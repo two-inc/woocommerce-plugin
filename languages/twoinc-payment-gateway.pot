@@ -1306,7 +1306,7 @@ msgid "\"%s\" is not a valid HTTP header name. Use letters, digits and hyphens."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "The value of \"%s\" may only contain printable ASCII characters, and cannot be empty."
+msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
 msgstr ""
 
 #: class/WC_Twoinc.php

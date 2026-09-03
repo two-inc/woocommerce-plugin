@@ -803,9 +803,10 @@ if (!class_exists('WC_Twoinc')) {
             $token = is_scalar($this->settings['firewall_token'] ?? null)
                 ? (string) $this->settings['firewall_token']
                 : '';
-            // Repairing it would migrate a different token silently; a dropped
-            // row is named loudly by the next save of the settings form.
-            if (self::is_valid_header_value($token)) {
+            // Migrated verbatim, even if unsendable: repairing it would carry a
+            // different token across, and dropping it would destroy the only
+            // copy. The read path refuses to send it and the form names it.
+            if (trim($token) !== '') {
                 $existing = isset($this->settings['custom_headers']) && is_array($this->settings['custom_headers'])
                     ? array_values($this->settings['custom_headers'])
                     : [];
@@ -5153,7 +5154,7 @@ if (!class_exists('WC_Twoinc')) {
                 if (!is_array($row)) {
                     continue;
                 }
-                // WC's own validators unslash; this one replaces them.
+                // Replaces a WC validator, so it must unslash like one.
                 $name = trim(self::unslash_scalar($row['name'] ?? ''));
                 // Untrimmed: an accepted value reaches the wire byte-identical.
                 $header_value = self::unslash_scalar($row['value'] ?? '');
@@ -5181,7 +5182,7 @@ if (!class_exists('WC_Twoinc')) {
                 if (!self::is_valid_header_value($header_value) || trim($header_value) === '') {
                     throw new Exception(sprintf(
                         /* translators: %s: the header name whose value was rejected */
-                        __('The value of "%s" may only contain printable ASCII characters, and cannot be empty.', 'twoinc-payment-gateway'),
+                        __('The value of "%s" must be printable ASCII text and cannot be blank.', 'twoinc-payment-gateway'),
                         $name
                     ));
                 }
@@ -5663,12 +5664,11 @@ if (!class_exists('WC_Twoinc')) {
                 }
                 $name = is_scalar($row['name'] ?? null) ? trim((string) $row['name']) : '';
                 $header_value = is_scalar($row['value'] ?? null) ? (string) $row['value'] : '';
-                // The read path composes the request, so a row written around
-                // the form must clear the same bar the form sets.
                 $lower = strtolower($name);
                 if (
                     !self::is_valid_header_name($name)
                     || !self::is_valid_header_value($header_value)
+                    || trim($header_value) === ''
                     || in_array($lower, self::reserved_header_names(), true)
                     || isset($seen[$lower])
                 ) {
@@ -5733,7 +5733,7 @@ if (!class_exists('WC_Twoinc')) {
             return (bool) preg_match('/^[\x20-\x7E]+$/D', $value);
         }
 
-        /** Names a custom row may not take: composed by make_request(), set by the HTTP client, or proxy identity. */
+        /** Names a custom row may not take: composed here, set by the transport, or reserved as proxy identity. */
         private static function reserved_header_names(): array
         {
             return [
@@ -6086,8 +6086,16 @@ if (!class_exists('WC_Twoinc')) {
                 // verification call below runs before the settings persist, so
                 // reading the stored value would send it without them and a
                 // merchant firewall would reject it, reverting the key.
-                $posted = $post_data[$custom_headers_field];
-                $this->custom_headers_override = is_array($posted) ? wp_unslash($posted) : [];
+                try {
+                    $this->custom_headers_override = $this->validate_two_custom_headers_field(
+                        'custom_headers',
+                        $post_data[$custom_headers_field]
+                    );
+                } catch (Exception $e) {
+                    // A table the save is about to refuse must not authenticate
+                    // the key either; the stored rows stand for this request.
+                    $this->custom_headers_override = null;
+                }
             }
             $api_key_field = 'woocommerce_' . $this->id . '_api_key';
             $api_key_in_post = array_key_exists($api_key_field, $post_data);
@@ -6114,8 +6122,6 @@ if (!class_exists('WC_Twoinc')) {
             // Save all settings (with possibly reverted API key)
             $_POST = $post_data;
             parent::process_admin_options();
-            // Refused rows must not serve the rest of the request as config.
-            $this->custom_headers_override = null;
             $this->reconcile_custom_payment_term();
         }
 

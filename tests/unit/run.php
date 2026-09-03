@@ -9253,12 +9253,12 @@ final class BrandConfigSpec
                 'browser-flag column label',
             ],
             [
-                'The value of "%s" may only contain printable ASCII characters, and cannot be empty.',
-                'The value of "%s" may only contain printable ASCII characters, and cannot be empty.',
+                'The value of "%s" must be printable ASCII text and cannot be blank.',
+                'The value of "%s" must be printable ASCII text and cannot be blank.',
                 [
-                    'nb_NO' => 'Verdien til "%s" kan bare inneholde skrivbare ASCII-tegn, og kan ikke være tom.',
-                    'nl_NL' => 'De waarde van "%s" mag alleen afdrukbare ASCII-tekens bevatten en mag niet leeg zijn.',
-                    'sv_SE' => 'Värdet för "%s" får endast innehålla skrivbara ASCII-tecken och får inte vara tomt.',
+                    'nb_NO' => 'Verdien til "%s" må være skrivbar ASCII-tekst og kan ikke være tom.',
+                    'nl_NL' => 'De waarde van "%s" moet afdrukbare ASCII-tekst zijn en mag niet leeg zijn.',
+                    'sv_SE' => 'Värdet för "%s" måste vara skrivbar ASCII-text och får inte vara tomt.',
                 ],
                 'rejected-header-value message',
             ],
@@ -9353,6 +9353,7 @@ final class BrandConfigSpec
             ['name' => 'X Bad Name', 'value' => 'v', 'send_from_browser' => 'yes'],
             ['name' => '', 'value' => 'v', 'send_from_browser' => 'yes'],
             ['name' => 'X-Unicode', 'value' => 'tøken', 'send_from_browser' => 'yes'],
+            ['name' => 'X-Blank', 'value' => '   ', 'send_from_browser' => 'yes'],
             ['name' => 'X-Tenant', 'value' => 'tenant-7', 'send_from_browser' => 'yes'],
         ]]);
         $gateway->make_request('/v1/order_intent', ['a' => 1]);
@@ -9361,7 +9362,7 @@ final class BrandConfigSpec
         TinyAssert::same('real-key', $headers['X-API-Key'] ?? null, 'a stored row must not clobber the API key');
         TinyAssert::same('application/json; charset=utf-8', $headers['Content-Type'] ?? null);
         TinyAssert::same('tenant-7', $headers['X-Tenant'] ?? null, 'the usable row still travels');
-        foreach (['X Bad Name', 'Host', 'Content-Length', 'X-Forwarded-For', 'x-real-ip', 'X-Unicode'] as $dropped) {
+        foreach (['X Bad Name', 'Host', 'Content-Length', 'X-Forwarded-For', 'x-real-ip', 'X-Unicode', 'X-Blank'] as $dropped) {
             TinyAssert::same(false, array_key_exists($dropped, $headers), "$dropped must not reach the request");
         }
         // Nor may a dropped row reach the browser.
@@ -9382,10 +9383,7 @@ final class BrandConfigSpec
         );
     }
 
-    /**
-     * The override exists only to carry the posted rows into the API-key
-     * verification of that same save.
-     */
+    /** The override carries only rows the save will keep. */
     private static function testCustomHeadersOverrideDoesNotOutliveTheSave(): void
     {
         $gateway = self::gateway();
@@ -9398,8 +9396,7 @@ final class BrandConfigSpec
         $gateway->test_post_data = [
             $gateway->get_field_key('api_key') => 'new-key',
             $gateway->get_field_key('custom_headers') => [
-                // A duplicate pair the save refuses whole, while the read path
-                // would happily keep the first row of it.
+                // A duplicate pair: refused whole, so nothing may be borrowed from it.
                 0 => ['name' => 'X-Dup', 'value' => 'first'],
                 1 => ['name' => 'x-dup', 'value' => 'second'],
             ],
@@ -9444,17 +9441,18 @@ final class BrandConfigSpec
             [[['name' => 'Accept-Language', 'value' => 'v']], 'cannot be overridden', 'the locale header is composed from settings'],
             [[['name' => 'X-Forwarded-For', 'value' => 'v']], 'cannot be overridden', 'a forged client IP must not be settable here'],
             [[['name' => 'x-real-ip', 'value' => 'v']], 'cannot be overridden', 'nor its Nginx-flavoured twin'],
-            [[['name' => 'X-Split', 'value' => "a\r\nX-Injected: b"]], 'printable ASCII', 'CRLF would splice a second header in'],
-            [[['name' => 'X-Split', 'value' => "a\nb"]], 'printable ASCII', 'a bare LF splits the line too'],
+            [[['name' => 'X-Split', 'value' => "a\r\nX-Injected: b"]], 'printable ASCII text', 'CRLF would splice a second header in'],
+            [[['name' => 'X-Split', 'value' => "a\nb"]], 'printable ASCII text', 'a bare LF splits the line too'],
             // Without /D on the pattern, $ matches before a trailing newline.
-            [[['name' => 'X-Split', 'value' => "ab\n"]], 'printable ASCII', 'a trailing LF is still a split'],
-            [[['name' => 'X-Split', 'value' => "a\rb"]], 'printable ASCII', 'a bare CR splits the line too'],
-            [[['name' => 'X-Nul', 'value' => "a\0b"]], 'printable ASCII', 'NUL truncates the value downstream'],
-            [[['name' => 'X-Tab', 'value' => "a\tb"]], 'printable ASCII', 'a tab is not a value character'],
-            [[['name' => 'X-Unicode', 'value' => 'tøken']], 'printable ASCII', 'a non-ASCII byte has no unambiguous encoding'],
-            [[['name' => 'X-Empty', 'value' => '']], 'printable ASCII', 'a named row with no value is not usable config'],
-            [[['name' => 'X-Blank', 'value' => '   ']], 'printable ASCII', 'nor one a proxy would trim to nothing'],
+            [[['name' => 'X-Split', 'value' => "ab\n"]], 'printable ASCII text', 'a trailing LF is still a split'],
+            [[['name' => 'X-Split', 'value' => "a\rb"]], 'printable ASCII text', 'a bare CR splits the line too'],
+            [[['name' => 'X-Nul', 'value' => "a\0b"]], 'printable ASCII text', 'NUL truncates the value downstream'],
+            [[['name' => 'X-Tab', 'value' => "a\tb"]], 'printable ASCII text', 'a tab is not a value character'],
+            [[['name' => 'X-Unicode', 'value' => 'tøken']], 'printable ASCII text', 'a non-ASCII byte has no unambiguous encoding'],
+            [[['name' => 'X-Empty', 'value' => '']], 'printable ASCII text', 'a named row with no value is not usable config'],
+            [[['name' => 'X-Blank', 'value' => '   ']], 'printable ASCII text', 'nor one a proxy would trim to nothing'],
             [[['name' => 'HTTP_X_CLOUD_TRACE_CONTEXT', 'value' => 'v']], 'cannot be overridden', 'make_request composes the trace header'],
+            [[['name' => 'Host', 'value' => '']], 'cannot be overridden', 'a reserved name is named before its value is judged'],
             [
                 [['name' => 'X-Dup', 'value' => 'a'], ['name' => 'x-dup', 'value' => 'b']],
                 'listed more than once',
@@ -9666,40 +9664,53 @@ final class BrandConfigSpec
             [
                 ['firewall_token' => 'waf-token-1', 'firewall_token_browser' => 'yes'],
                 [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'yes']],
+                [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => true]],
                 'a token opted into the browser keeps that opt-in',
             ],
             [
                 ['firewall_token' => 'waf-token-1', 'firewall_token_browser' => 'no'],
                 [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'no']],
+                [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => false]],
                 'a server-only token stays server-only',
             ],
             [
                 ['firewall_token' => 'waf-token-1'],
                 [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'no']],
+                [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => false]],
                 'an absent browser flag defaults to server-only',
             ],
             [
                 ['firewall_token' => '', 'firewall_token_browser' => 'no'],
                 [],
+                [],
                 'an empty token seeds no row',
             ],
             [
                 ['firewall_token' => " waf\r\ntoken-1\n", 'firewall_token_browser' => 'no'],
+                [['name' => 'X-WAF-TOKEN', 'value' => " waf\r\ntoken-1\n", 'send_from_browser' => 'no']],
                 [],
-                'a newline-bearing token seeds no row: repairing it would migrate a different token',
+                'a newline-bearing token migrates verbatim: repairing it would carry a different token across',
             ],
             [
                 ['firewall_token' => 'tøken', 'firewall_token_browser' => 'no'],
+                [['name' => 'X-WAF-TOKEN', 'value' => 'tøken', 'send_from_browser' => 'no']],
                 [],
-                'nor does a non-ASCII token seed one',
+                'nor is a non-ASCII token thrown away',
+            ],
+            [
+                ['firewall_token' => '   ', 'firewall_token_browser' => 'no'],
+                [],
+                [],
+                'a blank token seeds no row',
             ],
             [
                 ['firewall_token' => "a\"b'c\\d", 'firewall_token_browser' => 'no'],
                 [['name' => 'X-WAF-TOKEN', 'value' => "a\"b'c\\d", 'send_from_browser' => 'no']],
+                [['name' => 'X-WAF-TOKEN', 'value' => "a\"b'c\\d", 'send_from_browser' => false]],
                 'a token of printable punctuation migrates verbatim',
             ],
         ];
-        foreach ($cases as [$stored, $expected, $description]) {
+        foreach ($cases as [$stored, $expected, $sent, $description]) {
             $gateway = self::migratedGateway(array_merge($stored, ['api_key' => 'key']));
             $saved = get_option($gateway->get_option_key(), []);
 
@@ -9707,16 +9718,8 @@ final class BrandConfigSpec
             // The legacy keys are cleared, so the migration cannot run twice.
             TinyAssert::same(false, array_key_exists('firewall_token', $saved), $description);
             TinyAssert::same(false, array_key_exists('firewall_token_browser', $saved), $description);
-            // The migrated row is what the header assembly then reads.
-            TinyAssert::same(
-                $expected === [] ? [] : [[
-                    'name' => 'X-WAF-TOKEN',
-                    'value' => $expected[0]['value'],
-                    'send_from_browser' => $expected[0]['send_from_browser'] === 'yes',
-                ]],
-                $gateway->get_custom_headers(),
-                $description
-            );
+            // An unsendable token is kept and visible without going out.
+            TinyAssert::same($sent, $gateway->get_custom_headers(), $description);
         }
 
         // An install with no legacy key is left completely alone.
