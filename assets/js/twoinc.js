@@ -2907,6 +2907,27 @@ let twoincTermChips = {
 };
 
 /**
+ * Prefetched autofill answers by country — the buyer object, or `false` for
+ * "nobody on the cookie". An absent entry means unresolved.
+ *
+ * Keyed by country because the delegated authority each was fetched under is.
+ * Shared by every controller because the answer describes the buyer, not the
+ * role: the billing and delivery panels each own an instance, and a signup
+ * completed through one must not leave the other prompting the same buyer to
+ * sign up again.
+ */
+const soleTraderAutofillByCountry = {};
+
+/** Countries with a lookup outstanding, so two controllers make one request. */
+const soleTraderAutofillPending = {};
+
+/**
+ * Set by a rate-limited lookup. Page-global, unlike the maps above: the limit
+ * is on the endpoint, which one country's tokens reach as readily as another's.
+ */
+let soleTraderAutofillBackoffUntil = 0;
+
+/**
  * Sole trader checkout — presentation only (TWO-24754).
  *
  * All business logic (country eligibility, token minting) lives in
@@ -2915,25 +2936,6 @@ let twoincTermChips = {
  * hosted signup popup, and autofills the company fields from
  * GET /autofill/v1/buyer/current. Mirrors the Magento reference flow.
  */
-/**
- * Prefetched autofill answers by country — the buyer object, or `false` for
- * "nobody on the cookie". An absent entry means unresolved.
- *
- * Keyed by country because the delegated authority each was fetched under is,
- * and shared by every controller because the answer describes the buyer rather
- * than the role: the billing and delivery panels each own an instance, and a
- * signup completed through one must not leave the other prompting the same
- * buyer to sign up again. Two roles on different countries hold one answer
- * each, which is why this is a map and not a single slot.
- */
-const soleTraderAutofillByCountry = {};
-
-/** Countries with a lookup outstanding, so two controllers make one request. */
-const soleTraderAutofillPending = {};
-
-/** Set by a rate-limited lookup: `render()` runs on every `updated_checkout`. */
-let soleTraderAutofillBackoffUntil = 0;
-
 function createSoleTraderController(companySearch) {
   const controller = {
     mode: "business", // 'business' | 'sole_trader'
@@ -3220,7 +3222,7 @@ function createSoleTraderController(companySearch) {
       // country change there is no authority to ask under and the chip falls
       // back to the signup popup.
       const country = controller.currentCountry();
-      if (!country || controller.tokenCountry !== country) return;
+      if (controller.tokenCountry !== country) return;
       if (soleTraderAutofillPending[country]) return;
       if (controller.heldAutofill() !== null) return;
       if (Date.now() < soleTraderAutofillBackoffUntil) return;
@@ -3231,14 +3233,11 @@ function createSoleTraderController(companySearch) {
         // for the life of the page and block the next render's retry. A rate
         // limit is the one failure retrying makes worse.
         if (failed) {
+          // `Retry-After` is not CORS-safelisted and this request is
+          // cross-origin, so the server's own value is unreadable here —
+          // `retryAfterMs`'s default stands in.
           if (response && response.status === 429) {
-            soleTraderAutofillBackoffUntil =
-              Date.now() +
-              twoincUtilHelper.retryAfterMs({
-                getResponseHeader: function (name) {
-                  return response.headers.get(name);
-                }
-              });
+            soleTraderAutofillBackoffUntil = Date.now() + twoincUtilHelper.retryAfterMs();
           }
           return;
         }
@@ -3247,11 +3246,18 @@ function createSoleTraderController(companySearch) {
     },
 
     /**
-     * @returns {Object|boolean|null} the answer held for this role's country,
-     *   `null` when there is none. An unknown country is `null` too — the
-     *   jurisdiction decides which authority the answer came from, so without
-     *   one the click belongs on the signup popup.
+     * A country change retires the tokens: their delegated authority is
+     * scoped to the country they were minted on, and the next `render()`
+     * mints for the new one. Refused while busy — an outstanding signup's
+     * own buyer lookup still needs them.
      */
+    retireTokens: function () {
+      if (controller.isBusy()) return;
+      controller.tokens = null;
+      controller.tokenCountry = null;
+    },
+
+    /** @returns {Object|boolean|null} the answer held for this role's country, `null` if none */
     heldAutofill: function () {
       const country = controller.currentCountry();
       if (!country) return null;
@@ -4189,6 +4195,12 @@ function createSoleTraderController(companySearch) {
         return;
       }
       const country = controller.currentCountry();
+      // A mint under an unreadable country would scope its authority to
+      // nothing, and `tokenCountry` gates every later use of it.
+      if (!country) {
+        if (cb) cb(false);
+        return;
+      }
       jQuery
         .post(cfg.tokens_url, { csrf_token: cfg.csrf_token, country: country })
         .done(function (response) {
@@ -4308,8 +4320,6 @@ function createSoleTraderController(companySearch) {
           headers[name] = customHeaders[name];
         });
       }
-      // The response behind a failure, where there was one, for a caller that
-      // treats a refusal differently from a dropped connection.
       let refused = null;
       fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
         credentials: "include",
@@ -4328,12 +4338,16 @@ function createSoleTraderController(companySearch) {
             throw new Error("autofill/v1/buyer/current failed");
           });
         })
-        .then(function (json) {
-          cb(json || null);
-        })
-        .catch(function () {
-          cb(null, true, refused);
-        });
+        .then(
+          function (json) {
+            cb(json || null);
+          },
+          // Paired with the success handler rather than chained after it, so
+          // a throw from the callback itself cannot re-enter it as a failure.
+          function () {
+            cb(null, true, refused);
+          }
+        );
     },
 
     /**
@@ -4470,8 +4484,10 @@ function createSoleTraderController(companySearch) {
               );
             }
             if (resolved) {
-              // A signup replaces the cookie's buyer.
-              controller.holdAutofill(buyer, controller.currentCountry());
+              // A signup replaces the cookie's buyer. Filed under the country
+              // the signup was performed under — the one `openPopup` sent —
+              // not whatever the field reads by the time it completes.
+              controller.holdAutofill(buyer, controller.tokenCountry);
               controller.setCompany(buyer.organization_number, buyer.company_name, buyer);
               controller.showNote(false);
             } else {
@@ -5935,6 +5951,8 @@ class Twoinc {
     // it back (TWO-24867).
     self.customerCompany.country_prefix = country;
 
+    // Before `refresh()`, whose `render()` is what re-mints.
+    twoincSoleTrader.retireTokens();
     // Sole trader availability is per-country; re-evaluate the toggle.
     twoincSoleTrader.refresh();
 
@@ -5976,6 +5994,7 @@ class Twoinc {
       helper.clearSelectedCompany();
     }
 
+    helper.soleTrader.retireTokens();
     helper.soleTrader.refresh();
     Twoinc.getInstance().getApproval();
   }

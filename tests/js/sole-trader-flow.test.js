@@ -1380,8 +1380,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       phone_number: "+4712345678"
     };
 
-    // Resolves the prefetch through `render()`, the real trigger, rather than
-    // writing the held state by hand.
     function prefetched(buyer) {
       jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(buyer));
       soleTrader.render();
@@ -1440,9 +1438,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
     /**
      * `window.open()` runs in the click handler's OWN call stack, never
-     * after a promise tick. Asserted through the REAL transport, left
-     * installed across the click, so a lookup made there would reach it and
-     * lose the gesture.
+     * after a promise tick. Through the REAL transport, left installed across
+     * the click, so a lookup made there would reach it and lose the gesture.
      */
     test.each([
       { respond: () => Promise.reject(new Error("offline")), description: "the request failed" },
@@ -1460,24 +1457,14 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       global.fetch = jest.fn(respond);
       soleTrader.render();
       // The prefetch's own promise chain drains here, BEFORE the click — a
-      // macrotask, since the transport's `.then()`s are microtasks. The
-      // transport stays installed across the click: a lookup moved back into
-      // the handler would reach it and lose the gesture, which is the whole
-      // property under test.
+      // macrotask, since the transport's `.then()`s are microtasks.
       await new Promise((resolve) => setTimeout(resolve, 0));
-      let inClickHandler = false;
-      let openedInGesture = null;
-      window.open = jest.fn(() => {
-        openedInGesture = inClickHandler;
-        return { closed: false };
-      });
 
-      inClickHandler = true;
       soleTrader.onModeChipClick("sole_trader");
-      inClickHandler = false;
 
+      // Asserted with no tick in between: an open made from a continuation
+      // would not have happened yet.
       expect(window.open).toHaveBeenCalledTimes(1);
-      expect(openedInGesture).toBe(true);
       delete global.fetch;
     });
 
@@ -1491,18 +1478,10 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       const prefetch = deferredPrefetch();
       soleTrader.render();
       expect(soleTrader.heldAutofill()).toBeNull();
-      let inClickHandler = false;
-      let openedInGesture = null;
-      window.open = jest.fn(() => {
-        openedInGesture = inClickHandler;
-        return { closed: false };
-      });
 
-      inClickHandler = true;
       soleTrader.onModeChipClick("sole_trader");
-      inClickHandler = false;
 
-      expect(openedInGesture).toBe(true);
+      expect(window.open).toHaveBeenCalledTimes(1);
       // One call, the prefetch's — the click added none.
       expect(prefetch.calls).toBe(1);
     });
@@ -1763,13 +1742,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         description: "a 500 is not held, so the next render asks again"
       },
       {
-        respond: () =>
-          Promise.resolve({
-            ok: false,
-            status: 429,
-            text: () => Promise.resolve(""),
-            headers: { get: () => "120" }
-          }),
+        respond: () => Promise.resolve({ ok: false, status: 429, text: () => Promise.resolve("") }),
         expectedRequests: 1,
         description: "a 429 backs off rather than asking again"
       }
@@ -1805,6 +1778,39 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       expect(opened).toHaveLength(1);
     });
 
+    /**
+     * The whole window, not just the next render: the backoff exists because
+     * `render()` runs on every `updated_checkout`, and a buyer generates
+     * plenty of those inside a minute.
+     */
+    test("a rate-limited lookup stays backed off for the whole window", async () => {
+      soleTrader.fetchCurrentBuyer.mockRestore();
+      const transport = jest.fn(() =>
+        Promise.resolve({ ok: false, status: 429, text: () => Promise.resolve("") })
+      );
+      global.fetch = transport;
+      const start = Date.now();
+      const clock = jest.spyOn(Date, "now");
+      clock.mockReturnValue(start);
+
+      soleTrader.render();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(transport).toHaveBeenCalledTimes(1);
+
+      clock.mockReturnValue(start + 59 * 1000);
+      soleTrader.render();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(transport).toHaveBeenCalledTimes(1);
+
+      clock.mockReturnValue(start + 61 * 1000);
+      soleTrader.render();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(transport).toHaveBeenCalledTimes(2);
+
+      clock.mockRestore();
+      delete global.fetch;
+    });
+
     test("no lookup is made while the country is unreadable", () => {
       $("#billing_country").val("");
       const prefetch = deferredPrefetch();
@@ -1812,6 +1818,23 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       soleTrader.render();
 
       expect(prefetch.calls).toBe(0);
+    });
+
+    /**
+     * The mint is what records the jurisdiction, so it cannot happen without
+     * one to record — the gate would otherwise hold a token scoped to nothing
+     * for the rest of the page.
+     */
+    test("no tokens are minted while the country is unreadable", () => {
+      soleTrader.tokens = null;
+      soleTrader.tokenCountry = null;
+      const ajax = harness.stubAjax($);
+      $("#billing_country").val("");
+
+      soleTrader.render();
+
+      expect(ajax.calls).toHaveLength(0);
+      ajax.restore();
     });
 
     /**
@@ -1852,6 +1875,63 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       expect($("#company_id").val()).toBe("TWO:ST2");
       expect($("#billing_company").val()).toBe("Second Trader");
+    });
+
+    /**
+     * Filed under the country the signup ran under — the one the popup was
+     * opened with — not whatever the field reads by the time it completes.
+     * WooCommerce can move the country while the popup is open.
+     */
+    test("a signup completing after the field moved is filed under the country it ran under", () => {
+      $("#billing_country").append('<option value="NO">NO</option>');
+      soleTrader.setMode("sole_trader");
+      soleTrader.bindPopupMessageListener();
+      const SIGNED_UP = { organization_number: "TWO:ST2", company_name: "Second Trader" };
+      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(SIGNED_UP));
+
+      $("#billing_country").val("NO");
+      window.dispatchEvent(
+        new window.MessageEvent("message", {
+          data: "ACCEPTED",
+          origin: "https://checkout.example.test"
+        })
+      );
+      $("#billing_country").val("GB");
+
+      expect(soleTrader.heldAutofill()).toEqual(SIGNED_UP);
+    });
+
+    /**
+     * The tokens' authority is scoped to one country, so a change retires
+     * them and the next render mints again — otherwise autofill is dead for
+     * the rest of the page and the signup popup runs on the old jurisdiction.
+     */
+    test("a real country change retires the tokens, and the next render mints again", () => {
+      ctx.helper.countryDidChange("GB");
+      soleTrader.availabilityByCountry.SE = true;
+      const ajax = harness.stubAjax($);
+      $("#billing_country").append('<option value="SE">SE</option>');
+      $("#billing_country").val("SE");
+
+      ctx.Twoinc.getInstance().syncBillingCountry();
+
+      expect(soleTrader.tokens).toBeNull();
+      expect(ajax.calls.some((call) => call.url.includes("two_sole_trader_tokens"))).toBe(true);
+      ajax.restore();
+    });
+
+    test("a country change leaves the tokens alone while a signup is still outstanding", () => {
+      ctx.helper.countryDidChange("GB");
+      soleTrader.availabilityByCountry.SE = true;
+      soleTrader.setMode("sole_trader");
+      soleTrader.launchSignup();
+      expect(soleTrader.isBusy()).toBe(true);
+
+      $("#billing_country").append('<option value="SE">SE</option>');
+      $("#billing_country").val("SE");
+      ctx.Twoinc.getInstance().syncBillingCountry();
+
+      expect(soleTrader.tokens).not.toBeNull();
     });
 
     test("re-clicking the chip once adopted goes straight to the re-signup, with no lookup", () => {
@@ -1901,6 +1981,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         ajax = harness.stubAjax($);
         soleTrader.availabilityByCountry = {};
         soleTrader.tokens = null;
+        // Cleared with them: a real mint is what records the country their
+        // authority is scoped to, and the prefetch is gated on it.
+        soleTrader.tokenCountry = null;
       });
 
       afterEach(() => {
