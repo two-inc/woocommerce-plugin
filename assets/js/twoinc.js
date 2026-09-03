@@ -4506,8 +4506,7 @@ function createSoleTraderController(companySearch) {
               // In a `finally`, and after the capture above has landed: a
               // throw from the writes would otherwise hold `flightDepth`
               // above zero for the life of the page, leaving `isBusy()` true
-              // and every exit from sole-trader mode refused. "Flow
-              // complete" is the write, not the response.
+              // and every exit from sole-trader mode refused.
               controller.settleFlight();
             }
           });

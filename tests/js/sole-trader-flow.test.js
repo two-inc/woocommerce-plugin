@@ -1953,11 +1953,17 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       soleTrader.launchSignup();
       expect(soleTrader.isBusy()).toBe(true);
 
+      // Installed before the change: the re-render it triggers is where a
+      // lookup on the outgoing country's authority would be made.
+      const prefetch = deferredPrefetch();
       $("#billing_country").append('<option value="SE">SE</option>');
       $("#billing_country").val("SE");
       ctx.Twoinc.getInstance().syncBillingCountry();
 
       expect(soleTrader.tokens).not.toBeNull();
+      // Nor are they asked under: they carry authority for the country the
+      // buyer has left, so the lookup waits for the re-mint.
+      expect(prefetch.calls).toBe(0);
     });
 
     test("re-clicking the chip once adopted goes straight to the re-signup, with no lookup", () => {
