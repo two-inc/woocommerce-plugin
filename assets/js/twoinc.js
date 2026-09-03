@@ -2987,6 +2987,9 @@ function createSoleTraderController(companySearch) {
      */
     autofillProbing: false,
 
+    /** Supersession stamp for that probe, same idiom as `companySearchSeq`. */
+    autofillProbeSeq: 0,
+
     /**
      * True once `setCompany()` has actually adopted a company while in
      * sole-trader mode this time through (TWO-40 §7). Reset by every
@@ -3405,8 +3408,15 @@ function createSoleTraderController(companySearch) {
       // tokens are minted by `render()`, never here.
       if (controller.autofillProbing) return;
       controller.autofillProbing = true;
+      const seq = (controller.autofillProbeSeq += 1);
       controller.beginFlight();
       controller.fetchCurrentBuyer(function (buyer) {
+        // Stamped per probe, not a bare flag: a chip click cancels the probe
+        // and settles its flight, and the buyer can be back in a SECOND probe
+        // by the time the abandoned request lands — a flag read at that point
+        // says "probing" and lets the stale answer spend the live probe's
+        // settle.
+        if (seq !== controller.autofillProbeSeq) return;
         controller.autofillProbing = false;
         // `abandonSoleTraderFlow()` cannot cancel a `fetch`, so a buyer who
         // left mid-flight is gated out here, as a late ACCEPTED is.
@@ -3941,10 +3951,24 @@ function createSoleTraderController(companySearch) {
      * `click` regardless, which is the only one Enter and Space produce.
      */
     abandonPopupsForChipClick: function () {
+      controller.cancelAutofillProbe();
       controller.abandonablePopups().forEach(function (watcher) {
         if (typeof watcher.win.close === "function") watcher.win.close();
         controller.settleClosedPopup(watcher, true);
       });
+    },
+
+    /**
+     * Drop an outstanding chip-click probe, settling its flight here rather
+     * than when the request lands: nothing can cancel a `fetch`, and left
+     * outstanding it holds `isDeciding()` true, so the chip the buyer just
+     * pressed would do nothing at all for the length of the round trip.
+     */
+    cancelAutofillProbe: function () {
+      if (!controller.autofillProbing) return;
+      controller.autofillProbing = false;
+      controller.autofillProbeSeq += 1;
+      controller.settleFlight();
     },
 
     /**

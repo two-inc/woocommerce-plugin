@@ -1512,6 +1512,52 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       expect($("#company_id").val()).toBe("TWO:ST9");
     });
 
+    /**
+     * A probe left outstanding holds `isDeciding()`, which is what every other
+     * mode chip's own guard refuses on — so without cancelling it, the chip
+     * the buyer pressed would do nothing for the length of the round trip.
+     */
+    test("another mode chip pressed while the probe is out is honoured, not dead", () => {
+      harness.openCompanyPanel($, ctx.helper);
+      const probe = deferredProbe();
+      soleTrader.onModeChipClick("sole_trader");
+
+      clickChip("registered");
+
+      expect(soleTrader.mode).toBe("business");
+      expect(soleTrader.isDeciding()).toBe(false);
+      expect(soleTrader.flightDepth).toBe(0);
+
+      // And the answer that lands afterwards neither adopts nor opens
+      // anything behind the buyer, nor settles anything — the unrelated
+      // flight below stands in for whatever the buyer went on to start.
+      soleTrader.beginFlight();
+      probe.answer(ENROLLED);
+
+      expect(opened).toHaveLength(0);
+      expect($("#company_id").val()).toBe("");
+      expect(soleTrader.flightDepth).toBe(1);
+    });
+
+    test("a cancelled probe's late answer does not spend the next flight's settle", () => {
+      harness.openCompanyPanel($, ctx.helper);
+      const probe = deferredProbe();
+      soleTrader.onModeChipClick("sole_trader");
+      clickChip("registered");
+      const staleAnswer = probe.answer;
+
+      // A second trip into sole-trader mode, still deciding, when the first
+      // trip's abandoned request finally lands.
+      soleTrader.onModeChipClick("sole_trader");
+      staleAnswer(ENROLLED);
+
+      // The live probe still owns the busy state — a stale settle would have
+      // taken the spinner down under it.
+      expect(soleTrader.flightDepth).toBe(1);
+      expect(busy()).toBe(true);
+      expect($("#company_id").val()).toBe("");
+    });
+
     test("a probe answering after the buyer left sole-trader mode changes nothing", () => {
       const probe = deferredProbe();
       soleTrader.onModeChipClick("sole_trader");
