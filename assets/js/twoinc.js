@@ -779,6 +779,9 @@ class TwoCompanySearch {
   /** Class of the wrapper the panel anchors against. */
   fieldWrapClass = "two-company-field-wrap";
 
+  /** Class toggled on the field wrap while the billing/shipping country falls outside the registry's coverage. */
+  companySearchUnsupportedCountryClass = "twoinc-company-search-country-unsupported";
+
   /** `window` is page-wide, so the viewport listener is bound at most once. */
   fieldWrapRefreshBound = false;
   fieldWrapRefreshTimer = null;
@@ -910,6 +913,12 @@ class TwoCompanySearch {
    * @returns {Promise<Object>}
    */
   searchCompanies(params) {
+    // Defense in depth: the field is disabled the moment the
+    // country falls outside the registry's coverage, but a request already
+    // queued (debounce) before that landed must not reach the network.
+    if (!this.companySearchCountryIsSupported()) {
+      return Promise.resolve({ unavailable: true });
+    }
     // Before the sequence bump: a search dropped during backoff must not
     // invalidate an in-flight one whose results are already on the wire.
     if (Date.now() < this.companySearchBackoffUntil) {
@@ -1190,7 +1199,52 @@ class TwoCompanySearch {
   isChipVisible(mode) {
     if (mode === "sole_trader") return this.soleTrader.isAvailable();
     if (mode === "manual") return this.manualEntryIsAvailable();
+    if (mode === "registered") return this.registeredSearchIsAvailable();
     return true;
+  }
+
+  /**
+   * Whether the ordinary registry search should be offered for the current
+   * billing/shipping country — the search-side counterpart of
+   * `soleTrader.isAvailable()`. Kicks off the one page-wide fetch on first
+   * ask; fails open (reads as available) until that fetch has a definitive
+   * answer, so a slow or failed lookup never hides the control over a
+   * country it may well support.
+   *
+   * @returns {boolean}
+   */
+  registeredSearchIsAvailable() {
+    twoincSupportedSearchCountries.ensureFetched();
+    return this.companySearchCountryIsSupported();
+  }
+
+  /**
+   * Passive read of the same answer, with no side effect of its own
+   *. Used by the transport-level guards below: by the time a
+   * search can even fire the field is already attached, which is what
+   * triggers the one page-wide fetch — those call sites reading the answer
+   * a second time must not each risk kicking off a fetch of their own.
+   *
+   * @returns {boolean}
+   */
+  companySearchCountryIsSupported() {
+    return twoincSupportedSearchCountries.isSupported(this.currentCountry());
+  }
+
+  /**
+   * Grey out the search field and close its dropdown once the country falls
+   * outside the registry's coverage; restore it once the country is back
+   * inside. Today an unsupported-country search just fails at
+   * request time with a generic error — this stops it being offered at all,
+   * mirroring the sole-trader chip's own per-country disable.
+   */
+  syncCompanySearchAvailability() {
+    const available = this.registeredSearchIsAvailable();
+    const $field = jQuery(this.companyFieldSelector());
+    $field.closest("." + this.fieldWrapClass).toggleClass(this.companySearchUnsupportedCountryClass, !available);
+    $field.prop("disabled", !available);
+    if (!available) this.closeCompanySearchDropdown();
+    this.syncModeChips();
   }
 
   /**
@@ -1266,6 +1320,10 @@ class TwoCompanySearch {
   openCompanySearchDropdown() {
     const panel = this.panel;
     if (!panel || !panel.isBound()) return false;
+    // Defense in depth alongside the disabled field attribute:
+    // any programmatic open (the registered chip, exiting manual entry) must
+    // refuse the same way a disabled field itself refuses focus.
+    if (!this.companySearchCountryIsSupported()) return false;
     panel.open();
     return true;
   }
@@ -1942,6 +2000,64 @@ let twoincSelectWooHelperShipping = new TwoCompanySearch({
  * picking it up.
  */
 let twoincCompanySearchControls = [twoincSelectWooHelper, twoincSelectWooHelperShipping];
+
+/**
+ * The ISO country codes bifrost's company registry search covers, from
+ * GET /companies/v2/supported-countries — the ordinary
+ * company-search control's own gate, parallel to
+ * `twoincSoleTrader.availabilityByCountry` but a single global list rather
+ * than a per-country lookup: the endpoint answers with every supported
+ * country at once, so one fetch for the page's lifetime covers every role.
+ */
+let twoincSupportedSearchCountries = {
+  /** @type {string[]|null} null until the first fetch resolves. */
+  countries: null,
+
+  /** @type {Object|null} the jqXHR of a fetch in flight, so a caller mid-fetch does not start a second one. */
+  fetchPromise: null,
+
+  /** Idempotent: every caller that might need the answer calls this rather than coordinating who fetches first. */
+  ensureFetched: function () {
+    if (this.countries !== null || this.fetchPromise) return;
+    const cfg = (window.twoinc && window.twoinc.api_proxy) || {};
+    if (!cfg.supported_countries_url) return;
+    const self = this;
+    this.fetchPromise = jQuery
+      .get(cfg.supported_countries_url, { csrf_token: cfg.csrf_token })
+      .done(function (response) {
+        if (response && Array.isArray(response.supported_countries)) {
+          self.countries = response.supported_countries;
+        }
+      })
+      // Fail-soft: a network blip or a 429 on THIS call leaves `countries`
+      // null, which `isSupported()` reads as "everything supported" — a
+      // transient failure here must never hide the search control.
+      .always(function () {
+        self.fetchPromise = null;
+        jQuery(document.body).trigger("twoinc_supported_search_countries_updated");
+      });
+  },
+
+  /**
+   * Fail-open: no answer yet, or an empty/absent country, reads as supported.
+   *
+   * @param {string} country
+   * @returns {boolean}
+   */
+  isSupported: function (country) {
+    if (!Array.isArray(this.countries) || !country) return true;
+    return this.countries.indexOf(country.toUpperCase()) !== -1;
+  }
+};
+
+// The fetch above resolves after every control may already have attached
+// (or not yet have), so each control re-checks itself once the answer lands
+// rather than the fetch trying to know who asked.
+jQuery(document.body).on("twoinc_supported_search_countries_updated", function () {
+  twoincCompanySearchControls.forEach(function (control) {
+    control.syncCompanySearchAvailability();
+  });
+});
 
 // Back-compat alias: every flow that predates the shipping instance and is
 // genuinely invoice-scoped by design (order-intent, order restore from user
@@ -5747,6 +5863,9 @@ class Twoinc {
 
     twoincTermChips.refresh();
     twoincSoleTrader.refresh();
+    // Re-resolve every updated_checkout, not only a real country change —
+    // same reasoning as `syncOrderCompany()` below.
+    twoincSelectWooHelper.syncCompanySearchAvailability();
 
     // TWO-25326 §7.1: called directly here, not only via
     // `toggleBusinessFields()`. `updated_checkout` fires on every
@@ -5762,6 +5881,7 @@ class Twoinc {
     // node and the panel that was bound to the old one is gone with it.
     twoincSelectWooHelperShipping.rebindUnlessManual();
     twoincSelectWooHelperShipping.soleTrader.refresh();
+    twoincSelectWooHelperShipping.syncCompanySearchAvailability();
 
     // Re-resolve on EVERY `updated_checkout`, not only a real country change
     // (Doug 2026-08-31 §2, corner case (d)): this is also what fires when
@@ -5924,6 +6044,8 @@ class Twoinc {
 
     // Sole trader availability is per-country; re-evaluate the toggle.
     twoincSoleTrader.refresh();
+    // Same for the ordinary registry search's own per-country gate.
+    twoincSelectWooHelper.syncCompanySearchAvailability();
 
     self.getApproval();
   }
@@ -5964,6 +6086,7 @@ class Twoinc {
     }
 
     helper.soleTrader.refresh();
+    helper.syncCompanySearchAvailability();
     Twoinc.getInstance().getApproval();
   }
 

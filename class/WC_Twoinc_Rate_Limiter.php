@@ -21,6 +21,8 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             'company_by_id' => [30, 60],
             'payment_terms' => [30, 60],
             'sole_trader_availability' => [30, 60],
+            // Fetched once per page load, not per keystroke — a low ceiling.
+            'supported_countries' => [20, 60],
         ];
 
         /** Kept off the wire: the key embeds a client address. */

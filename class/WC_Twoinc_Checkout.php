@@ -431,6 +431,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'company_by_id_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_company_by_id') : '',
                     'order_intent_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_order_intent') : '',
                     'payment_terms_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_payment_terms') : '',
+                    'supported_countries_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_supported_countries') : '',
                     'csrf_token' => wp_create_nonce('twoinc_checkout'),
                 ],
                 // Chip selector bootstrap (TWO-24751). JS renders only; the

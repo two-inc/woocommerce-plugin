@@ -21,13 +21,20 @@ const harness = require("./wc-harness");
 
 describe("company search results", () => {
   let ctx;
+  let ajax;
 
   beforeEach(() => {
     ctx = harness.loadTwoinc();
     harness.buildCheckoutForm();
+    // Binding the panel (below, via openCompanyPanel/attach) renders its mode
+    // chips, which kicks off the one page-wide supported-countries fetch —
+    // irrelevant here, but real and unstubbed it hits the network and fails
+    // noisily.
+    ajax = harness.stubAjax(ctx.$);
   });
 
   afterEach(() => {
+    ajax.restore();
     harness.releasePanel(ctx.helper);
     document.body.innerHTML = "";
   });

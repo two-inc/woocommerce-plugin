@@ -48,6 +48,7 @@ const API_PROXY = {
   company_by_id_url: "https://shop.example.test/?wc-ajax=two_company_by_id",
   order_intent_url: "https://shop.example.test/?wc-ajax=two_order_intent",
   payment_terms_url: "https://shop.example.test/?wc-ajax=two_payment_terms",
+  supported_countries_url: "https://shop.example.test/?wc-ajax=two_supported_countries",
   csrf_token: "test-checkout-csrf-token"
 };
 
@@ -132,7 +133,7 @@ function loadPluginSource() {
       "\n;({ twoincUtilHelper, twoincAddressRoles," +
       " twoincCompanyCapture," +
       " twoincSelectWooHelper, twoincSelectWooHelperShipping, twoincDomHelper," +
-      " twoincTermChips, twoincSoleTrader, Twoinc, TwoCompanySearch });"
+      " twoincTermChips, twoincSoleTrader, twoincSupportedSearchCountries, Twoinc, TwoCompanySearch });"
   );
   if (!exported || typeof exported.twoincSelectWooHelper !== "object") {
     throw new Error("harness: twoinc.js did not yield its top-level bindings");
@@ -190,6 +191,7 @@ function loadTwoinc(twoinc) {
     dom: exported.twoincDomHelper,
     termChips: exported.twoincTermChips,
     soleTrader: exported.twoincSoleTrader,
+    supportedSearchCountries: exported.twoincSupportedSearchCountries,
     // The Twoinc class itself, for the code paths that reach the singleton.
     // Safe to construct here: the constructor only initialises fields, and
     // every call re-evaluates the source, so the `instance` a test creates

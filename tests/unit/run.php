@@ -9960,7 +9960,13 @@ final class BrandConfigSpec
         // The proxies spend the merchant's API key, so an unauthenticated
         // caller reaching them would be a free lookup oracle.
         $GLOBALS['__twoinc_test_ajax_referer_ok'] = false;
-        $handlers = ['ajax_company_search', 'ajax_company_by_id', 'ajax_order_intent', 'ajax_payment_terms'];
+        $handlers = [
+            'ajax_company_search',
+            'ajax_company_by_id',
+            'ajax_order_intent',
+            'ajax_payment_terms',
+            'ajax_supported_countries',
+        ];
         foreach ($handlers as $handler) {
             $gateway = self::proxyGateway();
             $response = self::runProxyHandler($gateway, $handler);
@@ -10028,6 +10034,7 @@ final class BrandConfigSpec
                 '/v1/payment_terms',
             ],
             ['ajax_order_intent', [], ['intent' => '{"gross_amount":"10.00"}'], '/v1/order_intent'],
+            ['ajax_supported_countries', [], [], '/companies/v2/supported-countries'],
         ];
         foreach ($cases as [$handler, $request, $post, $endpoint]) {
             unset($GLOBALS['__twoinc_test_http_calls']);
@@ -10075,6 +10082,19 @@ final class BrandConfigSpec
         TinyAssert::same('shortname-from-settings', $params['merchant_short_name']);
         TinyAssert::same('12345678', $params['buyer_organization_number']);
         TinyAssert::same('GB', $params['country_prefix']);
+    }
+
+    private static function testApiProxySupportedCountriesRelaysTheGlobalListWithNoRequestParams(): void
+    {
+        // The list is global, not per-country — nothing from the
+        // browser should reach the upstream call.
+        $gateway = self::proxyGateway(['response' => ['code' => 200], 'body' => '{"supported_countries":["GB","US"]}']);
+        $response = self::runProxyHandler($gateway, 'ajax_supported_countries');
+
+        TinyAssert::same(['supported_countries' => ['GB', 'US']], $response['relayed'] ?? null);
+        TinyAssert::same('/companies/v2/supported-countries', $gateway->calls[0]['endpoint']);
+        TinyAssert::same('GET', $gateway->calls[0]['method']);
+        TinyAssert::same([], $gateway->calls[0]['params']);
     }
 
     private static function testApiProxyOrderIntentPostsTheDecodedBodyOrRefuses(): void
@@ -10152,6 +10172,7 @@ final class BrandConfigSpec
             'company_by_id_url' => 'two_company_by_id',
             'order_intent_url' => 'two_order_intent',
             'payment_terms_url' => 'two_payment_terms',
+            'supported_countries_url' => 'two_supported_countries',
         ];
         foreach ($expected as $key => $action) {
             TinyAssert::same(
@@ -10205,6 +10226,7 @@ final class BrandConfigSpec
             ['company_by_id', 30, 60, 'one per company the buyer picks'],
             ['payment_terms', 30, 60, 'one per captured company'],
             ['sole_trader_availability', 30, 60, 'cached per country by the browser'],
+            ['supported_countries', 20, 60, 'fetched once per page load, not per keystroke'],
         ];
         // select_term makes no upstream call, so metering it would only cost a
         // buyer their term choice for nothing.
@@ -10359,6 +10381,7 @@ final class BrandConfigSpec
             ['company_by_id', 'ajax_company_by_id', 'the registry address lookup'],
             ['order_intent', 'ajax_order_intent', 'the order intent check'],
             ['payment_terms', 'ajax_payment_terms', 'the payment terms lookup'],
+            ['supported_countries', 'ajax_supported_countries', 'the supported search countries lookup'],
         ];
         foreach ($handlers as list($route, $handler, $description)) {
             $GLOBALS['__twoinc_test_transients'] = [];

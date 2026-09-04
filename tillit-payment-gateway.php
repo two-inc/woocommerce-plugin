@@ -126,6 +126,7 @@ function load_twoinc_classes()
     add_action('wc_ajax_two_company_by_id', ['WC_Twoinc_Api_Proxy', 'ajax_company_by_id']);
     add_action('wc_ajax_two_order_intent', ['WC_Twoinc_Api_Proxy', 'ajax_order_intent']);
     add_action('wc_ajax_two_payment_terms', ['WC_Twoinc_Api_Proxy', 'ajax_payment_terms']);
+    add_action('wc_ajax_two_supported_countries', ['WC_Twoinc_Api_Proxy', 'ajax_supported_countries']);
 
     // Admin invoice / credit-note PDF download from the order edit screen:
     // streams the PDF, or redirects back with a notice after the

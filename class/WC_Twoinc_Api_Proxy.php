@@ -87,6 +87,21 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
             self::relay($gateway->make_request('/companies/v2/company', [], 'GET', $params));
         }
 
+        /**
+         * wc-ajax handler: the countries the registry search covers, so the
+         * ordinary company-search control can gate itself the same way the
+         * sole-trader chip gates on its own per-country registry answer.
+         * No request params — the list is global, not per-country.
+         */
+        public static function ajax_supported_countries(): void
+        {
+            $gateway = self::authorize('supported search countries', 'supported_countries');
+            if (!$gateway) {
+                return;
+            }
+            self::relay($gateway->make_request('/companies/v2/supported-countries', [], 'GET'));
+        }
+
         /** wc-ajax handler: registry address lookup for one company. */
         public static function ajax_company_by_id(): void
         {
