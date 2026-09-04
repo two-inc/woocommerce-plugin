@@ -369,7 +369,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         ["us", "US", "upper-cased for the page's ISO check"],
         ["", null, "empty stays absent, not an empty param"]
       ])("#billing_country %p -> country=%p (%s)", (fieldCountry, expected) => {
-        $("#billing_country").append(`<option value="${fieldCountry}">${fieldCountry}</option>`).val(fieldCountry);
+        $("#billing_country")
+          .append(`<option value="${fieldCountry}">${fieldCountry}</option>`)
+          .val(fieldCountry);
 
         soleTrader.launchSignup();
 
