@@ -355,7 +355,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       expect(opened[0].url).toContain("businessToken=delegation");
       expect(opened[0].url).toContain("autofillToken=autofill");
-      const encoded = decodeURIComponent(opened[0].url.split("autofillData=")[1]);
+      const encoded = new URL(opened[0].url).searchParams.get("autofillData");
       const prefill = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
       expect(prefill.email).toBe("buyer@example.test");
       expect(prefill.billing_address.city).toBe("Registryville");
@@ -363,27 +363,26 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     describe("PDEV-4669 — the country the hosted signup builds its form for", () => {
-      // Given tokens.country / When launchSignup / Then `country` carries the server's value, or is absent.
+      // Given #billing_country / When launchSignup / Then `country` carries the live field's value, or is absent.
       test.each([
         ["US", "US", "passed straight through"],
         ["us", "US", "upper-cased for the page's ISO check"],
-        ["", null, "empty stays absent, not an empty param"],
-        [undefined, null, "a response without one leaves the page on its default"]
-      ])("tokens.country %p -> country=%p (%s)", (tokenCountry, expected) => {
-        soleTrader.tokens.country = tokenCountry;
+        ["", null, "empty stays absent, not an empty param"]
+      ])("#billing_country %p -> country=%p (%s)", (fieldCountry, expected) => {
+        $("#billing_country").append(`<option value="${fieldCountry}">${fieldCountry}</option>`).val(fieldCountry);
 
         soleTrader.launchSignup();
 
         expect(new URL(opened[0].url).searchParams.get("country")).toBe(expected);
       });
 
-      test("never the DOM — a tampered field must not pick the buyer's jurisdiction", () => {
+      test("never tokens.country — tokens outlive a country change (TWO-40), so it can be stale", () => {
         $("#billing_country").append('<option value="US">US</option>').val("US");
         soleTrader.tokens.country = "GB";
 
         soleTrader.launchSignup();
 
-        expect(new URL(opened[0].url).searchParams.get("country")).toBe("GB");
+        expect(new URL(opened[0].url).searchParams.get("country")).toBe("US");
       });
     });
   });

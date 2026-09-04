@@ -4374,9 +4374,12 @@ function createSoleTraderController(companySearch) {
         encodeURIComponent(controller.tokens.autofill_token) +
         "&autofillData=" +
         encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(prefill)))));
-      // PDEV-4669: server-vetted country only — a DOM read would let the buyer
-      // pick their own verification flow.
-      const country = (controller.tokens.country || "").toUpperCase();
+      // PDEV-4669: same live country as `prefill.billing_address` above, not
+      // tokens.country — tokens now outlive a country change (TWO-40), so
+      // that field is mint-time, not current. Still registry-vetted: the
+      // sole-trader button that reaches this is only live once `refresh()`
+      // has confirmed the registry supports this country.
+      const country = prefill.billing_address.country_code;
       if (country) url += "&country=" + encodeURIComponent(country);
       // Wired through unconditionally when asked for, with no branching on what
       // the hosted flow does with it — that is the flow's business, not this
