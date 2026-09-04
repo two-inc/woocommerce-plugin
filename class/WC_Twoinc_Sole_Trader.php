@@ -124,8 +124,9 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
         /**
          * Whether the Sole Trader option should be offered for a billing
          * country: the registry's answer for that country, and nothing else.
-         * This is the ONLY gate, and it is also the authorisation gate the
-         * token-minting endpoint relies on (see ajax_tokens()).
+         * This is the ONLY gate on the toggle's visibility. The token mint
+         * (ajax_tokens()) does not gate on this, or on any country/merchant
+         * check — see that method's own doc.
          */
         public static function is_available($gateway, string $country): bool
         {
@@ -249,28 +250,14 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
                 wp_send_json_error('Gateway unavailable');
                 return;
             }
-            // The authorisation gate: only mint delegated-authority tokens
-            // when the buyer's billing country actually supports sole trader.
-            // With the merchant toggle removed (TWO-25163) this country check
-            // is the ONLY thing standing between an unauthenticated request
-            // and a write-scoped token pair — it must never be relaxed, or
-            // the endpoint becomes a minting oracle for any country. Gate on
-            // the country the browser posts (the same value the availability
-            // check used) rather than WC()->customer, which lags the DOM
-            // within the checkout-update debounce and would wrongly block a
-            // legitimate buyer. is_available() re-checks the registry
-            // server-side, so spoofing only permits minting for a country the
-            // registry already supports — no privilege gain.
+            // No country/merchant gate (TWO-40 eager mint): the registry's
+            // company-search coverage is the same set for every merchant, so
+            // a per-merchant or per-country check here gated nothing real —
+            // it only delayed the mint until the toggle's own country check
+            // happened to agree. Minted unconditionally, as soon as checkout
+            // is reached; CSRF + rate limiting above are the only gates.
             $country = isset($_REQUEST['country']) ? sanitize_text_field(wp_unslash($_REQUEST['country'])) : '';
             $country = strtoupper(trim($country));
-            if (!self::is_available($gateway, (string) $country)) {
-                self::log_refusal(
-                    'token mint',
-                    sprintf('billing country "%s" is not sole-trader capable per the registry', (string) $country)
-                );
-                wp_send_json_error('Sole trader checkout is not available for this country');
-                return;
-            }
             $tokens = self::mint_tokens($gateway);
             if ($tokens === null) {
                 self::log_refusal('token mint', 'the delegation endpoints did not return a usable token pair');
@@ -281,10 +268,9 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
                 'delegation_token' => $tokens['delegation_token'],
                 'autofill_token' => $tokens['autofill_token'],
                 'signup_url' => self::get_signup_page_url($gateway),
-                // PDEV-4669: registry-vetted country, echoed back — never re-derived from a DOM read.
                 'country' => $country,
             ];
-            // Sent here (token-checked, registry-gated) rather than the page bootstrap, so it never reaches an unvetted render.
+            // Sent here (behind CSRF + rate limiting) rather than the page bootstrap, so it never reaches an unauthenticated render.
             $custom_headers = $gateway->get_browser_custom_headers();
             if (count($custom_headers) > 0) {
                 $response['custom_headers'] = $custom_headers;

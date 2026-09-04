@@ -3185,22 +3185,35 @@ function createSoleTraderController(companySearch) {
         .appendTo($note);
       $container.append($note);
 
-      // Minted here rather than at click time, since `window.open()` outside
-      // the click's own gesture is blocker bait. Not country- or
-      // email-scoped, so one mint per page serves every launch, held and
-      // reused across a country change.
-      //
-      // The callback re-decides the "select a different sole trader" link: a
-      // sole trader restored from a previous order is already adopted before
-      // any mint has happened, and that link only shows once `tokens` is real.
-      if (!controller.tokens) {
-        controller.fetchTokens(function () {
-          controller.syncDifferentSoleTraderLink();
-          controller.prefetchAutofill();
-        });
-      } else {
+      // Mint happens once, eagerly, from `Twoinc#initialize()` (see
+      // `primeTokens`) — not here, so the toggle becoming visible for a
+      // country never gates or re-triggers it. Re-sync in case the eager
+      // mint already landed (or lands later): a sole trader restored from a
+      // previous order is adopted before any mint completes, and this link
+      // only shows once `tokens` is real.
+      controller.syncDifferentSoleTraderLink();
+      // Not tied to the mint itself: `prefetchAutofill` self-guards
+      // (pending/held/backoff), so retrying it on every render — including
+      // one under a country the toggle just moved to — costs nothing and
+      // catches an answer that arrives after the eager mint already ran.
+      controller.prefetchAutofill();
+    },
+
+    /**
+     * Mint the delegation + autofill tokens unconditionally, at checkout
+     * load (TWO-40) — never gated on the currently selected billing/shipping
+     * country, so the toggle becoming visible for a country never has to
+     * wait on a mint. Called from `Twoinc#initialize()`, itself a run-once
+     * guarded by `isInitialized`; the `!controller.tokens` guard here still
+     * matters for the (harmless) case of a second call before the first
+     * mint has resolved.
+     */
+    primeTokens: function () {
+      if (controller.tokens) return;
+      controller.fetchTokens(function () {
+        controller.syncDifferentSoleTraderLink();
         controller.prefetchAutofill();
-      }
+      });
     },
 
     /**
@@ -4839,6 +4852,14 @@ class Twoinc {
     // a shipping company captured under a country the buyer has left.
     twoincSelectWooHelperShipping.countryDidChange(twoincSelectWooHelperShipping.currentCountry());
 
+    // Mint eagerly and unconditionally, once per checkout load (TWO-40) —
+    // never gated on the country selected above. Idempotent (`primeTokens`
+    // no-ops once `tokens` is set), so it's safe to reach this
+    // `initialize()` call more than once; it isn't, because of the guard at
+    // the top of this method, but the safety costs nothing to keep.
+    twoincSelectWooHelper.soleTrader.primeTokens();
+    twoincSelectWooHelperShipping.soleTrader.primeTokens();
+
     setTimeout(function () {
       twoincDomHelper.saveCheckoutInputs();
       Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
@@ -5746,6 +5767,12 @@ class Twoinc {
     twoincDomHelper.rearrangeDescription();
 
     twoincTermChips.refresh();
+    // Retries a mint that hasn't landed yet (network blip, rate limit) —
+    // `primeTokens` no-ops once `tokens` is set, so this costs nothing once
+    // the eager mint from `initialize()` has already succeeded. Unconditional,
+    // same as `initialize()`'s own call: independent of country, unlike
+    // `refresh()` right below.
+    twoincSoleTrader.primeTokens();
     twoincSoleTrader.refresh();
 
     // TWO-25326 §7.1: called directly here, not only via
@@ -5761,6 +5788,7 @@ class Twoinc {
     // refresh re-renders the shipping fields, so the control's host is a new
     // node and the panel that was bound to the old one is gone with it.
     twoincSelectWooHelperShipping.rebindUnlessManual();
+    twoincSelectWooHelperShipping.soleTrader.primeTokens();
     twoincSelectWooHelperShipping.soleTrader.refresh();
 
     // Re-resolve on EVERY `updated_checkout`, not only a real country change

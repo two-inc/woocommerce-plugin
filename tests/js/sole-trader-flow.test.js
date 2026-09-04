@@ -1536,7 +1536,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         if (cb) cb(false);
       });
 
-      soleTrader.render();
+      soleTrader.primeTokens();
 
       expect(prefetch.calls).toBe(0);
       expect(soleTrader.heldAutofill()).toBeNull();
@@ -1804,14 +1804,15 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
     /**
      * The backend needs a country to build the mint under, so an unreadable
-     * one mints nothing.
+     * one mints nothing. `render()` no longer mints at all (TWO-40 eager
+     * mint) — asserted against `primeTokens()` instead.
      */
     test("no tokens are minted while the country is unreadable", () => {
       soleTrader.tokens = null;
       const ajax = harness.stubAjax($);
       $("#billing_country").val("");
 
-      soleTrader.render();
+      soleTrader.primeTokens();
 
       expect(ajax.calls).toHaveLength(0);
       ajax.restore();
@@ -1940,7 +1941,13 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
      * The mint must be behind the buyer by the time they click, or the click
      * path carries a round trip `window.open()` cannot survive.
      */
-    describe("tokens are minted when the control renders, never on the click path", () => {
+    /**
+     * TWO-40 eager mint: minting is decoupled from the per-country toggle.
+     * `refresh()`/`apply()`/`render()` decide only the toggle's VISIBILITY
+     * (unchanged); `primeTokens()` is the one path that mints, and it never
+     * consults `availabilityByCountry`.
+     */
+    describe("primeTokens mints independent of the per-country toggle", () => {
       let ajax;
 
       beforeEach(() => {
@@ -1954,35 +1961,72 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       test.each([
-        {
-          available: true,
-          expectedCalls: 2,
-          description: "a country where sole trader is offered"
-        },
-        {
-          available: false,
-          expectedCalls: 1,
-          description: "a country where it is not — a buyer who can never use it mints nothing"
-        }
-      ])("$description", ({ available, expectedCalls }) => {
+        { available: true, description: "a country where sole trader is offered" },
+        { available: false, description: "a country where it is not" }
+      ])("refresh() never mints — $description", ({ available }) => {
         soleTrader.refresh();
         ajax.last().succeed({ success: true, data: { available: available } });
 
-        expect(ajax.calls).toHaveLength(expectedCalls);
-        if (expectedCalls === 2) {
-          expect(ajax.calls[1].url).toContain("two_sole_trader_tokens");
-        }
+        expect(ajax.calls.some((call) => call.url.includes("two_sole_trader_tokens"))).toBe(false);
         expect(window.open).not.toHaveBeenCalled();
+      });
+
+      test("primeTokens() mints regardless of toggle availability", () => {
+        soleTrader.primeTokens();
+
+        expect(ajax.calls.some((call) => call.url.includes("two_sole_trader_tokens"))).toBe(true);
       });
 
       test("a successful mint prefetches the autofill answer behind it", () => {
         const prefetch = deferredPrefetch();
 
-        soleTrader.refresh();
-        ajax.last().succeed({ success: true, data: { available: true } });
+        soleTrader.primeTokens();
         ajax.last().succeed({ success: true, data: { autofill_token: "autofill" } });
 
         expect(prefetch.calls).toBe(1);
+      });
+
+      test("primeTokens() is a no-op once tokens are already held", () => {
+        soleTrader.tokens = { delegation_token: "d", autofill_token: "a", signup_url: "https://x" };
+
+        soleTrader.primeTokens();
+
+        expect(ajax.calls).toHaveLength(0);
+      });
+    });
+
+    /**
+     * TWO-40 eager mint: the real checkout entry point is
+     * `Twoinc#initialize()`, called once at checkout load — not a click, not
+     * a country becoming eligible.
+     */
+    describe("the mint fires once at checkout load, from initialize()", () => {
+      let ajax;
+
+      beforeEach(() => {
+        ajax = harness.stubAjax($);
+        soleTrader.tokens = null;
+        $("form[name='checkout']").after('<div id="order_review"></div>');
+      });
+
+      afterEach(() => {
+        ajax.restore();
+      });
+
+      test("mints with no country selected by the buyer and no chip click", () => {
+        ctx.Twoinc.getInstance().initialize(false);
+
+        const tokenCalls = ajax.calls.filter((call) => call.url.includes("two_sole_trader_tokens"));
+        expect(tokenCalls).toHaveLength(1);
+        expect(opened).toHaveLength(0);
+      });
+
+      test("a second initialize() call re-mints nothing — isInitialized guards it", () => {
+        ctx.Twoinc.getInstance().initialize(false);
+        ctx.Twoinc.getInstance().initialize(false);
+
+        const tokenCalls = ajax.calls.filter((call) => call.url.includes("two_sole_trader_tokens"));
+        expect(tokenCalls).toHaveLength(1);
       });
     });
   });
@@ -2037,10 +2081,11 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect($("#company_id").val()).toBe("");
       });
 
-      test("render() mints up front, so the chip click has tokens to open with", () => {
+      test("primeTokens() mints up front, so the chip click has tokens to open with", () => {
         // The reported defect end to end. `window.open()` has to run inside
         // the click's own gesture, so the mint must already have landed —
-        // hence the up-front one, not one started by the click.
+        // hence the up-front one, not one started by the click. Eager now
+        // (TWO-40): the mint call is `primeTokens()`, not `render()`.
         soleTrader.tokens = null;
         jest.spyOn(soleTrader, "fetchTokens").mockImplementation(() => {
           soleTrader.tokens = {
@@ -2050,8 +2095,12 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           };
         });
 
-        soleTrader.render();
+        soleTrader.primeTokens();
         expect(soleTrader.fetchTokens).toHaveBeenCalled();
+        // The toggle becoming visible for this country builds the note DOM
+        // `expectNoNote()` checks — independent of the mint above, which
+        // already landed by the time this runs.
+        soleTrader.render();
 
         soleTrader.onModeChipClick("sole_trader");
 
@@ -2060,15 +2109,24 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expectNoNote();
       });
 
-      test("a re-render does not mint a second, concurrent set of tokens", () => {
-        // Two POSTs racing each other's write to `.tokens`. `render()` runs on
-        // every `updated_checkout`.
-        jest.spyOn(soleTrader, "fetchTokens").mockImplementation(() => {});
+      test("a second primeTokens() call does not mint a second, concurrent set of tokens", () => {
+        // Two POSTs racing each other's write to `.tokens` — guards the
+        // resilience retry (`onUpdatedCheckout` calls `primeTokens()` on
+        // every checkout update) against re-minting once the first has
+        // landed.
+        soleTrader.tokens = null;
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation(() => {
+          soleTrader.tokens = {
+            delegation_token: "delegation",
+            autofill_token: "autofill",
+            signup_url: "https://checkout.example.test/soletrader/signup"
+          };
+        });
 
-        soleTrader.render();
-        soleTrader.render();
+        soleTrader.primeTokens();
+        soleTrader.primeTokens();
 
-        expect(soleTrader.fetchTokens).not.toHaveBeenCalled();
+        expect(soleTrader.fetchTokens).toHaveBeenCalledTimes(1);
       });
 
       test("tokens that could not be minted at all leave only the signup link", () => {
@@ -2078,7 +2136,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => {
           if (cb) cb(false);
         });
-        soleTrader.render();
+        soleTrader.tokens = null;
+        soleTrader.primeTokens();
         soleTrader.tokens = null;
         $("#billing_email").val("");
         jest.spyOn(soleTrader, "openPopup");
@@ -3954,7 +4013,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       jest.useRealTimers();
     });
 
-    // Drives a REAL (stubbed-network) token mint, as `render()` does.
+    // Drives a REAL (stubbed-network) token mint, as `primeTokens()` does.
     function realMint() {
       soleTrader.fetchTokens();
       ajax.last().succeed({
