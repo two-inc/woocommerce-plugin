@@ -1241,7 +1241,9 @@ class TwoCompanySearch {
   syncCompanySearchAvailability() {
     const available = this.registeredSearchIsAvailable();
     const $field = jQuery(this.companyFieldSelector());
-    $field.closest("." + this.fieldWrapClass).toggleClass(this.companySearchUnsupportedCountryClass, !available);
+    $field
+      .closest("." + this.fieldWrapClass)
+      .toggleClass(this.companySearchUnsupportedCountryClass, !available);
     $field.prop("disabled", !available);
     if (!available) this.closeCompanySearchDropdown();
     this.syncModeChips();
