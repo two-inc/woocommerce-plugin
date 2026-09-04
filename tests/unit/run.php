@@ -120,7 +120,8 @@ final class BrandConfigSpec
             'testPaymentTermsInvalidPostFallsBackToDefault',
             'testPaymentTermsDisabledMeansNoPayloadTerms',
             'testSoleTraderAvailableWhenRegistryListsIt',
-            'testSoleTraderTokensRefusedForNonCapableCountry',
+            'testSoleTraderTokensMintedRegardlessOfCountry',
+            'testSoleTraderTokensMintedWithNoCountryPosted',
             'testSoleTraderTokensMintedForCapableCountry',
             'testSoleTraderTokensEchoNormalisedCountry',
             'testSoleTraderHasNoMerchantToggleSetting',
@@ -4091,9 +4092,9 @@ final class BrandConfigSpec
      * endpoint prefix (the sole-trader logic talks to the registry +
      * delegation endpoints through it).
      */
-    private static function soleTraderGateway(array $options, array $responses): WC_Payment_Gateway
+    private static function soleTraderGateway(array $options, array $responses): WC_Twoinc
     {
-        return new class ($options, $responses) extends WC_Payment_Gateway {
+        return new class ($options, $responses) extends WC_Twoinc {
             private $options;
             private $responses;
             public $requests = [];
@@ -4108,27 +4109,6 @@ final class BrandConfigSpec
             public function get_option($key, $empty_value = null)
             {
                 return $this->options[$key] ?? $empty_value ?? '';
-            }
-
-            // Mirrors WC_Twoinc::get_browser_custom_headers() by delegating to
-            // it: a hand-rolled copy here would drift from the real filter.
-            public function get_browser_custom_headers()
-            {
-                $real = new class ($this->options) extends WC_Twoinc {
-                    private $seeded;
-
-                    public function __construct(array $options)
-                    {
-                        $this->seeded = $options;
-                        $this->id = WC_Twoinc_Brand::get('gateway_id');
-                    }
-
-                    public function get_option($key, $empty_value = null)
-                    {
-                        return $this->seeded[$key] ?? $empty_value ?? '';
-                    }
-                };
-                return $real->get_browser_custom_headers();
             }
 
             public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
@@ -4182,7 +4162,7 @@ final class BrandConfigSpec
     }
 
     /** Gateway that would happily mint if it were ever asked to. */
-    private static function tokenMintingGateway(array $types, array $options = []): WC_Payment_Gateway
+    private static function tokenMintingGateway(array $types, array $options = []): WC_Twoinc
     {
         return self::soleTraderGateway($options, [
             '/registry/v1/supported-company-types/' => self::registryOk($types),
@@ -4197,26 +4177,39 @@ final class BrandConfigSpec
         ]);
     }
 
-    private static function testSoleTraderTokensRefusedForNonCapableCountry(): void
+    /**
+     * TWO-40 eager mint: minting is unconditional — no country/merchant
+     * gate. The registry's company-search coverage is the same set for
+     * every merchant, so a per-country check here gated nothing real.
+     */
+    private static function testSoleTraderTokensMintedRegardlessOfCountry(): void
     {
-        // With the merchant toggle gone (TWO-25163) the country check is the
-        // ONLY authorisation gate on the token mint. A country the registry
-        // does not list must still be refused, and must not reach either
-        // delegation endpoint.
-        $gateway = self::tokenMintingGateway([]);
-        $_REQUEST = ['country' => 'NO'];
-        $response = self::runTokensHandler($gateway);
-        $_REQUEST = [];
-        TinyAssert::same(false, $response['success']);
-        TinyAssert::same(['/registry/v1/supported-company-types/NO'], $gateway->requests);
+        $cases = [
+            [[], 'GB', 'registry lists nothing for the posted country'],
+            [['SOLE_TRADER'], 'NO', 'registry lists it for the posted country'],
+        ];
+        foreach ($cases as [$types, $country, $description]) {
+            WC_Twoinc_Sole_Trader::reset_cache();
+            $gateway = self::tokenMintingGateway($types);
+            $_REQUEST = ['country' => $country];
+            $response = self::runTokensHandler($gateway);
+            $_REQUEST = [];
+            TinyAssert::true($response['success'], $description);
+        }
+    }
 
-        // A missing country is equally unauthorised (and never hits the API).
-        WC_Twoinc_Sole_Trader::reset_cache();
+    /**
+     * A missing country no longer blocks the mint — mint_tokens() itself
+     * carries no country, and there is no gate to check it against.
+     */
+    private static function testSoleTraderTokensMintedWithNoCountryPosted(): void
+    {
         $gateway = self::tokenMintingGateway(['SOLE_TRADER']);
         $_REQUEST = [];
         $response = self::runTokensHandler($gateway);
-        TinyAssert::same(false, $response['success']);
-        TinyAssert::same([], $gateway->requests);
+        $_REQUEST = [];
+        TinyAssert::true($response['success']);
+        TinyAssert::same('', $response['data']['country']);
     }
 
     private static function testSoleTraderTokensMintedForCapableCountry(): void

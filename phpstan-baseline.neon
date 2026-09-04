@@ -79,15 +79,9 @@ parameters:
 			path: tests/unit/run.php
 
 		-
-			message: '#^Access to an undefined property WC_Payment_Gateway\:\:\$requests\.$#'
-			identifier: property.notFound
-			count: 5
-			path: tests/unit/run.php
-
-		-
 			message: '#^Access to an undefined property WC_Twoinc\:\:\$requests\.$#'
 			identifier: property.notFound
-			count: 6
+			count: 9
 			path: tests/unit/run.php
 
 		-
