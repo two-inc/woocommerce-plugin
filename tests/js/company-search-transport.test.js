@@ -342,6 +342,11 @@ describe("company search transport", () => {
     beforeEach(() => {
       jest.useFakeTimers();
       harness.openCompanyPanel(ctx.$, ctx.helper);
+      // Binding the panel also renders its mode chips, which asks whether the
+      // registered-search chip should show — kicking off the one page-wide
+      // supported-countries fetch. Irrelevant to these assertions, which
+      // count requests typing itself produces.
+      ajax.calls.length = 0;
     });
 
     afterEach(() => {
