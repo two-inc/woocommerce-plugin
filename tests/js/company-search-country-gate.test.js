@@ -1,5 +1,5 @@
 /**
- *. The ordinary company-search control's own per-country gate.
+ * The ordinary company-search control's own per-country gate.
  *
  * Bifrost's GET /companies/v2/supported-countries answers with the full list
  * of countries its registry search covers. Before this, an unsupported

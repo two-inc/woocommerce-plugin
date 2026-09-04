@@ -1219,8 +1219,8 @@ class TwoCompanySearch {
   }
 
   /**
-   * Passive read of the same answer, with no side effect of its own
-   *. Used by the transport-level guards below: by the time a
+   * Passive read of the same answer, with no side effect of its own.
+   * Used by the transport-level guards below: by the time a
    * search can even fire the field is already attached, which is what
    * triggers the one page-wide fetch — those call sites reading the answer
    * a second time must not each risk kicking off a fetch of their own.
