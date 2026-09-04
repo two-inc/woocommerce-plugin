@@ -86,8 +86,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       autofill_token: "autofill",
       signup_url: "https://checkout.example.test/soletrader/signup"
     };
-    // The country the form below is on: tokens carry authority for one.
-    soleTrader.tokenCountry = "GB";
     // No Two session by default, so a chip click resolves to the hosted
     // signup — the path every popup expectation below is written against.
     // Synchronous, like a browser answering from a cookie it already has.
@@ -1596,10 +1594,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * The authority the answer was fetched under is country-scoped, so an
-     * answer from before a country change is not an answer for this one — in
-     * either direction: one landing after the change, and one already held
-     * when it happens.
+     * The answer is not scoped to a country, so a country change does not
+     * invalidate it — in either direction: one landing after the change, and
+     * one already held when it happens.
      */
     test.each([
       {
@@ -1616,18 +1613,18 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         },
         description: "already held when it happens"
       }
-    ])("an answer $description is not read for the new country", ({ arrange }) => {
+    ])("an answer $description is still read after a country change", ({ arrange }) => {
       $("#billing_country").append('<option value="NO">NO</option>');
       const prefetch = deferredPrefetch();
       soleTrader.render();
 
       arrange(prefetch);
 
-      expect(soleTrader.heldAutofill()).toBeNull();
-      // And the consequence: the chip does not adopt it.
+      expect(soleTrader.heldAutofill()).toEqual(ENROLLED);
+      // And the consequence: the chip adopts it with no popup.
       soleTrader.onModeChipClick("sole_trader");
-      expect($("#company_id").val()).toBe("");
-      expect(opened).toHaveLength(1);
+      expect($("#company_id").val()).toBe("TWO:ST9");
+      expect(opened).toHaveLength(0);
     });
 
     /**
@@ -1670,47 +1667,33 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       );
       const shipping = ctx.shippingHelper.soleTrader;
       shipping.tokens = soleTrader.tokens;
-      shipping.tokenCountry = country;
       return shipping;
     }
 
-    test("both company-search instances read the one held answer, on one request", () => {
-      const shipping = shippingOn("GB");
-      const shippingLookup = jest.spyOn(shipping, "fetchCurrentBuyer");
-      const prefetch = deferredPrefetch();
-
-      soleTrader.render();
-      shipping.render();
-      prefetch.answer(ENROLLED);
-
-      expect(prefetch.calls).toBe(1);
-      expect(shippingLookup).not.toHaveBeenCalled();
-      expect(shipping.heldAutofill()).toEqual(ENROLLED);
-    });
-
     /**
-     * Woo lets the delivery address sit in another country, and the two roles'
-     * lookups then carry different authority. One slot for both would have the
-     * second answer land on the first, so the first role's chip prompts a
-     * buyer it already had an answer for.
+     * Woo lets the delivery address sit in another country. The answer is
+     * not scoped to one, so the two roles share the single held answer
+     * whether their fields agree or not.
      */
-    test("two roles on different countries each keep their own answer", () => {
-      const shipping = shippingOn("NO");
-      const billingPrefetch = deferredPrefetch();
-      const shippingAnswers = [];
-      jest.spyOn(shipping, "fetchCurrentBuyer").mockImplementation((cb) => {
-        shippingAnswers.push(cb);
-      });
+    test.each([
+      { shippingCountry: "GB", description: "the same country as billing" },
+      { shippingCountry: "NO", description: "a different country from billing" }
+    ])(
+      "both roles read the one held answer, on one request — $description",
+      ({ shippingCountry }) => {
+        const shipping = shippingOn(shippingCountry);
+        const shippingLookup = jest.spyOn(shipping, "fetchCurrentBuyer");
+        const prefetch = deferredPrefetch();
 
-      soleTrader.render();
-      shipping.render();
-      shippingAnswers[0](null);
-      billingPrefetch.answer(ENROLLED);
+        soleTrader.render();
+        shipping.render();
+        prefetch.answer(ENROLLED);
 
-      expect(shippingAnswers).toHaveLength(1);
-      expect(soleTrader.heldAutofill()).toEqual(ENROLLED);
-      expect(shipping.heldAutofill()).toBe(false);
-    });
+        expect(prefetch.calls).toBe(1);
+        expect(shippingLookup).not.toHaveBeenCalled();
+        expect(shipping.heldAutofill()).toEqual(ENROLLED);
+      }
+    );
 
     test.each([
       { answer: ENROLLED, description: "a registration" },
@@ -1761,21 +1744,18 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * The jurisdiction decides which authority an answer came from, so an
-     * unreadable country is not a country the held answer answers for — the
-     * chip goes to the popup rather than adopting under an unknown one.
-     * WooCommerce leaves the field briefly unreadable while replacing it.
+     * The held answer describes the buyer, not the field — an unreadable
+     * country (WooCommerce briefly clears it while replacing the select) is
+     * not a reason to withhold it.
      */
-    test("an unreadable country reads no held answer, whatever is held", () => {
-      soleTrader.holdAutofill(ENROLLED, "");
-      soleTrader.holdAutofill(ENROLLED, "GB");
+    test("a held answer is read and adopted even while the country is unreadable", () => {
+      soleTrader.holdAutofill(ENROLLED);
       $("#billing_country").val("");
 
       soleTrader.onModeChipClick("sole_trader");
 
-      expect(soleTrader.heldAutofill()).toBeNull();
-      expect($("#company_id").val()).toBe("");
-      expect(opened).toHaveLength(1);
+      expect($("#company_id").val()).toBe("TWO:ST9");
+      expect(opened).toHaveLength(0);
     });
 
     /**
@@ -1811,23 +1791,22 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       delete global.fetch;
     });
 
-    test("no lookup is made while the country is unreadable", () => {
+    /** The buyer lookup carries no country, so an unreadable one is no reason to skip it. */
+    test("a lookup is still made while the country is unreadable", () => {
       $("#billing_country").val("");
       const prefetch = deferredPrefetch();
 
       soleTrader.render();
 
-      expect(prefetch.calls).toBe(0);
+      expect(prefetch.calls).toBe(1);
     });
 
     /**
-     * The mint is what records the jurisdiction, so it cannot happen without
-     * one to record — the gate would otherwise hold a token scoped to nothing
-     * for the rest of the page.
+     * The backend needs a country to build the mint under, so an unreadable
+     * one mints nothing.
      */
     test("no tokens are minted while the country is unreadable", () => {
       soleTrader.tokens = null;
-      soleTrader.tokenCountry = null;
       const ajax = harness.stubAjax($);
       $("#billing_country").val("");
 
@@ -1838,18 +1817,17 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * Tokens carry authority for the country they were minted on and are
-     * never re-minted, so after a country change there is nothing to ask
-     * under — the chip falls back to the popup rather than asking anyway.
+     * Tokens are not country-scoped, so a country change is not a reason to
+     * withhold a lookup under them.
      */
-    test("no lookup is made under another country's tokens", () => {
+    test("a lookup is still made after a country change, under the same tokens", () => {
       $("#billing_country").append('<option value="NO">NO</option>');
       const prefetch = deferredPrefetch();
 
       $("#billing_country").val("NO");
       soleTrader.render();
 
-      expect(prefetch.calls).toBe(0);
+      expect(prefetch.calls).toBe(1);
     });
 
     /**
@@ -1878,98 +1856,53 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * Filed under the country the signup ran under — the one the popup was
-     * opened with — not whatever the field reads by the time it completes.
-     * WooCommerce can move the country while the popup is open.
+     * The held answer is not filed under a country, so it is unaffected by
+     * the field moving between launch and completion. WooCommerce can move
+     * the country while the popup is open.
      */
-    test("a signup completing after the field moved is filed under the country it ran under", () => {
+    test("a signup completing after the field moved holds its answer regardless", () => {
       $("#billing_country").append('<option value="NO">NO</option>');
       soleTrader.setMode("sole_trader");
       soleTrader.bindPopupMessageListener();
+      $("#billing_country").val("NO");
+      soleTrader.launchSignup();
       const SIGNED_UP = { organization_number: "TWO:ST2", company_name: "Second Trader" };
       jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(SIGNED_UP));
 
-      $("#billing_country").val("NO");
+      $("#billing_country").val("GB");
       window.dispatchEvent(
         new window.MessageEvent("message", {
           data: "ACCEPTED",
           origin: "https://checkout.example.test"
         })
       );
-      $("#billing_country").val("GB");
 
       expect(soleTrader.heldAutofill()).toEqual(SIGNED_UP);
     });
 
     /**
-     * The tokens' authority is scoped to one country, so a change retires
-     * them and the next render mints again — otherwise autofill is dead for
-     * the rest of the page and the signup popup runs on the old jurisdiction.
+     * Tokens are not country-scoped, so a country change is not a reason to
+     * mint again — held and reused, with no `two_sole_trader_tokens` call.
      */
-    test("a real country change retires the tokens, and the next render mints again", () => {
+    test("a real country change does not re-mint the tokens", () => {
       ctx.helper.countryDidChange("GB");
       soleTrader.availabilityByCountry.SE = true;
+      const heldTokens = soleTrader.tokens;
       const ajax = harness.stubAjax($);
       $("#billing_country").append('<option value="SE">SE</option>');
       $("#billing_country").val("SE");
 
       ctx.Twoinc.getInstance().syncBillingCountry();
 
-      expect(soleTrader.tokens).toBeNull();
-      expect(ajax.calls.some((call) => call.url.includes("two_sole_trader_tokens"))).toBe(true);
+      expect(soleTrader.tokens).toBe(heldTokens);
+      expect(ajax.calls.some((call) => call.url.includes("two_sole_trader_tokens"))).toBe(false);
       ajax.restore();
-    });
-
-    /**
-     * A retire refused mid-flight is retried by a later render, not dropped:
-     * dropping it strands the page on authority for a country the buyer left,
-     * with autofill dead and every later popup opened under the wrong
-     * jurisdiction.
-     */
-    test("a retire refused during a signup happens on the next render instead", () => {
-      ctx.helper.countryDidChange("GB");
-      soleTrader.availabilityByCountry.SE = true;
-      soleTrader.setMode("sole_trader");
-      soleTrader.launchSignup();
-      $("#billing_country").append('<option value="SE">SE</option>');
-      $("#billing_country").val("SE");
-      ctx.Twoinc.getInstance().syncBillingCountry();
-      expect(soleTrader.tokens).not.toBeNull();
-
-      soleTrader.stopAllPopupWatchers();
-      soleTrader.settleFlight();
-      const ajax = harness.stubAjax($);
-      soleTrader.render();
-
-      expect(soleTrader.tokens).toBeNull();
-      expect(ajax.calls.some((call) => call.url.includes("two_sole_trader_tokens"))).toBe(true);
-      ajax.restore();
-    });
-
-    test("a country change leaves the tokens alone while a signup is still outstanding", () => {
-      ctx.helper.countryDidChange("GB");
-      soleTrader.availabilityByCountry.SE = true;
-      soleTrader.setMode("sole_trader");
-      soleTrader.launchSignup();
-      expect(soleTrader.isBusy()).toBe(true);
-
-      // Installed before the change: the re-render it triggers is where a
-      // lookup on the outgoing country's authority would be made.
-      const prefetch = deferredPrefetch();
-      $("#billing_country").append('<option value="SE">SE</option>');
-      $("#billing_country").val("SE");
-      ctx.Twoinc.getInstance().syncBillingCountry();
-
-      expect(soleTrader.tokens).not.toBeNull();
-      // Nor are they asked under: they carry authority for the country the
-      // buyer has left, so the lookup waits for the re-mint.
-      expect(prefetch.calls).toBe(0);
     });
 
     test("re-clicking the chip once adopted goes straight to the re-signup, with no lookup", () => {
       soleTrader.setMode("sole_trader");
       soleTrader.setCompany("TWO:ST1", "First Trader");
-      soleTrader.holdAutofill(ENROLLED, "GB");
+      soleTrader.holdAutofill(ENROLLED);
       soleTrader.fetchCurrentBuyer.mockClear();
 
       soleTrader.onModeChipClick("sole_trader");
@@ -1991,7 +1924,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       ({ activate }) => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "First Trader");
-        soleTrader.holdAutofill(ENROLLED, "GB");
+        soleTrader.holdAutofill(ENROLLED);
         soleTrader.fetchCurrentBuyer.mockClear();
 
         activate(soleTrader.getDifferentSoleTraderBtnNode());
@@ -2013,9 +1946,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         ajax = harness.stubAjax($);
         soleTrader.availabilityByCountry = {};
         soleTrader.tokens = null;
-        // Cleared with them: a real mint is what records the country their
-        // authority is scoped to, and the prefetch is gated on it.
-        soleTrader.tokenCountry = null;
       });
 
       afterEach(() => {
@@ -4095,26 +4025,23 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       expect(soleTrader.tokens.delegation_token).toBe("delegation-3");
     });
 
-    test("a stale-country refresh response is discarded rather than overwriting a newer mint (round-2 review — Vader)", () => {
-      // The buyer changes billing country while the refresh tick's own
-      // request is still outstanding. Applying it anyway would ship
-      // delegated authority for the country they just left.
+    test("a refresh response landing after a country change is still applied — tokens are not country-scoped", () => {
       realMint();
       jest.advanceTimersByTime(30 * 60 * 1000);
-      const staleTick = ajax.last();
+      const tick = ajax.last();
 
       $("#billing_country").append('<option value="DE">DE</option>');
       $("#billing_country").val("DE");
-      staleTick.succeed({
+      tick.succeed({
         success: true,
         data: {
-          delegation_token: "stale-gb-delegation",
-          autofill_token: "stale-gb-autofill",
+          delegation_token: "refreshed-delegation",
+          autofill_token: "refreshed-autofill",
           signup_url: "https://checkout.example.test/soletrader/signup"
         }
       });
 
-      expect(soleTrader.tokens.delegation_token).toBe("delegation-1");
+      expect(soleTrader.tokens.delegation_token).toBe("refreshed-delegation");
     });
 
     test.each([

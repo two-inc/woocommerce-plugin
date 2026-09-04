@@ -2907,24 +2907,20 @@ let twoincTermChips = {
 };
 
 /**
- * Prefetched autofill answers by country — the buyer object, or `false` for
- * "nobody on the cookie". An absent entry means unresolved.
- *
- * Keyed by country because the delegated authority each was fetched under is.
- * Shared by every controller because the answer describes the buyer, not the
+ * The prefetched autofill answer — the buyer object, or `false` for "nobody
+ * on the cookie". `undefined` means unresolved. Not scoped to a country: the
+ * buyer on the cookie is the same buyer whatever the checkout's country
+ * reads. Shared by every controller because it describes the buyer, not the
  * role: the billing and delivery panels each own an instance, and a signup
  * completed through one must not leave the other prompting the same buyer to
  * sign up again.
  */
-const soleTraderAutofillByCountry = {};
+let soleTraderAutofillAnswer;
 
-/** Countries with a lookup outstanding, so two controllers make one request. */
-const soleTraderAutofillPending = {};
+/** Whether a lookup is currently outstanding, so two controllers make one request. */
+let soleTraderAutofillPending = false;
 
-/**
- * Set by a rate-limited lookup. Page-global, unlike the maps above: the limit
- * is on the endpoint, which one country's tokens reach as readily as another's.
- */
+/** Set by a rate-limited lookup, page-global like the answer above. */
 let soleTraderAutofillBackoffUntil = 0;
 
 /**
@@ -2941,9 +2937,6 @@ function createSoleTraderController(companySearch) {
     mode: "business", // 'business' | 'sole_trader'
     availabilityByCountry: {},
     tokens: null,
-
-    /** The country `tokens` were minted for — their delegated authority is scoped to it. */
-    tokenCountry: null,
 
     /** Backoff after a 429: callers gate on `!tokens`, so a failed mint otherwise re-mints every render. */
     tokenMintBackoffUntil: 0,
@@ -3192,10 +3185,10 @@ function createSoleTraderController(companySearch) {
         .appendTo($note);
       $container.append($note);
 
-      controller.retireTokens();
       // Minted here rather than at click time, since `window.open()` outside
-      // the click's own gesture is blocker bait. Tokens are country-scoped,
-      // not email-scoped, so one mint per page serves every launch.
+      // the click's own gesture is blocker bait. Not country- or
+      // email-scoped, so one mint per page serves every launch, held and
+      // reused across a country change.
       //
       // The callback re-decides the "select a different sole trader" link: a
       // sole trader restored from a previous order is already adopted before
@@ -3219,17 +3212,12 @@ function createSoleTraderController(companySearch) {
       // A failed mint leaves no tokens, and the lookup then answers `null`
       // unconditionally — latching a false "nobody" over a real registration.
       if (!controller.tokens) return;
-      // Tokens are minted once, for the country the buyer had then, so after a
-      // country change there is no authority to ask under and the chip falls
-      // back to the signup popup.
-      const country = controller.currentCountry();
-      if (controller.tokenCountry !== country) return;
-      if (soleTraderAutofillPending[country]) return;
+      if (soleTraderAutofillPending) return;
       if (controller.heldAutofill() !== null) return;
       if (Date.now() < soleTraderAutofillBackoffUntil) return;
-      soleTraderAutofillPending[country] = true;
+      soleTraderAutofillPending = true;
       controller.fetchCurrentBuyer(function (buyer, failed, response) {
-        delete soleTraderAutofillPending[country];
+        soleTraderAutofillPending = false;
         // A dropped request is not an answer: held, it would latch "nobody"
         // for the life of the page and block the next render's retry. A rate
         // limit is the one failure retrying makes worse.
@@ -3242,37 +3230,17 @@ function createSoleTraderController(companySearch) {
           }
           return;
         }
-        controller.holdAutofill(buyer || false, country);
+        controller.holdAutofill(buyer || false);
       });
     },
 
-    /**
-     * Retire tokens minted for a country the buyer has since left — their
-     * delegated authority is scoped to it, and the next `render()` mints for
-     * the country now on the field.
-     *
-     * Refused while busy, since an outstanding signup's own buyer lookup
-     * still needs them; called from `render()` rather than the country change
-     * itself so a refusal is retried on the next one, instead of stranding
-     * the page on authority for a country it has left.
-     */
-    retireTokens: function () {
-      if (controller.tokenCountry === controller.currentCountry()) return;
-      if (controller.isBusy()) return;
-      controller.tokens = null;
-      controller.tokenCountry = null;
-    },
-
-    /** @returns {Object|boolean|null} the answer held for this role's country, `null` if none */
+    /** @returns {Object|boolean|null} the held answer, `null` if none */
     heldAutofill: function () {
-      const country = controller.currentCountry();
-      if (!country) return null;
-      const held = soleTraderAutofillByCountry[country];
-      return held === undefined ? null : held;
+      return soleTraderAutofillAnswer === undefined ? null : soleTraderAutofillAnswer;
     },
 
-    holdAutofill: function (buyer, country) {
-      soleTraderAutofillByCountry[country] = buyer;
+    holdAutofill: function (buyer) {
+      soleTraderAutofillAnswer = buyer;
     },
 
     /**
@@ -4201,8 +4169,8 @@ function createSoleTraderController(companySearch) {
         return;
       }
       const country = controller.currentCountry();
-      // A mint under an unreadable country would scope its authority to
-      // nothing, and `tokenCountry` gates every later use of it.
+      // The backend needs a country to build the mint under, even though
+      // the resulting tokens are not scoped to it.
       if (!country) {
         if (cb) cb(false);
         return;
@@ -4210,18 +4178,8 @@ function createSoleTraderController(companySearch) {
       jQuery
         .post(cfg.tokens_url, { csrf_token: cfg.csrf_token, country: country })
         .done(function (response) {
-          // The buyer may have changed country while the request was in
-          // flight — same guard `refresh()` uses for availability. Without
-          // it, a slower request for the country the buyer just left can
-          // land after a newer one and overwrite `tokens` with delegated
-          // authority for the wrong jurisdiction.
-          if (controller.currentCountry() !== country) {
-            if (cb) cb(false);
-            return;
-          }
           if (response && response.success && response.data && response.data.autofill_token) {
             controller.tokens = response.data;
-            controller.tokenCountry = country;
             controller.bindPopupMessageListener();
             controller.scheduleTokenRefresh();
             if (cb) cb(true);
@@ -4269,9 +4227,7 @@ function createSoleTraderController(companySearch) {
      * Deliberately does NOT also call `beginFlight()`/`settleFlight()` itself
      * (round-1 review, rejected): holding the flag for a background round trip
      * nobody asked for would only over-block the Business chip,
-     * `reopenSearch()` and click-to-reopen. `fetchTokens`'s own
-     * country-staleness guard (round-2 review) is what keeps a late response
-     * from overwriting `tokens` for the wrong jurisdiction.
+     * `reopenSearch()` and click-to-reopen.
      *
      * @returns {void}
      */
@@ -4500,11 +4456,8 @@ function createSoleTraderController(companySearch) {
                 );
               }
               if (resolved) {
-                // A signup replaces the cookie's buyer. Filed under the
-                // country the tokens were minted under, which is what
-                // `heldAutofill` keys on — not whatever the field reads by
-                // the time the signup completes.
-                controller.holdAutofill(buyer, controller.tokenCountry);
+                // A signup replaces the cookie's buyer.
+                controller.holdAutofill(buyer);
                 controller.setCompany(buyer.organization_number, buyer.company_name, buyer);
                 controller.showNote(false);
               } else {
