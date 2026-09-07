@@ -162,7 +162,27 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
             // Merchant identity is resolved here, never read from the request.
             $payload['merchant_id'] = (string) $gateway->get_merchant_id();
             $payload['merchant_short_name'] = (string) $gateway->get_option('merchant_short_name');
-            self::relay($gateway->make_request('/v1/order_intent', $payload, 'POST'));
+            $response = $gateway->make_request('/v1/order_intent', $payload, 'POST');
+            self::record_verdict($company, $response);
+            self::relay($response);
+        }
+
+        /**
+         * Bank the verdict for order creation to enforce (TWO-25657). Only an explicit
+         * `approved` counts — a transport or upstream error is not a decline.
+         */
+        private static function record_verdict($company, $response): void
+        {
+            $company_id = is_array($company) && isset($company['organization_number'])
+                ? (string) $company['organization_number']
+                : '';
+            if ($company_id === '' || is_wp_error($response) || !is_array($response)) {
+                return;
+            }
+            $body = json_decode((string) wp_remote_retrieve_body($response), true);
+            if (is_array($body) && array_key_exists('approved', $body)) {
+                WC_Twoinc::record_order_intent_verdict($company_id, (bool) $body['approved']);
+            }
         }
     }
 }

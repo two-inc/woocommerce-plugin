@@ -68,6 +68,8 @@ final class BrandConfigSpec
             'testBuyerCountrySupportJudgesEachAllowlistState',
             'testOrderCreationRefusesAnUnsupportedBuyerCountry',
             'testOrderIntentRefusesAnUnsupportedBuyerCountry',
+            'testOrderCreationRefusesADeclinedOrderIntent',
+            'testOrderIntentRecordsItsVerdictForOrderCreation',
             'testAvailabilityGateSkipsMinimumsOnEmptyCart',
             'testAvailabilityGateSkipsMinimumsOnOrderPayPage',
             'testMerchantMinimumRaisesTheBar',
@@ -1770,6 +1772,139 @@ final class BrandConfigSpec
         TinyAssert::same(['/v1/order_intent'], $gateway->calls, 'a supported buyer country must still reach the API');
 
         $_POST = [];
+    }
+
+    private static function testOrderCreationRefusesADeclinedOrderIntent(): void
+    {
+        // TWO-25657: the browser unticks and disables the payment method on a
+        // decline, but neither is enforcement — the submit path judges again.
+        $cases = [
+            [[], '923456789', false, 'no intent verdict for the submitted company'],
+            [['923456789' => true], '923456789', false, 'the intent approved this company'],
+            [['923456789' => false], '923456789', true, 'the intent declined this company'],
+            [['923456789' => false], '999888777', false, 'a company other than the declined one'],
+            [['923 456 789' => false], '923456789', true, 'the declined number as the browser formatted it'],
+        ];
+
+        foreach ($cases as $case) {
+            list($verdicts, $posted_company_id, $refused, $description) = $case;
+
+            // The first meta write is the statement after the gate, and the stub
+            // models nothing beyond it — so throwing there ends the run.
+            $order = new class extends StubOrder {
+                public function get_payment_method()
+                {
+                    return WC_Twoinc_Brand::get('gateway_id');
+                }
+
+                public function update_meta_data($key, $value)
+                {
+                    throw new DomainException('order building started');
+                }
+            };
+            $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+            $GLOBALS['__twoinc_test_notices'] = [];
+            WC()->session = new StubSession();
+            foreach ($verdicts as $company_id => $approved) {
+                WC_Twoinc::record_order_intent_verdict((string) $company_id, $approved);
+            }
+            $_POST = ['company_id' => $posted_company_id, 'billing_country' => 'NO'];
+
+            $gateway = self::buyerCountryGateway(null);
+            $proceeded = false;
+            try {
+                $gateway->process_payment(42);
+            } catch (DomainException $e) {
+                $proceeded = true;
+            }
+
+            $notices = array_column($GLOBALS['__twoinc_test_notices'], 'message');
+            if ($refused) {
+                TinyAssert::same([], $gateway->calls, $description . ': reached the API');
+                TinyAssert::true(!$proceeded, $description . ': order building started anyway');
+                TinyAssert::same(
+                    ['Invoice purchase with Two is not available for this order.'],
+                    $notices,
+                    $description . ': buyer was not told'
+                );
+            } else {
+                TinyAssert::true($proceeded, $description . ': order building never started');
+                TinyAssert::same([], $notices, $description . ': buyer was refused');
+            }
+        }
+
+        WC()->session = null;
+        $_POST = [];
+    }
+
+    private static function testOrderIntentRecordsItsVerdictForOrderCreation(): void
+    {
+        // The refusal above can only fire on a verdict the intent handler
+        // banked, so the two halves are pinned together.
+        $cases = [
+            ['{"approved":true}', true, 'an approval'],
+            ['{"approved":false}', false, 'a decline'],
+            ['{}', null, 'a body carrying no verdict'],
+            ['not json', null, 'an unparseable body'],
+        ];
+
+        foreach ($cases as $case) {
+            list($body, $expected, $description) = $case;
+
+            $GLOBALS['__twoinc_test_transients'] = [];
+            WC()->session = new StubSession();
+            $gateway = self::intentVerdictGateway($body);
+            $_POST = ['intent' => json_encode([
+                'buyer' => ['company' => ['country_prefix' => 'NO', 'organization_number' => '923456789']],
+            ])];
+
+            self::runProxyHandler($gateway, 'ajax_order_intent');
+
+            TinyAssert::same(
+                $expected,
+                WC_Twoinc::get_order_intent_verdict('923456789'),
+                $description . ': was not banked as expected'
+            );
+        }
+
+        WC()->session = null;
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $_POST = [];
+    }
+
+    private static function intentVerdictGateway(string $body)
+    {
+        return new class ($body) extends WC_Twoinc {
+            public $calls = [];
+            private $body;
+
+            public function __construct($body)
+            {
+                $this->body = $body;
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_merchant_id()
+            {
+                return 'mid';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'api_key' ? 'key' : ($empty_value ?? '');
+            }
+
+            public function get_supported_buyer_countries()
+            {
+                return null;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                $this->calls[] = $endpoint;
+                return ['response' => ['code' => 200], 'body' => $this->body];
+            }
+        };
     }
 
     private static function testAvailabilityGateSkipsMinimumsOnEmptyCart(): void

@@ -2321,6 +2321,10 @@ let twoincDomHelper = {
       paymentMethodRadioObj.prop("checked", false);
     }
   },
+  /** TWO-25657: unticking alone let the buyer re-tick and submit a declined order. */
+  setPaymentMethodSelectable: function (selectable) {
+    jQuery(':input[value="' + window.twoinc.gateway_id + '"]').prop("disabled", !selectable);
+  },
   toggleTooltip: function (selectorStr, tooltip) {
     if (window.twoinc.display_tooltips !== "yes") return;
 
@@ -2419,6 +2423,8 @@ let twoincDomHelper = {
     // verdict classes, so a brand overlay or later ticket adding a fourth
     // verdict box is still covered.
     jQuery(".twoinc-pay-box").not(".twoinc-loader").addClass("hidden");
+    // The block goes with the notice (TWO-25657); a replayed decline re-applies it.
+    twoincDomHelper.setPaymentMethodSelectable(true);
   },
   /**
    * Bumped by every pay-box paint. A deferred retire captures it at paint time
@@ -2430,6 +2436,10 @@ let twoincDomHelper = {
   togglePaySubtitleDesc: function (action, errSelector, companyLabel) {
     twoincDomHelper.payBoxPaintSeq += 1;
     jQuery(".twoinc-pay-box").addClass("hidden");
+    // TWO-25657: `.twoinc-busy-retry` is the shop's own limiter, not a verdict.
+    twoincDomHelper.setPaymentMethodSelectable(
+      !(action === "errored" && errSelector !== ".twoinc-busy-retry")
+    );
     if (["checking-intent", "intent-approved", "errored"].includes(action)) {
       if (action === "checking-intent") {
         // Suppressed by the brand => the loader div is absent, so this is a
