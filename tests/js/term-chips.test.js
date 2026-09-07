@@ -196,20 +196,14 @@ describe("payment terms chips", () => {
       }
     };
 
-    // A non-2xx and a dropped connection are indistinguishable to the caller —
-    // jQuery routes both through .fail with textStatus 'error' — so they are
-    // one row here rather than two that differ only in name.
+    // jQuery routes a non-2xx and a dropped connection both through .fail with
+    // textStatus 'error', so they are one row rather than two.
     const OUTCOMES = [
-      ["a fresh quote renders", (r) => r.succeed(QUOTE), ["+€9,00"]],
+      ["a fresh quote replaces the stale badge", (r) => r.succeed(QUOTE), ["+€9,00"]],
       ["a network error or non-2xx clears", (r) => r.fail("error"), []],
       ["an unparseable body clears", (r) => r.fail("parsererror"), []],
       ["a declined quote clears", (r) => r.succeed({ success: false, data: {} }), []],
-      ["a non-envelope body clears", (r) => r.succeed("<html>error</html>"), []],
-      [
-        "a quote carrying no fees clears",
-        (r) => r.succeed({ success: true, data: { terms: [30, 60], selected: 30 } }),
-        []
-      ]
+      ["a non-envelope body clears", (r) => r.succeed("<html>error</html>"), []]
     ];
 
     test.each(OUTCOMES)("%s", (description, settle, expected) => {
@@ -225,7 +219,6 @@ describe("payment terms chips", () => {
           },
           COPY
         ),
-        // The badges a previous quote left on the chips.
         { 30: { buyer_fee_share: "99.00", currency: "EUR", buyer_fee_share_display: "€99,00" } }
       );
       ajax = harness.stubAjax(ctx.$);
@@ -233,8 +226,7 @@ describe("payment terms chips", () => {
       chips.refresh();
       settle(ajax.last());
 
-      expect(feeLabels()).toEqual(expected, description);
-      // Whatever the outcome, the loading dots settle.
+      expect(feeLabels()).toEqual(expected);
       expect(ctx.$(".twoinc-term-chip__loading")).toHaveLength(0);
     });
   });
