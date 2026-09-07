@@ -208,6 +208,8 @@ describe("order-intent 429 backoff", () => {
     ajax.last().failWith(429, "30");
 
     expect(selected()).toBe(true);
+    // TWO-25657 disables the radio on a verdict; the shop being busy is not one.
+    expect($(":input[value='" + GATEWAY_ID + "']").prop("disabled")).toBe(false);
     expect(shown(".twoinc-busy-retry")).toBe(true);
     expect(shown(".twoinc-err-payment-default")).toBe(false);
     expect(instance.orderIntentCheck.rateLimitedUntil).toBe(Date.now() + 30000);

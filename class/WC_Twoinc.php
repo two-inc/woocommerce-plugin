@@ -3999,6 +3999,44 @@ if (!class_exists('WC_Twoinc')) {
             return apply_filters('twoinc_payment_validation_error', null, $order_id);
         }
 
+        /** WC session key: the last order-intent verdict per company id. */
+        public const INTENT_VERDICT_SESSION_KEY = 'twoinc_order_intent_verdicts';
+
+        /** Compared across a hand-typed field and an API payload, so formatting is not significant. */
+        private static function intent_verdict_key(string $company_id): string
+        {
+            return strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $company_id));
+        }
+
+        /** Banked so order creation can refuse a declined company (TWO-25657). */
+        public static function record_order_intent_verdict(string $company_id, bool $approved): void
+        {
+            $key = self::intent_verdict_key($company_id);
+            $session = function_exists('WC') ? (WC()->session ?? null) : null;
+            if ($key === '' || !$session) {
+                return;
+            }
+            $verdicts = $session->get(self::INTENT_VERDICT_SESSION_KEY);
+            $verdicts = is_array($verdicts) ? $verdicts : [];
+            $verdicts[$key] = $approved;
+            $session->set(self::INTENT_VERDICT_SESSION_KEY, $verdicts);
+        }
+
+        /** @return bool|null Null = no answer, never a decline. */
+        public static function get_order_intent_verdict(string $company_id): ?bool
+        {
+            $key = self::intent_verdict_key($company_id);
+            $session = function_exists('WC') ? (WC()->session ?? null) : null;
+            if ($key === '' || !$session) {
+                return null;
+            }
+            $verdicts = $session->get(self::INTENT_VERDICT_SESSION_KEY);
+            if (!is_array($verdicts) || !array_key_exists($key, $verdicts)) {
+                return null;
+            }
+            return (bool) $verdicts[$key];
+        }
+
         /**
          * @param int $order_id
          *
@@ -4115,6 +4153,17 @@ if (!class_exists('WC_Twoinc')) {
             }
             if (!$this->is_buyer_country_supported($buyer_country)) {
                 $this->log_buyer_country_rejection('order creation', $buyer_country);
+                WC_Twoinc_Helper::display_ajax_error(
+                    sprintf(
+                        __('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name')
+                    )
+                );
+                return;
+            }
+
+            // The browser disable is not enforcement (TWO-25657).
+            if (self::get_order_intent_verdict($company_id) === false) {
                 WC_Twoinc_Helper::display_ajax_error(
                     sprintf(
                         __('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'),

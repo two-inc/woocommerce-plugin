@@ -1820,6 +1820,18 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // hide took it down, with nothing to put it back until the next request.
       expect(shown(".twoinc-loader")).toBe(true);
     });
+
+    test("a change on #billing_company lifts a decline's block", () => {
+      instance.getApproval();
+      jest.advanceTimersByTime(1000);
+      ajax.last().succeed({ approved: false });
+      jest.advanceTimersByTime(1000);
+      expect($(":input[value='" + GATEWAY_ID + "']").prop("disabled")).toBe(true);
+
+      $("#billing_company").trigger("change");
+
+      expect($(":input[value='" + GATEWAY_ID + "']").prop("disabled")).toBe(false);
+    });
   });
 
   describe("clearSelectedCompany's deferred re-read", () => {
@@ -2474,6 +2486,51 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // sentence (TWO-25326 §7.3).
       expect(unhidden(".twoinc-pay-box.twoinc-intent-approved").overflowWrap).toBe("anywhere");
       expect(unhidden(".twoinc-pay-box.twoinc-err-payment-default").overflowWrap).toBe("anywhere");
+    });
+  });
+  describe("a declined verdict makes the gateway unplaceable (TWO-25657)", () => {
+    function placeable() {
+      return !$(":input[value='" + GATEWAY_ID + "']").prop("disabled");
+    }
+
+    test.each([
+      [{ approved: true }, true, "an approval leaves the gateway placeable"],
+      [{ approved: false }, false, "a decline blocks placement"],
+      [null, false, "an unusable body reads as a decline and blocks placement"]
+    ])("%p -> placeable %p: %s", (body, expected, description) => {
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+        expect(placeable()).toBe(true);
+
+        ajax.last().succeed(body);
+        jest.advanceTimersByTime(1000);
+
+        expect(placeable()).toBe(expected);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("an approval for a company picked after a decline places again", () => {
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+        expect(placeable()).toBe(false);
+
+        instance.enableCompanySearch();
+        ctx.helper.onPick({ id: "Beta Traders Ltd", company_id: "87654321" });
+        jest.advanceTimersByTime(1000);
+        ajax.last().succeed({ approved: true });
+        jest.advanceTimersByTime(1000);
+
+        expect(shown(".twoinc-intent-approved")).toBe(true);
+        expect(placeable()).toBe(true);
+      } finally {
+        ajax.restore();
+      }
     });
   });
 });
