@@ -2881,6 +2881,9 @@ let twoincTermChips = {
     // A checkout update invalidates the previous quotes, so show the
     // loading dots again until the fresh quotes arrive. When no fetch
     // will happen, skip straight to the settled (no-fee) state.
+    // Dropped here, not in the failure handlers: every path that re-renders
+    // without a fresh quote must find the map empty rather than the last one.
+    twoincTermChips.fees = {};
     twoincTermChips.feesLoaded = !willFetchFees;
     twoincTermChips.render(cfg.terms, cfg.selected);
 
