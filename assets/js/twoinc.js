@@ -775,6 +775,10 @@ class TwoCompanySearch {
 
   /** Shared class on every chip inside the panel. */
   modeChipClass = "two-company-mode-chip";
+  /** The panel's own hide class (`CompanySearchPanel.CLASSES.HIDDEN`). */
+  panelHiddenClass = "two-hidden";
+  /** Root class of the panel's own popover node (`CompanySearchPanel`'s `PANEL_CLASS`). */
+  panelClass = "two-company-dropdown";
 
   /** Class of the wrapper the panel anchors against. */
   fieldWrapClass = "two-company-field-wrap";
@@ -1514,7 +1518,13 @@ class TwoCompanySearch {
     if (!$el || !$el.length) return false;
     let node = $el.get(0);
     while (node && node.nodeType === 1) {
-      if (node.classList.contains("hidden") || node.hasAttribute("hidden")) return false;
+      if (
+        node.classList.contains("hidden") ||
+        node.classList.contains(this.panelHiddenClass) ||
+        node.hasAttribute("hidden")
+      ) {
+        return false;
+      }
       // WooCommerce collapses a payment box by writing `display: none` inline,
       // which is what makes a relocated row unreachable without ever putting a
       // class on it.
@@ -1994,6 +2004,14 @@ let twoincSelectWooHelperShipping = new TwoCompanySearch({
   soleTraderSpinnerClass: "twoinc-sole-trader-spinner-shipping",
   soleTraderSpinnerHostClass: "twoinc-name-searching-shipping"
 });
+
+/** A launch of either role is blurring the focus holder (TWO-25658) — not the buyer leaving the field. */
+function twoincSoleTraderLaunching() {
+  return (
+    twoincSelectWooHelper.soleTrader.openingSignup ||
+    twoincSelectWooHelperShipping.soleTrader.openingSignup
+  );
+}
 
 /**
  * Every mounted company-search control, for the flows that must treat the two
@@ -3078,28 +3096,12 @@ function createSoleTraderController(companySearch) {
     messageListenerBound: false,
     /** @type {Function|null} the bound `message` listener, so it can be removed */
     messageHandler: null,
-    /** @type {Function|null} the bound window `focus` listener — see `bindWindowRefocusListener` */
-    refocusHandler: null,
-    /** @type {Function|null} the bound `visibilitychange` listener, paired with the above */
-    visibilityHandler: null,
-    /**
-     * @type {Function|null} the bound capture-phase `mousedown` listener that
-     * settles a chip click's own effect on an open popup, independently of
-     * whatever the deferred path is doing.
-     */
-    chipMousedownHandler: null,
-    /**
-     * @type {number|null} the pending abandon a return to the checkout
-     * scheduled, or `null` when none is outstanding.
-     */
-    refocusAbandonTimer: null,
-    /**
-     * How long the abandon waits for the click that caused the refocus to
-     * identify itself. A window `focus` is dispatched before the `mousedown`
-     * that produced it, so the decision can't be made in the focus handler —
-     * it has to outlive it by long enough for that mousedown to arrive.
-     */
-    refocusChipGraceMs: 150,
+    /** @type {Function|null} the capture-phase `focusin` listener, `bindFocusinListener`'s */
+    focusinHandler: null,
+    /** @type {boolean} whether the last launch found focus held somewhere — the settle then gives it back */
+    restoreOnSettle: false,
+    /** @type {Element|null} the control a launch took focus from, given it back once the popup settles */
+    refocusOnSettle: null,
     /**
      * How many sole-trader round trips are outstanding (TWO-40 §7).
      *
@@ -3564,18 +3566,9 @@ function createSoleTraderController(companySearch) {
         if (!controller.isDeciding()) controller.setMode("business");
         return;
       }
-      // Cancel any abandon the buyer's return armed, here rather than only in
-      // the capture-phase mousedown (TWO-25503): Enter and Space produce no
-      // mousedown, so keyboard-activating this chip raised the popup and then
-      // let the still-armed timer close it 150ms later.
-      clearTimeout(controller.refocusAbandonTimer);
-      controller.refocusAbandonTimer = null;
       // A signup the buyer hasn't finished is still on screen, so this click
       // is asking for it back, not for anything new: raise it and stop.
-      // Checked on the chip itself, not the refocus that usually precedes it
-      // — a chip activated from the keyboard fires `click` with no
-      // `mousedown`, so a raise hung off the refocus would leave Enter/Space
-      // as the one route that can't get the buyer back to their popup.
+      // Checked here too, for a chip activated with focus already on it.
       if (controller.refocusOpenPopups()) return;
       // Re-clicking once already adopted is the same re-signup the "select a
       // different sole trader" link launches, not a no-op — the chip is a
@@ -3586,6 +3579,8 @@ function createSoleTraderController(companySearch) {
         controller.launchSignup({ autoselect: false });
         return;
       }
+      // The mode switch rebuilds the chips, so a chip holding focus is gone before the launch can see it.
+      const heldFocus = document.activeElement;
       controller.setMode("sole_trader");
       // Autofill first, hosted signup only when there is nobody to autofill
       // (TWO-40). The answer's subject is a cookie first-party to Two itself,
@@ -3601,7 +3596,7 @@ function createSoleTraderController(companySearch) {
         controller.showNote(false);
         return;
       }
-      controller.launchSignup();
+      controller.launchSignup(undefined, heldFocus);
     },
 
     /**
@@ -3791,13 +3786,10 @@ function createSoleTraderController(companySearch) {
      * while an already-open popup's outcome is undecided raises that popup
      * instead of opening a second one.
      *
-     * A re-signup (`options.autoselect === false`) is also refused while a
-     * different one is already outstanding: `openingSignup` only guards two
-     * clicks in the same synchronous gesture, not a later sequential one —
-     * closing one re-signup and re-clicking is exactly the case that made
-     * `soleTraderReconfirmingCount` a count rather than a boolean.
+     * @param {Object} [options]
+     * @param {Element} [heldFocus] what held focus before a chip's mode switch rebuilt it
      */
-    launchSignup: function (options) {
+    launchSignup: function (options, heldFocus) {
       if (controller.openingSignup) return;
       // One live undecided popup at a time. "Live" is load-bearing: a
       // hand-closed record stays undecided until its own poll notices, and a
@@ -3807,22 +3799,13 @@ function createSoleTraderController(companySearch) {
       // `isDeciding()`, which would strand a chip click when no popup exists
       // and only a stale flight is outstanding.
       if (controller.signupConfirming) return;
-      // The abandon a return to the checkout armed goes, whatever this
-      // activation then does: left running it closes the popup 150ms later,
-      // raised or freshly opened. Only the mode chips cancel it on their own.
-      clearTimeout(controller.refocusAbandonTimer);
-      controller.refocusAbandonTimer = null;
       // Raised, not silently dropped: the popup that would answer this
       // activation is already on screen, and a refusal that does nothing at all
       // reads as a dead control to a buyer who cannot see it.
       if (controller.refocusOpenPopups()) return;
-      if (options && options.autoselect === false && controller.soleTraderReconfirmingCount > 0) {
-        return;
-      }
       controller.openingSignup = true;
       try {
         const win = controller.openPopup(options);
-        controller.showNote(!win);
         if (win) {
           // Both callers passing `autoselect: false` — the "select a
           // different sole trader" link, and a re-click of the chip once
@@ -3838,8 +3821,11 @@ function createSoleTraderController(companySearch) {
             controller.soleTraderReconfirmingCount += 1;
           }
           controller.closeDropdownOnSettle = true;
+          // Before the note hides, so a launch from its link records the link.
+          controller.dropLaunchFocus(heldFocus);
           controller.watchPopupClose(win, isReconfirming);
         }
+        controller.showNote(!win);
       } finally {
         // Released once the synchronous open has returned, blocked or not —
         // held any longer and a blocked popup would lock the buyer out of
@@ -3870,7 +3856,6 @@ function createSoleTraderController(companySearch) {
      *   decrement meant for a different, still-open re-signup.
      */
     watchPopupClose: function (win, isReconfirming) {
-      controller.bindWindowRefocusListener();
       controller.beginFlight();
       const watcher = { id: null, win: win, isReconfirming: !!isReconfirming, decided: false };
       watcher.id = setInterval(function () {
@@ -3931,135 +3916,92 @@ function createSoleTraderController(companySearch) {
       ) {
         controller.setMode("business");
       }
+      controller.restoreLaunchFocus(chipOwnsOutcome || controller.soleTraderAdopted);
     },
 
-    /**
-     * Close an abandoned signup popup when the buyer comes back to the
-     * checkout.
-     *
-     * A window `focus` listener AND a `visibilitychange` one. The hosted signup
-     * is a separate window, so a round trip to it and back leaves the checkout's
-     * own tab `visible` throughout and only `focus` reports it; a buyer who
-     * fetches their code from another TAB of the same window is the reverse.
-     * Which of the two Chrome reports for an in-window tab switch is not
-     * established, so both are bound and the arming guard absorbs a duplicate.
-     * Bound lazily from `watchPopupClose`, left bound for the window's lifetime
-     * like the `message` listener.
-     *
-     * The target check is not defensive noise: jQuery's `.trigger("focus")`
-     * does not dispatch natively — it walks the propagation path itself,
-     * window included. This file triggers focus that way on the company field
-     * (`focusVisibleCompanyField`), so without the check, opening the dropdown
-     * would close the popup.
-     *
-     * The refocus only SCHEDULES the abandon — which of three things the
-     * buyer meant depends on what they activated, and window `focus` fires
-     * before that gesture completes — so the decision has to outlive the focus
-     * handler by `refocusChipGraceMs`:
-     *
-     *  - Sole trader chip → cancel the abandon; activating it asks for that
-     *    popup back and `onModeChipClick` raises it.
-     *  - any other mode chip → abandon now, so the chip's own handler runs
-     *    against settled state — left to the timer it would land afterwards
-     *    and the chip's `isDeciding()` guard would wrongly refuse it.
-     *  - anything else (alt-tab back, a click on the page) → the timer fires
-     *    and abandons.
-     *
-     * Each chip resolves this from its own `click` handler, which is the only
-     * event Enter and Space produce. The capture-phase `mousedown` below is the
-     * pointer's earlier shortcut to the same decision, not the only route to it.
-     * Capture phase, on `document` rather than the chips: chips are rebuilt
-     * on every dropdown open, and capture reaches them regardless.
-     *
-     * @returns {void}
-     */
-    bindWindowRefocusListener: function () {
-      if (controller.refocusHandler) return;
-      controller.refocusHandler = function (event) {
-        if (event && event.target && event.target !== window && event.target !== document) return;
-        controller.scheduleRefocusAbandon();
-      };
-      window.addEventListener("focus", controller.refocusHandler);
+    /** Give an abandoned launch's focus back — to the company field when the holder is gone, never once adopted. */
+    restoreLaunchFocus: function (outcomeOwned) {
+      if (!controller.restoreOnSettle || controller.activePopupWatchers.length) return;
+      controller.restoreOnSettle = false;
+      const node = controller.refocusOnSettle;
+      controller.refocusOnSettle = null;
+      if (outcomeOwned || document.activeElement !== document.body) return;
+      if (node && node.isConnected && companySearch.isOnScreen(jQuery(node))) {
+        node.focus();
+        return;
+      }
+      // Unlike Magento, the field's own opener reopens the popover after a hand-closed, non-adopted popup — accepted (TWO-25658).
+      companySearch.focusVisibleCompanyField(companySearch.companyFieldSelector());
+    },
 
-      // Paired with `focus` because neither signal covers the case alone. A
-      // return from another TAB of the same window is a visibility change;
-      // a return from another WINDOW leaves visibility untouched. Whether
-      // Chrome also emits a window `focus` for the first is not something
-      // this plugin should depend on, so both are bound and the arming
-      // guard below makes a duplicate harmless.
-      controller.visibilityHandler = function () {
-        // Fires on HIDE as well as show, and arming is coalesced onto the first
-        // caller — so arming here would spend the grace the buyer's actual
-        // return needs, leaving them a fraction of it or none.
-        if (document.visibilityState === "hidden") return;
-        controller.scheduleRefocusAbandon();
+    /** A window return re-fires focus on whatever holds it, so a launch leaves nothing holding it (TWO-25658). */
+    dropLaunchFocus: function (heldFocus) {
+      const isControl = function (node) {
+        return !!node && node !== document.body && node !== document.documentElement;
       };
-      document.addEventListener("visibilitychange", controller.visibilityHandler);
+      controller.refocusOnSettle = null;
+      const active = document.activeElement;
+      controller.restoreOnSettle = isControl(active) || isControl(heldFocus);
+      if (!isControl(active)) return;
+      // A hidden node holds focus only in jsdom; a browser has already dropped it.
+      if (companySearch.isOnScreen(jQuery(active))) controller.refocusOnSettle = active;
+      // The popup taking the window's focus blurs this node in a browser anyway.
+      active.blur();
+    },
 
-      controller.chipMousedownHandler = function (event) {
+    /** @returns {Element|null} this role's own field wrap — field, popover and affordances — never a sibling role's (TWO-25554) */
+    ownControlNode: function () {
+      return (
+        jQuery(companySearch.companyFieldSelector()).closest(
+          "." + companySearch.fieldWrapClass
+        )[0] || null
+      );
+    },
+
+    /** TWO-25658: (1) the Sole trader chip asks for the popup; (2) anything else closes it; (3) anything outside the popover closes that too. */
+    bindFocusinListener: function () {
+      if (controller.focusinHandler) return;
+      controller.focusinHandler = function (event) {
         const target = event && event.target;
-        const chip =
-          target && typeof target.closest === "function"
-            ? target.closest("." + companySearch.modeChipClass)
-            : null;
-        if (!chip) return;
-        // Whatever the deferred path is or is not waiting on: a chip click is
-        // the buyer saying which mode they want, and only Sole trader means
-        // "give me that popup back".
-        clearTimeout(controller.refocusAbandonTimer);
-        controller.refocusAbandonTimer = null;
-        if (chip.getAttribute("data-two-chip") === "sole_trader") return;
-        controller.abandonPopupsForChipClick();
+        if (
+          !target ||
+          typeof target.closest !== "function" ||
+          target === document.body ||
+          target === document.documentElement
+        ) {
+          return;
+        }
+        const own = controller.ownControlNode();
+        const chip = target.closest("." + companySearch.modeChipClass);
+        if (
+          chip &&
+          own &&
+          own.contains(chip) &&
+          chip.getAttribute("data-two-chip") === "sole_trader"
+        ) {
+          controller.onModeChipClick("sole_trader");
+          return;
+        }
+        if (controller.abandonablePopups().length) {
+          controller.closeAbandonedPopups();
+          // The popover is rule (3)'s call, not the settle poll's.
+          controller.closeDropdownOnSettle = false;
+        }
+        // The field counts as inside: it is the popover's own trigger, and its focus opener would otherwise race rule (3) on event order.
+        const field = jQuery(companySearch.companyFieldSelector())[0];
+        const popover = own ? own.querySelector("." + companySearch.panelClass) : null;
+        if (target !== field && !(popover && popover.contains(target))) {
+          companySearch.closeCompanySearchDropdown();
+        }
       };
-      document.addEventListener("mousedown", controller.chipMousedownHandler, true);
+      document.addEventListener("focusin", controller.focusinHandler, true);
     },
 
-    /**
-     * Arm the deferred abandon, decided when the grace elapses rather than now:
-     * the buyer can arrive or leave again inside it, and the answer that matters
-     * is the one at the moment the popup would actually go.
-     *
-     * A refused close is simply a wasted cycle — the next `focus` or visibility
-     * change arms again, and nothing else keys off this timer (TWO-25503: the
-     * chip handler used to, which is how a refused close took the chips with
-     * it).
-     *
-     * @returns {void}
-     */
-    scheduleRefocusAbandon: function () {
-      // Coalesced onto the FIRST arming. Nothing clears an armed timer, so a
-      // second signal would not move the deadline — it would leave a SECOND
-      // timer running past it, coming due against whatever popup exists by then
-      // rather than the one the buyer walked away from. Window-targeted `focus`
-      // arrives in bursts (a blur fires one, so the panel closing its own
-      // dropdown produces a stream), and a single return can legitimately reach
-      // both this and the visibility listener.
-      if (controller.refocusAbandonTimer !== null) return;
-      controller.refocusAbandonTimer = setTimeout(function () {
-        controller.refocusAbandonTimer = null;
-        if (!controller.checkoutIsInFront()) return;
-        controller.closeAbandonedPopups();
-      }, controller.refocusChipGraceMs);
-    },
-
-    /** Test seam / teardown: drop the window `focus` listener, the mousedown
-     * listener that resolves it, and any abandon still scheduled.
-     * @returns {void}
-     */
-    unbindWindowRefocusListener: function () {
-      clearTimeout(controller.refocusAbandonTimer);
-      controller.refocusAbandonTimer = null;
-      if (controller.chipMousedownHandler) {
-        document.removeEventListener("mousedown", controller.chipMousedownHandler, true);
-        controller.chipMousedownHandler = null;
-      }
-      if (controller.visibilityHandler) {
-        document.removeEventListener("visibilitychange", controller.visibilityHandler);
-        controller.visibilityHandler = null;
-      }
-      if (!controller.refocusHandler) return;
-      window.removeEventListener("focus", controller.refocusHandler);
-      controller.refocusHandler = null;
+    /** Test seam / teardown: drop the `focusin` listener. */
+    unbindFocusinListener: function () {
+      if (!controller.focusinHandler) return;
+      document.removeEventListener("focusin", controller.focusinHandler, true);
+      controller.focusinHandler = null;
     },
 
     /**
@@ -4077,36 +4019,13 @@ function createSoleTraderController(companySearch) {
      * buyer is decided yet still on screen, and the buyer's retry inside it
      * posts a second ACCEPTED — closing it would take the retry with it.
      *
-     * The deferred path's own closer. A pointer activation of a chip resolves
-     * before this runs, via the capture-phase mousedown; a keyboard one resolves
-     * in the chip's `click` handler, which can land after this has already
-     * fired. See `bindWindowRefocusListener` and `abandonPopupsForChipClick`.
+     * The `focusin` path's own closer — see `bindFocusinListener`.
      */
     closeAbandonedPopups: function () {
       controller.abandonablePopups().forEach(function (watcher) {
         if (typeof watcher.win.close !== "function") return;
         watcher.win.close();
       });
-    },
-
-    /**
-     * Is the buyer actually looking at the checkout right now?
-     *
-     * A window `focus` fires when the browser WINDOW activates even while the
-     * checkout is the background tab, so `focus` alone cannot tell "came back to
-     * the checkout" from "opened the signup email in another tab of the same
-     * window".
-     *
-     * Gates ONLY the deferred refocus path. The chip handlers decide for
-     * themselves and must never consult this: in an iframed checkout it is false
-     * for the whole session unless the frame itself holds focus, and a buyer who
-     * clicks a chip has told us what they want whatever the frame owns.
-     *
-     * @returns {boolean}
-     */
-    checkoutIsInFront: function () {
-      if (typeof document.hasFocus !== "function") return true;
-      return document.hasFocus();
     },
 
     /**
@@ -4117,14 +4036,18 @@ function createSoleTraderController(companySearch) {
      * early only because `chipOwnsOutcome` holds back the steps that touch the
      * dropdown — see `settleClosedPopup`.
      *
-     * Reached from the chip's `mousedown` where there is one, and from its
-     * `click` regardless, which is the only one Enter and Space produce.
+     * A popup already closed but not yet noticed by its poll is drained too,
+     * or the chip's own `isDeciding()` guard refuses the click that follows.
      */
     abandonPopupsForChipClick: function () {
-      controller.abandonablePopups().forEach(function (watcher) {
-        if (typeof watcher.win.close === "function") watcher.win.close();
-        controller.settleClosedPopup(watcher, true);
-      });
+      controller.activePopupWatchers
+        .filter(function (watcher) {
+          return !watcher.decided;
+        })
+        .forEach(function (watcher) {
+          if (!watcher.win.closed && typeof watcher.win.close === "function") watcher.win.close();
+          controller.settleClosedPopup(watcher, true);
+        });
     },
 
     /**
@@ -4323,6 +4246,7 @@ function createSoleTraderController(companySearch) {
           if (response && response.success && response.data && response.data.autofill_token) {
             controller.tokens = response.data;
             controller.bindPopupMessageListener();
+            controller.bindFocusinListener();
             controller.scheduleTokenRefresh();
             if (cb) cb(true);
           } else {
@@ -4837,6 +4761,7 @@ class Twoinc {
     $body.on("change", "#billing_company", function () {
       if (!twoincCompanyCapture.isNameField(this)) return;
       Twoinc.getInstance().customerCompany.company_name = twoincSelectWooHelper.getCompanyName();
+      if (twoincSoleTraderLaunching()) return;
       twoincSelectWooHelper.renderCompanySummary();
       // Verdicts only — same mid-request blanking as the picker's own handler.
       twoincDomHelper.clearIntentVerdicts();
@@ -5980,6 +5905,7 @@ class Twoinc {
       Twoinc.getInstance().customerCompany.company_name = $input.val();
     }
 
+    if (twoincSoleTraderLaunching()) return;
     twoincSelectWooHelper.renderCompanySummary();
     Twoinc.getInstance().getApproval();
   }
@@ -5999,6 +5925,7 @@ class Twoinc {
 
     Twoinc.getInstance().customerRepresentative[inputName] = $input.val();
 
+    if (twoincSoleTraderLaunching()) return;
     Twoinc.getInstance().getApproval();
   }
 
