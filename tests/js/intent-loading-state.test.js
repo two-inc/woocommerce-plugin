@@ -1822,9 +1822,6 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("a change on #billing_company lifts a decline's block", () => {
-      // TWO-25657: the block is lifted by whatever clears the verdict, so a
-      // buyer who edits the company is not left with an unusable gateway even
-      // when the edit leaves the form too incomplete to re-check.
       instance.getApproval();
       jest.advanceTimersByTime(1000);
       ajax.last().succeed({ approved: false });
@@ -2492,8 +2489,6 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
   });
   describe("a declined verdict makes the gateway unplaceable (TWO-25657)", () => {
-    // Unticking alone left the buyer free to re-tick and submit, so the
-    // radio's disabled state is now part of the verdict paint.
     function placeable() {
       return !$(":input[value='" + GATEWAY_ID + "']").prop("disabled");
     }

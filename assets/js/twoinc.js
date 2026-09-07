@@ -2423,7 +2423,6 @@ let twoincDomHelper = {
     // verdict classes, so a brand overlay or later ticket adding a fourth
     // verdict box is still covered.
     jQuery(".twoinc-pay-box").not(".twoinc-loader").addClass("hidden");
-    // The block goes with the notice (TWO-25657); a replayed decline re-applies it.
     twoincDomHelper.setPaymentMethodSelectable(true);
   },
   /**

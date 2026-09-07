@@ -167,10 +167,7 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
             self::relay($response);
         }
 
-        /**
-         * Bank the verdict for order creation to enforce (TWO-25657). Only an explicit
-         * `approved` counts — a transport or upstream error is not a decline.
-         */
+        /** Only an explicit `approved` counts — an error is not a decline (TWO-25657). */
         private static function record_verdict($company, $response): void
         {
             $company_id = is_array($company) && isset($company['organization_number'])

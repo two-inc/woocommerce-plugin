@@ -4022,10 +4022,7 @@ if (!class_exists('WC_Twoinc')) {
             $session->set(self::INTENT_VERDICT_SESSION_KEY, $verdicts);
         }
 
-        /**
-         * @return bool|null Null when no intent check has answered for this
-         *                   company — never read as a decline.
-         */
+        /** @return bool|null Null = no answer, never a decline. */
         public static function get_order_intent_verdict(string $company_id): ?bool
         {
             $key = self::intent_verdict_key($company_id);
@@ -4165,8 +4162,7 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
-            // The browser disables the method too, but the verdict is the server's
-            // to enforce (TWO-25657).
+            // The browser disable is not enforcement (TWO-25657).
             if (self::get_order_intent_verdict($company_id) === false) {
                 WC_Twoinc_Helper::display_ajax_error(
                     sprintf(

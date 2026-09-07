@@ -1776,8 +1776,7 @@ final class BrandConfigSpec
 
     private static function testOrderCreationRefusesADeclinedOrderIntent(): void
     {
-        // TWO-25657: the browser unticks and disables the payment method on a
-        // decline, but neither is enforcement — the submit path judges again.
+        // TWO-25657: the browser's block is not enforcement — the submit path judges again.
         $cases = [
             [[], '923456789', false, 'no intent verdict for the submitted company'],
             [['923456789' => true], '923456789', false, 'the intent approved this company'],
@@ -1789,8 +1788,6 @@ final class BrandConfigSpec
         foreach ($cases as $case) {
             list($verdicts, $posted_company_id, $refused, $description) = $case;
 
-            // The first meta write is the statement after the gate, and the stub
-            // models nothing beyond it — so throwing there ends the run.
             $order = new class extends StubOrder {
                 public function get_payment_method()
                 {
@@ -1839,8 +1836,6 @@ final class BrandConfigSpec
 
     private static function testOrderIntentRecordsItsVerdictForOrderCreation(): void
     {
-        // The refusal above can only fire on a verdict the intent handler
-        // banked, so the two halves are pinned together.
         $cases = [
             ['{"approved":true}', true, 'an approval'],
             ['{"approved":false}', false, 'a decline'],
