@@ -5014,6 +5014,12 @@ if (!class_exists('WC_Twoinc')) {
                 ],
             ];
 
+            // Offered only to shops already on it (TWO-25656); raw row read — get_option() on a missing key recurses.
+            $saved = get_option($this->get_option_key(), null);
+            if (!is_array($saved) || ($saved['payment_terms_type'] ?? '') !== 'end_of_month') {
+                unset($twoinc_form_fields['payment_terms_type']);
+            }
+
             $this->form_fields = apply_filters('wc_two_form_fields', $twoinc_form_fields);
         }
 

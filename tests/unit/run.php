@@ -121,6 +121,7 @@ final class BrandConfigSpec
             'testOrderPayloadCarriesSelectedAndAvailableTerms',
             'testPaymentTermsInvalidPostFallsBackToDefault',
             'testPaymentTermsDisabledMeansNoPayloadTerms',
+            'testPaymentTermsTypeOfferedOnlyToShopsAlreadyOnEndOfMonth',
             'testSoleTraderAvailableWhenRegistryListsIt',
             'testSoleTraderTokensMintedRegardlessOfCountry',
             'testSoleTraderTokensMintedWithNoCountryPosted',
@@ -4750,6 +4751,50 @@ final class BrandConfigSpec
                 );
             }
         }
+    }
+
+    private static function testPaymentTermsTypeOfferedOnlyToShopsAlreadyOnEndOfMonth(): void
+    {
+        $gateway = self::gateway();
+        $key = $gateway->get_option_key();
+
+        foreach (
+            [
+                [null, false, 'no settings row at all (fresh install)'],
+                [['payment_terms_type' => ''], false, 'stored empty'],
+                [['payment_terms_type' => 'standard'], false, 'stored standard'],
+                [['payment_terms_type' => 'end_of_month'], true, 'stored end_of_month'],
+            ] as $case
+        ) {
+            [$stored, $expected, $description] = $case;
+            if (is_null($stored)) {
+                unset($GLOBALS['__twoinc_test_options'][$key]);
+            } else {
+                $GLOBALS['__twoinc_test_options'][$key] = $stored;
+            }
+            $gateway->init_form_fields();
+            TinyAssert::same(
+                $expected,
+                array_key_exists('payment_terms_type', $gateway->form_fields),
+                "payment_terms_type visibility, $description"
+            );
+        }
+
+        $GLOBALS['__twoinc_test_options'][$key] = ['payment_terms_type' => 'end_of_month'];
+        $gateway->init_form_fields();
+        TinyAssert::same(
+            ['standard', 'end_of_month'],
+            array_keys($gateway->form_fields['payment_terms_type']['options']),
+            'the shown field still offers both terms types'
+        );
+
+        // WC_Settings_API::process_admin_options() only writes keys present in get_form_fields().
+        $GLOBALS['__twoinc_test_options'][$key] = ['payment_terms_type' => 'standard'];
+        $gateway->init_form_fields();
+        $gateway->process_admin_options();
+        TinyAssert::same('standard', $GLOBALS['__twoinc_test_options'][$key]['payment_terms_type']);
+
+        unset($GLOBALS['__twoinc_test_options'][$key]);
     }
 
     private static function testSoleTraderHasNoMerchantToggleSetting(): void
