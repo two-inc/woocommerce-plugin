@@ -166,4 +166,68 @@ describe("payment terms chips", () => {
       expect(ctx.$(".twoinc-term-chip__fee").text()).toBe("+12.50 EUR");
     });
   });
+
+  describe("a fee quote that does not arrive", () => {
+    let ajax;
+
+    afterEach(() => {
+      if (ajax) ajax.restore();
+      ajax = null;
+    });
+
+    /** @returns {string[]} the fee label of each rendered chip, in order */
+    function feeLabels() {
+      return ctx
+        .$(".twoinc-term-chip__fee")
+        .map(function () {
+          return ctx.$(this).text();
+        })
+        .get();
+    }
+
+    const QUOTE = {
+      success: true,
+      data: {
+        terms: [30, 60],
+        selected: 30,
+        fees: {
+          30: { buyer_fee_share: "9.00", currency: "EUR", buyer_fee_share_display: "€9,00" }
+        }
+      }
+    };
+
+    // jQuery routes a non-2xx and a dropped connection both through .fail with
+    // textStatus 'error', so they are one row rather than two.
+    const OUTCOMES = [
+      ["a fresh quote replaces the stale badge", (r) => r.succeed(QUOTE), ["+€9,00"]],
+      ["a network error or non-2xx clears", (r) => r.fail("error"), []],
+      ["an unparseable body clears", (r) => r.fail("parsererror"), []],
+      ["a declined quote clears", (r) => r.succeed({ success: false, data: {} }), []],
+      ["a non-envelope body clears", (r) => r.succeed("<html>error</html>"), []]
+    ];
+
+    test.each(OUTCOMES)("%s", (description, settle, expected) => {
+      const chips = mount(
+        Object.assign(
+          {
+            enabled: true,
+            terms: [30, 60],
+            selected: 30,
+            offset_pricing_enabled: true,
+            fees_url: "https://shop.example.test/?wc-ajax=two_term_fees",
+            csrf_token: "test-checkout-csrf-token"
+          },
+          COPY
+        ),
+        { 30: { buyer_fee_share: "99.00", currency: "EUR", buyer_fee_share_display: "€99,00" } }
+      );
+      ajax = harness.stubAjax(ctx.$);
+
+      chips.refresh();
+      settle(ajax.last());
+
+      expect(feeLabels()).toEqual(expected);
+      expect(ctx.$(".twoinc-term-chip__loading")).toHaveLength(0);
+    });
+  });
 });
