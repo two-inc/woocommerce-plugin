@@ -9102,6 +9102,34 @@ final class BrandConfigSpec
     }
 
     /**
+     * Gateway for a settings save. $checkout_host_configured false leaves no
+     * API host to send to, which is the one way the save reaches the
+     * 'not_configured' verdict.
+     */
+    private static function save_gateway(bool $checkout_host_configured): WC_Twoinc
+    {
+        return new class ($checkout_host_configured) extends WC_Twoinc {
+            private $checkout_host_configured;
+
+            public function __construct($checkout_host_configured)
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->checkout_host_configured = $checkout_host_configured;
+            }
+
+            public function get_twoinc_checkout_host()
+            {
+                return $this->checkout_host_configured ? parent::get_twoinc_checkout_host() : '';
+            }
+
+            public function get_merchant_available_terms(): array
+            {
+                return [14, 30, 60, 90];
+            }
+        };
+    }
+
+    /**
      * ABN-495. The settings save reverted the submitted API key to the
      * stored one on EVERY non-200, a network failure included. On a fresh
      * install the stored key is empty, so a merchant could not configure
@@ -9113,28 +9141,6 @@ final class BrandConfigSpec
      */
     private static function testOnlyARejectedApiKeyRevertsOnSave(): void
     {
-        $make_gateway = static function (bool $host_configured): WC_Twoinc {
-            return new class ($host_configured) extends WC_Twoinc {
-                private $host_configured;
-
-                public function __construct($host_configured)
-                {
-                    $this->id = WC_Twoinc_Brand::get('gateway_id');
-                    $this->host_configured = $host_configured;
-                }
-
-                public function get_twoinc_checkout_host()
-                {
-                    return $this->host_configured ? parent::get_twoinc_checkout_host() : '';
-                }
-
-                public function get_merchant_available_terms(): array
-                {
-                    return [14, 30, 60, 90];
-                }
-            };
-        };
-
         // [canned verify_api_key response, key that must be persisted, the
         // notice it must carry, whether that notice blocks, whether an API
         // host resolves at all, why].
@@ -9151,7 +9157,7 @@ final class BrandConfigSpec
         ];
 
         foreach ($cases as [$response, $expected_key, $notice, $blocking, $host_configured, $description]) {
-            $gateway = $make_gateway($host_configured);
+            $gateway = self::save_gateway($host_configured);
             $gateway->init_form_fields();
             $option_key = $gateway->get_option_key();
             $GLOBALS['__twoinc_test_options'][$option_key] = [
