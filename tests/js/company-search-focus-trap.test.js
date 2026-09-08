@@ -215,6 +215,30 @@ describe("company-search focus trap", () => {
     expect(displayField().getAttribute("tabindex")).toBe("7");
   });
 
+  test("a throwing host abort still leaves the field with its tab stop back", () => {
+    helper.attach();
+    const transport = helper.panel.search;
+    helper.panel.search = Object.assign({}, transport, {
+      abortActiveRequest() {
+        throw new Error("host transport is broken");
+      }
+    });
+
+    try {
+      helper.openCompanySearchDropdown();
+      expect(displayField().getAttribute("tabindex")).toBe("-1");
+
+      // Positive control: the throw has to reach the caller, or the release is
+      // being asserted on an ordinary close.
+      expect(() => helper.closeCompanySearchDropdown()).toThrow("host transport is broken");
+
+      expect(displayField().hasAttribute("tabindex")).toBe(false);
+    } finally {
+      // afterEach destroys the panel, which calls the same host member.
+      helper.panel.search = transport;
+    }
+  });
+
   test("a second open/close cycle restores the same state as the first", () => {
     helper.attach();
 

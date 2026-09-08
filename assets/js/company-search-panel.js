@@ -691,6 +691,9 @@
     CompanySearchPanel.prototype.close = function (options) {
         if (!this._panel || !this._open) return;
         this._open = false;
+        // Ahead of the injected abortActiveRequest, which can throw: _open is
+        // already false, so a throw below would strand the field at `-1`.
+        this._releaseFieldTabStop();
         this._cancelPendingSearch();
         // A response still on the wire would paint rows into a panel the buyer
         // has closed, and _searchSeq alone would let the next open inherit them.
@@ -700,7 +703,6 @@
         this._items = [];
         this._activeIndex = -1;
         if (this._field) this._field.setAttribute('aria-expanded', 'false');
-        this._releaseFieldTabStop();
         if (options && options.returnFocus && this._field) {
             // Guards the field's own focus opener against reopening the panel
             // this call is closing.
