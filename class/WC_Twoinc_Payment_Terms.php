@@ -187,8 +187,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 $type = 'none';
             } elseif (!in_array($type, self::KNOWN_SURCHARGE_TYPES, true)) {
                 self::log_surcharge_type_failure($type);
-                // Untranslated on purpose: every caller catches this, so it is
-                // never rendered — see surcharge_settings_or_null()'s docblock.
+                // Untranslated: every caller catches this, so it is never rendered.
                 throw new WC_Twoinc_Surcharge_Method_Exception('Unrecognised stored surcharge method');
             }
             $grid = $gateway->get_option('surcharge_grid');
@@ -208,16 +207,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * Q54: null when the stored method is unrecognised. The availability
-         * gate, the cart-fee hook and the checkout bootstrap run on every
-         * render, so a raise there fatals the page.
-         *
-         * Every caller of get_surcharge_settings() swallows the refusal — this
-         * one and fetch_term_fee(), which is inside a wc-ajax handler — so its
-         * message is never rendered to anyone and is deliberately a plain
-         * internal string. What stops an order being placed on an
-         * unrecognised method is the availability gate withdrawing Two, which
-         * WooCommerce re-checks against the posted gateway in process_checkout.
+         * Null when the stored method is unrecognised: the gate, the cart-fee
+         * hook and the checkout bootstrap all render on every request, where a
+         * raise would fatal the page.
          */
         public static function surcharge_settings_or_null($gateway): ?array
         {

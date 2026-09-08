@@ -457,7 +457,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'enabled' => WC_Twoinc_Payment_Terms::is_enabled($this->wc_twoinc),
                     'terms' => $offered_terms,
                     'selected' => WC_Twoinc_Payment_Terms::get_selected_term($this->wc_twoinc),
-                    // Q54: an unrecognised stored method reads as no offset pricing.
+                    // An unrecognised stored method reads as no offset pricing.
                     'offset_pricing_enabled' => (bool) (
                         WC_Twoinc_Payment_Terms::surcharge_settings_or_null($this->wc_twoinc)['enabled'] ?? false
                     ),
