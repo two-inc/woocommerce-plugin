@@ -325,7 +325,7 @@ if (!class_exists('WC_Twoinc')) {
          * One GET /v1/merchant writes every cached derivative; a failed fetch writes nothing.
          * Two epoch clocks: `merchant_record_checked_on` = last fully stored record, written
          * after the stores; `merchant_record_attempted_on` = last attempt by any entry point,
-         * claimed before the wire call and the read path's only throttle (in-flight or failed).
+         * written before the wire call and the read path's only throttle (in-flight or failed).
          * $force (cron, button, identity save) ignores both clocks but reuses this request's own fetch.
          */
         public function refresh_merchant_record_caches(bool $force = false): bool
@@ -348,11 +348,7 @@ if (!class_exists('WC_Twoinc')) {
                 if ((int) get_option($attempted_option) + self::MERCHANT_RECORD_ATTEMPT_INTERVAL > time()) {
                     return false;
                 }
-                // Insert-or-fail claim: of the workers arriving together, only one proceeds.
-                delete_option($attempted_option);
-                if (!add_option($attempted_option, time(), '', false)) {
-                    return false;
-                }
+                update_option($attempted_option, time(), false);
             }
 
             $record = $this->fetch_merchant_record();
@@ -721,7 +717,8 @@ if (!class_exists('WC_Twoinc')) {
          * The merchant's offerable payment terms (net days, ascending) from GET /v1/merchant
          * `available_terms`, the authoritative set the admin narrows from (TWO-24812). Empty,
          * whether unresolved or explicitly empty, offers no terms and the backend applies its default.
-         * A cache read, except on a cold or >24h clock, where one request pays one 10s-capped fetch.
+         * A cache read, except on a cold or >24h clock, where one request pays one 10s-capped fetch;
+         * a failed fetch leaves that clock unmoved, so one request every 60s pays it again until one succeeds.
          *
          * @return int[]
          */
@@ -5431,7 +5428,7 @@ if (!class_exists('WC_Twoinc')) {
                     <p class="description">
                         <?php echo esc_html(sprintf(
                             /* translators: %s is the brand product name (e.g. "Two") */
-                            __('Your offerable payment terms, buyer-surcharge cap, minimum order value and default term are read from %s and cached. They are refreshed every night and whenever the API key or environment is saved; use this to pull a change through now. The nightly refresh runs on WP-Cron. With WP-Cron disabled, the next request more than 24 hours after the last refresh re-reads it.', 'twoinc-payment-gateway'),
+                            __('Your offerable payment terms, buyer-surcharge cap, minimum order value and default term are read from %s and cached. They are refreshed every night and whenever the API key or environment is saved; use this to pull a change through now. The nightly refresh runs on WP-Cron. With WP-Cron disabled, the next request more than 24 hours after the last refresh re-reads it, and while a re-read keeps failing one request a minute retries it.', 'twoinc-payment-gateway'),
                             WC_Twoinc_Brand::get('product_name')
                         )); ?>
                     </p>

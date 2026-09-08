@@ -1334,8 +1334,8 @@ msgstr "Uppdatera säljarprofil"
 
 #: class/WC_Twoinc.php
 #, php-format
-msgid "Your offerable payment terms, buyer-surcharge cap, minimum order value and default term are read from %s and cached. They are refreshed every night and whenever the API key or environment is saved; use this to pull a change through now. The nightly refresh runs on WP-Cron. With WP-Cron disabled, the next request more than 24 hours after the last refresh re-reads it."
-msgstr "De betalningsvillkor du kan erbjuda, taket för köpartillägget, minsta ordervärde och standardvillkoret hämtas från %s och cachas. De uppdateras varje natt och varje gång API-nyckeln eller miljön sparas; använd detta för att hämta in en ändring nu. Den nattliga uppdateringen körs på WP-Cron. Med WP-Cron avstängt läser den första förfrågan mer än 24 timmar efter senaste uppdateringen om den."
+msgid "Your offerable payment terms, buyer-surcharge cap, minimum order value and default term are read from %s and cached. They are refreshed every night and whenever the API key or environment is saved; use this to pull a change through now. The nightly refresh runs on WP-Cron. With WP-Cron disabled, the next request more than 24 hours after the last refresh re-reads it, and while a re-read keeps failing one request a minute retries it."
+msgstr "De betalningsvillkor du kan erbjuda, taket för köpartillägget, minsta ordervärde och standardvillkoret hämtas från %s och cachas. De uppdateras varje natt och varje gång API-nyckeln eller miljön sparas; använd detta för att hämta in en ändring nu. Den nattliga uppdateringen körs på WP-Cron. Med WP-Cron avstängt läser den första förfrågan mer än 24 timmar efter senaste uppdateringen om den, och så länge en ny läsning fortsätter att misslyckas gör en förfrågan per minut ett nytt försök."
 
 #: class/WC_Twoinc.php
 msgid "Refreshing…"
