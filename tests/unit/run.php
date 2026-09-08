@@ -256,6 +256,7 @@ final class BrandConfigSpec
             'testEnableCompanySearchForOthersSettingDroppedFromUpgradedInstalls',
             'testCategorizeVerificationResultDistinguishesFailureReasons',
             'testVerifyApiKeyDistinguishesUnreachableFromNotConfigured',
+            'testOnlyARejectedApiKeyRevertsOnSave',
             'testApiKeyVerificationStatusCachedAcrossCallsWithinTtl',
             'testIsAvailableFalseWhenApiKeyVerificationFails',
             'testIsAvailableTrueOnlyWhenEnabledAndVerified',
@@ -9097,6 +9098,61 @@ final class BrandConfigSpec
         $gateway->host = '';
         TinyAssert::same(null, $gateway->verify_api_key());
         TinyAssert::same('not_configured', WC_Twoinc::categorize_verification_result($gateway->verify_api_key())['status']);
+    }
+
+    /**
+     * ABN-495. The settings save reverted the submitted API key to the
+     * stored one on EVERY non-200, a network failure included. On a fresh
+     * install the stored key is empty, so a merchant could not configure
+     * the plugin at all while Two was unreachable — and the key they were
+     * typing may be the one that would have made the shop resolvable.
+     *
+     * Drives the real save and asserts the PERSISTED option, so a save that
+     * silently discards the submitted value fails here.
+     */
+    private static function testOnlyARejectedApiKeyRevertsOnSave(): void
+    {
+        // [canned verify_api_key response, key that must be persisted, the
+        // notice it must carry, whether that notice blocks, why].
+        $cases = [
+            [new WP_Error('http_request_failed', 'could not resolve host'), 'new-key', 'could not be reached', false, 'a connection failure must not discard the submitted key'],
+            [false, 'new-key', 'could not be reached', false, 'a timeout that returns nothing must not discard the submitted key'],
+            [['response' => ['code' => 500], 'body' => '{}'], 'new-key', 'returned an error', false, 'a service error must not discard the submitted key'],
+            [['response' => ['code' => 401], 'body' => '{}'], 'old-key', 'rejected that API key', true, 'a 401 rejection must keep the stored key'],
+            [['response' => ['code' => 403], 'body' => '{}'], 'old-key', 'rejected that API key', true, 'a 403 rejection must keep the stored key'],
+            [['response' => ['code' => 200], 'body' => '{"id":"merchant-1","short_name":"shop"}'], 'new-key', 'API key verified', false, 'a verified key must persist'],
+        ];
+
+        foreach ($cases as [$response, $expected_key, $notice, $blocking, $description]) {
+            $gateway = self::gateway();
+            $gateway->init_form_fields();
+            $option_key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$option_key] = [
+                'api_key' => 'old-key',
+                'title' => 'stored title',
+            ];
+            $gateway->init_settings();
+            $GLOBALS['__twoinc_test_http_response'] = $response;
+            $GLOBALS['__twoinc_test_admin_messages'] = [];
+            $GLOBALS['__twoinc_test_admin_errors'] = [];
+            $gateway->test_post_data = [
+                $gateway->get_field_key('api_key') => 'new-key',
+                $gateway->get_field_key('title') => 'edited title',
+            ];
+            $gateway->process_admin_options();
+            $saved = get_option($option_key, []);
+
+            TinyAssert::same($expected_key, $saved['api_key'] ?? null, $description);
+            TinyAssert::same('edited title', $saved['title'] ?? null, $description . ' — and a sibling field in the same save must land');
+
+            $bucket = $blocking ? $GLOBALS['__twoinc_test_admin_errors'] : $GLOBALS['__twoinc_test_admin_messages'];
+            $other = $blocking ? $GLOBALS['__twoinc_test_admin_messages'] : $GLOBALS['__twoinc_test_admin_errors'];
+            TinyAssert::true(
+                strpos(implode("\n", $bucket), $notice) !== false,
+                $description . ' — and say why in the right notice bucket'
+            );
+            TinyAssert::same([], $other, $description . ' — and nothing in the other bucket');
+        }
     }
 
     /**

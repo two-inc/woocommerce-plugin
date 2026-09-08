@@ -6303,16 +6303,21 @@ if (!class_exists('WC_Twoinc')) {
             ];
 
             if ($api_key_in_post && $api_key) {
-                $result = $this->verify_api_key($api_key);
-                if (isset($result['body']) && isset($result['code']) && $result['code'] == 200) {
-                    WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')));
-                } else {
-                    // Invalid key: keep previous API key, save other settings
+                $verification = self::categorize_verification_result($this->verify_api_key($api_key));
+                $product_name = WC_Twoinc_Brand::get('product_name');
+                if ($verification['status'] === 'ok') {
+                    WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'twoinc-payment-gateway'), $product_name));
+                } elseif ($verification['status'] === 'invalid_key') {
                     $post_data[$api_key_field] = $this->get_option('api_key');
-                    WC_Admin_Settings::add_error(__('Failed to verify API key.', 'twoinc-payment-gateway'));
+                    WC_Admin_Settings::add_error(sprintf(__('%s rejected that API key, so the previously saved key was kept.', 'twoinc-payment-gateway'), $product_name));
+                } elseif ($verification['status'] === 'unreachable') {
+                    // ABN-495: a fresh install's stored key is empty, so reverting an unverifiable key locks the merchant out of saving the one that would work.
+                    WC_Admin_Settings::add_message(sprintf(__('API key saved, but %s could not be reached to verify it.', 'twoinc-payment-gateway'), $product_name));
+                } else {
+                    WC_Admin_Settings::add_message(sprintf(__('API key saved, but %s returned an error while verifying it.', 'twoinc-payment-gateway'), $product_name));
                 }
             }
-            // Save all settings (with possibly reverted API key)
+            // Save all settings (with the API key reverted only on a rejection)
             $_POST = $post_data;
             parent::process_admin_options();
             $this->refetch_merchant_record_on_identity_save();
