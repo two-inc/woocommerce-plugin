@@ -226,6 +226,45 @@ describe("company-search focus trap", () => {
     }
   });
 
+  /**
+   * The host re-renders its own container while the panel is open: the wrapper
+   * goes, and the field either survives or comes back from the host's template.
+   *
+   * @param {boolean} keepField
+   */
+  function hostReRender(keepField) {
+    const field = displayField();
+    const wrap = field.parentElement;
+    let next = field;
+    if (!keepField) {
+      next = document.createElement("input");
+      next.type = "text";
+      next.id = field.id;
+    }
+    wrap.parentNode.insertBefore(next, wrap);
+    wrap.remove();
+    helper.attach();
+  }
+
+  test.each([
+    { keepField: true, description: "keeping the field node" },
+    { keepField: false, description: "re-rendering the field too" }
+  ])(
+    "a host re-render while open leaves the field closed, not stranded ($description)",
+    ({ keepField }) => {
+      harness.openCompanyPanel($, helper);
+      expect(displayField().getAttribute("tabindex")).toBe("-1");
+
+      hostReRender(keepField);
+
+      // Positive control: the re-render has to have cost the panel its wrapper,
+      // or this exercises adoption instead of construction.
+      expect(document.querySelector(".two-company-dropdown").hasAttribute("hidden")).toBe(true);
+      expect(displayField().hasAttribute("tabindex")).toBe(false);
+      expect(displayField().getAttribute("aria-expanded")).toBe("false");
+    }
+  );
+
   test("tearing the panel down while it is open hands the tab stop back", () => {
     harness.openCompanyPanel($, helper);
 
