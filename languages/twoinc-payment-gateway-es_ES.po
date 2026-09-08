@@ -69,3 +69,9 @@ msgstr "No se pudo completar esto en este momento. Espere un momento y vuelva a 
 #, php-format
 msgid "Please select your company before paying with %s."
 msgstr "Seleccione su empresa antes de pagar con %s."
+
+#. translators: 1: submitted value, 2: comma-separated list of valid methods
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Unrecognised surcharge method: %1$s. Choose one of: %2$s."
+msgstr "Método de recargo no reconocido: %1$s. Elija uno de: %2$s."

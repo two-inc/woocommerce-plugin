@@ -67,12 +67,14 @@ function load_twoinc_classes()
     init_twoinc_translation();
 
     add_action('wp_ajax_twoinc_verify_api_key', 'twoinc_ajax_verify_api_key');
+    add_action('wp_ajax_twoinc_refresh_merchant_record', ['WC_Twoinc', 'ajax_refresh_merchant_record']);
     add_action('wp_ajax_twoinc_term_fees', 'twoinc_ajax_term_fees');
 
     require_once __DIR__ . '/class/WC_Twoinc_Brand.php';
     require_once __DIR__ . '/class/WC_Twoinc_Helper.php';
     require_once __DIR__ . '/class/WC_Twoinc_FX.php';
     require_once __DIR__ . '/class/WC_Twoinc_Rate_Limiter.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Surcharge_Method_Exception.php';
     require_once __DIR__ . '/class/WC_Twoinc_Payment_Terms.php';
     require_once __DIR__ . '/class/WC_Twoinc_Sole_Trader.php';
     require_once __DIR__ . '/class/WC_Twoinc_Api_Proxy.php';
@@ -114,6 +116,12 @@ function load_twoinc_classes()
     add_action('init', static function () {
         add_action(WC_Twoinc_FX::refresh_hook(), ['WC_Twoinc_FX', 'run_scheduled_refresh']);
         WC_Twoinc_FX::maybe_schedule_refresh();
+    });
+
+    // Deferred to init like the FX refresh above: WP-Cron's schedule store is not ready at plugins_loaded.
+    add_action('init', static function () {
+        add_action(WC_Twoinc::merchant_record_refresh_hook(), ['WC_Twoinc', 'run_scheduled_merchant_record_refresh']);
+        WC_Twoinc::schedule_merchant_record_refresh();
     });
     add_action('wc_ajax_two_term_fees', ['WC_Twoinc_Payment_Terms', 'ajax_term_fees']);
     add_action('wc_ajax_two_select_term', ['WC_Twoinc_Payment_Terms', 'ajax_select_term']);
