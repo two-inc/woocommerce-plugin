@@ -1324,3 +1324,32 @@ msgstr ""
 #: class/WC_Twoinc.php
 msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
 msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Merchant profile"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Refresh merchant profile"
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Your offerable payment terms, buyer-surcharge cap, minimum order value and default term are read from %s and cached. They are refreshed every night and whenever the API key or environment is saved; use this to pull a change through now. The nightly refresh runs on WP-Cron. With WP-Cron disabled, the next request more than 24 hours after the last refresh re-reads it."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Refreshing…"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Could not refresh the merchant profile."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Merchant profile refreshed."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Could not refresh the merchant profile. Check that the API key is valid and that the API is reachable."
+msgstr ""

@@ -362,11 +362,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         {
             $currency = get_woocommerce_currency();
 
-            // Checkout render is the sanctioned refresh point for the
-            // backend term list (TWO-24812) — refresh once here; the
-            // cache-only seam reads below (is_enabled, get_selected_term,
-            // …) then see the fresh list.
-            $offered_terms = WC_Twoinc_Payment_Terms::get_available_terms($this->wc_twoinc, true);
+            $offered_terms = WC_Twoinc_Payment_Terms::get_available_terms($this->wc_twoinc);
 
             // Read once, fed to both `enable_company_search` below and
             // `derive_company_search_location()` — same option chain, same

@@ -1323,3 +1323,32 @@ msgstr "Om din IT-administratör ber dig lägga till huvuden på anropen som din
 #: class/WC_Twoinc.php
 msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
 msgstr "Markera \"Skicka även från webbläsaren\" endast om din IT-administratör kräver huvudet på anrop från köparens webbläsare utöver dem från din server. Värdet publiceras till köparens webbläsare och kan läsas av vem som helst."
+
+#: class/WC_Twoinc.php
+msgid "Merchant profile"
+msgstr "Säljarprofil"
+
+#: class/WC_Twoinc.php
+msgid "Refresh merchant profile"
+msgstr "Uppdatera säljarprofil"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Your offerable payment terms, buyer-surcharge cap, minimum order value and default term are read from %s and cached. They are refreshed every night and whenever the API key or environment is saved; use this to pull a change through now. The nightly refresh runs on WP-Cron. With WP-Cron disabled, the next request more than 24 hours after the last refresh re-reads it."
+msgstr "De betalningsvillkor du kan erbjuda, taket för köpartillägget, minsta ordervärde och standardvillkoret hämtas från %s och cachas. De uppdateras varje natt och varje gång API-nyckeln eller miljön sparas; använd detta för att hämta in en ändring nu. Den nattliga uppdateringen körs på WP-Cron. Med WP-Cron avstängt läser den första förfrågan mer än 24 timmar efter senaste uppdateringen om den."
+
+#: class/WC_Twoinc.php
+msgid "Refreshing…"
+msgstr "Uppdaterar…"
+
+#: class/WC_Twoinc.php
+msgid "Could not refresh the merchant profile."
+msgstr "Kunde inte uppdatera säljarprofilen."
+
+#: class/WC_Twoinc.php
+msgid "Merchant profile refreshed."
+msgstr "Säljarprofilen har uppdaterats."
+
+#: class/WC_Twoinc.php
+msgid "Could not refresh the merchant profile. Check that the API key is valid and that the API is reachable."
+msgstr "Kunde inte uppdatera säljarprofilen. Kontrollera att API-nyckeln är giltig och att API:et går att nå."

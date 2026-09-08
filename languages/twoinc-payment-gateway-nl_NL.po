@@ -1322,3 +1322,32 @@ msgstr "Als je IT-beheerder je vraagt headers toe te voegen aan de aanroepen die
 #: class/WC_Twoinc.php
 msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
 msgstr "Vink \"Ook vanuit de browser verzenden\" alleen aan als je IT-beheerder de header vereist bij aanroepen vanuit de browser van de koper naast die vanaf je server. De waarde wordt gepubliceerd naar de browser van de koper en kan door iedereen worden gelezen."
+
+#: class/WC_Twoinc.php
+msgid "Merchant profile"
+msgstr "Verkopersprofiel"
+
+#: class/WC_Twoinc.php
+msgid "Refresh merchant profile"
+msgstr "Verkopersprofiel vernieuwen"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Your offerable payment terms, buyer-surcharge cap, minimum order value and default term are read from %s and cached. They are refreshed every night and whenever the API key or environment is saved; use this to pull a change through now. The nightly refresh runs on WP-Cron. With WP-Cron disabled, the next request more than 24 hours after the last refresh re-reads it."
+msgstr "De betaaltermijnen die u kunt aanbieden, het maximum voor de kopertoeslag, de minimale orderwaarde en de standaardtermijn worden bij %s opgehaald en in de cache bewaard. Ze worden elke nacht vernieuwd en telkens wanneer de API-sleutel of de omgeving wordt opgeslagen; gebruik dit om een wijziging nu direct op te halen. De nachtelijke vernieuwing loopt via WP-Cron. Met WP-Cron uitgeschakeld leest het eerste verzoek meer dan 24 uur na de laatste vernieuwing ze opnieuw."
+
+#: class/WC_Twoinc.php
+msgid "Refreshing…"
+msgstr "Vernieuwen…"
+
+#: class/WC_Twoinc.php
+msgid "Could not refresh the merchant profile."
+msgstr "Het verkopersprofiel kon niet worden vernieuwd."
+
+#: class/WC_Twoinc.php
+msgid "Merchant profile refreshed."
+msgstr "Verkopersprofiel vernieuwd."
+
+#: class/WC_Twoinc.php
+msgid "Could not refresh the merchant profile. Check that the API key is valid and that the API is reachable."
+msgstr "Het verkopersprofiel kon niet worden vernieuwd. Controleer of de API-sleutel geldig is en of de API bereikbaar is."
