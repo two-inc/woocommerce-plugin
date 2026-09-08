@@ -91,8 +91,13 @@ Vendored assets
   invisible to the upstream reviewer and silently forks the control.
 - **A change to shared panel behaviour is therefore TWO edits**, and nothing links
   the copies: whoever changes one and stops has fixed one platform, and neither
-  reviewer sees the other half. Re-copying is what keeps the two in step, so a
-  panel change that is not accompanied by a re-copy here is half-landed.
+  reviewer sees the other half. This copy lags the Magento one, and re-copying is
+  the only thing that brings it back into step.
+- `tests/js/company-search-panel-vendored.test.js` is an **edit-lock, not a parity
+  check** (TWO-25503). `EDIT_LOCK_SHA256` is this file's OWN digest, so the suite
+  catches an in-place edit here and says nothing whatever about whether the two
+  copies agree — it cannot reach the Magento repo at all. The digest moves only on
+  a deliberate re-copy from upstream.
 - The module is framework-free with a UMD tail and stays that way: another Magento
   checkout loads it with no RequireJS, no jQuery and no Knockout, so a dependency on
   this plugin's own jQuery would break it there.
