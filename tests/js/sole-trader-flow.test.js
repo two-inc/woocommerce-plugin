@@ -3249,7 +3249,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(onDocument.mock.calls.map((call) => call[0])).toEqual(["focusin"]);
       });
 
-      /** Tab to the chip then Enter or Space: its `focusin` raises the popup, no mousedown anywhere. */
+      /** Tab to the chip then Enter or Space: the chip's activation raises the popup, no mousedown and no `focusin` raise. */
       test("keyboard activation of Sole trader keeps the popup it just raised", () => {
         const win = launchFromChips();
 
