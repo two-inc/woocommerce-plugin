@@ -596,4 +596,45 @@ jQuery(function ($) {
     updateSurchargeOptionFields();
     updateRoundingStepVisibility();
   })();
+
+  // ── Diagnostics: on-demand merchant-profile refresh ─────────────────────
+  (function initRefreshMerchantRecord() {
+    const $button = $("#twoinc-refresh-merchant-record");
+    const $status = $("#twoinc-refresh-merchant-record-status");
+    if (!$button.length) {
+      return;
+    }
+
+    function render(colour, text) {
+      $status.css("color", colour).text(text);
+    }
+
+    $button.on("click", function () {
+      $button.prop("disabled", true);
+      render("", twoinc_admin.i18n_refreshing);
+
+      $.ajax({
+        url: twoinc_admin.ajax_url,
+        type: "POST",
+        data: {
+          action: "twoinc_refresh_merchant_record",
+          csrf_token: twoinc_admin.csrf_token
+        },
+        success: function (response) {
+          const data = response.data || {};
+          if (response.success) {
+            render("#2a7f2a", [data.message, data.merchant].filter(Boolean).join(" "));
+          } else {
+            render("#a94442", data.message || twoinc_admin.i18n_refresh_failed);
+          }
+        },
+        error: function () {
+          render("#a94442", twoinc_admin.i18n_refresh_failed);
+        },
+        complete: function () {
+          $button.prop("disabled", false);
+        }
+      });
+    });
+  })();
 });

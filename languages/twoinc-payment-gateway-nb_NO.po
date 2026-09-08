@@ -1329,3 +1329,32 @@ msgstr "Kryss av for \"Send også fra nettleseren\" bare hvis IT-administratoren
 #, php-format
 msgid "Unrecognised surcharge method: %1$s. Choose one of: %2$s."
 msgstr "Ukjent tilleggsmetode: %1$s. Velg en av: %2$s."
+
+#: class/WC_Twoinc.php
+msgid "Merchant profile"
+msgstr "Selgerprofil"
+
+#: class/WC_Twoinc.php
+msgid "Refresh merchant profile"
+msgstr "Oppdater selgerprofil"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Your offerable payment terms, buyer-surcharge cap, minimum order value and default term are read from %s and cached. They are refreshed every night and whenever the API key or environment is saved; use this to pull a change through now. The nightly refresh runs on WP-Cron. With WP-Cron disabled, the next request more than 24 hours after the last refresh re-reads it, and while a re-read keeps failing one request a minute retries it."
+msgstr "Betalingsvilkårene du kan tilby, taket for kjøpstillegget, minste ordreverdi og standardvilkåret hentes fra %s og mellomlagres. De oppdateres hver natt og hver gang API-nøkkelen eller miljøet lagres; bruk denne for å hente inn en endring nå. Den nattlige oppdateringen kjører på WP-Cron. Med WP-Cron avslått leser den første forespørselen mer enn 24 timer etter forrige oppdatering den på nytt, og så lenge en ny lesing fortsetter å feile, prøver én forespørsel per minutt på nytt."
+
+#: class/WC_Twoinc.php
+msgid "Refreshing…"
+msgstr "Oppdaterer…"
+
+#: class/WC_Twoinc.php
+msgid "Could not refresh the merchant profile."
+msgstr "Kunne ikke oppdatere selgerprofilen."
+
+#: class/WC_Twoinc.php
+msgid "Merchant profile refreshed."
+msgstr "Selgerprofilen er oppdatert."
+
+#: class/WC_Twoinc.php
+msgid "Could not refresh the merchant profile. Check that the API key is valid and that the API is reachable."
+msgstr "Kunne ikke oppdatere selgerprofilen. Kontroller at API-nøkkelen er gyldig og at API-et er tilgjengelig."

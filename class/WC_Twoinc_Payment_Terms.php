@@ -92,18 +92,12 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * custom term unioned in. An empty result is meaningful: no term is
          * offered, so none is sent and the backend applies the account default.
          *
-         * Cache-only by default — this seam is reached from the gateway
-         * constructor, cart totals and wc-ajax, none of which may block on
-         * HTTP. Pass `$refresh = true` only from the sanctioned refresh
-         * points (checkout render bootstrap; the admin field render has its
-         * own path via get_payment_term_day_options).
-         *
          * @return int[]
          */
-        public static function get_available_terms($gateway, bool $refresh = false): array
+        public static function get_available_terms($gateway): array
         {
             // EOM: offered days are not filtered to the API-eligible set. TWO-25656.
-            $backend_terms = array_map('intval', $gateway->get_merchant_available_terms($refresh));
+            $backend_terms = array_map('intval', $gateway->get_merchant_available_terms());
 
             $terms = [];
             $admin_subset = $gateway->get_option('payment_terms_days');

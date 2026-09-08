@@ -84,6 +84,12 @@ final class BrandConfigSpec
             'testDeactivationNeverClearsSettings',
             'testUninstallCleanupClearsSettingsAndTermCache',
             'testMerchantRecordFetchSharedAcrossConsumersAndOffTheBlob',
+            'testMerchantRecordRefetchedOnIdentityChangingSave',
+            'testNightlyMerchantRecordRefreshScheduledAtLocalMidnight',
+            'testOnDemandMerchantRecordRefreshReplacesCacheOrKeepsLastKnownGood',
+            'testForcedRefreshEntryPointsSpendOneFetchNotTwo',
+            'testSurchargeCapSaveValidatesAgainstLiveRecord',
+            'testRefreshMerchantRecordAjaxGateRefusesUngatedRequests',
             'testLegacyDaysOnInvoiceOptionRowsDropped',
             'testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList',
             'testSurchargeGridPreservesRowsNotOnTheForm',
@@ -370,6 +376,9 @@ final class BrandConfigSpec
         WC_Twoinc_FX::reset_request_cache();
         unset($GLOBALS['__twoinc_test_translations']);
         $GLOBALS['__twoinc_test_transients'] = [];
+        // Site timezone and the WP-Cron store, so a failing spec cannot leak either into later tests.
+        unset($GLOBALS['__twoinc_test_timezone'], $GLOBALS['__twoinc_test_option_write_fails']);
+        $GLOBALS['__twoinc_test_cron'] = [];
         $GLOBALS['__twoinc_test_logs'] = [];
         $GLOBALS['__twoinc_test_notices'] = [];
         $GLOBALS['__twoinc_test_http_calls'] = [];
@@ -417,7 +426,7 @@ final class BrandConfigSpec
                 return $this->test_buyer_countries;
             }
 
-            public function get_merchant_available_terms(bool $refresh = false): array
+            public function get_merchant_available_terms(): array
             {
                 // A typical resolved merchant record (TWO-24812); the fetch/
                 // cache protocol has its own dedicated test.
@@ -1525,7 +1534,8 @@ final class BrandConfigSpec
             }
         };
 
-        $checked = WC_Twoinc_Brand::prefixed_name('supported_buyer_countries_checked_on');
+        $checked = WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on');
+        $attempted = WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on');
 
         // Absent means the API predates its own enforcement (unrestricted);
         // present means the merchant's answer is authoritative, including
@@ -1545,7 +1555,7 @@ final class BrandConfigSpec
         foreach ($cases as $case) {
             list($record, $expected, $description) = $case;
             WC_Twoinc::reset_merchant_record_memo();
-            unset($GLOBALS['__twoinc_test_options'][$checked]);
+            unset($GLOBALS['__twoinc_test_options'][$checked], $GLOBALS['__twoinc_test_options'][$attempted]);
             $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode($record)]];
 
             TinyAssert::same($expected, $gateway->get_supported_buyer_countries(), $description);
@@ -1559,19 +1569,22 @@ final class BrandConfigSpec
         }
 
         WC_Twoinc::reset_merchant_record_memo();
-        unset($GLOBALS['__twoinc_test_options'][$checked]);
+        unset($GLOBALS['__twoinc_test_options'][$checked], $GLOBALS['__twoinc_test_options'][$attempted]);
         $GLOBALS['__twoinc_test_logs'] = [];
         $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode(['supported_buyer_countries' => 'NL'])]];
         $gateway->get_supported_buyer_countries();
         // Distinct from an empty list, which is the merchant's own answer.
         self::assertLogged('warning', 'supported_buyer_countries is a string, not a list');
 
+        // A failed refresh keeps the last-known-good allowlist rather than blanking it.
         WC_Twoinc::reset_merchant_record_memo();
-        unset($GLOBALS['__twoinc_test_options'][$checked]);
+        unset($GLOBALS['__twoinc_test_options'][$checked], $GLOBALS['__twoinc_test_options'][$attempted]);
+        $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode(['supported_buyer_countries' => ['NL']])]];
+        TinyAssert::same(['NL'], $gateway->get_supported_buyer_countries());
+        WC_Twoinc::reset_merchant_record_memo();
+        unset($GLOBALS['__twoinc_test_options'][$checked], $GLOBALS['__twoinc_test_options'][$attempted]);
         $gateway->responses = [new WP_Error('http_request_failed', 'down')];
-        TinyAssert::same(null, $gateway->get_supported_buyer_countries(), 'fetch failure means no restriction');
-        $gateway->responses = [];
-        TinyAssert::same(null, $gateway->get_supported_buyer_countries(), 'a failed fetch does not cache a restriction');
+        TinyAssert::same(['NL'], $gateway->get_supported_buyer_countries(), 'a failed fetch keeps the last-known allowlist');
     }
 
     private static function testAvailabilityGateJudgesMerchantBuyerCountryAllowlist(): void
@@ -1727,6 +1740,9 @@ final class BrandConfigSpec
             $GLOBALS['__twoinc_test_logs'] = [];
             $GLOBALS['__twoinc_test_notices'] = [];
             $_POST = ['company_id' => '923456789', 'billing_country' => $posted_country];
+
+            // A fresh record clock, so the only call left is the order create the gate must refuse.
+            $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on')] = time();
 
             $gateway = self::buyerCountryGateway($allowlist);
             $gateway->process_payment(42);
@@ -2131,7 +2147,7 @@ final class BrandConfigSpec
                 return $this->options[$key] ?? $empty_value ?? '';
             }
 
-            public function get_merchant_available_terms(bool $refresh = false): array
+            public function get_merchant_available_terms(): array
             {
                 return $this->merchant_terms;
             }
@@ -2176,6 +2192,8 @@ final class BrandConfigSpec
             public $options = ['api_key' => 'key'];
             public $responses = [];
             public $calls = 0;
+            // Runs while the request is "in flight": what another request does concurrently.
+            public $on_request = null;
 
             public function __construct()
             {
@@ -2200,76 +2218,195 @@ final class BrandConfigSpec
             public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
             {
                 $this->calls++;
+                if ($this->on_request) {
+                    ($this->on_request)();
+                }
                 return array_shift($this->responses);
             }
         };
-        $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms_checked_on');
-        $expire = static function () use ($checked_option) {
-            $GLOBALS['__twoinc_test_options'][$checked_option] = time() - 901;
-            // TTL expiry only ever happens across requests, so an expiry is
-            // also a request boundary for the per-request record memo.
+        $stamp = WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on');
+        $attempted = WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on');
+        $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
+        // A request boundary with the clock $age seconds old (null: absent) and no recent attempt.
+        $next_request = static function ($age = null) use ($stamp, $attempted) {
+            if ($age === null) {
+                unset($GLOBALS['__twoinc_test_options'][$stamp]);
+            } else {
+                $GLOBALS['__twoinc_test_options'][$stamp] = time() - $age;
+            }
+            unset($GLOBALS['__twoinc_test_options'][$attempted]);
             WC_Twoinc::reset_merchant_record_memo();
             WC_Twoinc_FX::reset_request_cache();
-            $GLOBALS['__twoinc_test_transients'] = [];
         };
 
-        // Default (cache-only) read NEVER fetches, even with a cold cache —
-        // the seam is reached from the constructor / cart totals / wc-ajax,
-        // none of which may block on HTTP.
-        TinyAssert::same([], $gateway->get_merchant_available_terms());
-        TinyAssert::same(0, $gateway->calls);
-
-        // First refresh: normalised (ints, dedup, non-positive dropped,
-        // non-numeric dropped rather than intval'd to a phantom 1, sorted)
-        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [60, 30, 30, 0, -5, 90, [7], true, null]])];
-        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms(true));
+        // A cold cache is a refresh trigger: the first read after an install or a cache clear pays one fetch.
+        unset($GLOBALS['__twoinc_test_options'][$terms_option]);
+        $next_request();
+        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [30]])];
+        TinyAssert::same([30], $gateway->get_merchant_available_terms());
         TinyAssert::same(1, $gateway->calls);
 
-        // Within the TTL: served from the cached option, no request —
-        // and cache-only reads see the refreshed list
-        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms(true));
+        // Normalisation of a successful response's list
+        $normalisation = [
+            [[60, 30, 30, 0, -5, 90, [7], true, null], [30, 60, 90], 'ints deduped, sorted, non-positive and non-numeric dropped'],
+            [[], [], 'an explicit empty list means nothing is offerable'],
+            [['45'], [45], 'numeric strings accepted'],
+        ];
+        foreach ($normalisation as $case) {
+            list($response_terms, $expected, $description) = $case;
+            $next_request();
+            $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['available_terms' => $response_terms])];
+            TinyAssert::same($expected, $gateway->get_merchant_available_terms(), $description);
+        }
+
+        // Restore a known list, then assert what does and does not refetch
+        $next_request();
+        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [30, 60, 90]])];
         TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms());
+        $gateway->calls = 0;
+
+        // Serving from cache, and the backstop clock
+        $backstop = [
+            [0, 0, 'a fresh stamp serves the cached list'],
+            [WC_Twoinc::MERCHANT_RECORD_TTL - 1, 0, 'just inside the backstop still serves cache'],
+            [WC_Twoinc::MERCHANT_RECORD_TTL + 1, 1, 'past the backstop refetches'],
+        ];
+        foreach ($backstop as $case) {
+            list($age, $expected_calls, $description) = $case;
+            $next_request($age);
+            $gateway->calls = 0;
+            // Queued only where a fetch is expected, so nothing leaks into a later assertion.
+            $gateway->responses = $expected_calls === 0
+                ? []
+                : [['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [30, 60, 90]])]];
+            TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms(), $description);
+            TinyAssert::same($expected_calls, $gateway->calls, $description);
+        }
+
+        // A refresh that cannot land its answer keeps the last-known list
+        $degrade = [
+            [new WP_Error('http_request_failed', 'down'), 'a transport failure serves the last-known list'],
+            [['response' => ['code' => 200], 'body' => json_encode(['due_in_days' => 14])], 'a record without the field serves the last-known list'],
+        ];
+        foreach ($degrade as $case) {
+            list($response, $description) = $case;
+            $next_request();
+            $gateway->responses = [$response];
+            TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms(), $description);
+        }
+
+        // The clock is written only by a success, so a failure leaves it as found.
+        $expired = time() - 2 * WC_Twoinc::MERCHANT_RECORD_TTL;
+        $failure_leaves_clock = [
+            [$expired, false, 'a read-path failure leaves an expired clock where it was'],
+            [null, false, 'a read-path failure leaves an absent clock absent'],
+            [$expired, true, 'a forced failure leaves the clock where it was'],
+        ];
+        foreach ($failure_leaves_clock as $case) {
+            list($clock, $force, $description) = $case;
+            $next_request();
+            if ($clock !== null) {
+                $GLOBALS['__twoinc_test_options'][$stamp] = $clock;
+            }
+            $gateway->responses = [new WP_Error('http_request_failed', 'down')];
+
+            if ($force) {
+                TinyAssert::same(false, $gateway->refresh_merchant_record_caches(true), $description);
+            } else {
+                TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms(), $description);
+            }
+
+            TinyAssert::same($clock, $GLOBALS['__twoinc_test_options'][$stamp] ?? null, $description);
+            TinyAssert::true(
+                (int) ($GLOBALS['__twoinc_test_options'][$attempted] ?? 0) >= time() - 5,
+                $description . ': the attempt must be recorded'
+            );
+        }
+
+        // A write that dies between the stores must not leave a fresh clock over a half-written record.
+        $next_request();
+        $GLOBALS['__twoinc_test_options'][$stamp] = $expired;
+        $GLOBALS['__twoinc_test_option_write_fails'] = [WC_Twoinc_Brand::prefixed_name('platform_minimum_order')];
+        $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [30, 60, 90], 'due_in_days' => 21])]];
+        $died = false;
+        try {
+            $gateway->refresh_merchant_record_caches();
+        } catch (RuntimeException $e) {
+            $died = true;
+        }
+        unset($GLOBALS['__twoinc_test_option_write_fails']);
+        TinyAssert::true($died, 'the fixture must die mid-write');
+        TinyAssert::same(21, (int) $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_due_in_days')], 'the stores before the death landed');
+        TinyAssert::same($expired, $GLOBALS['__twoinc_test_options'][$stamp], 'a half-written record must not anchor the clock');
+
+        // A read path whose fetch fails must not undo a refresh that succeeded concurrently.
+        $next_request(WC_Twoinc::MERCHANT_RECORD_TTL + 1);
+        $concurrent_success = time() - 1;
+        $gateway->on_request = static function () use ($stamp, $concurrent_success) {
+            $GLOBALS['__twoinc_test_options'][$stamp] = $concurrent_success;
+        };
+        $gateway->responses = [new WP_Error('http_request_failed', 'down')];
+        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms());
+        $gateway->on_request = null;
+        TinyAssert::same(
+            $concurrent_success,
+            $GLOBALS['__twoinc_test_options'][$stamp],
+            'a failed fetch must not overwrite a concurrent successful refresh'
+        );
+
+        // Outage: consecutive requests with the last attempt $age seconds ago retry per interval, not per backstop.
+        $outage = [
+            [null, 1, 'the first request of an outage fetches'],
+            [0, 0, 'a request inside the attempt interval must not fetch'],
+            [WC_Twoinc::MERCHANT_RECORD_ATTEMPT_INTERVAL - 1, 0, 'just inside the attempt interval still must not fetch'],
+            [WC_Twoinc::MERCHANT_RECORD_ATTEMPT_INTERVAL + 1, 1, 'a request after the interval retries, rather than waiting out the backstop'],
+        ];
+        foreach ($outage as $case) {
+            list($age, $expected_calls, $description) = $case;
+            $next_request(WC_Twoinc::MERCHANT_RECORD_TTL + 1);
+            if ($age !== null) {
+                $GLOBALS['__twoinc_test_options'][$attempted] = time() - $age;
+            }
+            $gateway->calls = 0;
+            $gateway->responses = [new WP_Error('http_request_failed', 'down')];
+            TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms(), $description);
+            TinyAssert::same($expected_calls, $gateway->calls, $description);
+        }
+
+        // A forced refresh bypasses the attempt interval; its success anchors the clock for the next page view.
+        WC_Twoinc::reset_merchant_record_memo();
+        $GLOBALS['__twoinc_test_options'][$attempted] = time();
+        $gateway->calls = 0;
+        $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [30, 60, 90]])]];
+        TinyAssert::same(true, $gateway->refresh_merchant_record_caches(true), 'a forced refresh ignores the attempt interval');
         TinyAssert::same(1, $gateway->calls);
+        TinyAssert::true(
+            (int) ($GLOBALS['__twoinc_test_options'][$stamp] ?? 0) >= time() - 5,
+            'a successful forced refresh must anchor the clock'
+        );
+        $gateway->calls = 0;
+        WC_Twoinc::reset_merchant_record_memo();
+        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms());
+        TinyAssert::same(0, $gateway->calls, 'the anchored clock must serve the next request from cache');
 
-        // Fetch failure after expiry: last-known list served, not blanked
-        $expire();
-        $gateway->responses[] = new WP_Error('http_request_failed', 'down');
-        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms(true));
-        TinyAssert::same(2, $gateway->calls);
-
-        // ...and the failure still bumped the TTL clock: an immediate
-        // re-refresh does NOT hammer the API (one stall per TTL, not per view)
-        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms(true));
-        TinyAssert::same(2, $gateway->calls);
-
-        // Successful response WITHOUT the field (older backend): stale kept
-        $expire();
-        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['due_in_days' => 14])];
-        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms(true));
-
-        // Successful explicit [] : the backend says nothing is offerable
-        $expire();
-        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['available_terms' => []])];
-        TinyAssert::same([], $gateway->get_merchant_available_terms(true));
-
-        // No API key: no fetch attempted even on refresh. The TTL must be
-        // expired and a sentinel response queued, or this would pass on the
-        // TTL gate alone without ever exercising the api_key guard.
-        $expire();
+        // No API key: no fetch attempted. The stamp must be cold and a
+        // sentinel response queued, or this would pass on the clock alone
+        // without ever exercising the api_key guard.
+        $next_request();
         $bare = clone $gateway;
         $bare->options = [];
         $bare->calls = 0;
         $bare->responses = [['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [7]])]];
-        $bare->get_merchant_available_terms(true);
+        $bare->get_merchant_available_terms();
         TinyAssert::same(0, $bare->calls);
     }
 
     private static function testMerchantAvailableTermsInvalidatedOnMerchantIdChange(): void
     {
         $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
-        $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms_checked_on');
+        $stamp = WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on');
         $GLOBALS['__twoinc_test_options'][$terms_option] = '[30,60]';
-        $GLOBALS['__twoinc_test_options'][$checked_option] = 999;
+        $GLOBALS['__twoinc_test_options'][$stamp] = 999;
 
         $gateway = new class () extends WC_Twoinc {
             public $options = [
@@ -2311,12 +2448,11 @@ final class BrandConfigSpec
         $gateway->verify_api_key();
         TinyAssert::same('new-merchant', $gateway->options['merchant_id']);
         TinyAssert::same(false, array_key_exists($terms_option, $GLOBALS['__twoinc_test_options']));
-        TinyAssert::same(false, array_key_exists($checked_option, $GLOBALS['__twoinc_test_options']));
-        TinyAssert::same([], $gateway->get_merchant_available_terms());
+        TinyAssert::same(false, array_key_exists($stamp, $GLOBALS['__twoinc_test_options']));
 
         // Same merchant re-verifying does NOT drop the cache
         $GLOBALS['__twoinc_test_options'][$terms_option] = '[30,60]';
-        $GLOBALS['__twoinc_test_options'][$checked_option] = 999;
+        $GLOBALS['__twoinc_test_options'][$stamp] = time();
         $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['id' => 'new-merchant', 'short_name' => 'nm'])];
         $gateway->verify_api_key();
         TinyAssert::same('[30,60]', $GLOBALS['__twoinc_test_options'][$terms_option]);
@@ -2350,9 +2486,10 @@ final class BrandConfigSpec
     {
         $settings_option = 'woocommerce_woocommerce-gateway-tillit_settings';
         $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
-        $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms_checked_on');
+        $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on');
+        $attempted_option = WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on');
 
-        $seed = static function (?string $clear) use ($settings_option, $terms_option, $checked_option) {
+        $seed = static function (?string $clear) use ($settings_option, $terms_option, $checked_option, $attempted_option) {
             $settings = ['api_key' => 'key'];
             if ($clear !== null) {
                 $settings['clear_options_on_uninstall'] = $clear;
@@ -2361,6 +2498,7 @@ final class BrandConfigSpec
                 $settings_option => $settings,
                 $terms_option => '[30,60]',
                 $checked_option => 999,
+                $attempted_option => 998,
             ];
         };
 
@@ -2388,6 +2526,7 @@ final class BrandConfigSpec
         TinyAssert::same(false, array_key_exists($settings_option, $GLOBALS['__twoinc_test_options']));
         TinyAssert::same(false, array_key_exists($terms_option, $GLOBALS['__twoinc_test_options']));
         TinyAssert::same(false, array_key_exists($checked_option, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::same(false, array_key_exists($attempted_option, $GLOBALS['__twoinc_test_options']));
     }
 
     private static function testMerchantRecordFetchSharedAcrossConsumersAndOffTheBlob(): void
@@ -2439,11 +2578,11 @@ final class BrandConfigSpec
         $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode($record)];
 
         // All four consumers in one request: exactly ONE wire fetch
-        TinyAssert::same([30, 60], $gateway->get_merchant_available_terms(true));
+        TinyAssert::same([30, 60], $gateway->get_merchant_available_terms());
         TinyAssert::same(21, $gateway->get_merchant_due_in_days());
         $minimum = $gateway->get_platform_minimum_order();
         TinyAssert::same(['amount' => 100.0, 'currency' => 'NOK', 'basis' => 'net'], $minimum);
-        TinyAssert::same(['amount' => 25.0, 'currency' => 'EUR'], $gateway->get_merchant_surcharge_limit(true));
+        TinyAssert::same(['amount' => 25.0, 'currency' => 'EUR'], $gateway->get_merchant_surcharge_limit());
         TinyAssert::same(1, $gateway->calls);
 
         // The caches live in dedicated wp_options, never the settings blob —
@@ -2457,23 +2596,398 @@ final class BrandConfigSpec
         TinyAssert::same(false, array_key_exists('platform_minimum_order', $gateway->options));
         TinyAssert::same(false, array_key_exists('platform_minimum_order_last_checked_on', $gateway->options));
 
-        // Next request with every TTL expired and the API down: one capped
-        // stall total (memo covers failures), each consumer keeps its own
-        // degrade posture — days serves stale, minimum blanks to null,
-        // terms serve stale.
-        foreach (['merchant_available_terms_checked_on', 'merchant_due_in_days_checked_on', 'platform_minimum_order_checked_on', 'merchant_surcharge_limit_checked_on'] as $name) {
-            $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name($name)] = time() - 3601;
-        }
+        // Next request past the backstop with the API down: one capped stall
+        // total, and every consumer keeps its last-known-good value.
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on')] = time() - WC_Twoinc::MERCHANT_RECORD_TTL - 1;
+        unset($GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on')]);
         WC_Twoinc::reset_merchant_record_memo();
         WC_Twoinc_FX::reset_request_cache();
-        $GLOBALS['__twoinc_test_transients'] = [];
         $gateway->responses[] = new WP_Error('http_request_failed', 'down');
 
-        TinyAssert::same([30, 60], $gateway->get_merchant_available_terms(true));
+        TinyAssert::same([30, 60], $gateway->get_merchant_available_terms());
         TinyAssert::same(21, $gateway->get_merchant_due_in_days());
-        TinyAssert::same(null, $gateway->get_platform_minimum_order());
-        TinyAssert::same(['amount' => 25.0, 'currency' => 'EUR'], $gateway->get_merchant_surcharge_limit(true));
+        TinyAssert::same(['amount' => 100.0, 'currency' => 'NOK', 'basis' => 'net'], $gateway->get_platform_minimum_order());
+        TinyAssert::same(['amount' => 25.0, 'currency' => 'EUR'], $gateway->get_merchant_surcharge_limit());
         TinyAssert::same(2, $gateway->calls);
+    }
+
+    /**
+     * Doug's ruling: an API-key or environment save drops the cached record
+     * AND refetches it in the same request, so the admin never looks at the
+     * previous identity's commercial values.
+     */
+    private static function testMerchantRecordRefetchedOnIdentityChangingSave(): void
+    {
+        $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
+        $stamp = WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on');
+
+        // Given a shop on 'old-key'/sandbox with a cached term list, when the
+        // settings form posts <api_key>/<checkout_env>, then the cached list is
+        // <expected> and the record endpoint was hit <expected_record_calls> times.
+        $cases = [
+            ['new-key', 'sandbox', null, [45], 1, 2, 'a new API key refetches'],
+            ['old-key', 'production', null, [45], 1, 2, 'an environment switch refetches'],
+            ['old-key', 'sandbox', null, [30, 60], 0, 0, 'an unrelated save serves the cache'],
+            ['new-key', 'sandbox', '20', [45], 1, 2, 'a fixed fee saved with a new key is not judged against the old cap'],
+        ];
+
+        foreach ($cases as $case) {
+            list($api_key, $env, $fixed_fee, $expected, $expected_record_calls, $expected_capped, $description) = $case;
+
+            $gateway = new class () extends WC_Twoinc {
+                public $endpoints = [];
+                public $timeouts = [];
+                public $responses = [];
+                public $test_post_data = [];
+
+                public function __construct()
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                }
+
+                public function get_twoinc_checkout_host()
+                {
+                    return 'https://api.example';
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                {
+                    $this->endpoints[] = $endpoint;
+                    $this->timeouts[] = $timeout;
+                    return array_shift($this->responses);
+                }
+            };
+            $gateway->init_form_fields();
+            $GLOBALS['__twoinc_test_options'] = [
+                $gateway->get_option_key() => [
+                    'api_key' => 'old-key',
+                    'checkout_env' => 'sandbox',
+                    'merchant_id' => 'mid',
+                ],
+                $terms_option => '[30,60]',
+                $stamp => time(),
+                WC_Twoinc_Brand::prefixed_name('merchant_surcharge_limit') => json_encode(['amount' => 10.0, 'currency' => 'EUR']),
+            ];
+            // The real constructor's init_settings(); the stub does not resolve settings lazily.
+            $gateway->init_settings();
+            WC_Twoinc::reset_merchant_record_memo();
+            $gateway->test_post_data = [
+                $gateway->get_field_key('api_key') => $api_key,
+                $gateway->get_field_key('checkout_env') => $env,
+            ];
+            if ($fixed_fee !== null) {
+                $gateway->test_post_data[$gateway->get_field_key('surcharge_grid')] = [30 => ['fixed' => $fixed_fee]];
+            }
+            // Pre-save verify, post-save merchant_id re-resolution, then the record.
+            $gateway->responses = [
+                ['response' => ['code' => 200], 'body' => json_encode(['id' => 'mid', 'short_name' => 'sn'])],
+                ['response' => ['code' => 200], 'body' => json_encode(['id' => 'mid', 'short_name' => 'sn'])],
+                ['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [45]])],
+            ];
+
+            $gateway->process_admin_options();
+
+            TinyAssert::same(
+                [],
+                array_values(array_filter($gateway->errors, static function ($error) {
+                    return strpos($error, 'exceeds the maximum') !== false;
+                })),
+                $description . ': the fee must not be refused'
+            );
+            TinyAssert::same($expected, $gateway->get_merchant_available_terms(), $description);
+            TinyAssert::same(
+                $expected_record_calls,
+                count(array_filter($gateway->endpoints, static function ($endpoint) {
+                    return $endpoint === '/v1/merchant/mid';
+                })),
+                $description
+            );
+            // Post-save calls are capped (in series, admin waiting); the count guards an empty slice.
+            $capped = array_slice($gateway->timeouts, 1);
+            TinyAssert::same($expected_capped, count($capped), $description . ': wrong number of post-save calls');
+            foreach ($capped as $timeout) {
+                TinyAssert::same(10, $timeout, $description . ': an uncapped call would stall the save');
+            }
+        }
+    }
+
+    /**
+     * Doug's ruling: the record is refreshed nightly at midnight site time,
+     * which is what lands a commercial change within a day without putting a
+     * fetch on any checkout render.
+     */
+    private static function testNightlyMerchantRecordRefreshScheduledAtLocalMidnight(): void
+    {
+        $hook = WC_Twoinc::merchant_record_refresh_hook();
+        // Brand-prefixed like the FX hook: two brand overlays on one site must
+        // not share one scheduled event.
+        TinyAssert::same(WC_Twoinc_Brand::prefixed_name('merchant_record_refresh'), $hook);
+        // Site timezone, and whether midnight there is behind or ahead of UTC's.
+        $cases = [
+            ['UTC', 'a site on UTC'],
+            ['Europe/Oslo', 'a site ahead of UTC'],
+            ['America/Los_Angeles', 'a site behind UTC'],
+        ];
+
+        foreach ($cases as $case) {
+            list($timezone, $description) = $case;
+            $GLOBALS['__twoinc_test_timezone'] = $timezone;
+            $GLOBALS['__twoinc_test_cron'] = [];
+
+            WC_Twoinc::schedule_merchant_record_refresh();
+
+            $scheduled = $GLOBALS['__twoinc_test_cron'][$hook] ?? null;
+            TinyAssert::true(is_array($scheduled), $description . ': nothing was scheduled');
+            TinyAssert::same('daily', $scheduled['recurrence'], $description);
+            $local = (new DateTime('@' . $scheduled['timestamp']))->setTimezone(new DateTimeZone($timezone));
+            TinyAssert::same('00:00:00', $local->format('H:i:s'), $description . ': not midnight site time');
+            TinyAssert::true($scheduled['timestamp'] > time(), $description . ': midnight already passed');
+
+            // Idempotent: a second boot must not move the schedule.
+            $first = $scheduled['timestamp'];
+            WC_Twoinc::schedule_merchant_record_refresh();
+            TinyAssert::same($first, $GLOBALS['__twoinc_test_cron'][$hook]['timestamp'], $description);
+        }
+
+        $GLOBALS['__twoinc_test_timezone'] = 'Europe/Oslo';
+
+        // 'daily' is a fixed 86400 anchored once, so a DST shift leaves the
+        // event an hour off local midnight for good unless it is re-anchored.
+        // Offsets are applied to a real local midnight.
+        $midnight = (new DateTime('tomorrow midnight', new DateTimeZone('Europe/Oslo')))->getTimestamp();
+        $drift = [
+            [0, false, 'an event already at local midnight is left alone'],
+            [3600, true, 'an event an hour late is re-anchored'],
+            [-3600, true, 'an event an hour early is re-anchored'],
+        ];
+        foreach ($drift as $case) {
+            list($offset, $expect_reanchor, $description) = $case;
+            $GLOBALS['__twoinc_test_cron'] = [
+                $hook => ['timestamp' => $midnight + $offset, 'recurrence' => 'daily'],
+            ];
+
+            WC_Twoinc::schedule_merchant_record_refresh();
+
+            $timestamp = $GLOBALS['__twoinc_test_cron'][$hook]['timestamp'];
+            TinyAssert::same($expect_reanchor, $timestamp !== $midnight + $offset, $description);
+            $local = (new DateTime('@' . $timestamp))->setTimezone(new DateTimeZone('Europe/Oslo'));
+            TinyAssert::same('00:00:00', $local->format('H:i:s'), $description);
+        }
+
+        // The anchor is judged on the resolved target timestamp, never on a
+        // wall-clock hour: where a DST jump skips local midnight PHP resolves
+        // 'tomorrow midnight' to 01:00, and an '00:00' test would clear and
+        // reschedule the event on every request for good. America/Havana
+        // 2026-03-08 is such a night.
+        $havana = new DateTimeZone('America/Havana');
+        $skipped = (new DateTime('2026-03-08 00:00:00', $havana))->getTimestamp();
+        TinyAssert::same(
+            '01:00',
+            (new DateTime('@' . $skipped))->setTimezone($havana)->format('H:i'),
+            'the fixture night must be one where local midnight does not exist'
+        );
+        $is_anchored = new ReflectionMethod(WC_Twoinc::class, 'is_on_refresh_anchor');
+        $is_anchored->setAccessible(true);
+        $anchor = [
+            [$skipped, true, 'an event on a target that resolved to 01:00 is on-anchor'],
+            [$skipped + 86400 * 3, true, 'whole days on from the target is still on-anchor'],
+            [$skipped - 86400 * 2, true, 'whole days before the target is still on-anchor'],
+            [$skipped + 120, true, 'a couple of minutes off is within tolerance'],
+            [$skipped + 86400 - 120, true, 'a couple of minutes short of a whole day is within tolerance'],
+            [$skipped + 3600, false, 'a DST-sized hour late is drift'],
+            [$skipped - 3600, false, 'a DST-sized hour early is drift'],
+        ];
+        foreach ($anchor as $case) {
+            list($next, $expected, $description) = $case;
+            TinyAssert::same($expected, $is_anchored->invoke(null, $next, $skipped), $description);
+        }
+
+        $GLOBALS['__twoinc_test_timezone'] = 'UTC';
+
+        // Deactivation stops it: an event with no listener otherwise keeps
+        // firing while the plugin is off.
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->on_deactivate_plugin();
+        TinyAssert::same(false, wp_next_scheduled($hook));
+    }
+
+    /**
+     * The gateway's constructor reads the record, and on a clock a backstop old that read is a GET;
+     * the forced refresh that follows must reuse it, whether or not the gateway was already built.
+     */
+    private static function testForcedRefreshEntryPointsSpendOneFetchNotTwo(): void
+    {
+        $stamp = WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on');
+        $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
+        $instance = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $instance->setAccessible(true);
+
+        // A fresh request on a clock a backstop old, which is what the previous night left.
+        $next_request = static function () use ($stamp, $terms_option, $instance) {
+            $GLOBALS['__twoinc_test_options'] = [
+                'woocommerce_woocommerce-gateway-tillit_settings' => ['api_key' => 'key', 'merchant_id' => 'mid'],
+                $stamp => time() - WC_Twoinc::MERCHANT_RECORD_TTL - 1,
+                $terms_option => '[30]',
+            ];
+            $GLOBALS['__twoinc_test_http_calls'] = [];
+            $GLOBALS['__twoinc_test_http_response'] = ['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [45]]), 'headers' => []];
+            WC_Twoinc::reset_merchant_record_memo();
+            $instance->setValue(null, null);
+        };
+        $record_fetches = static function () {
+            return count(array_filter($GLOBALS['__twoinc_test_http_calls'], static function ($call) {
+                return strpos($call['url'], '/v1/merchant/mid') !== false;
+            }));
+        };
+
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST = ['csrf_token' => 'valid'];
+        $GLOBALS['__twoinc_test_nonce_verify_result'] = 1;
+        $GLOBALS['__twoinc_test_caps'] = ['manage_options'];
+        try {
+            // The control: WooCommerce's own construction pays the read-path fetch.
+            $next_request();
+            new WC_Twoinc();
+            TinyAssert::same(1, $record_fetches(), 'the constructor read fetches on a stale clock');
+
+            $entry_points = [
+                [static function () {
+                    WC_Twoinc::run_scheduled_merchant_record_refresh();
+                }, 'the nightly run'],
+                [static function () {
+                    $GLOBALS['__twoinc_test_ajax_json'] = null;
+                    WC_Twoinc::ajax_refresh_merchant_record();
+                    TinyAssert::same(true, $GLOBALS['__twoinc_test_ajax_json']['success'], 'the button must report success');
+                }, 'the Diagnostics button'],
+            ];
+            // Whether WooCommerce already constructed the gateway earlier in the request.
+            $shapes = [
+                [false, 'on a clean request'],
+                [true, 'with the gateway already constructed'],
+            ];
+            foreach ($entry_points as $entry_point) {
+                list($run, $description) = $entry_point;
+                foreach ($shapes as $shape) {
+                    list($preconstructed, $shape_description) = $shape;
+                    $next_request();
+                    if ($preconstructed) {
+                        new WC_Twoinc();
+                    }
+
+                    $run();
+
+                    $label = $description . ' ' . $shape_description;
+                    TinyAssert::same(1, $record_fetches(), $label . ' must spend exactly one fetch');
+                    TinyAssert::same('[45]', $GLOBALS['__twoinc_test_options'][$terms_option], $label . ' must land the record');
+                }
+            }
+        } finally {
+            $instance->setValue(null, null);
+            $_POST = [];
+            unset($_SERVER['REQUEST_METHOD'], $GLOBALS['__twoinc_test_nonce_verify_result'], $GLOBALS['__twoinc_test_http_response']);
+            $GLOBALS['__twoinc_test_caps'] = [];
+        }
+    }
+
+    /**
+     * Doug's ruling: the Diagnostics "Refresh merchant profile" button
+     * refetches on demand, replaces the cache on success, and keeps
+     * last-known-good while reporting the failure.
+     */
+    private static function testOnDemandMerchantRecordRefreshReplacesCacheOrKeepsLastKnownGood(): void
+    {
+        $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
+        $stamp = WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on');
+
+        // A forced refresh ignores the backstop clock, so each case starts
+        // from a cache that a normal read would have served untouched.
+        $cases = [
+            [['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [45]])], true, [45], 'a successful refetch replaces the cache'],
+            [new WP_Error('http_request_failed', 'down'), false, [30, 60], 'a transport failure keeps last-known-good'],
+            [['response' => ['code' => 500], 'body' => ''], false, [30, 60], 'an error response keeps last-known-good'],
+        ];
+
+        foreach ($cases as $case) {
+            list($response, $expected_result, $expected_terms, $description) = $case;
+
+            $gateway = new class () extends WC_Twoinc {
+                public $responses = [];
+
+                public function __construct()
+                {
+                }
+
+                public function get_merchant_id()
+                {
+                    return 'mid';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $key === 'api_key' ? 'key' : ($empty_value ?? '');
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                {
+                    return array_shift($this->responses);
+                }
+            };
+            $GLOBALS['__twoinc_test_options'][$terms_option] = '[30,60]';
+            $GLOBALS['__twoinc_test_options'][$stamp] = time();
+            WC_Twoinc::reset_merchant_record_memo();
+            $gateway->responses = [$response];
+
+            TinyAssert::same($expected_result, $gateway->refresh_merchant_record_caches(true), $description);
+            TinyAssert::same($expected_terms, $gateway->get_merchant_available_terms(), $description);
+        }
+    }
+
+    /**
+     * The button's endpoint spends the merchant's API key, so the gate is the
+     * only thing between an unauthenticated POST and a live refresh.
+     */
+    private static function testRefreshMerchantRecordAjaxGateRefusesUngatedRequests(): void
+    {
+        // method, nonce verifies, has manage_options, expected refusal
+        $cases = [
+            ['GET', true, true, 'Invalid request method', 'a GET is refused'],
+            ['POST', false, true, 'Security check failed', 'a request without a valid nonce is refused'],
+            ['POST', true, false, 'Insufficient permissions', 'a user without manage_options is refused'],
+        ];
+
+        foreach ($cases as $case) {
+            list($method, $nonce_ok, $capable, $expected, $description) = $case;
+            $_SERVER['REQUEST_METHOD'] = $method;
+            $_POST = ['csrf_token' => 'whatever'];
+            $GLOBALS['__twoinc_test_nonce_verify_result'] = $nonce_ok ? 1 : false;
+            $GLOBALS['__twoinc_test_caps'] = $capable ? ['manage_options'] : [];
+            $GLOBALS['__twoinc_test_ajax_json'] = null;
+
+            WC_Twoinc::ajax_refresh_merchant_record();
+
+            $response = $GLOBALS['__twoinc_test_ajax_json'];
+            TinyAssert::same(false, $response['success'], $description);
+            TinyAssert::same($expected, $response['data']['message'], $description);
+        }
+
+        // The nonce is checked before the capability, so a missing token is
+        // refused even for an administrator.
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST = [];
+        unset($GLOBALS['__twoinc_test_nonce_verify_result']);
+        $GLOBALS['__twoinc_test_caps'] = ['manage_options'];
+        $GLOBALS['__twoinc_test_ajax_json'] = null;
+        WC_Twoinc::ajax_refresh_merchant_record();
+        TinyAssert::same('Security check failed', $GLOBALS['__twoinc_test_ajax_json']['data']['message']);
+
+        $_POST = [];
+        $GLOBALS['__twoinc_test_caps'] = [];
+        unset($_SERVER['REQUEST_METHOD']);
     }
 
     private static function testLegacyDaysOnInvoiceOptionRowsDropped(): void
@@ -2622,7 +3136,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function get_merchant_available_terms(bool $refresh = false): array
+            public function get_merchant_available_terms(): array
             {
                 return $this->merchant_terms;
             }
@@ -3411,9 +3925,8 @@ final class BrandConfigSpec
     private static function testSurchargeGridEnforcesMerchantFixedCap(): void
     {
         $limit_option = WC_Twoinc_Brand::prefixed_name('merchant_surcharge_limit');
-        $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_surcharge_limit_checked_on');
         $GLOBALS['__twoinc_test_options'][$limit_option] = json_encode(['amount' => 25.0, 'currency' => 'EUR']);
-        $GLOBALS['__twoinc_test_options'][$checked_option] = time();
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on')] = time();
         $gateway = self::gateway();
         // A percentage-bearing type, so the Cap column is live and the `limit`
         // assertions below exercise the rule rather than the drop path.
@@ -3516,12 +4029,70 @@ final class BrandConfigSpec
             'surcharge_limit_currency' => 'eur',
         ])];
 
-        TinyAssert::same(null, $gateway->get_merchant_surcharge_limit(true));
+        TinyAssert::same(null, $gateway->get_merchant_surcharge_limit());
         // The no-limit outcome is cached as the empty marker...
         TinyAssert::same('', $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_surcharge_limit')]);
         // ...and save-validation applies no cap.
         $clean = $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['fixed' => '9999']]);
         TinyAssert::same([30 => ['fixed' => '9999']], $clean);
+    }
+
+    /** A fixed fee is judged against the live cap, not a day-old cache; a save without one costs no fetch. */
+    private static function testSurchargeCapSaveValidatesAgainstLiveRecord(): void
+    {
+        // posted grid, cap the API now returns, expected refusal, expected record fetches
+        $cases = [
+            [[30 => ['fixed' => '20']], 10, true, 1, 'a fixed fee over the live cap is refused although under the cached one'],
+            [[30 => ['fixed' => '20']], 25, false, 1, 'a fixed fee under the live cap is accepted'],
+            [[30 => ['percentage' => '5']], 10, false, 0, 'a save without a fixed fee does not fetch'],
+            [[30 => ['fixed' => '']], 10, false, 0, 'a blank fixed cell does not fetch'],
+        ];
+
+        foreach ($cases as $case) {
+            list($grid, $live_cap, $expect_refusal, $expected_fetches, $description) = $case;
+            $gateway = new class () extends WC_Twoinc {
+                public $options = ['api_key' => 'key', 'merchant_id' => 'mid', 'surcharge_type' => 'fixed'];
+                public $responses = [];
+                public $calls = 0;
+
+                public function __construct()
+                {
+                }
+
+                public function get_merchant_id()
+                {
+                    return 'mid';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                {
+                    $this->calls++;
+                    return array_shift($this->responses);
+                }
+            };
+            $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_surcharge_limit')] = json_encode(['amount' => 25.0, 'currency' => 'EUR']);
+            $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on')] = time();
+            WC_Twoinc::reset_merchant_record_memo();
+            $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode([
+                'surcharge_limit_amount' => $live_cap,
+                'surcharge_limit_currency' => 'EUR',
+            ])]];
+
+            $refused = false;
+            try {
+                $gateway->validate_two_surcharge_grid_field('surcharge_grid', $grid);
+            } catch (Exception $e) {
+                $refused = true;
+                TinyAssert::true(strpos($e->getMessage(), 'EUR ' . $live_cap) !== false, $description . ': the refusal must name the live cap');
+            }
+            TinyAssert::same($expect_refusal, $refused, $description);
+            TinyAssert::same($expected_fetches, $gateway->calls, $description);
+        }
     }
 
     /**
@@ -3656,7 +4227,7 @@ final class BrandConfigSpec
                 return $this->options[$key] ?? $empty_value ?? '';
             }
 
-            public function get_merchant_available_terms(bool $refresh = false): array
+            public function get_merchant_available_terms(): array
             {
                 return [30, 60];
             }
@@ -6394,7 +6965,7 @@ final class BrandConfigSpec
                 return $this->test_platform_minimum;
             }
 
-            public function get_merchant_available_terms(bool $refresh = false): array
+            public function get_merchant_available_terms(): array
             {
                 return [14, 30, 60, 90];
             }
@@ -7052,7 +7623,7 @@ final class BrandConfigSpec
                 return $this->options[$key] ?? $empty_value ?? '';
             }
 
-            public function get_merchant_available_terms(bool $refresh = false): array
+            public function get_merchant_available_terms(): array
             {
                 return [30];
             }
@@ -7379,7 +7950,7 @@ final class BrandConfigSpec
                 return $options[$key] ?? $empty_value ?? '';
             }
 
-            public function get_merchant_available_terms(bool $refresh = false): array
+            public function get_merchant_available_terms(): array
             {
                 return [30, 60];
             }
@@ -7835,7 +8406,7 @@ final class BrandConfigSpec
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
             }
 
-            public function get_merchant_available_terms(bool $refresh = false): array
+            public function get_merchant_available_terms(): array
             {
                 return [14, 30, 60];
             }

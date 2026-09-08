@@ -261,13 +261,28 @@ function get_option($key, $default = false)
     if ($key === 'woocommerce_currency') {
         return $GLOBALS['__twoinc_test_store_currency'] ?? 'EUR';
     }
-    return $GLOBALS['__twoinc_test_options'][$key] ?? $default;
+    if (!array_key_exists($key, $GLOBALS['__twoinc_test_options'] ?? [])) {
+        return $default;
+    }
+    return $GLOBALS['__twoinc_test_options'][$key];
 }
 
 function update_option($key, $value, $autoload = null)
 {
+    // A key listed in $GLOBALS['__twoinc_test_option_write_fails'] throws: a fatal mid-write.
+    if (in_array($key, $GLOBALS['__twoinc_test_option_write_fails'] ?? [], true)) {
+        throw new RuntimeException("write of $key failed");
+    }
     $GLOBALS['__twoinc_test_options'][$key] = $value;
     return true;
+}
+
+function add_option($key, $value = '', $deprecated = '', $autoload = 'yes')
+{
+    if (array_key_exists($key, $GLOBALS['__twoinc_test_options'] ?? [])) {
+        return false;
+    }
+    return update_option($key, $value);
 }
 
 function delete_option($key)
@@ -1292,6 +1307,32 @@ function as_unschedule_all_actions($hook, $args = [], $group = '')
 {
     unset($GLOBALS['__twoinc_test_as_scheduled'][$hook]);
     return true;
+}
+
+// WP-Cron: $GLOBALS['__twoinc_test_cron'] holds hook => ['timestamp', 'recurrence'].
+
+function wp_next_scheduled($hook, $args = [])
+{
+    return isset($GLOBALS['__twoinc_test_cron'][$hook])
+        ? $GLOBALS['__twoinc_test_cron'][$hook]['timestamp']
+        : false;
+}
+
+function wp_schedule_event($timestamp, $recurrence, $hook, $args = [], $wp_error = false)
+{
+    $GLOBALS['__twoinc_test_cron'][$hook] = ['timestamp' => $timestamp, 'recurrence' => $recurrence];
+    return true;
+}
+
+function wp_clear_scheduled_hook($hook, $args = [], $wp_error = false)
+{
+    unset($GLOBALS['__twoinc_test_cron'][$hook]);
+    return 1;
+}
+
+function wp_timezone()
+{
+    return new DateTimeZone($GLOBALS['__twoinc_test_timezone'] ?? 'UTC');
 }
 
 // The real one lives in tillit-payment-gateway.php, which the suite does
