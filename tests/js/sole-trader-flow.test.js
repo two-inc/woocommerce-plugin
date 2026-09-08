@@ -114,6 +114,17 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     // a test that reaches a real successful mint starts it, and it would
     // otherwise keep firing against a stale module for the rest of the file.
     soleTrader.stopTokenRefresh();
+    // The delivery role's controller is a second instance with its own listener
+    // and its own popup polls, and only the tests that mount it touch it. Left
+    // armed, it keeps judging focus for the rest of the file against a stale
+    // popup - which under TWO-25658's cross-role rule relaunches a chip.
+    const shippingSoleTrader = ctx.shippingHelper && ctx.shippingHelper.soleTrader;
+    if (shippingSoleTrader) {
+      shippingSoleTrader.unbindPopupMessageListener();
+      shippingSoleTrader.unbindFocusinListener();
+      shippingSoleTrader.stopAllPopupWatchers();
+      shippingSoleTrader.stopTokenRefresh();
+    }
     harness.releasePanel(ctx.helper);
     // `initialize()` delegates from document.body, which survives the wipe
     // below along with the module instance that bound it — and a stale
@@ -2898,23 +2909,32 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       /** The delivery role owns its own panel, chips and controller: its controls are outside billing's. */
       test.each([
-        ["sole_trader", "rule 1 exempts the delivery Sole trader chip for delivery only"],
-        ["registered", "a delivery chip is outside billing's popover"]
-      ])("focus on %s closes the billing popup and its popover — %s", (mode) => {
-        openWidgetWithChips();
-        // Before the launch: mounting focuses the delivery panel's own query field.
-        const chip = deliveryChip(mode);
-        const win = launchFromChips();
+        ["sole_trader", 1, "the delivery Sole trader chip gets a popup of its own (TWO-25658)"],
+        ["registered", 0, "a delivery chip is outside billing's popover"]
+      ])(
+        "focus on %s closes the billing popup and its popover, relaunches=%s — %s",
+        (mode, relaunches) => {
+          openWidgetWithChips();
+          // Before the launch: mounting focuses the delivery panel's own query field.
+          const chip = deliveryChip(mode);
+          const win = launchFromChips();
+          // The exempt control is the chip whose activation opened THIS popup.
+          // The delivery role's chip is a different control, so the rule takes
+          // this popup down and hands that one a popup instead.
+          const relaunched = fakePopup();
+          window.open = jest.fn(() => relaunched);
 
-        focusControl(chip);
-        const panelOpenAtOnce = ctx.helper.companySearchDropdownIsOpen();
-        jest.runOnlyPendingTimers();
+          focusControl(chip);
+          const panelOpenAtOnce = ctx.helper.companySearchDropdownIsOpen();
+          jest.runOnlyPendingTimers();
 
-        expect(win.close).toHaveBeenCalledTimes(1);
-        expect(win.focus).not.toHaveBeenCalled();
-        expect(panelOpenAtOnce).toBe(false);
-        jest.useRealTimers();
-      });
+          expect(win.close).toHaveBeenCalledTimes(1);
+          expect(win.focus).not.toHaveBeenCalled();
+          expect(panelOpenAtOnce).toBe(false);
+          expect(window.open.mock.calls.length).toBe(relaunches);
+          jest.useRealTimers();
+        }
+      );
 
       /** The delivery controller's own listener settles the delivery popup by the same rule. */
       test.each([
