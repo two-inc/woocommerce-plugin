@@ -262,7 +262,6 @@ function get_option($key, $default = false)
         return $GLOBALS['__twoinc_test_store_currency'] ?? 'EUR';
     }
     if (!array_key_exists($key, $GLOBALS['__twoinc_test_options'] ?? [])) {
-        $GLOBALS['__twoinc_test_notoptions'][$key] = true;
         return $default;
     }
     return $GLOBALS['__twoinc_test_options'][$key];
@@ -275,18 +274,12 @@ function update_option($key, $value, $autoload = null)
         throw new RuntimeException("write of $key failed");
     }
     $GLOBALS['__twoinc_test_options'][$key] = $value;
-    unset($GLOBALS['__twoinc_test_notoptions'][$key]);
     return true;
 }
 
 function add_option($key, $value = '', $deprecated = '', $autoload = 'yes')
 {
-    // Refuses an existing key only when the notoptions bucket is cold for it, as real WP does:
-    // a preceding delete_option() or missed get_option() marks the key and the insert then wins.
-    if (
-        !isset($GLOBALS['__twoinc_test_notoptions'][$key])
-        && array_key_exists($key, $GLOBALS['__twoinc_test_options'] ?? [])
-    ) {
+    if (array_key_exists($key, $GLOBALS['__twoinc_test_options'] ?? [])) {
         return false;
     }
     return update_option($key, $value);
@@ -295,7 +288,6 @@ function add_option($key, $value = '', $deprecated = '', $autoload = 'yes')
 function delete_option($key)
 {
     unset($GLOBALS['__twoinc_test_options'][$key]);
-    $GLOBALS['__twoinc_test_notoptions'][$key] = true;
     return true;
 }
 

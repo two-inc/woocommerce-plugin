@@ -56,7 +56,7 @@ if (!class_exists('WC_Twoinc')) {
         // Backstop only — refreshed by event, not by expiry.
         const MERCHANT_RECORD_TTL = 86400;
 
-        // Minimum spacing between read-path fetch attempts: the stampede guard and the failure backoff.
+        // Minimum spacing between read-path fetch attempts: bounds the store to one burst per interval, and backs off after a failure.
         const MERCHANT_RECORD_ATTEMPT_INTERVAL = 60;
 
         // Tolerance for judging an event on-anchor; a DST shift moves the event a full hour.

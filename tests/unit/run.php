@@ -366,7 +366,6 @@ final class BrandConfigSpec
             putenv($var);
         }
         $GLOBALS['__twoinc_test_options'] = [];
-        $GLOBALS['__twoinc_test_notoptions'] = [];
         unset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]);
         WC_Twoinc_Payment_Terms::reset_fee_cache();
         WC_Twoinc_Sole_Trader::reset_cache();
