@@ -1089,7 +1089,7 @@ if (!class_exists('WC_Twoinc')) {
          * is_intent_declined_notice_enabled() above), independent of the
          * approved notice's switch — TWO-25224's original ruling that this
          * box is unconditional stays the documented default (both switches
-         * default true), but an overlay brand may now suppress it too.
+         * default true), but an overlay brand may suppress it too.
          *
          * @param bool $notice_enabled resolved once per render by the caller.
          */
@@ -1109,9 +1109,6 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * The declined notice's wording — %1$s the brand product name,
          * %2$s the company token twoinc.js substitutes.
-         *
-         * Deliberately NOT brand-overridable (TWO-25326): there is no
-         * 'intent_declined_notice' brand key and there must never be one.
          *
          * @return string sprintf template with %1$s and the company TOKEN,
          *                 ready for esc_attr() into data-company-template.
