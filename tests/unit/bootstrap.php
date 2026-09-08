@@ -216,7 +216,7 @@ function determine_locale()
 
 function is_admin()
 {
-    return false;
+    return !empty($GLOBALS['__twoinc_test_is_admin']);
 }
 
 function is_wc_endpoint_url($endpoint = false)

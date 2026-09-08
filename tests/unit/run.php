@@ -3155,7 +3155,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * Ruling 19.3: a method outside the known set is refused on save, so a
+     * A method outside the known set is refused on save, so a
      * crafted POST cannot store one for the runtime to trip over.
      */
     private static function testUnrecognisedSurchargeMethodIsRefusedOnSave(): void
@@ -3204,7 +3204,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * Q54: the availability gate, the cart-fee hook and the checkout bootstrap
+     * The availability gate, the cart-fee hook and the checkout bootstrap
      * all run on every render, so a corrupt stored method withdraws/zeroes Two
      * only — never fatals the page — and is logged once.
      */
@@ -3315,18 +3315,66 @@ final class BrandConfigSpec
         }));
         TinyAssert::same(1, count($unexpected), 'an unexpected failure must not vanish silently');
 
-        // Other payment methods are untouched: the gate only ever unsets its own id.
-        $gateway = self::termsGateway(['surcharge_type' => 'wat']);
-        WC_Twoinc_Payment_Terms::reset_fee_cache();
-        $available = ['other_gateway' => 'kept', $gateway->id => 'dropped'];
-        if (WC_Twoinc_Payment_Terms::surcharge_currency_unquotable($gateway)) {
-            unset($available[$gateway->id]);
-        }
-        TinyAssert::same(['other_gateway' => 'kept'], $available, 'only Two is withdrawn');
+        // Through the real gate, in both contexts: an admin-created order is
+        // judged as thoroughly as a buyer-placed one, and only Two is dropped.
+        $gateForType = static function (string $stored, bool $admin): array {
+            $gateway = new class ($stored) extends WC_Twoinc {
+                private $stored;
+
+                public function __construct($stored)
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                    $this->stored = $stored;
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $key === 'surcharge_type' ? $this->stored : ($empty_value ?? '');
+                }
+
+                public function get_platform_minimum_order()
+                {
+                    return null;
+                }
+
+                public function get_supported_buyer_countries()
+                {
+                    return null;
+                }
+
+                public function get_merchant_available_terms(bool $refresh = false): array
+                {
+                    return [14, 30, 60, 90];
+                }
+            };
+            WC_Twoinc_Payment_Terms::reset_fee_cache();
+            $GLOBALS['__twoinc_test_is_admin'] = $admin;
+            $result = $gateway->apply_brand_availability_gate(
+                ['other_gateway' => 'kept', $gateway->id => 'dropped']
+            );
+            unset($GLOBALS['__twoinc_test_is_admin']);
+
+            return $result;
+        };
+        TinyAssert::same(
+            ['other_gateway' => 'kept'],
+            $gateForType('wat', false),
+            'only Two is withdrawn on the front end'
+        );
+        TinyAssert::same(
+            ['other_gateway' => 'kept'],
+            $gateForType('wat', true),
+            'an admin-created order is judged too'
+        );
+        TinyAssert::same(
+            ['other_gateway' => 'kept', WC_Twoinc_Brand::get('gateway_id') => 'dropped'],
+            $gateForType('none', true),
+            'a known method leaves an admin order alone'
+        );
     }
 
     /**
-     * Ruling 19.3: the runtime read raises instead of pricing the order at 0%
+     * The runtime read raises instead of pricing the order at 0%
      * under a method nothing understands. Unset still means none.
      */
     private static function testUnrecognisedSurchargeMethodIsRefusedAtRuntime(): void

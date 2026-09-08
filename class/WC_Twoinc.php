@@ -3705,9 +3705,9 @@ if (!class_exists('WC_Twoinc')) {
          * cannot be quoted in the checkout currency at all (TWO-25269).
          * The two country gates are independent and ANDed: neither reads
          * the other.
-         * Mirrors the brand availability gate semantics:
-         * front-end only, minimum is inclusive (an exactly-minimum basket
-         * passes).
+         * The surcharge judgement applies in admin too; the basket-based
+         * judgements are front-end only. Minimums are inclusive (an
+         * exactly-minimum basket passes).
          *
          * @param array $available_gateways
          *
@@ -3715,7 +3715,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function apply_brand_availability_gate($available_gateways)
         {
-            if (is_admin() || !isset($available_gateways[$this->id])) {
+            if (!isset($available_gateways[$this->id])) {
                 return $available_gateways;
             }
 
@@ -3732,6 +3732,13 @@ if (!class_exists('WC_Twoinc')) {
             // silently charged no surcharge with nobody told (TWO-25269).
             if (WC_Twoinc_Payment_Terms::surcharge_currency_unquotable($this)) {
                 unset($available_gateways[$this->id]);
+                return $available_gateways;
+            }
+            // Everything below judges a BASKET, which an admin-created order
+            // has none of; the surcharge judgement above is basket-independent
+            // and so applies in admin too — an admin-placed order must not
+            // carry a silently absent fee (TWO-25503).
+            if (is_admin()) {
                 return $available_gateways;
             }
             $gate = WC_Twoinc_Brand::get('availability_gate');
