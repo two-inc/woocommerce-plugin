@@ -2479,9 +2479,11 @@ if (!class_exists('WC_Twoinc')) {
          * @param array|null $result verify_api_key()'s return value.
          *
          * @return array{status: string, code: int|null} status is one of:
-         *   'ok', 'invalid_key' (401/403), 'service_error' (5xx),
-         *   'unreachable' (network/timeout/no response), 'error' (any
-         *   other non-200 code), 'not_configured' (no key/host set).
+         *   'ok' (200 carrying a merchant record), 'invalid_key'
+         *   (401/403), 'service_error' (5xx), 'unreachable'
+         *   (network/timeout/no response), 'error' (any other code, and a
+         *   200 with no merchant record), 'not_configured' (no key/host
+         *   set).
          */
         public static function categorize_verification_result($result)
         {
@@ -2493,6 +2495,10 @@ if (!class_exists('WC_Twoinc')) {
             }
             $code = isset($result['code']) ? (int) $result['code'] : null;
             if ($code === 200) {
+                // A captive portal or maintenance page answers 200 too; with no merchant record there is no identity to offer the method under.
+                if (!isset($result['body']['id'])) {
+                    return ['status' => 'error', 'code' => $code];
+                }
                 return ['status' => 'ok', 'code' => $code];
             }
             if ($code === 401 || $code === 403) {
@@ -6313,6 +6319,8 @@ if (!class_exists('WC_Twoinc')) {
                 } elseif ($verification['status'] === 'unreachable') {
                     // ABN-495: a fresh install's stored key is empty, so reverting an unverifiable key locks the merchant out of saving the one that would work.
                     WC_Admin_Settings::add_message(sprintf(__('API key saved, but %s could not be reached to verify it.', 'twoinc-payment-gateway'), $product_name));
+                } elseif ($verification['status'] === 'not_configured') {
+                    WC_Admin_Settings::add_message(__('API key saved, but it could not be verified because no environment is configured.', 'twoinc-payment-gateway'));
                 } else {
                     WC_Admin_Settings::add_message(sprintf(__('API key saved, but %s returned an error while verifying it.', 'twoinc-payment-gateway'), $product_name));
                 }

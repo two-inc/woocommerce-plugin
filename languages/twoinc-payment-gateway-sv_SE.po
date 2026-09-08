@@ -1097,9 +1097,24 @@ msgstr "driftsatt %s UTC"
 msgid "%s API key verified."
 msgstr "%s API-nyckel verifierad."
 
-#: class/WC_Twoinc.php:5802
-msgid "Failed to verify API key."
-msgstr "Det gick inte att verifiera API-nyckeln."
+#: class/WC_Twoinc.php
+#, php-format
+msgid "%s rejected that API key, so the previously saved key was kept."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "API key saved, but %s could not be reached to verify it."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "API key saved, but it could not be verified because no environment is configured."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "API key saved, but %s returned an error while verifying it."
+msgstr ""
 
 #: class/WC_Twoinc_Checkout.php:165 class/WC_Twoinc_Checkout.php:179
 #: class/WC_Twoinc_Checkout.php:193 class/WC_Twoinc_Checkout.php:217
