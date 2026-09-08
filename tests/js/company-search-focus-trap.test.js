@@ -8,6 +8,13 @@
  *
  * So the subject is unchanged — the buyer's own navigation wins — but it is now
  * satisfied by structure, and that is what these assert.
+ *
+ * Structure alone is not enough backwards: the field's focus opener pushes
+ * focus forward into the query input, so while the panel is open the field
+ * carries no tab stop at all (TWO-25503). jsdom implements no sequential focus
+ * navigation, so a Tab key event moves focus nowhere and the oscillation itself
+ * is unreachable here — the tab-stop state is what these assert, and the
+ * reverse-Tab behaviour is verified in a real browser.
  */
 
 "use strict";
@@ -144,5 +151,86 @@ describe("company-search focus trap", () => {
 
     expect(tab.defaultPrevented).toBe(false);
     expect(helper.companySearchDropdownIsOpen()).toBe(true);
+  });
+
+  /** @returns {Element} the display field the panel binds its openers to */
+  function displayField() {
+    return document.querySelector("#billing_company_display");
+  }
+
+  function pressEscape() {
+    document
+      .querySelector(".two-company-dropdown__query")
+      .dispatchEvent(
+        new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+      );
+  }
+
+  function clickOutside() {
+    $("#billing_company")
+      .get(0)
+      .dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
+  }
+
+  function tabOutOfTheControl() {
+    $("#billing_company").get(0).focus();
+    document
+      .querySelector(".two-company-dropdown")
+      .dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
+    jest.advanceTimersByTime(1);
+  }
+
+  test("an open panel leaves no tab stop on the field it opened from", () => {
+    harness.openCompanyPanel($, helper);
+
+    expect(displayField().getAttribute("tabindex")).toBe("-1");
+  });
+
+  test.each([
+    { close: () => helper.closeCompanySearchDropdown(), description: "the panel's own close" },
+    { close: pressEscape, description: "Escape, which also hands focus back to the field" },
+    { close: clickOutside, description: "a mousedown outside the panel" },
+    { close: tabOutOfTheControl, description: "focus settling outside the control" }
+  ])("closing reinstates the tab stop the field started with ($description)", ({ close }) => {
+    helper.attach();
+    expect(displayField().hasAttribute("tabindex")).toBe(false);
+
+    helper.openCompanySearchDropdown();
+    expect(displayField().getAttribute("tabindex")).toBe("-1");
+
+    close();
+
+    expect(helper.companySearchDropdownIsOpen()).toBe(false);
+    expect(displayField().hasAttribute("tabindex")).toBe(false);
+  });
+
+  test("a theme's own tabindex is given back, not the removal", () => {
+    helper.attach();
+    displayField().setAttribute("tabindex", "7");
+
+    helper.openCompanySearchDropdown();
+    expect(displayField().getAttribute("tabindex")).toBe("-1");
+
+    helper.closeCompanySearchDropdown();
+    expect(displayField().getAttribute("tabindex")).toBe("7");
+  });
+
+  test("a second open/close cycle restores the same state as the first", () => {
+    helper.attach();
+
+    for (let cycle = 0; cycle < 2; cycle++) {
+      helper.openCompanySearchDropdown();
+      expect(displayField().getAttribute("tabindex")).toBe("-1");
+      helper.closeCompanySearchDropdown();
+      expect(displayField().hasAttribute("tabindex")).toBe(false);
+    }
+  });
+
+  test("tearing the panel down while it is open hands the tab stop back", () => {
+    harness.openCompanyPanel($, helper);
+
+    helper.panel.destroy();
+
+    expect(displayField().hasAttribute("tabindex")).toBe(false);
   });
 });

@@ -163,6 +163,10 @@
         this._listeners = [];
         /** Pending focus-out close, re-armed by the next focusout, dropped on teardown. */
         this._closeTimerId = null;
+        /** The field's `tabindex` before the open panel took its tab stop; null = none. */
+        this._fieldTabIndex = null;
+        /** The field whose tab stop this panel currently holds, or null. */
+        this._tabStopHeldOn = null;
     }
 
     // ------------------------------------------------------------- DOM helpers
@@ -308,6 +312,7 @@
             // wrapper is a second anchor: the sole-trader fallback note then
             // renders against a host the buyer has left.
             this._releaseWrap(previous);
+            this._releaseFieldTabStop();
             // Fresh identity, so a search issued by the node this call replaces
             // resolves into a token nothing is listening for.
             this._token = {};
@@ -331,6 +336,7 @@
         field.setAttribute('aria-haspopup', 'listbox');
         field.setAttribute('aria-controls', `two-company-results-${this._id}`);
         field.setAttribute('aria-expanded', this._open ? 'true' : 'false');
+        if (this._open) this._holdFieldTabStop();
         this.setDisplayText(this.getDisplayText());
     };
 
@@ -619,6 +625,30 @@
     // ----------------------------------------------------------- open / close
 
     /**
+     * Take the field out of the tab order for as long as the panel is open.
+     *
+     * TWO-25503: the field's focus opener puts the caret in the query input, so
+     * a tab stop here catches shift+Tab coming back out of the query and pushes
+     * it forward again — WCAG 2.1.2. `-1` leaves close()'s own focus() working.
+     */
+    CompanySearchPanel.prototype._holdFieldTabStop = function () {
+        if (!this._field || this._tabStopHeldOn) return;
+        this._fieldTabIndex = this._field.getAttribute('tabindex');
+        this._tabStopHeldOn = this._field;
+        this._field.setAttribute('tabindex', '-1');
+    };
+
+    /** Give the field back exactly the tab stop it had before the panel opened. */
+    CompanySearchPanel.prototype._releaseFieldTabStop = function () {
+        const field = this._tabStopHeldOn;
+        if (!field) return;
+        this._tabStopHeldOn = null;
+        if (this._fieldTabIndex === null) field.removeAttribute('tabindex');
+        else field.setAttribute('tabindex', this._fieldTabIndex);
+        this._fieldTabIndex = null;
+    };
+
+    /**
      * Open the panel and put the caret in the query field.
      *
      * An ALREADY-open panel still re-syncs and re-focuses rather than
@@ -644,6 +674,7 @@
             this._renderMessage('');
         }
         if (this._field) this._field.setAttribute('aria-expanded', 'true');
+        this._holdFieldTabStop();
         this._query.focus();
     };
 
@@ -667,6 +698,7 @@
         this._items = [];
         this._activeIndex = -1;
         if (this._field) this._field.setAttribute('aria-expanded', 'false');
+        this._releaseFieldTabStop();
         if (options && options.returnFocus && this._field) {
             // Guards the field's own focus opener against reopening the panel
             // this call is closing.
@@ -1067,6 +1099,7 @@
         this._cancelPendingSearch();
         this.search.abortActiveRequest(this._token);
         this._unbind();
+        this._releaseFieldTabStop();
         if (this._panel) this._panel.remove();
         this._panel = null;
         this._query = null;
