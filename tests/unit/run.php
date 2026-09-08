@@ -102,6 +102,9 @@ final class BrandConfigSpec
             'testCustomPaymentTermNotReconciledWhenGenuinelyCustom',
             'testZeroCapOnAnUnrenderedRowDoesNotBlockEnabling',
             'testDisablingSurchargesIsNeverBlockedByAZeroCap',
+            'testUnrecognisedSurchargeMethodIsRefusedOnSave',
+            'testUnrecognisedSurchargeMethodIsRefusedAtRuntime',
+            'testUnrecognisedSurchargeMethodWithdrawsTwoOnly',
             'testSurchargeCapZeroAmountFromApiMeansNoLimit',
             'testSurchargeGridCurrencyNoteNamesTheStoreCurrency',
             'testSurchargeGridHelpTextOmitsMaxOnCurrencyMismatch',
@@ -3149,6 +3152,212 @@ final class BrandConfigSpec
             $threw = true;
         }
         TinyAssert::true($threw, 'a sub-cent cap must block enabling, as it blocks the grid');
+    }
+
+    /**
+     * Ruling 19.3: a method outside the known set is refused on save, so a
+     * crafted POST cannot store one for the runtime to trip over.
+     */
+    private static function testUnrecognisedSurchargeMethodIsRefusedOnSave(): void
+    {
+        $cases = [
+            ['wat', 'wat', 'a crafted POST of a method that does not exist'],
+            ['PERCENTAGE', 'PERCENTAGE', 'the right method in the wrong case'],
+            ['0', '0', 'a falsy value a truthiness check would have read as unset'],
+            ['percentage_and_fixed', 'percentage_and_fixed', 'a plausible-looking method that does not exist'],
+            [['percentage'], 'array', 'a tampered field[]= submission, named not flattened'],
+            [false, 'false', 'a posted boolean casts to \'\' but is not a blank submission'],
+            [0, '0', 'a posted int is not a blank submission either'],
+            [null, null, 'an absent field persists as the explicit default'],
+            ['', null, 'a blank submission persists as the explicit default'],
+            ['none', null, 'the known set still saves'],
+            ['fixed', null, 'the known set still saves'],
+        ];
+        foreach ($cases as [$posted, $named, $case]) {
+            $gateway = self::gateway();
+            $gateway->test_post_data = [
+                $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+            ];
+            $error = null;
+            $saved = null;
+            try {
+                $saved = $gateway->validate_surcharge_type_field('surcharge_type', $posted);
+            } catch (Exception $e) {
+                $error = $e->getMessage();
+            }
+            if ($named === null) {
+                // Accepted rows must not throw AT ALL, and must persist a value
+                // the known set names — never the '' the field used to store.
+                TinyAssert::same(null, $error, 'must not throw: ' . $case);
+                TinyAssert::true(
+                    in_array($saved, WC_Twoinc_Payment_Terms::KNOWN_SURCHARGE_TYPES, true),
+                    'persists a known method: ' . $case
+                );
+                continue;
+            }
+            TinyAssert::true(
+                $error !== null && strpos($error, 'Unrecognised surcharge method') !== false,
+                'must be refused: ' . $case
+            );
+            TinyAssert::true(strpos($error, $named) !== false, 'the refusal names the value: ' . $case);
+        }
+    }
+
+    /**
+     * Q54: the availability gate, the cart-fee hook and the checkout bootstrap
+     * all run on every render, so a corrupt stored method withdraws/zeroes Two
+     * only — never fatals the page — and is logged once.
+     */
+    private static function testUnrecognisedSurchargeMethodWithdrawsTwoOnly(): void
+    {
+        foreach (['wat', 'PERCENTAGE', '0'] as $stored) {
+            $gateway = self::termsGateway(['surcharge_type' => $stored]);
+            WC_Twoinc_Payment_Terms::reset_fee_cache();
+            $GLOBALS['__twoinc_test_logs'] = [];
+
+            // The availability gate's own input: unquotable, so Two is withdrawn.
+            TinyAssert::same(
+                true,
+                WC_Twoinc_Payment_Terms::surcharge_currency_unquotable($gateway),
+                sprintf('"%s" withdraws Two from the gate', $stored)
+            );
+
+            // The cart-fee hook and the checkout bootstrap both read this.
+            TinyAssert::same(
+                null,
+                WC_Twoinc_Payment_Terms::surcharge_settings_or_null($gateway),
+                sprintf('"%s" yields no settings rather than raising', $stored)
+            );
+
+            // A chip quote runs through the wc-ajax handler: no fee, no fatal.
+            TinyAssert::same(
+                null,
+                WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 1000.0, 'NO'),
+                sprintf('"%s" yields no chip quote rather than 500 HTML', $stored)
+            );
+
+            // Three reads across three call sites, one line in the log.
+            $refusals = array_values(array_filter($GLOBALS['__twoinc_test_logs'], function ($entry) use ($stored) {
+                return $entry['level'] === 'error'
+                    && strpos($entry['message'], 'Unrecognised stored surcharge method') !== false
+                    && strpos($entry['message'], $stored) !== false;
+            }));
+            TinyAssert::same(1, count($refusals), sprintf('"%s" reported exactly once', $stored));
+        }
+
+        // Keyed by value, not a bare flag: a SECOND distinct bad method in the
+        // same request must still be reported.
+        WC_Twoinc_Payment_Terms::reset_fee_cache();
+        $GLOBALS['__twoinc_test_logs'] = [];
+        foreach (['first_bad', 'second_bad'] as $stored) {
+            WC_Twoinc_Payment_Terms::surcharge_settings_or_null(
+                self::termsGateway(['surcharge_type' => $stored])
+            );
+        }
+        $reported = array_values(array_filter($GLOBALS['__twoinc_test_logs'], function ($entry) {
+            return strpos($entry['message'], 'Unrecognised stored surcharge method') !== false;
+        }));
+        TinyAssert::same(2, count($reported), 'a second distinct bad method still reports');
+
+        // Keyed on TYPE, not message: a reworded or translated refusal must
+        // still take the quiet path rather than becoming an error line.
+        WC_Twoinc_Payment_Terms::reset_fee_cache();
+        $GLOBALS['__twoinc_test_logs'] = [];
+        $reworded = new class extends WC_Payment_Gateway {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                if ($key === 'surcharge_grid') {
+                    throw new WC_Twoinc_Surcharge_Method_Exception('totally different wording');
+                }
+                return $key === 'surcharge_type' ? 'percentage' : '';
+            }
+        };
+        TinyAssert::same(
+            null,
+            WC_Twoinc_Payment_Terms::surcharge_settings_or_null($reworded),
+            'a reworded refusal still yields no settings'
+        );
+        $quiet = array_filter($GLOBALS['__twoinc_test_logs'], function ($entry) {
+            return strpos($entry['message'], 'Surcharge settings unavailable') !== false;
+        });
+        TinyAssert::same(0, count($quiet), 'a reworded refusal must not become an error line');
+
+        // A failure that is NOT the self-reporting refusal must still be logged.
+        WC_Twoinc_Payment_Terms::reset_fee_cache();
+        $GLOBALS['__twoinc_test_logs'] = [];
+        $exploding = new class extends WC_Payment_Gateway {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                if ($key === 'surcharge_grid') {
+                    throw new Exception('exploding option store');
+                }
+                return $key === 'surcharge_type' ? 'percentage' : '';
+            }
+        };
+        TinyAssert::same(
+            null,
+            WC_Twoinc_Payment_Terms::surcharge_settings_or_null($exploding),
+            'an unexpected failure still yields no settings'
+        );
+        $unexpected = array_values(array_filter($GLOBALS['__twoinc_test_logs'], function ($entry) {
+            return $entry['level'] === 'error'
+                && strpos($entry['message'], 'exploding option store') !== false;
+        }));
+        TinyAssert::same(1, count($unexpected), 'an unexpected failure must not vanish silently');
+
+        // Other payment methods are untouched: the gate only ever unsets its own id.
+        $gateway = self::termsGateway(['surcharge_type' => 'wat']);
+        WC_Twoinc_Payment_Terms::reset_fee_cache();
+        $available = ['other_gateway' => 'kept', $gateway->id => 'dropped'];
+        if (WC_Twoinc_Payment_Terms::surcharge_currency_unquotable($gateway)) {
+            unset($available[$gateway->id]);
+        }
+        TinyAssert::same(['other_gateway' => 'kept'], $available, 'only Two is withdrawn');
+    }
+
+    /**
+     * Ruling 19.3: the runtime read raises instead of pricing the order at 0%
+     * under a method nothing understands. Unset still means none.
+     */
+    private static function testUnrecognisedSurchargeMethodIsRefusedAtRuntime(): void
+    {
+        $cases = [
+            ['wat', true, 'junk from a direct DB edit or an import'],
+            ['PERCENTAGE', true, 'the right method in the wrong case'],
+            ['0', true, 'a falsy value a truthiness check would have read as unset'],
+            ['', false, 'the never-saved field reads as none'],
+            ['none', false, 'explicitly disabled'],
+            ['fixed_and_percentage', false, 'a known method'],
+        ];
+        foreach ($cases as [$stored, $refused, $case]) {
+            $error = null;
+            try {
+                WC_Twoinc_Payment_Terms::get_surcharge_settings(self::termsGateway(['surcharge_type' => $stored]));
+            } catch (Exception $e) {
+                $error = $e->getMessage();
+            }
+            if (!$refused) {
+                TinyAssert::same(null, $error, 'must not throw: ' . $case);
+                continue;
+            }
+            // Internal, never rendered: every caller swallows it, and the
+            // merchant's stored value belongs in the log, not the message.
+            TinyAssert::same('Unrecognised stored surcharge method', $error, $case);
+            TinyAssert::true(strpos($error, $stored) === false, 'no stored value in the message: ' . $case);
+            foreach (WC_Twoinc_Payment_Terms::KNOWN_SURCHARGE_TYPES as $known) {
+                TinyAssert::true(strpos($error, $known) === false, 'no enum keys in the message: ' . $case);
+            }
+        }
     }
 
     private static function testSurchargeGridEnforcesMerchantFixedCap(): void

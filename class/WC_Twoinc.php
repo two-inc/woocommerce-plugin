@@ -1567,9 +1567,23 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function validate_surcharge_type_field($key, $value)
         {
-            $value = is_scalar($value) ? trim((string) $value) : '';
-            // Same enabled-set the runtime uses (get_surcharge_settings
-            // coerces anything else to 'none'), so the gate matches what
+            // Judged on the RAW value: a posted false casts to '' but is tampering, not absence.
+            $blank = $value === null || (is_string($value) && trim($value) === '');
+            if (is_string($value)) {
+                $reported = trim($value);
+            } else {
+                $reported = is_scalar($value) ? var_export($value, true) : gettype($value);
+            }
+            $value = $blank ? 'none' : $reported;
+            if (!in_array($value, WC_Twoinc_Payment_Terms::KNOWN_SURCHARGE_TYPES, true)) {
+                throw new Exception(sprintf(
+                    /* translators: 1: submitted value, 2: comma-separated list of valid methods */
+                    __('Unrecognised surcharge method: %1$s. Choose one of: %2$s.', 'twoinc-payment-gateway'),
+                    esc_html($reported),
+                    implode(', ', WC_Twoinc_Payment_Terms::KNOWN_SURCHARGE_TYPES)
+                ));
+            }
+            // Same enabled-set the runtime uses, so the gate matches what
             // will actually surcharge.
             // Selectable modes come from the same source the treatment
             // validator uses, minus the '' placeholder — so the never-taxed

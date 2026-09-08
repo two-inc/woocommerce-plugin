@@ -457,7 +457,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'enabled' => WC_Twoinc_Payment_Terms::is_enabled($this->wc_twoinc),
                     'terms' => $offered_terms,
                     'selected' => WC_Twoinc_Payment_Terms::get_selected_term($this->wc_twoinc),
-                    'offset_pricing_enabled' => WC_Twoinc_Payment_Terms::get_surcharge_settings($this->wc_twoinc)['enabled'],
+                    // Q54: an unrecognised stored method reads as no offset pricing.
+                    'offset_pricing_enabled' => (bool) (
+                        WC_Twoinc_Payment_Terms::surcharge_settings_or_null($this->wc_twoinc)['enabled'] ?? false
+                    ),
                     'fees_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_term_fees') : '',
                     'select_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_select_term') : '',
                     'csrf_token' => wp_create_nonce('twoinc_checkout'),

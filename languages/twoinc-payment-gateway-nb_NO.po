@@ -1323,3 +1323,9 @@ msgstr "Hvis IT-administratoren din ber deg legge til headere på kallene butikk
 #: class/WC_Twoinc.php
 msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
 msgstr "Kryss av for \"Send også fra nettleseren\" bare hvis IT-administratoren din krever headeren på kall fra kjøperens nettleser i tillegg til dem fra serveren din. Verdien vil bli publisert til kjøperens nettleser og kan leses av hvem som helst."
+
+#. translators: 1: submitted value, 2: comma-separated list of valid methods
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Unrecognised surcharge method: %1$s. Choose one of: %2$s."
+msgstr "Ukjent tilleggsmetode: %1$s. Velg en av: %2$s."

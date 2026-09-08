@@ -1324,3 +1324,9 @@ msgstr ""
 #: class/WC_Twoinc.php
 msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
 msgstr ""
+
+#. translators: 1: submitted value, 2: comma-separated list of valid methods
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Unrecognised surcharge method: %1$s. Choose one of: %2$s."
+msgstr ""

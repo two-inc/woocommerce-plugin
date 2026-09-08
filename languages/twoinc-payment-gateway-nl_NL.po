@@ -1322,3 +1322,9 @@ msgstr "Als je IT-beheerder je vraagt headers toe te voegen aan de aanroepen die
 #: class/WC_Twoinc.php
 msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
 msgstr "Vink \"Ook vanuit de browser verzenden\" alleen aan als je IT-beheerder de header vereist bij aanroepen vanuit de browser van de koper naast die vanaf je server. De waarde wordt gepubliceerd naar de browser van de koper en kan door iedereen worden gelezen."
+
+#. translators: 1: submitted value, 2: comma-separated list of valid methods
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Unrecognised surcharge method: %1$s. Choose one of: %2$s."
+msgstr "Onbekende toeslagmethode: %1$s. Kies een van: %2$s."
