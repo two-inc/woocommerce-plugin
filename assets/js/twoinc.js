@@ -3566,15 +3566,10 @@ function createSoleTraderController(companySearch) {
         if (!controller.isDeciding()) controller.setMode("business");
         return;
       }
-      // A signup the buyer hasn't finished is still on screen, so this click
-      // is asking for it back, not for anything new: raise it and stop.
-      // Checked here too, for a chip activated with focus already on it.
+      // Raised, not reopened: `openPopup` targets `_blank`, so a second open would orphan a signup the buyer is part-way through.
       if (controller.refocusOpenPopups()) return;
-      // Re-clicking once already adopted is the same re-signup the "select a
-      // different sole trader" link launches, not a no-op — the chip is a
-      // second, equally deliberate way to ask for it. `autoselect: false` so
-      // the hosted flow offers a choice rather than handing back the
-      // registration already adopted.
+      // The first click adopts an autofill answer the buyer may not have wanted, so a second is a deliberate request for the popup itself (TWO-25658).
+      // `autoselect: false` so the hosted flow offers a choice rather than the registration already adopted.
       if (controller.mode === "sole_trader" && controller.soleTraderAdopted) {
         controller.launchSignup({ autoselect: false });
         return;
@@ -3958,7 +3953,7 @@ function createSoleTraderController(companySearch) {
       );
     },
 
-    /** TWO-25658: (1) the Sole trader chip asks for the popup; (2) anything else closes it; (3) anything outside the popover closes that too. */
+    /** TWO-25658: (1) this role's Sole trader chip changes nothing; (2) anything else closes the popup; (3) anything outside the popover closes that too. */
     bindFocusinListener: function () {
       if (controller.focusinHandler) return;
       controller.focusinHandler = function (event) {
@@ -3979,7 +3974,7 @@ function createSoleTraderController(companySearch) {
           own.contains(chip) &&
           chip.getAttribute("data-two-chip") === "sole_trader"
         ) {
-          controller.onModeChipClick("sole_trader");
+          // Only an activation moves the popup: Tabbing onto this chip is the buyer passing through, and it must leave the popup as they left it (TWO-25658).
           return;
         }
         if (controller.abandonablePopups().length) {

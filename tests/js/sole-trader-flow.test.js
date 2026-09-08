@@ -2423,29 +2423,30 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       }
 
       /**
-       * Rule (1): this role's Sole trader chip asks for the popup. Rule (2): any
-       * other target closes an open popup. Rule (3): a target outside the
-       * popover closes an open popover. Each row names the target, the popover
-       * and popup state before it, and what the focusin leaves behind.
+       * Rule (1): focus arriving on this role's Sole trader chip changes
+       * nothing. Rule (2): any other target closes an open popup. Rule (3): a
+       * target outside the popover closes an open popover. Each row names the
+       * target, the popover and popup state before it, and what the focusin
+       * leaves behind.
        */
       test.each([
         {
           target: chipTarget("sole_trader"),
           popupOpen: true,
           closes: 0,
-          raises: 1,
+          raises: 0,
           opens: 0,
           panelOpen: true,
-          description: "rule 1: the Sole trader chip with the popup open raises it"
+          description: "rule 1: Tab arrival on the Sole trader chip leaves an open popup open"
         },
         {
           target: chipTarget("sole_trader"),
           popupOpen: false,
           closes: 0,
           raises: 0,
-          opens: 1,
+          opens: 0,
           panelOpen: true,
-          description: "rule 1: the Sole trader chip with no popup opens one"
+          description: "rule 1: Tab arrival on the Sole trader chip with no popup opens none"
         },
         {
           target: queryTarget,
@@ -2822,6 +2823,67 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         jest.useRealTimers();
       });
 
+      /**
+       * Rule (1) and rule (4) together, through the chip node: arriving by Tab
+       * moves nothing, and the Enter that follows is the action that does.
+       * `click` with no `mousedown` is the pair Enter and Space produce.
+       */
+      test("Tab onto the Sole trader chip is inert, and Enter then raises the open popup", () => {
+        const win = launchFromChips();
+
+        focusControl(chipNode("sole_trader"));
+
+        expect(win.focus).not.toHaveBeenCalled();
+        expect(win.close).not.toHaveBeenCalled();
+        const openedBefore = window.open.mock.calls.length;
+
+        clickChip("sole_trader");
+
+        expect(win.focus).toHaveBeenCalledTimes(1);
+        expect(win.close).not.toHaveBeenCalled();
+        expect(window.open.mock.calls.length).toBe(openedBefore);
+        jest.useRealTimers();
+      });
+
+      test("Tab onto the Sole trader chip with no popup is inert, and Enter then opens one", () => {
+        openWidgetWithChips();
+        armListeners();
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+
+        focusControl(chipNode("sole_trader"));
+
+        expect(window.open).not.toHaveBeenCalled();
+
+        clickChip("sole_trader");
+
+        expect(window.open).toHaveBeenCalledTimes(1);
+        soleTrader.stopAllPopupWatchers();
+      });
+
+      /** Rule (4): the first click adopted an autofill answer the buyer may not have wanted, so the second is a request for the popup itself. */
+      test("a second click on the Sole trader chip after the first autofilled opens the popup", () => {
+        openWidgetWithChips();
+        armListeners();
+        jest
+          .spyOn(soleTrader, "fetchCurrentBuyer")
+          .mockImplementation((cb) =>
+            cb({ organization_number: "TWO:ST9", company_name: "Held Trader" })
+          );
+        soleTrader.render();
+
+        clickChip("sole_trader");
+
+        expect(window.open).not.toHaveBeenCalled();
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+
+        clickChip("sole_trader");
+
+        expect(opened).toHaveLength(1);
+        expect(opened[0].url).toContain("&autoselect=false");
+        soleTrader.stopAllPopupWatchers();
+      });
+
       /** A popup closed by hand and re-launched before its poll noticed: the chip click must still switch mode. */
       test("Registered company clicked inside a hand-closed popup's poll window still switches mode", () => {
         const win = launchFromChips();
@@ -2836,7 +2898,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       /** The delivery role owns its own panel, chips and controller: its controls are outside billing's. */
       test.each([
-        ["sole_trader", "the delivery Sole trader chip is a launcher for delivery only"],
+        ["sole_trader", "rule 1 exempts the delivery Sole trader chip for delivery only"],
         ["registered", "a delivery chip is outside billing's popover"]
       ])("focus on %s closes the billing popup and its popover — %s", (mode) => {
         openWidgetWithChips();
@@ -2856,7 +2918,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       /** The delivery controller's own listener settles the delivery popup by the same rule. */
       test.each([
-        ["sole_trader", 0, 1, "the delivery Sole trader chip raises it"],
+        ["sole_trader", 0, 0, "the delivery Sole trader chip leaves it alone"],
         [
           "registered",
           1,
@@ -2900,7 +2962,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
             node.focus();
             return node;
           },
-          launches: true,
           description: "the Sole trader chip"
         },
         {
@@ -2927,16 +2988,14 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           },
           description: "a control outside"
         }
-      ])("a launch drops focus from $description", ({ arrange, launches }) => {
-        const dropped = (node) => (launches ? document.body : node);
+      ])("a launch drops focus from $description", ({ arrange }) => {
         armListeners();
         openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         window.open = jest.fn(() => fakePopup());
         jest.useFakeTimers();
-        // Focus on the Sole trader chip is rule 1 — the launch itself.
         const node = arrange();
-        expect(document.activeElement).toBe(dropped(node));
+        expect(document.activeElement).toBe(node);
 
         soleTrader.launchSignup();
 
@@ -2956,7 +3015,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           description: "closing a re-signup by hand while adopted gives nothing back"
         },
         {
-          // Focus on the chip is rule 1, whose mode switch rebuilds the chips under focus before the launch; the settle then closes the popover, so the company field's opener lands focus in the query.
+          // The settle closes the popover the chip lives in, so the holder is gone and the company field's opener lands focus in the query.
           adopted: false,
           launcher: () => chipNode("sole_trader"),
           settle: (win) => {
@@ -3002,6 +3061,26 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
         expect(document.activeElement).toBe(focusedAfter());
         expect(soleTrader.activePopupWatchers).toHaveLength(0);
+        jest.useRealTimers();
+      });
+
+      /**
+       * WebKit does not focus a control on click, so a Safari buyer's click on
+       * this button fires no focusin and rule (2) never runs: the click's own
+       * launch raises the outstanding re-signup instead of replacing it. A
+       * usable popup with no orphan either way, which is rule (4)'s choice too.
+       */
+      test("a click that WebKit leaves unfocused raises the re-signup rather than relaunching", () => {
+        const first = launchFromChips({ autoselect: false });
+        const relaunch = jest.fn(() => fakePopup());
+        window.open = relaunch;
+
+        expect(document.activeElement).toBe(document.body);
+        differentSoleTraderBtn().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+
+        expect(first.focus).toHaveBeenCalledTimes(1);
+        expect(first.close).not.toHaveBeenCalled();
+        expect(relaunch).not.toHaveBeenCalled();
         jest.useRealTimers();
       });
 
