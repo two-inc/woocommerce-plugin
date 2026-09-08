@@ -1556,15 +1556,8 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Refuse a surcharge method outside the known set, and block
-         * ENABLING surcharges while no valid surcharge tax treatment is
-         * selected (server-side — the treatment field has no default, so
-         * a never-configured shop posts the '' placeholder). Enforced on
-         * this field, not just the treatment field, because WooCommerce's
-         * per-field validation only skips the failing field: without this
-         * check a save could enable surcharges while the treatment error
-         * merely left the treatment unset. Disabling ('none') never needs a
-         * treatment.
+         * Refuse a surcharge method outside the known set, and refuse
+         * enabling surcharges with no valid tax treatment selected.
          */
         public function validate_surcharge_type_field($key, $value)
         {
