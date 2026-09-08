@@ -1556,8 +1556,9 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Block ENABLING surcharges while no valid surcharge tax treatment
-         * is selected (server-side — the treatment field has no default, so
+         * Refuse a surcharge method outside the known set, and block
+         * ENABLING surcharges while no valid surcharge tax treatment is
+         * selected (server-side — the treatment field has no default, so
          * a never-configured shop posts the '' placeholder). Enforced on
          * this field, not just the treatment field, because WooCommerce's
          * per-field validation only skips the failing field: without this
@@ -1583,8 +1584,6 @@ if (!class_exists('WC_Twoinc')) {
                     implode(', ', WC_Twoinc_Payment_Terms::KNOWN_SURCHARGE_TYPES)
                 ));
             }
-            // Same enabled-set the runtime uses, so the gate matches what
-            // will actually surcharge.
             // Selectable modes come from the same source the treatment
             // validator uses, minus the '' placeholder — so the never-taxed
             // mode is refused here too (TWO-25279). When the two lists
