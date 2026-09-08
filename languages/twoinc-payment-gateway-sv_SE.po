@@ -1100,21 +1100,21 @@ msgstr "%s API-nyckel verifierad."
 #: class/WC_Twoinc.php
 #, php-format
 msgid "%s rejected that API key, so the previously saved key was kept."
-msgstr ""
+msgstr "%s avvisade den här API-nyckeln, så den tidigare sparade nyckeln behölls."
 
 #: class/WC_Twoinc.php
 #, php-format
 msgid "API key saved, but %s could not be reached to verify it."
-msgstr ""
+msgstr "API-nyckeln har sparats, men %s kunde inte nås för att verifiera den."
 
 #: class/WC_Twoinc.php
 msgid "API key saved, but it could not be verified because no environment is configured."
-msgstr ""
+msgstr "API-nyckeln har sparats, men kunde inte verifieras eftersom ingen miljö är konfigurerad."
 
 #: class/WC_Twoinc.php
 #, php-format
 msgid "API key saved, but %s returned an error while verifying it."
-msgstr ""
+msgstr "API-nyckeln har sparats, men %s returnerade ett fel vid verifieringen."
 
 #: class/WC_Twoinc_Checkout.php:165 class/WC_Twoinc_Checkout.php:179
 #: class/WC_Twoinc_Checkout.php:193 class/WC_Twoinc_Checkout.php:217
