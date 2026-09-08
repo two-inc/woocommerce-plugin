@@ -84,12 +84,104 @@ WordPress and WooCommerce Best Practices
 
 Vendored assets
 
-- `assets/js/company-search-panel.js` is a byte-identical copy of the Two Magento
-  plugin's `view/frontend/web/js/model/company-search-panel.js`. It is maintained
-  there and vendored here so the two checkouts render one popover rather than two
-  that drift. **Never edit it in this repo** — change it upstream, then re-copy the
-  whole file and re-run the JS suite. A local edit is invisible to the upstream
-  reviewer and silently forks the control.
+- `assets/js/company-search-panel.js` is a copy of the panel module the Two Magento
+  plugin maintains, vendored here so the two checkouts render one popover rather
+  than two that drift. **Never edit it in this repo** — change it in the Magento
+  plugin, then re-copy the whole file and re-run the JS suite. A local edit is
+  invisible to the upstream reviewer and silently forks the control.
+- **A change to shared panel behaviour is therefore TWO edits**, and nothing links
+  the copies: whoever changes one and stops has fixed one platform, and neither
+  reviewer sees the other half. Re-copying is what keeps the two in step, so a
+  panel change that is not accompanied by a re-copy here is half-landed.
+- The module is framework-free with a UMD tail and stays that way: another Magento
+  checkout loads it with no RequireJS, no jQuery and no Knockout, so a dependency on
+  this plugin's own jQuery would break it there.
+- **The unsupported-country gate greys out SEARCH, never manual entry.** Manual
+  entry hands the field over as a plain typeable input that never reaches the
+  registry, so disabling it there blocks a mode that was never going to search and
+  leaves a buyer in an uncovered country with no way to name their company at all.
+- **The company field opens the panel on FOCUS**, through the same `open()` a
+  mousedown runs. The PrestaShop module deliberately does the opposite — there only
+  a click or a keypress opens it and focus alone is inert. Those two behaviours are
+  the current state of the two platforms; do not assume parity between them, and do
+  not harmonise one to the other without a product ruling.
+
+Keyboard behaviour is not verifiable in jsdom
+
+- jsdom implements no sequential focus navigation: a dispatched `Tab` keydown moves
+  focus nowhere, so no Jest suite here can observe a focus trap, a wrong tab order
+  or a reverse-Tab dead end, however many cases it carries and however green it is.
+  `tests/js/company-search-focus-trap.test.js` therefore asserts the observable
+  proxies — the handler leaves the `Tab` event undefaulted, the control's parts are
+  one contiguous run in document order, a closed panel carries `hidden` — and the
+  keyboard behaviour itself is verified in a real browser. A passing jsdom Tab test
+  is never evidence that a trap is absent.
+
+A popup window is in no tab listing
+
+- `window.open` returns a window outside a browser extension's tab group, so a tab
+  list can never answer "did the popup open" — nor can a hang. The authoritative
+  check is the page's own retained handle and its `.closed`, which means wrapping
+  `window.open` before the action that should raise one. Judging from a tab list
+  yields a confident false "no window opened".
+
+What focus landing on the checkout does to an open signup popup
+
+Every `focusin` while the hosted sole-trader signup window is up is classified
+once, and these are the three rules (TWO-25658):
+
+- **The role's own Sole trader chip is inert.** Arrival moves the popup neither way
+  — only an activation raises it, and the browser delivers Enter and Space on a
+  focused chip as a click.
+- **Any other target closes an open popup.**
+- **A target outside that role's popover closes the popover too**, with the company
+  field counted as INSIDE it: the field is the popover's own trigger and sits
+  outside the panel node, so treating it as outside tore down the results the buyer
+  was still typing against, and its own focus opener races the rule on event order.
+
+A window or application switch lands on no control at all and settles nothing.
+Launchers are not exempt from rule two — a launch blurs whatever holds focus first,
+so a window return re-fires focus on nothing.
+
+The custom request-header table
+
+- The Diagnostics header table sends any number of named headers on calls to the Two
+  API, each with its own "also send from browser" tick. Every rule the save enforces
+  — reserved names, matched case-insensitively, and printable-ASCII values — is
+  re-applied on the READ path, because a stored value can arrive from a hand-edited
+  row or an import that no form validated.
+- **There is deliberately no data patch** for the single token field it replaced.
+  That field never reached a production release on any platform, so no merchant ever
+  had one configured. Do not add one on the assumption that stored values exist.
+- **A browser-ticked header must already be allowed by the API for
+  browser-originated calls**, or the one direct call the browser makes fails CORS
+  preflight and the sole-trader autofill silently finds no buyer. Nothing enforces
+  that; the field help says it.
+- A refusal names the rule, never who sets the header — the reason has to be true of
+  every reserved name, not of the one example that prompted the question.
+- **The printable-ASCII value pattern carries `/D`** (or is anchored `\z`). A bare
+  `$` also matches immediately before a trailing newline, which is precisely the
+  byte the rule exists to refuse, and a header value ending in one is a
+  response-splitting sink.
+
+A guard is invoked through `bash`
+
+- A script committed mode `100644` and run as `./script.sh` exits 126. On a CI
+  dashboard that is indistinguishable from a check that ran and failed, so the
+  guard's own absence reads as its verdict. Invoke anything whose failure mode is
+  "did not execute" as `bash script.sh`, and have it print what it checked.
+
+This is a public repository
+
+- No partner or merchant name reaches file contents, a commit body, a branch name or
+  a PR title or body. Gate before pushing: a force-push afterwards does not remove a
+  commit from GitHub's history.
+- In comments, commit messages and PR bodies alike, cite a Linear ticket id and
+  nothing else: a section, question or ruling number belonging to an internal review
+  document means nothing to a reader outside the company, and neither does a person
+  named as the authority for a rule.
+- Describe another plugin's behaviour in your own words; never reproduce its source
+  text, schema fragments or test identifiers here.
 
 Admin settings fail loud: an unrecognised stored value is never priced
 
@@ -114,6 +206,23 @@ The standard for EVERY gateway setting, not only the surcharge method.
 
 Degrading a junk value to a working default is the failure this replaces: it
 prices an order under a configuration nobody chose, and nobody is told.
+
+The merchant record refreshes on an event, never on expiry
+
+- One read path fetches the merchant record and one fetch writes every derivative
+  (terms, due-in-days, platform minimum, surcharge cap, buyer countries). Adding a
+  per-consumer freshness clock is how those drift apart.
+- Refreshed on three events: a key or environment save, a nightly cron re-anchored
+  if a DST shift drifts it off midnight, and the Diagnostics refresh button. No
+  render path refreshes on purpose; a render on a cold clock pays the fetch that
+  repopulates it, bounded to one attempt per 60 seconds while the API is failing.
+- **A failed fetch keeps last-known-good and advances no clock**, so it can neither
+  overwrite a concurrent success nor blank a cached restriction to "unrestricted".
+- An input that pricing cannot resolve fails CLOSED — the availability gate
+  withdraws Two rather than let an order be priced with the fee silently absent, and
+  a judgement that does not depend on a basket is made in admin too.
+- The payment-terms type setting is rendered only for a merchant already set to end
+  of month (TWO-25656); a merchant not on it is not offered it.
 
 Key Conventions
 
