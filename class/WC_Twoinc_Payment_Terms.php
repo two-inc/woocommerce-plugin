@@ -34,6 +34,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         public const MONEY_DECIMALS = 2;
 
+        /** Gated on by both the save validator and the runtime read, so they cannot drift. */
+        public const KNOWN_SURCHARGE_TYPES = ['none', 'percentage', 'fixed', 'fixed_and_percentage'];
+
         /**
          * Safety-net TTL for the cross-request term-fee cache (see
          * fetch_term_fee): the cache key already changes whenever the
@@ -65,6 +68,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         private static $fx_failure_logged = false;
 
+        /** @var array<string,bool> Keyed by value, so a second distinct bad method still speaks. */
+        private static $surcharge_type_failure_logged = [];
+
         /**
          * Whether the term feature is active: at least one term is offered. When
          * true a term is sent on the order and any configured surcharge applies.
@@ -86,17 +92,12 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * custom term unioned in. An empty result is meaningful: no term is
          * offered, so none is sent and the backend applies the account default.
          *
-         * Cache-only by default — this seam is reached from the gateway
-         * constructor, cart totals and wc-ajax, none of which may block on
-         * HTTP. Pass `$refresh = true` only from the sanctioned refresh
-         * points (checkout render bootstrap; the admin field render has its
-         * own path via get_payment_term_day_options).
-         *
          * @return int[]
          */
-        public static function get_available_terms($gateway, bool $refresh = false): array
+        public static function get_available_terms($gateway): array
         {
-            $backend_terms = array_map('intval', $gateway->get_merchant_available_terms($refresh));
+            // EOM: offered days are not filtered to the API-eligible set. TWO-25656.
+            $backend_terms = array_map('intval', $gateway->get_merchant_available_terms());
 
             $terms = [];
             $admin_subset = $gateway->get_option('payment_terms_days');
@@ -175,8 +176,13 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         public static function get_surcharge_settings($gateway): array
         {
             $type = (string) $gateway->get_option('surcharge_type');
-            if (!in_array($type, ['percentage', 'fixed', 'fixed_and_percentage'], true)) {
+            // '' is an unsaved field; anything else unknown is refused, not priced.
+            if ($type === '') {
                 $type = 'none';
+            } elseif (!in_array($type, self::KNOWN_SURCHARGE_TYPES, true)) {
+                self::log_surcharge_type_failure($type);
+                // Untranslated: every caller catches this, so it is never rendered.
+                throw new WC_Twoinc_Surcharge_Method_Exception('Unrecognised stored surcharge method');
             }
             $grid = $gateway->get_option('surcharge_grid');
             $grid = is_array($grid) ? $grid : [];
@@ -192,6 +198,22 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 'tax_treatment' => $tax['treatment'],
                 'tax_class' => $tax['tax_class'],
             ];
+        }
+
+        /**
+         * Null when the stored method is unrecognised: the gate, the cart-fee
+         * hook and the checkout bootstrap all render on every request, where a
+         * raise would fatal the page.
+         */
+        public static function surcharge_settings_or_null($gateway): ?array
+        {
+            try {
+                return self::get_surcharge_settings($gateway);
+            } catch (Exception $e) {
+                // Broad catch: only the method refusal reports itself.
+                self::log_unexpected_surcharge_failure($e);
+                return null;
+            }
         }
 
         /**
@@ -478,7 +500,11 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         public static function surcharge_currency_unquotable($gateway): bool
         {
-            $settings = self::get_surcharge_settings($gateway);
+            $settings = self::surcharge_settings_or_null($gateway);
+            if ($settings === null) {
+                // Unquotable, so the gate withdraws Two — fail closed, as FX does.
+                return true;
+            }
             if (!$settings['enabled']) {
                 return false;
             }
@@ -515,6 +541,31 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 $monetary_term
             ));
             return true;
+        }
+
+        /** Once per bad value, like the FX sibling: a withheld method is otherwise invisible. */
+        private static function log_surcharge_type_failure(string $type): void
+        {
+            if (isset(self::$surcharge_type_failure_logged[$type]) || !function_exists('wc_get_logger')) {
+                return;
+            }
+            self::$surcharge_type_failure_logged[$type] = true;
+            wc_get_logger()->error(
+                'Unrecognised stored surcharge method: ' . $type,
+                ['source' => 'twoinc-payment-gateway']
+            );
+        }
+
+        /** Anything the read raises other than the self-reporting method refusal. */
+        private static function log_unexpected_surcharge_failure(Exception $e): void
+        {
+            if ($e instanceof WC_Twoinc_Surcharge_Method_Exception || !function_exists('wc_get_logger')) {
+                return;
+            }
+            wc_get_logger()->error(
+                'Surcharge settings unavailable: ' . $e->getMessage(),
+                ['source' => 'twoinc-payment-gateway']
+            );
         }
 
         /**
@@ -602,7 +653,13 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return self::$fee_cache[$days];
             }
 
-            $buyer_fee_share = self::build_buyer_fee_share($gateway, $days);
+            // Contained: an uncaught raise in this wc-ajax handler is 500 HTML.
+            try {
+                $buyer_fee_share = self::build_buyer_fee_share($gateway, $days);
+            } catch (Exception $e) {
+                self::log_unexpected_surcharge_failure($e);
+                return self::$fee_cache[$days] = null;
+            }
             if ($buyer_fee_share === null || $gross_amount <= 0) {
                 return self::$fee_cache[$days] = null;
             }
@@ -774,8 +831,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             // never leaks onto a non-Two context — and so the term-set
             // resolution below never runs for visitors who aren't paying
             // with Two.
-            $settings = self::get_surcharge_settings($gateway);
-            if (!$settings['enabled']) {
+            $settings = self::surcharge_settings_or_null($gateway);
+            if ($settings === null || !$settings['enabled']) {
                 return;
             }
             $chosen = function_exists('WC') && (WC()->session ?? null) ? WC()->session->get('chosen_payment_method') : null;
@@ -920,8 +977,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             if (!class_exists('WC_Tax') || !method_exists('WC_Tax', 'get_rates') || !method_exists('WC_Tax', 'calc_tax')) {
                 return $net;
             }
-            $settings = self::get_surcharge_settings($gateway);
-            if ($settings['tax_treatment'] === 'always_zero') {
+            $settings = self::surcharge_settings_or_null($gateway);
+            if ($settings === null || $settings['tax_treatment'] === 'always_zero') {
                 return $net;
             }
             $rates = WC_Tax::get_rates($settings['tax_treatment'] === 'custom_class' ? $settings['tax_class'] : '');
@@ -1005,6 +1062,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         {
             self::$fee_cache = [];
             self::$fx_failure_logged = false;
+            self::$surcharge_type_failure_logged = [];
         }
     }
 }

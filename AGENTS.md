@@ -91,6 +91,30 @@ Vendored assets
   whole file and re-run the JS suite. A local edit is invisible to the upstream
   reviewer and silently forks the control.
 
+Admin settings fail loud: an unrecognised stored value is never priced
+
+The standard for EVERY gateway setting, not only the surcharge method.
+
+- Save refuses it. The field's `validate_<field>_field()` throws for a value
+  outside the field's known set, judged on the RAW submission — so a crafted
+  POST cannot store a value nothing understands. Only the field's explicit
+  unset key persists as the default.
+- Read paths raise. The settings reader is the single choke point: it maps the
+  unset key to the default and throws for anything else. Callers that price a
+  fee or build an order let that throw.
+- Gates catch it. The availability-gate filter withdraws the Two gateway and
+  nothing else; render-time and wc-ajax callers degrade to "no fee" rather
+  than fatalling the page. That judgement runs in admin too, so an
+  admin-created order cannot place with the fee silently absent. The reader
+  logs the offending value once per request, so the catchers stay quiet.
+- Buyer copy stays generic. The buyer sees the existing "not available"
+  wording. A setting name, a stored value or an enum key never reaches the
+  storefront — those belong in the WooCommerce log and in the admin field's
+  own validation message.
+
+Degrading a junk value to a working default is the failure this replaces: it
+prices an order under a configuration nobody chose, and nobody is told.
+
 Key Conventions
 
 1. Follow WordPress's plugin API for extending functionality.

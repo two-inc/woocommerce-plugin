@@ -71,13 +71,6 @@ return [
     // non-empty string is the sprintf template verbatim: %1$s
     // product_name, %2$s buyer company name.
     'intent_approved_notice' => null,
-    // Deliberately no 'intent_declined_notice' key: that notice is never
-    // brand-overridable (TWO-25326) — an overlay defining one is ignored.
-    //
-    // On/off switch for the declined ("not available") notice, independent
-    // of 'intent_approved_notice_enabled' above (TWO-25224's original
-    // ruling that this box is unconditional stays the default here; a
-    // brand may still opt out). Explicit boolean only; anything else
-    // defaults true.
+    // On/off for the declined notice, independent of the approved one; explicit bool only, else true (TWO-25224).
     'intent_declined_notice_enabled' => true,
 ];

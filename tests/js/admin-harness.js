@@ -177,10 +177,19 @@ function buildSettingsPage(options) {
         '<div id="twoinc-merchant-invalid-notice" style="display:none"></div>' +
         "</td></tr>";
 
+  // Mirrors generate_two_refresh_merchant_record_html(); opt-in, so the default page has no button.
+  const refreshBlock = opts.refreshMerchantRecord
+    ? "    <tr><td>" +
+      '<button type="button" id="twoinc-refresh-merchant-record">Refresh merchant profile</button>' +
+      '<span id="twoinc-refresh-merchant-record-status"></span>' +
+      "</td></tr>"
+    : "";
+
   document.body.innerHTML = [
     '<form method="post">',
     '  <table class="form-table"><tbody>',
     apiKeyBlock,
+    refreshBlock,
     '    <tr><td><div class="twoinc-term-checkboxes">' + checkboxes + "</div></td></tr>",
     '    <tr><td><input type="text" id="' +
       FIELD_PREFIX +
@@ -298,7 +307,9 @@ async function loadAdmin(options) {
     days_label: "%s days",
     decimal_separator: ".",
     merchant_available_terms: opts.merchantTerms || [14, 30, 60, 90],
-    surcharge_grid: opts.stored || {}
+    surcharge_grid: opts.stored || {},
+    i18n_refreshing: "Refreshing…",
+    i18n_refresh_failed: "Could not refresh the merchant profile."
   };
   // Only set when a test opts in, so the default world keeps exercising
   // admin.js's brand-neutral fallback copy. WC_Twoinc::get_api_key_notices()

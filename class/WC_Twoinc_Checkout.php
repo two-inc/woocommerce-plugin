@@ -362,11 +362,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         {
             $currency = get_woocommerce_currency();
 
-            // Checkout render is the sanctioned refresh point for the
-            // backend term list (TWO-24812) — refresh once here; the
-            // cache-only seam reads below (is_enabled, get_selected_term,
-            // …) then see the fresh list.
-            $offered_terms = WC_Twoinc_Payment_Terms::get_available_terms($this->wc_twoinc, true);
+            $offered_terms = WC_Twoinc_Payment_Terms::get_available_terms($this->wc_twoinc);
 
             // Read once, fed to both `enable_company_search` below and
             // `derive_company_search_location()` — same option chain, same
@@ -457,7 +453,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'enabled' => WC_Twoinc_Payment_Terms::is_enabled($this->wc_twoinc),
                     'terms' => $offered_terms,
                     'selected' => WC_Twoinc_Payment_Terms::get_selected_term($this->wc_twoinc),
-                    'offset_pricing_enabled' => WC_Twoinc_Payment_Terms::get_surcharge_settings($this->wc_twoinc)['enabled'],
+                    // An unrecognised stored method reads as no offset pricing.
+                    'offset_pricing_enabled' => (bool) (
+                        WC_Twoinc_Payment_Terms::surcharge_settings_or_null($this->wc_twoinc)['enabled'] ?? false
+                    ),
                     'fees_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_term_fees') : '',
                     'select_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_select_term') : '',
                     'csrf_token' => wp_create_nonce('twoinc_checkout'),
