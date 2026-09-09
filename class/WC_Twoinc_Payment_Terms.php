@@ -69,8 +69,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         private static $fx_failure_logged = false;
 
-        /** Terms already reported as unquotable this request (ABN-539). */
-        private static $unquoted_logged = [];
+        /** Terms whose quote failed this request, keyed by term (ABN-539). */
+        private static $unquoted_terms = [];
 
         /** @var array<string,bool> Keyed by value, so a second distinct bad method still speaks. */
         private static $surcharge_type_failure_logged = [];
@@ -592,7 +592,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * Report a configured surcharge that could not be quoted (ABN-539).
+         * Record and report a configured surcharge that could not be
+         * quoted (ABN-539).
          * Error level for log_surcharge_fx_failure()'s reason: the merchant
          * loses that revenue and nothing else on any surface says so.
          *
@@ -601,16 +602,40 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * without the latch that call site logs on every recalculation for the
          * whole quote TTL.
          */
-        private static function log_unquoted_surcharge(int $days, string $cause): void
+        private static function record_unquoted_surcharge(int $days, string $cause): void
         {
-            if (isset(self::$unquoted_logged[$days]) || !function_exists('wc_get_logger')) {
+            if (isset(self::$unquoted_terms[$days])) {
                 return;
             }
-            self::$unquoted_logged[$days] = true;
+            // Before the logger check: the withholding decision reads this
+            // record and must not depend on the logger being loadable.
+            self::$unquoted_terms[$days] = true;
+            if (!function_exists('wc_get_logger')) {
+                return;
+            }
             wc_get_logger()->error(
                 "Surcharge for the {$days}-day payment term could not be quoted: {$cause}. No surcharge is charged on this order.",
                 ['source' => 'twoinc-payment-gateway']
             );
+        }
+
+        /**
+         * Whether the term this checkout would be charged for failed to
+         * quote (ABN-546) — the fail-CLOSED condition the availability gate
+         * withholds on. Judged on the charged term alone: the chip render
+         * quotes every offered term, and one misconfigured term must not
+         * take Two offline for a checkout not using it.
+         *
+         * Reads what a quote attempt recorded rather than attempting one:
+         * every path that can charge the fee quotes during
+         * calculate_totals(), which WooCommerce runs before it filters the
+         * payment gateways — including WC_Checkout::process_checkout()
+         * before it re-validates the chosen method.
+         */
+        public static function surcharge_quote_failed($gateway): bool
+        {
+            $selected = self::get_selected_term($gateway);
+            return $selected !== null && isset(self::$unquoted_terms[$selected]);
         }
 
         /**
@@ -719,7 +744,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
             if (is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) < 200 || (int) wp_remote_retrieve_response_code($response) >= 300) {
                 $code = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
-                self::log_unquoted_surcharge(
+                self::record_unquoted_surcharge(
                     $days,
                     $code > 0 ? "the pricing service answered HTTP $code" : 'the pricing service could not be reached'
                 );
@@ -727,7 +752,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             }
             $body = json_decode($response['body'] ?? '', true);
             if (!is_array($body) || !isset($body['buyer_fee_share'])) {
-                self::log_unquoted_surcharge($days, 'the answer from the pricing service could not be read');
+                self::record_unquoted_surcharge($days, 'the answer from the pricing service could not be read');
                 return self::$fee_cache[$days] = null;
             }
 
@@ -907,7 +932,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             $fee_currency = strtoupper(trim((string) $fee['currency']));
             $cart_currency = strtoupper(get_woocommerce_currency());
             if ($fee_currency !== '' && $fee_currency !== $cart_currency) {
-                self::log_unquoted_surcharge($selected, "it was quoted in $fee_currency while the basket is in $cart_currency");
+                self::record_unquoted_surcharge($selected, "it was quoted in $fee_currency while the basket is in $cart_currency");
                 return;
             }
 
@@ -1105,7 +1130,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         {
             self::$fee_cache = [];
             self::$fx_failure_logged = false;
-            self::$unquoted_logged = [];
+            self::$unquoted_terms = [];
             self::$surcharge_type_failure_logged = [];
         }
     }
