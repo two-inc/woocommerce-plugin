@@ -2935,14 +2935,11 @@ let twoincTermChips = {
   },
 
   /**
-   * One term's amount as the chip shows it. buyer_fee_share_display is the
-   * amount run through the store's price format server-side, so it carries
-   * the currency SYMBOL in the store's position — "+€12,50", matching
-   * Magento's priceUtils.formatPrice. Raw amount plus currency CODE is the
-   * degraded fallback for a response that predates that field.
-   *
-   * A term with no resolvable quote reads as a zero amount, since a blank
-   * beside a priced sibling says "no fee" rather than "no charge".
+   * One term's amount as the chip shows it. buyer_fee_share_display carries
+   * the currency SYMBOL in the store's position, matching Magento's
+   * priceUtils.formatPrice; amount plus currency CODE is the degraded
+   * fallback for a response that predates that field. A term with no
+   * resolvable quote reads as zero, never as a blank.
    */
   feeLabel: function (days) {
     const fee = twoincTermChips.fees[days];
@@ -2964,9 +2961,8 @@ let twoincTermChips = {
     const single = terms.length === 1;
 
     // Whether a fee shows is decided over the whole offered set, never per
-    // chip (Magento parity — gateway_method.js `termOptions`): one non-zero
-    // quote puts an amount on every chip, a zero-fee chip included; every
-    // term ~zero shows none anywhere. An unresolved quote counts as zero.
+    // chip (Magento parity — gateway_method.js `termOptions`). An unresolved
+    // quote counts as zero.
     const allFeesZero = terms.every(function (days) {
       const fee = twoincTermChips.fees[days];
       return (fee ? parseFloat(fee.buyer_fee_share) || 0 : 0) < 0.005;
