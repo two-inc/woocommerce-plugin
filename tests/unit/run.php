@@ -2514,6 +2514,7 @@ final class BrandConfigSpec
         WC_Twoinc::reset_merchant_record_memo();
         $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [30]])]];
         TinyAssert::same('resolved', $gateway->get_merchant_terms_state()['state']);
+        TinyAssert::true($gateway->get_merchant_terms_state()['checked_on'] > 0, 'a resolved set still reports when it was read');
         TinyAssert::same(null, $GLOBALS['__twoinc_test_options'][$error_option] ?? null, 'a success clears the recorded cause');
 
         // Last-known-good outranks a failed refresh: nothing is wrong for the merchant to be told.
