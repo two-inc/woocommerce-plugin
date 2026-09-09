@@ -337,6 +337,16 @@ jQuery(function ($) {
       return sep === "." ? s : s.replace(".", sep);
     }
 
+    // An empty span reads as "no fee for this term", so a term the answer did
+    // not price says so instead (ABN-540).
+    function noFigureLabel() {
+      return " (" + (twoinc_admin.i18n_no_fee_figure || "no figure") + ")";
+    }
+
+    function markFeesUnavailable() {
+      $container.find(".twoinc-term-fee").text(noFigureLabel());
+    }
+
     function loadFees() {
       if (!$container.data("fees")) {
         return; // brand opted out of inline fees
@@ -372,31 +382,35 @@ jQuery(function ($) {
       })
         .done(function (response) {
           if (!response || !response.success || !response.data || !response.data.fees) {
-            return; // leave spans empty
+            lastFeesKey = null;
+            markFeesUnavailable();
+            return;
           }
           const fees = response.data.fees;
+          // Currency comes from the answer, never guessed: the fee values are
+          // its too. A set without one is refused server-side, and a unitless
+          // amount reads as a percentage, so it is labelled rather than drawn.
           const currency = String(response.data.currency || "")
             .toUpperCase()
             .trim();
-          const suffix = currency !== "" ? " " + currency : "";
+          if (currency === "") {
+            lastFeesKey = null;
+            markFeesUnavailable();
+            return;
+          }
+          const suffix = " " + currency;
           $container.find(".twoinc-term-fee").each(function () {
             const $span = $(this);
             const term = String($span.data("term"));
             const fee = fees[term];
             if (!fee) {
-              $span.text("");
+              $span.text(noFigureLabel());
               return;
             }
             const pct = parseFloat(fee.percentage || 0);
             const fixed = parseFloat(fee.fixed || 0);
             const pctZero = pct === 0;
             const fixedZero = fixed === 0;
-            // Without an API-supplied currency a fixed amount is ambiguous —
-            // drop it; a percentage carries its own unit and can stand alone.
-            if (currency === "") {
-              $span.text(pctZero ? "" : " (" + formatAmount(pct) + "%)");
-              return;
-            }
             let inner;
             if (pctZero && fixedZero) {
               inner = formatAmount(0) + suffix;
@@ -411,9 +425,9 @@ jQuery(function ($) {
           });
         })
         .fail(function () {
-          // Allow a retry on the same term-set and clear half-populated spans.
+          // Allow a retry on the same term-set.
           lastFeesKey = null;
-          $container.find(".twoinc-term-fee").text("");
+          markFeesUnavailable();
         });
     }
 

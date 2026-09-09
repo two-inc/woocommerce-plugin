@@ -823,9 +823,18 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 ];
             }
 
+            // Nothing priced, and a fee set with no currency, are both
+            // unrenderable: a screen drawing either says "this term carries no
+            // fee", which is a wrong figure rather than a missing one
+            // (ABN-540).
+            $currency = strval($body['currency'] ?? '');
+            if ($fees === [] || $currency === '') {
+                return ['success' => false];
+            }
+
             return [
                 'success' => true,
-                'currency' => strval($body['currency'] ?? ''),
+                'currency' => $currency,
                 'fees' => $fees,
             ];
         }
@@ -993,10 +1002,6 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 'terms' => self::get_available_terms($gateway),
                 'selected' => self::get_selected_term($gateway),
                 'fees' => $fees,
-                // A term whose quote did not resolve still shows an amount
-                // when a sibling term is priced, so the chips need a formatted
-                // zero they cannot derive from a missing entry.
-                'zero_fee_display' => self::format_fee_amount(0.0, get_woocommerce_currency()),
             ]);
         }
 

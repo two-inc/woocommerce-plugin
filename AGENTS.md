@@ -278,6 +278,12 @@ prices an order under a configuration nobody chose, and nobody is told.
   cannot be read, or one quoted in a currency the basket is not in — is logged at
   error level naming the term and the cause. A quote that resolved to nothing to
   charge is not a failure and is not reported.
+- A fee answer that cannot be drawn is refused, not drawn (ABN-540). The rates
+  read refuses a set with nothing priced, and one carrying no currency for the
+  amounts it does hold, rather than reporting success. On the screens, a term the
+  answer did not price is labelled as carrying no figure — never an empty gap in
+  the admin, and never a formatted zero on a buyer's chip, both of which read as
+  "this term carries no fee". A term priced AT zero still shows its zero.
 
 The merchant record refreshes on an event, never on expiry
 

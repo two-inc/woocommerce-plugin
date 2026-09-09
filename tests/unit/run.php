@@ -216,6 +216,8 @@ final class BrandConfigSpec
             'testUnquotableSurchargeIsReportedNotSilentlyDropped',
             'testAResolvedZeroSurchargeIsNotReportedAsAFailure',
             'testWrongCurrencyQuoteSaysWhyTheSurchargeIsMissing',
+            'testMerchantRatesRefuseAnUnrenderableAnswer',
+            'testTermFeeChipsCarryNoStandInZero',
             'testBuyerFeeShareCapRoundingToZeroRelaysZeroCap',
             'testBuyerFeeShareFixedRoundingToZeroChargesZero',
             'testSurchargeFxDiagnosticLogsGatedByDebugLogging',
@@ -8315,6 +8317,90 @@ final class BrandConfigSpec
             WC_Twoinc_Payment_Terms::apply_cart_fee($cart);
             WC_Twoinc_Payment_Terms::apply_cart_fee($cart);
             TinyAssert::same(1, count($GLOBALS['__twoinc_test_logs']), 'still one line after three recalculations');
+        });
+    }
+
+    /**
+     * ABN-540. A rates answer with nothing priced, or with no currency for the
+     * amounts it does carry, was reported as a success, and the admin drew it
+     * as a figure. Neither is renderable.
+     */
+    private static function testMerchantRatesRefuseAnUnrenderableAnswer(): void
+    {
+        $rate = ['net_terms' => 30, 'percentage_fee' => '2', 'fixed_fee' => '1.5'];
+        $cases = [
+            [['rates' => [$rate], 'currency' => 'EUR'], true, 'a priced set in a currency'],
+            [['rates' => [$rate]], false, 'a priced set with no currency key'],
+            [['rates' => [$rate], 'currency' => ''], false, 'a priced set with a blank currency'],
+            [['rates' => [], 'currency' => 'EUR'], false, 'a currency but nothing priced'],
+            [['rates' => [['percentage_fee' => '2']], 'currency' => 'EUR'], false, 'a rate row naming no term'],
+            [['currency' => 'EUR'], false, 'no rates key at all'],
+        ];
+
+        foreach ($cases as $case) {
+            list($body, $expected, $description) = $case;
+            $gateway = self::termFeeGateway([], [['response' => ['code' => 200], 'body' => json_encode($body)]]);
+            $result = WC_Twoinc_Payment_Terms::fetch_merchant_rates($gateway, [30], 'NO');
+            TinyAssert::same($expected, !empty($result['success']), "rates answer accepted for $description");
+            if (!$expected) {
+                TinyAssert::same(false, isset($result['fees']), "no fees relayed for $description");
+            }
+        }
+    }
+
+    /**
+     * ABN-540. The chip payload carried a formatted zero for the buyer script
+     * to show on any term whose quote did not resolve, which is a wrong figure
+     * rather than a missing one.
+     */
+    private static function testTermFeeChipsCarryNoStandInZero(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                $options = [
+                    'surcharge_type' => 'percentage',
+                    'payment_terms_days' => [30, 60],
+                    'surcharge_grid' => [30 => ['percentage' => 2.0], 60 => ['percentage' => 3.0]],
+                ];
+                return $options[$key] ?? $empty_value ?? '';
+            }
+
+            public function get_merchant_available_terms(): array
+            {
+                return [30, 60];
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                // The 60-day term does not resolve; the 30-day one does.
+                $days = (int) ($payload['order_terms']['duration_days'] ?? 0);
+                return $days === 30
+                    ? ['response' => ['code' => 200], 'body' => json_encode(['buyer_fee_share' => '9.00', 'currency' => 'EUR'])]
+                    : new WP_Error('http_request_failed', 'timed out');
+            }
+        };
+
+        self::withGatewayInstance($gateway, static function () {
+            WC_Twoinc_Payment_Terms::reset_fee_cache();
+            WC()->cart = new StubFeeCart();
+            WC()->customer = new StubCustomer('NO');
+            unset($GLOBALS['__twoinc_test_ajax_json']);
+            WC_Twoinc_Payment_Terms::ajax_term_fees();
+            $response = $GLOBALS['__twoinc_test_ajax_json'];
+            TinyAssert::same(true, $response['success'], 'the chip payload is served');
+            $payload = $response['data'];
+
+            TinyAssert::same(false, array_key_exists('zero_fee_display', $payload), 'no stand-in zero ships to the chips');
+            TinyAssert::same('9.00', $payload['fees'][30]['buyer_fee_share'], 'the priced term still carries its quote');
+            TinyAssert::same(true, array_key_exists(60, $payload['fees']), 'the unresolved term is still listed');
+            TinyAssert::same(null, $payload['fees'][60], 'the unresolved term carries no amount, not a zero');
+            TinyAssert::same(false, isset($payload['fees'][60]['buyer_fee_share_display']), 'and no formatted amount either');
         });
     }
 
