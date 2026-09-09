@@ -4972,9 +4972,23 @@ final class BrandConfigSpec
         }
         TinyAssert::true($threw);
 
-        // Empty selection but a custom term posted → accepted
-        $_POST[$custom_key] = '45';
-        TinyAssert::same([], $gateway->validate_two_payment_terms_field('payment_terms_days', []));
+        // Empty selection, and a custom term checkout would offer satisfies it. The merchant
+        // record here offers [14, 30, 60, 90].
+        $cases = [
+            ['60', true, 'a custom term the record offers stands in for a selection'],
+            ['45', false, 'a custom term checkout would not offer does not'],
+            ['30.0', false, 'a custom term that is not a number of days does not'],
+        ];
+        foreach ($cases as [$custom, $accepted, $description]) {
+            $_POST[$custom_key] = $custom;
+            $threw = false;
+            try {
+                $gateway->validate_two_payment_terms_field('payment_terms_days', []);
+            } catch (Exception $e) {
+                $threw = true;
+            }
+            TinyAssert::same($accepted, !$threw, $description);
+        }
         unset($_POST[$custom_key]);
     }
 
@@ -5272,7 +5286,18 @@ final class BrandConfigSpec
             ['45', '45', '45', 'the same value is written through'],
             ['45', null, '45', 'a write that omits the row leaves the stored term alone'],
             ['0030', '30', '0030', 'the same term written differently is still a change'],
+            ['45', [], '45', 'a row written as something other than a value is not a removal'],
         ];
+        // The suite never loads the plugin file, and the option stub applies no filters, so the
+        // registration is asserted against the source it lives in.
+        TinyAssert::true(
+            strpos(
+                (string) file_get_contents(dirname(__DIR__, 2) . '/tillit-payment-gateway.php'),
+                "add_filter(\n        'pre_update_option_woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',\n"
+                . "        ['WC_Twoinc', 'keep_stored_custom_payment_term'],"
+            ) !== false,
+            'the guard must be registered on every write to the settings row'
+        );
         foreach ($cases as [$stored, $incoming, $expected, $description]) {
             $value = ['title' => 'edited'];
             if ($incoming !== null) {

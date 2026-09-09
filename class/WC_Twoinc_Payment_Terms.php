@@ -108,9 +108,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 $terms = array_values(array_intersect($backend_terms, $admin_subset));
             }
 
-            // An unresolved backend set is unknown, not a refusal, so a stored custom term stands (ABN-521).
             $custom = WC_Twoinc_Stored_Term::days($gateway->get_option('payment_terms_custom_days'));
-            if ($custom !== null && (count($backend_terms) === 0 || in_array($custom, $backend_terms, true))) {
+            if (WC_Twoinc_Stored_Term::reaches_checkout($custom, $backend_terms)) {
                 $terms[] = $custom;
             }
 

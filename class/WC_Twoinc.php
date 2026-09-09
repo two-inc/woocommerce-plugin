@@ -2342,7 +2342,13 @@ if (!class_exists('WC_Twoinc')) {
                 sort($clean);
             }
 
-            if (count($clean) === 0 && $posted_custom === null) {
+            // Counted only where checkout would offer it, else a save with no ticks at all leaves
+            // the shop offering no term and withholding the method, with nothing said (ABN-522).
+            $reaches_checkout = WC_Twoinc_Stored_Term::reaches_checkout(
+                $posted_custom,
+                $this->get_merchant_available_terms()
+            );
+            if (count($clean) === 0 && !$reaches_checkout) {
                 throw new Exception(__('Select at least one payment term or enter a custom term.', 'twoinc-payment-gateway'));
             }
             return $clean;
@@ -2455,8 +2461,9 @@ if (!class_exists('WC_Twoinc')) {
 
                 return $value;
             }
-            $posted = WC_Twoinc_Stored_Term::text($value['payment_terms_custom_days']);
-            if ($posted !== '' && $posted !== $stored) {
+            $raw = $value['payment_terms_custom_days'];
+            $posted = WC_Twoinc_Stored_Term::text($raw);
+            if (!is_scalar($raw) || ($posted !== '' && $posted !== $stored)) {
                 $value['payment_terms_custom_days'] = $stored;
             }
 

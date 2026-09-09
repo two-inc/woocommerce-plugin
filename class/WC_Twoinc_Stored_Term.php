@@ -42,6 +42,18 @@ if (!class_exists('WC_Twoinc_Stored_Term')) {
         }
 
         /**
+         * Whether the term is one checkout will offer. An unresolved offered set refuses nothing,
+         * so a stored term stands through an outage (ABN-521).
+         *
+         * @param int|null $days
+         * @param int[] $offered
+         */
+        public static function reaches_checkout($days, array $offered): bool
+        {
+            return $days !== null && (count($offered) === 0 || in_array($days, $offered, true));
+        }
+
+        /**
          * Stored but not a number of days. It has to stay visible and block the save: hiding it
          * would leave the merchant no way to correct it.
          */
