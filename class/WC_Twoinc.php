@@ -435,8 +435,7 @@ if (!class_exists('WC_Twoinc')) {
         private static function store_merchant_due_in_days(array $record): void
         {
             // 0 when the record carries none, so the term resolver can tell
-            // "unset" from a real day count (ABN-548). drop_fabricated_due_in_days()
-            // retires the rows written before that.
+            // "unset" from a real day count (ABN-548).
             $due_in_days = !empty($record['due_in_days']) ? (int) $record['due_in_days'] : 0;
             update_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'), $due_in_days, false);
         }
@@ -1336,25 +1335,6 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @return void
          */
-        /**
-         * Retire a `merchant_due_in_days` row written under the rule that
-         * stored 14 for a merchant with no default term (ABN-548). The
-         * fabricated value is indistinguishable from a real 14 and outlives
-         * every refresh on a shop whose record cannot resolve, where it would
-         * preselect a term the merchant may not hold. Dropped once, not on
-         * every load, or a live value would never survive a request; the next
-         * successful fetch rewrites the row correctly.
-         */
-        private function drop_fabricated_due_in_days()
-        {
-            $marker = WC_Twoinc_Brand::prefixed_name('due_in_days_unset_is_zero');
-            if (get_option($marker, null) !== null) {
-                return;
-            }
-            update_option($marker, 'yes', false);
-            delete_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'));
-        }
-
         private function migrate_se_tax_subtotals()
         {
             $marker = WC_Twoinc_Brand::prefixed_name('tax_subtotals_se_backfilled');
@@ -1381,6 +1361,28 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
             $this->update_option('enable_tax_subtotals', 'yes');
+        }
+
+        /**
+         * Retire the `merchant_due_in_days` row written under the rule that
+         * stored 14 for a merchant with no default term (ABN-548) — it is
+         * indistinguishable from a real 14, and a shop whose record cannot
+         * resolve never overwrites it. The freshness stamp goes with it so the
+         * next read refetches rather than serving nothing for a day.
+         *
+         * @return void
+         */
+        private function drop_fabricated_due_in_days()
+        {
+            $marker = WC_Twoinc_Brand::prefixed_name('merchant_due_in_days_dropped');
+            if (get_option($marker, null) !== null) {
+                return;
+            }
+            delete_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'));
+            delete_option(WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on'));
+            // Last, so a failure between the deletes retries rather than
+            // leaving the fabricated row behind for good.
+            update_option($marker, 'yes', false);
         }
 
         private function get_abt_twoinc_html()
@@ -5603,7 +5605,7 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'default_payment_term' => [
                     'title'       => __('Default payment terms', 'twoinc-payment-gateway'),
-                    'description' => __('Select the payment term that will be automatically selected for your customer.', 'twoinc-payment-gateway'),
+                    'description' => __('Select the payment term that will be automatically selected for your customer. Automatic leaves the choice to the checkout, which uses your own default term when you offer it.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
                     'options'     => $this->get_offered_payment_term_options(),

@@ -102,6 +102,7 @@ final class BrandConfigSpec
             'testPaymentTermsDefaultPreferenceOrder',
             'testMerchantDefaultTermStoredValueDistinguishesUnset',
             'testDefaultTermOptionsLeadWithAutomatic',
+            'testFabricatedDueInDaysRowIsDroppedOnce',
             'testBuyerFeeShareShapes',
             'testBuyerFeeShareRounding',
             'testRoundingStepOptionsCanonicalAndNarrowed',
@@ -7798,6 +7799,30 @@ final class BrandConfigSpec
         // the field default rather than anything the migration could read.
         $GLOBALS['__twoinc_test_options'][$key] = $stored === null ? [] : ['enable_tax_subtotals' => $stored];
         return $key;
+    }
+
+    /**
+     * ABN-548: the legacy row and the freshness stamp go together and go once,
+     * so the next read refetches and a live value written afterwards stands.
+     */
+    private static function testFabricatedDueInDaysRowIsDroppedOnce(): void
+    {
+        $due = WC_Twoinc_Brand::prefixed_name('merchant_due_in_days');
+        $stamp = WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on');
+        $method = new ReflectionMethod(WC_Twoinc::class, 'drop_fabricated_due_in_days');
+        $method->setAccessible(true);
+
+        $GLOBALS['__twoinc_test_options'][$due] = 14;
+        $GLOBALS['__twoinc_test_options'][$stamp] = time();
+
+        $method->invoke(self::gateway());
+        TinyAssert::same(false, array_key_exists($due, $GLOBALS['__twoinc_test_options']), 'the legacy row is dropped');
+        TinyAssert::same(false, array_key_exists($stamp, $GLOBALS['__twoinc_test_options']), 'the freshness stamp goes with it');
+
+        // A value stored after the drop is the merchant's own and survives.
+        $GLOBALS['__twoinc_test_options'][$due] = 21;
+        $method->invoke(self::gateway());
+        TinyAssert::same(21, $GLOBALS['__twoinc_test_options'][$due], 'a later value is not dropped again');
     }
 
     private static function runTaxSubtotalsBackfill(WC_Twoinc $gateway): void

@@ -855,8 +855,8 @@ msgid "Default payment terms"
 msgstr "Standard betalingsbetingelser"
 
 #: class/WC_Twoinc.php:4704
-msgid "Select the payment term that will be automatically selected for your customer."
-msgstr "Velg betalingsvilkåret som automatisk blir valgt for kunden din."
+msgid "Select the payment term that will be automatically selected for your customer. Automatic leaves the choice to the checkout, which uses your own default term when you offer it."
+msgstr "Velg betalingsvilkåret som automatisk blir valgt for kunden din. Automatisk overlater valget til kassen, som bruker din egen standardbetingelse når du tilbyr den."
 
 #: class/WC_Twoinc.php:4711
 msgid "Surcharge method"
