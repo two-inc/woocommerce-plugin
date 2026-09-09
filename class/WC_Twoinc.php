@@ -19,7 +19,7 @@ if (!class_exists('WC_Twoinc')) {
         // Custom headers from the settings POST in flight; null outside a save.
         private $custom_headers_override = null;
 
-        // Per-request memo for GET /v1/merchant/{id} (TWO-25024): one wire
+        // Per-request memo for the merchant record (TWO-25024): one wire
         // fetch per request shared by every consumer, failures included.
         private static $merchant_record = null;
         private static $merchant_record_fetched = false;
@@ -272,7 +272,7 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * The decoded GET /v1/merchant/{id} record, fetched at most once
+         * The decoded merchant record from Two's API, fetched at most once
          * per PHP request — the memo covers failures too, so a hanging API
          * costs a single capped stall per request instead of one per
          * consumer (TWO-25024). Returns the decoded body, or null when the
@@ -358,7 +358,7 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * One GET /v1/merchant writes every cached derivative; a failed fetch writes nothing.
+         * One merchant-record fetch writes every cached derivative; a failed fetch writes nothing.
          * Two epoch clocks: `merchant_record_checked_on` = last fully stored record, written
          * after the stores; `merchant_record_attempted_on` = last attempt by any entry point,
          * written before the wire call and the read path's only throttle (in-flight or failed).
@@ -548,7 +548,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * The platform's minimum order value for this merchant, resolved
          * from the Two API (min_order_amount/min_order_currency/
-         * min_order_basis on GET /v1/merchant/{id} - the funding-partner
+         * min_order_basis on the merchant record - the funding-partner
          * default with merchant override, the same value the API
          * enforces at order create/intent), as
          * ['amount', 'currency', 'basis'] or null when none is configured.
@@ -710,7 +710,7 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * The merchant's fixed-fee surcharge cap from GET /v1/merchant
+         * The merchant's fixed-fee surcharge cap from the merchant record
          * (surcharge_limit_amount/_currency — the funding partner's upper
          * bound on what a merchant may pass on per order, TWO-24950), as
          * ['amount', 'currency'] or null when none is configured
@@ -751,11 +751,12 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * The merchant's offerable payment terms (net days, ascending) from GET /v1/merchant
+         * The merchant's offerable payment terms (net days, ascending) from the merchant record's
          * `available_terms`, the authoritative set the admin narrows from (TWO-24812). Empty,
-         * whether unresolved or explicitly empty, withholds the payment method — see is_available().
-         * A cache read, except on a cold or >24h clock, where one request pays one 10s-capped fetch;
-         * a failed fetch leaves that clock unmoved, so one request every 60s pays it again until one succeeds.
+         * whether unresolved or explicitly empty, withholds the payment method — see
+         * is_available(). A cache read, except on a cold or >24h clock, where one request pays one
+         * 10s-capped fetch; a failed fetch leaves that clock unmoved, so one request every 60s pays
+         * it again until one succeeds.
          *
          * @return int[]
          */
@@ -977,7 +978,7 @@ if (!class_exists('WC_Twoinc')) {
          *
          * `days_on_invoice` / `days_on_invoice_checked_on` (TWO-24859) —
          * renamed to `merchant_due_in_days` since the value is the MERCHANT's
-         * default due-in-days off GET /v1/merchant, not anything about a
+         * default due-in-days off the merchant record, not anything about a
          * specific invoice.
          *
          * The per-consumer `*_checked_on` stamps are retired for the single
@@ -1438,8 +1439,8 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Admin option list of the merchant's offerable term days (from
-         * GET /v1/merchant `available_terms`), for the payment-terms
+         * Admin option list of the merchant's offerable term days (from the
+         * merchant record's `available_terms`), for the payment-terms
          * settings fields: the backend owns which terms exist; the admin
          * narrows (TWO-24812).
          *
@@ -2226,7 +2227,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Render the "Payment Terms" checkboxes (WC Settings API custom field
          * `two_payment_terms`). One checkbox per term the merchant's account
-         * makes available (GET /v1/merchant `available_terms`); the merchant
+         * makes available (the merchant record's `available_terms`); the merchant
          * ticks which to offer the buyer. Stored as a single option array of
          * int day counts (the offered subset).
          */

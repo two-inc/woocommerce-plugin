@@ -88,7 +88,7 @@ PrestaShop's (TWO-25503):
 - no failure path resolves as a result set — an empty list reads to the buyer as "my company
   is not registered".
 - request envelope: the 30s client timeout reaches `jQuery.ajax`, the configured host and
-  `/companies/v2/company` path, `limit`/`offset` taken from the helper's own bound, the term
+  company-search path, `limit`/`offset` taken from the helper's own bound, the term
   encoded exactly once, `client`/`client_v` alongside the search params, and the country read
   per request rather than captured when the panel was built.
 - `degraded === true` resolves as unavailable with no items; a null body neither throws nor

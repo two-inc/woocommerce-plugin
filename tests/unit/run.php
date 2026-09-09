@@ -3123,7 +3123,7 @@ final class BrandConfigSpec
     {
         // TWO-24859: the merchant's default due-in-days cache moved from
         // `days_on_invoice` to `merchant_due_in_days`. No value is carried
-        // across - the row is a 1h TTL cache of GET /v1/merchant, so the new
+        // across - the row is a 1h TTL cache of the merchant record, so the new
         // key self-heals on the first request with an API key - but the old
         // rows must not be left behind as orphans.
         $gateway = new class () extends WC_Twoinc {
@@ -7783,8 +7783,8 @@ final class BrandConfigSpec
 
     /**
      * Repeated interactions within the same cart state (opening/closing the
-     * chip UI, a re-render) must reuse the cached quote rather than
-     * re-calling checkout-api — the core requirement this cache exists for.
+     * chip UI, a re-render) must reuse the cached quote rather than re-calling
+     * the API — the core requirement this cache exists for.
      */
     private static function testTermFeeServedFromCacheAcrossRequestsOnUnchangedCartState(): void
     {

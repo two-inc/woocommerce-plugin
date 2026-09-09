@@ -1,13 +1,12 @@
 /**
  * The ordinary company-search control's own per-country gate.
  *
- * Bifrost's GET /companies/v2/supported-countries answers with the full list
- * of countries its registry search covers. Before this, an unsupported
- * country's search just failed at request time with a generic error; this
- * fetches the list once per page load and disables the search field itself
- * for a country outside it — the same shape as the sole-trader chip's own
- * per-country disable, but keyed against one global list instead of a
- * per-country lookup.
+ * Two's API answers with the full list of countries the company registry
+ * search covers. Before this, an unsupported country's search just failed at
+ * request time with a generic error; this fetches the list once per page load
+ * and disables the search field itself for a country outside it — the same
+ * shape as the sole-trader chip's own per-country disable, but keyed against
+ * one global list instead of a per-country lookup.
  */
 
 "use strict";
