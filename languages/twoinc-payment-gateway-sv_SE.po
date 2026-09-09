@@ -377,10 +377,6 @@ msgstr "Välj minst ett betalningsvillkor eller ange ett anpassat villkor."
 msgid "For all companies, %1$sread more%2$s."
 msgstr "För alla företag, %1$släs mer%2$s."
 
-#: class/WC_Twoinc.php:2285
-msgid "Pay on invoice with agreed terms"
-msgstr "Betala med faktura enligt överenskomna villkor"
-
 #: class/WC_Twoinc.php:2610
 #, php-format
 msgid "Download %s invoice"

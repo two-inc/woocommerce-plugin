@@ -37,9 +37,9 @@ return [
     // null = no gate.
     'availability_gate' => null,
     // Default for the payment-method Title setting on fresh installs
-    // (merchant-saved titles always win); sprintf'd with the invoice day
-    // count, so a brand default may carry one %s.
-    'title_default' => 'Business invoice - %s days',
+    // (merchant-saved titles always win). Rendered verbatim at checkout, so
+    // a placeholder here would reach the buyer as literal text.
+    'title_default' => 'Business invoice',
     // NOTE: the offerable payment-term list is sourced per merchant from
     // the merchant record Two's API returns (TWO-24812) — an overlay
     // defining 'available_terms' has no effect.

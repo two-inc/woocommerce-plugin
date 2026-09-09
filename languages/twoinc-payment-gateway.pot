@@ -378,10 +378,6 @@ msgstr ""
 msgid "For all companies, %1$sread more%2$s."
 msgstr ""
 
-#: class/WC_Twoinc.php:2285
-msgid "Pay on invoice with agreed terms"
-msgstr ""
-
 #: class/WC_Twoinc.php:2610
 #, php-format
 msgid "Download %s invoice"

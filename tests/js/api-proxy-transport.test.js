@@ -44,31 +44,6 @@ describe("checkout API calls and the firewall-token proxy", () => {
     });
   });
 
-  describe("the payment-terms lookup", () => {
-    beforeEach(() => {
-      ctx.Twoinc.getInstance().customerCompany = {
-        organization_number: "12345678",
-        country_prefix: "GB"
-      };
-    });
-
-    test("addresses the proxy and carries the buyer, not the merchant", () => {
-      // Merchant identity is resolved from the store's own settings. Accepting
-      // it from the page would let a caller bill a lookup to another merchant.
-      ctx.Twoinc.getInstance().getDueInDays();
-
-      const request = ajax.last();
-      const params = harness.requestParams(request);
-
-      expect(request.url).toBe(harness.API_PROXY.payment_terms_url);
-      expect(params.get("buyer_organization_number")).toBe("12345678");
-      expect(params.get("country_prefix")).toBe("GB");
-      expect(params.get("csrf_token")).toBe(harness.API_PROXY.csrf_token);
-      expect(params.get("merchant_id")).toBeNull();
-      expect(params.get("merchant_short_name")).toBeNull();
-    });
-  });
-
   test("the proxied calls never carry a custom header from the browser", () => {
     // They get them server-side in make_request(), flagged or not. A second
     // copy travelling from the page would be a header value in a buyer's
@@ -81,7 +56,6 @@ describe("checkout API calls and the firewall-token proxy", () => {
     };
 
     ctx.Twoinc.getInstance().addressLookup({ lookup_id: "12345678" });
-    ctx.Twoinc.getInstance().getDueInDays();
 
     expect(ajax.calls.length).toBeGreaterThan(0);
     ajax.calls.forEach((record) => {

@@ -4958,8 +4958,6 @@ class Twoinc {
     // Rearrange the DOMs in Twoinc payment
     twoincDomHelper.rearrangeDescription();
 
-    this.toggleDueInDays();
-    this.getDueInDays();
   }
 
   /**
@@ -5731,56 +5729,6 @@ class Twoinc {
   }
 
   /**
-   * Get the actual due in days to display on page
-   */
-  getDueInDays() {
-    if (
-      !Twoinc.getInstance().customerCompany ||
-      !Twoinc.getInstance().customerCompany.organization_number ||
-      !Twoinc.getInstance().customerCompany.country_prefix
-    )
-      return;
-
-    // Merchant identity is not sent: the proxy resolves it server-side.
-    let params = {
-      csrf_token: twoincUtilHelper.proxyCsrfToken(),
-      buyer_organization_number: Twoinc.getInstance().customerCompany.organization_number,
-      country_prefix: Twoinc.getInstance().customerCompany.country_prefix
-    };
-
-    // Create a get due in days request
-    const dueInDaysResponse = jQuery.ajax({
-      url: twoincUtilHelper.proxyUrl("payment_terms_url"),
-      data: params,
-      dataType: "json",
-      method: "GET"
-    });
-
-    dueInDaysResponse.done(function (response) {
-      window.twoinc.custom_due_in_days = typeof response.due_in_days !== "undefined";
-
-      Twoinc.getInstance().toggleDueInDays();
-    });
-
-    dueInDaysResponse.fail(function (response) {
-      Twoinc.getInstance().toggleDueInDays();
-    });
-  }
-
-  /**
-   * Display due in days only if the buyer does not have custom payment term
-   */
-  toggleDueInDays() {
-    if (window.twoinc.custom_due_in_days) {
-      jQuery(".payment-term-number").hide();
-      jQuery(".payment-term-nonumber").show();
-    } else {
-      jQuery(".payment-term-nonumber").hide();
-      jQuery(".payment-term-number").show();
-    }
-  }
-
-  /**
    * Handle the woocommerce updated checkout event
    */
   onUpdatedCheckout() {
@@ -6010,10 +5958,9 @@ class Twoinc {
 
     // After clearSelectedCompany, deliberately: that function resets
     // `customerCompany` to {} wholesale, so setting the country prefix
-    // before it would discard it immediately and leave getApproval() and
-    // getDueInDays() below running on an undefined country for the three
-    // seconds until the deferred re-read inside clearSelectedCompany puts
-    // it back (TWO-24867).
+    // before it would discard it immediately and leave getApproval() below
+    // running on an undefined country for the three seconds until the
+    // deferred re-read inside clearSelectedCompany puts it back (TWO-24867).
     self.customerCompany.country_prefix = country;
 
     // Sole trader availability is per-country; re-evaluate the toggle.
@@ -6216,9 +6163,8 @@ class Twoinc {
 
     // After clearSelectedCompany, for the reason spelled out in
     // syncBillingCountry: it resets `customerCompany` to {} wholesale, so
-    // an assignment made before it is dropped and leaves getApproval()
-    // and getDueInDays() with no country for the three seconds until its
-    // deferred re-read runs.
+    // an assignment made before it is dropped and leaves getApproval() with
+    // no country for the three seconds until its deferred re-read runs.
     this.customerCompany.country_prefix = country;
   }
 }

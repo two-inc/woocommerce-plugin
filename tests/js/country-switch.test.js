@@ -219,8 +219,8 @@ describe("billing country switch", () => {
     test("leaves the new country on customerCompany, not the cleared {}", () => {
       // clearSelectedCompany() resets customerCompany wholesale and only
       // re-reads it from the DOM three seconds later, so an assignment made
-      // BEFORE it is silently dropped — which left getApproval() and
-      // getDueInDays() running with no country for that whole window.
+      // BEFORE it is silently dropped — which left getApproval() running
+      // with no country for that whole window.
       initializeCheckout();
       captureCompany("Example Co", "123456789");
 
@@ -561,9 +561,8 @@ describe("billing country switch", () => {
     test("leaves the new country on customerCompany, not the cleared {}", () => {
       // Same trap as on the `change` path: clearSelectedCompany() resets
       // customerCompany wholesale and only re-reads it from the DOM three
-      // seconds later, so an assignment made before it is silently dropped and
-      // getDueInDays() — which early-returns without a country — is dead for
-      // that whole window.
+      // seconds later, so an assignment made before it is silently dropped
+      // and getApproval() has no country for that whole window.
       addAddressFields();
       initializeCheckout();
       captureCompany("Example Co", "123456789", "GB");

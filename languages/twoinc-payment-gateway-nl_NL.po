@@ -376,10 +376,6 @@ msgstr "Selecteer ten minste één betalingstermijn of voer een aangepaste termi
 msgid "For all companies, %1$sread more%2$s."
 msgstr "Voor alle bedrijven, %1$slees meer%2$s."
 
-#: class/WC_Twoinc.php:2285
-msgid "Pay on invoice with agreed terms"
-msgstr "Betalen op factuur met overeengekomen voorwaarden"
-
 #: class/WC_Twoinc.php:2610
 #, php-format
 msgid "Download %s invoice"
