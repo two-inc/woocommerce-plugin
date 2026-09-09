@@ -3576,8 +3576,10 @@ final class BrandConfigSpec
     /**
      * Gateway fake over a scripted merchant-record fetch, with the record's
      * cached rows and the per-request memo cleared so each use fetches once.
+     * Returns the anonymous class, not WC_Twoinc: callers script `$responses`
+     * and read `$calls` off it.
      */
-    private static function merchantRecordGateway(): WC_Twoinc
+    private static function merchantRecordGateway()
     {
         unset(
             $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on')],
