@@ -3944,15 +3944,6 @@ function createSoleTraderController(companySearch) {
       active.blur();
     },
 
-    /** @returns {Element|null} this role's own field wrap — field, popover and affordances — never a sibling role's (TWO-25554) */
-    ownControlNode: function () {
-      return (
-        jQuery(companySearch.companyFieldSelector()).closest(
-          "." + companySearch.fieldWrapClass
-        )[0] || null
-      );
-    },
-
     /**
      * @returns {Element|null} this role's own popover
      *

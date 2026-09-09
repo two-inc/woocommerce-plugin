@@ -2794,7 +2794,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       test("a focusin with this role's control gone closes the popup", () => {
         const win = launchFromChips();
 
-        soleTrader.ownControlNode().remove();
+        ctx.helper.modeChipsNode()[0].closest(".two-company-field-wrap").remove();
         focusControl(outsideControl());
         jest.runOnlyPendingTimers();
 
@@ -2930,8 +2930,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         }
       );
 
-      // A host that morphs its markup over the live DOM replaces the popover and keeps
-      // the field, so a rule reading a stored popover node reads a detached one.
+      // A host that morphs its markup over the live DOM rebuilds the popover and keeps the
+      // field, and can take the wrap the panel built with it.
       test.each([
         ["own chip", true, 0, "the launching role's own re-rendered chip is still its own: the popup it launched stays"],
         ["own chip", false, 0, "and still its own when the re-render took the wrap too, leaving the field where it is"],
