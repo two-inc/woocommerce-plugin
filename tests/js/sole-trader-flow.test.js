@@ -447,6 +447,10 @@ describe("TWO-40 — sole-trader flow", () => {
       window.open = jest.fn(() => win);
       jest.useFakeTimers();
       soleTrader.setMode("sole_trader");
+      // The state the link is on screen in, and the one Doug reported it dead
+      // from (ABN-526).
+      soleTrader.soleTraderAdopted = true;
+      soleTrader.syncDifferentSoleTraderLink();
       soleTrader.launchSignup();
       expect(window.open).toHaveBeenCalledTimes(1);
 
@@ -927,15 +931,62 @@ describe("TWO-40 — sole-trader flow", () => {
       ).toBe(true);
     });
 
-    test("is hidden until a sole trader is actually adopted", () => {
+    test.each([
+      {
+        mode: "business",
+        adopted: false,
+        tokens: true,
+        shown: false,
+        description: "business mode"
+      },
+      {
+        mode: "business",
+        adopted: true,
+        tokens: true,
+        shown: false,
+        description: "business mode holding a stale adoption latch"
+      },
+      {
+        mode: "sole_trader",
+        adopted: false,
+        tokens: true,
+        shown: false,
+        description: "sole-trader mode with nothing adopted yet — ABN-526"
+      },
+      {
+        mode: "sole_trader",
+        adopted: true,
+        tokens: false,
+        shown: false,
+        description: "adopted with no delegation tokens to relaunch with"
+      },
+      {
+        mode: "sole_trader",
+        adopted: true,
+        tokens: true,
+        shown: true,
+        description: "adopted in sole-trader mode"
+      }
+    ])("shown=$shown: $description", ({ mode, adopted, tokens, shown }) => {
+      soleTrader.mode = mode;
+      soleTrader.soleTraderAdopted = adopted;
+      if (!tokens) soleTrader.tokens = null;
+
       soleTrader.syncDifferentSoleTraderLink();
+
       // `:visible` is unusable under jsdom — nothing has layout, so every
       // element reports zero size. The inline display the show/hide writes is
       // the real signal.
-      expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).toBe("none");
+      expect(soleTrader.getDifferentSoleTraderBtnNode().css("display") !== "none").toBe(shown);
+    });
 
+    test("stays out of the gate's reach: an adopted link ignores #company_id's value", () => {
+      // Doug's ruling on PR #486: the gate does not probe that field, which
+      // can still hold an identifier from an earlier, unrelated capture.
       soleTrader.mode = "sole_trader";
-      $("#company_id").val("TWO:ST12345");
+      soleTrader.soleTraderAdopted = true;
+      $("#company_id").val("");
+
       soleTrader.syncDifferentSoleTraderLink();
 
       expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).not.toBe("none");
@@ -943,12 +994,28 @@ describe("TWO-40 — sole-trader flow", () => {
 
     test("goes back to hidden on the way out of sole-trader mode", () => {
       soleTrader.mode = "sole_trader";
-      $("#company_id").val("TWO:ST12345");
+      soleTrader.soleTraderAdopted = true;
       soleTrader.syncDifferentSoleTraderLink();
+      expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).not.toBe("none");
 
       soleTrader.setMode("business");
 
       expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).toBe("none");
+    });
+
+    test.each([
+      {
+        read: (btn) => btn.attr("type"),
+        expected: "button",
+        description: "a type that cannot submit the checkout form"
+      },
+      {
+        read: (btn) => btn.attr("tabindex"),
+        expected: undefined,
+        description: "no tabindex, so it keeps its native place in the tab order"
+      }
+    ])("reachable by keyboard: $description", ({ read, expected }) => {
+      expect(read(soleTrader.getDifferentSoleTraderBtnNode())).toBe(expected);
     });
 
     test.each([
@@ -2344,6 +2411,13 @@ describe("TWO-40 — sole-trader flow", () => {
         return document.getElementById("select_different_sole_trader_btn");
       }
 
+      // Puts the flow in the state its re-signup launcher renders in: adopted,
+      // without a signup round trip (ABN-526).
+      function adoptForResignup() {
+        soleTrader.soleTraderAdopted = true;
+        soleTrader.syncDifferentSoleTraderLink();
+      }
+
       function noteLink() {
         soleTrader.render();
         soleTrader.showNote(true);
@@ -2396,6 +2470,9 @@ describe("TWO-40 — sole-trader flow", () => {
         armListeners();
         openWidgetWithChips();
         soleTrader.setMode("sole_trader");
+        // A re-signup is reachable only from the adopted state — the same
+        // state its own launcher is on screen in (ABN-526).
+        if (options && options.autoselect === false) adoptForResignup();
         if (arrange) arrange();
         const win = fakePopup();
         window.open = jest.fn(() => win);
@@ -2493,6 +2570,7 @@ describe("TWO-40 — sole-trader flow", () => {
           description: "rule 2: the Enter manually chip closes the popup; the popover stays"
         },
         {
+          arrange: adoptForResignup,
           target: differentSoleTraderBtn,
           popupOpen: true,
           closes: 1,
@@ -2503,6 +2581,7 @@ describe("TWO-40 — sole-trader flow", () => {
             "rule 2 + 3: the Select a different sole trader button is not exempt, and the field wrap is not the popover"
         },
         {
+          arrange: adoptForResignup,
           gesture: () => {
             focusControl(queryTarget());
             focusControl(differentSoleTraderBtn());
@@ -2516,6 +2595,7 @@ describe("TWO-40 — sole-trader flow", () => {
             "rule 3: the re-signup button reached from the query field closes the popover"
         },
         {
+          arrange: adoptForResignup,
           gesture: () => {
             focusControl(outsideControl());
             focusControl(differentSoleTraderBtn());
@@ -3081,6 +3161,7 @@ describe("TWO-40 — sole-trader flow", () => {
         },
         {
           arrange: () => {
+            adoptForResignup();
             const node = differentSoleTraderBtn();
             node.focus();
             return node;
@@ -4544,13 +4625,12 @@ describe("TWO-40 — sole-trader flow", () => {
         expect($btn.css("display")).not.toBe("none");
       });
 
-      test("shows on mode + tokens alone, with no #company_id check (Doug's ruling)", () => {
-        // No `setCompany()` call — `#company_id` is deliberately left empty.
-        // There is no real UX state where sole-trader mode is engaged with
-        // nothing captured except while the dropdown is still deciding, and
-        // that already visually obscures this link, so the gate does not
-        // need to lean on the field at all.
+      test("reads the adoption latch, never #company_id (Doug's ruling)", () => {
+        // No `setCompany()` call, so `#company_id` stays empty while the
+        // adoption latch is true — the split that proves which of the two the
+        // gate is reading.
         soleTrader.setMode("sole_trader");
+        soleTrader.soleTraderAdopted = true;
 
         soleTrader.syncDifferentSoleTraderLink();
 
