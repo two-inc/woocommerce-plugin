@@ -60,7 +60,7 @@ services:
       # has to be a host the buyer's browser can resolve. `localhost` and
       # `host.docker.internal` are fine while the shop itself is local and
       # resolve to nothing useful once it is not; a reverse tunnel exposing a
-      # locally-run instance of it is what covers the remote-shop case.
+      # local dev instance of that page is what covers the remote-shop case.
       TWOINC_DEV_CHECKOUT_HOST: "${TWO_CHECKOUT_BASE_URL:-}"
       TWOINC_DEV_PORTAL_HOST: "${TWO_PORTAL_BASE_URL:-}"
     volumes:

@@ -40,9 +40,9 @@ return [
     // (merchant-saved titles always win); sprintf'd with the invoice day
     // count, so a brand default may carry one %s.
     'title_default' => 'Business invoice - %s days',
-    // NOTE: the offerable payment-term list is sourced per merchant from the
-    // merchant record Two's API returns (TWO-24812) — an overlay defining
-    // 'available_terms' has no effect.
+    // NOTE: the offerable payment-term list is sourced per merchant from
+    // the merchant record Two's API returns (TWO-24812) — an overlay
+    // defining 'available_terms' has no effect.
     // Increments the buyer surcharge line may be rounded to (merchant
     // picks one in the admin Rounding Step dropdown; None disables
     // rounding). WC_Twoinc::get_rounding_step_options is the only reader.
