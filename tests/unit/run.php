@@ -103,10 +103,11 @@ final class BrandConfigSpec
             'testSurchargeGridValidationNormalisesAndRejects',
             'testSurchargeGridEnforcesMerchantFixedCap',
             'testSurchargeRefusalIsVisibleAndNothingPartiallySaves',
-            'testCustomPaymentTermFieldHiddenUnlessGenuinelyCustom',
-            'testCustomPaymentTermReconciledOnSaveWhenItMatchesATickedPreset',
-            'testCustomPaymentTermTicksAnUnofferedButOfferedUntickedMatch',
-            'testCustomPaymentTermNotReconciledWhenGenuinelyCustom',
+            'testStoredCustomTermNormalisation',
+            'testDeprecatedCustomTermRendersKeepOrRemove',
+            'testDeprecatedCustomTermSaveStates',
+            'testDeprecatedCustomTermFoldsInOnlyAgainstAResolvedOfferedSet',
+            'testDeprecatedCustomTermCopyIsTranslatedInEveryLocale',
             'testZeroCapOnAnUnrenderedRowDoesNotBlockEnabling',
             'testDisablingSurchargesIsNeverBlockedByAZeroCap',
             'testUnrecognisedSurchargeMethodIsRefusedOnSave',
@@ -2168,6 +2169,9 @@ final class BrandConfigSpec
             [['payment_terms_days' => ['30'], 'payment_terms_custom_days' => '45'], [14, 30, 60, 90], [30], 'a custom term the backend does not offer drops out (ABN-521)'],
             [['payment_terms_custom_days' => '45'], [14, 30, 45, 60, 90], [45], 'an offered custom term alone still offers a term'],
             [['payment_terms_custom_days' => '45'], [], [45], 'an unresolved backend set refuses nothing, so a stored custom term stands (ABN-521)'],
+            [['payment_terms_custom_days' => '007'], [7, 14], [7], 'leading zeros denote the same term'],
+            [['payment_terms_custom_days' => '0'], [14], [], 'a zero is not a term'],
+            [['payment_terms_custom_days' => '30.0'], [14, 30], [], 'a stored value that is not a number of days offers nothing'],
         ];
 
         foreach ($cases as [$options, $merchant_terms, $expected, $description]) {
@@ -4974,131 +4978,314 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25498. The "Custom payment terms (days)" row is hidden server-side
-     * (no JS flash) unless the stored custom value is genuinely custom — not
-     * a duplicate of a backend-offered preset row, ticked or not.
+     * ABN-522. The one normalisation of a stored custom term: every consumer reads through it, so
+     * a hand-edited row cannot be blank to one reading and a term to another.
      */
-    private static function testCustomPaymentTermFieldHiddenUnlessGenuinelyCustom(): void
+    private static function testStoredCustomTermNormalisation(): void
     {
-        // self::gateway() offers [14, 30, 60, 90] from the backend.
-        $gateway = self::gateway();
-        $option_key = $gateway->get_option_key();
-
-        // Genuinely custom: 45 is not offered at all.
-        $GLOBALS['__twoinc_test_options'][$option_key] = [
-            'payment_terms_days' => ['30'],
-            'payment_terms_custom_days' => '45',
+        $cases = [
+            ['', true, null, false, 'an unset value is blank'],
+            ['   ', true, null, false, 'whitespace only is blank'],
+            ['0', true, null, false, 'a zero is not a term and reads as blank'],
+            ['000', true, null, false, 'any run of zeros reads as blank'],
+            [null, true, null, false, 'a missing row is blank'],
+            [[], true, null, false, 'a non-scalar row is blank'],
+            ['30', false, 30, false, 'a plain day count is that term'],
+            ['007', false, 7, false, 'leading zeros normalise to the same term'],
+            ['  30  ', false, 30, false, 'surrounding whitespace is trimmed'],
+            ['30.0', false, null, true, 'a decimal is stored but unusable'],
+            ['1e2', false, null, true, 'exponent notation is stored but unusable'],
+            ['-5', false, null, true, 'a negative is stored but unusable'],
+            ['abc', false, null, true, 'text is stored but unusable'],
         ];
-        $gateway->init_settings();
-        $html = $gateway->generate_two_custom_payment_days_html('payment_terms_custom_days', []);
-        TinyAssert::true(strpos($html, 'style="display:none;"') === false, 'a genuinely custom value must render visible');
-
-        // Duplicate of a ticked preset: hidden.
-        $GLOBALS['__twoinc_test_options'][$option_key] = [
-            'payment_terms_days' => ['30'],
-            'payment_terms_custom_days' => '30',
-        ];
-        $gateway->init_settings();
-        $html = $gateway->generate_two_custom_payment_days_html('payment_terms_custom_days', []);
-        TinyAssert::true(strpos($html, 'style="display:none;"') !== false, 'a value duplicating a ticked preset must render hidden');
-
-        // Duplicate of an OFFERED-BUT-UNTICKED preset (60 is offered by the
-        // backend but not in payment_terms_days here): hidden too, since it
-        // already has a preset row to fold into.
-        $GLOBALS['__twoinc_test_options'][$option_key] = [
-            'payment_terms_days' => ['30'],
-            'payment_terms_custom_days' => '60',
-        ];
-        $gateway->init_settings();
-        $html = $gateway->generate_two_custom_payment_days_html('payment_terms_custom_days', []);
-        TinyAssert::true(strpos($html, 'style="display:none;"') !== false, 'a value duplicating an unticked but offered preset must render hidden');
-
-        // Empty: hidden.
-        $GLOBALS['__twoinc_test_options'][$option_key] = [
-            'payment_terms_days' => ['30'],
-            'payment_terms_custom_days' => '',
-        ];
-        $gateway->init_settings();
-        $html = $gateway->generate_two_custom_payment_days_html('payment_terms_custom_days', []);
-        TinyAssert::true(strpos($html, 'style="display:none;"') !== false, 'an empty custom value must render hidden');
+        foreach ($cases as [$value, $blank, $days, $unusable, $description]) {
+            TinyAssert::same($blank, WC_Twoinc_Stored_Term::is_blank($value), $description . ' — is_blank');
+            TinyAssert::same($days, WC_Twoinc_Stored_Term::days($value), $description . ' — days');
+            TinyAssert::same($unusable, WC_Twoinc_Stored_Term::is_unusable($value), $description . ' — is_unusable');
+        }
     }
 
     /**
-     * TWO-25498. On save, a custom value that now duplicates a term the
-     * merchant just ticked is redundant — it is cleared and folded into the
-     * checkbox selection (already there in this case, but the write path is
-     * exercised regardless). Drives the real save loop, like
-     * testSurchargeRefusalIsVisibleAndNothingPartiallySaves above.
+     * ABN-522. The deprecated field renders as keep-or-remove — the only edit offered is the only
+     * one the save accepts — and is hidden where nothing is stored or where the value folds into
+     * an offered term's checkbox. Hidden, not dropped: the row still posts, which is what lets
+     * that fold-in happen.
      */
-    private static function testCustomPaymentTermReconciledOnSaveWhenItMatchesATickedPreset(): void
+    private static function testDeprecatedCustomTermRendersKeepOrRemove(): void
     {
+        // self::gateway() offers [14, 30, 60, 90] from the merchant record.
+        $cases = [
+            ['', true, '', 'nothing stored — hidden, remove is the only option'],
+            ['0', true, '<option value="0" selected="selected">0</option>', 'a zero reads as blank — hidden'],
+            ['45', false, '<option value="45" selected="selected">45 days</option>', 'a term no standard checkbox offers — shown, keep or remove'],
+            ['30', true, '<option value="30" selected="selected">30 days</option>', 'a term offered as standard — hidden, the save folds it in'],
+            ['abc', false, '<option value="abc" selected="selected">abc</option>', 'an unusable value — shown verbatim so it can be corrected'],
+        ];
         $gateway = self::gateway();
-        $gateway->init_form_fields();
         $option_key = $gateway->get_option_key();
-        $GLOBALS['__twoinc_test_options'][$option_key] = [
-            'payment_terms_days' => ['14'],
-            'payment_terms_custom_days' => '30',
-        ];
-        // The merchant ticks 30 (previously offered only via the custom
-        // field) on this save.
-        $gateway->test_post_data = [
-            $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
-            $gateway->get_field_key('payment_terms_days') => ['14', '30'],
-            $gateway->get_field_key('payment_terms_custom_days') => '30',
-        ];
-        $gateway->process_admin_options();
-        $saved = get_option($option_key, []);
+        foreach ($cases as [$stored, $hidden, $keep_option, $description]) {
+            $GLOBALS['__twoinc_test_options'][$option_key] = [
+                'payment_terms_days' => ['14'],
+                'payment_terms_custom_days' => $stored,
+            ];
+            $gateway->init_settings();
+            $html = $gateway->generate_two_custom_payment_days_html('payment_terms_custom_days', []);
 
-        TinyAssert::same('', $saved['payment_terms_custom_days'], 'a custom value duplicating a newly-ticked preset must be cleared');
-        TinyAssert::same([14, 30], $saved['payment_terms_days'], 'the day count must survive in the checkbox selection');
+            TinyAssert::same($hidden, strpos($html, 'style="display:none;"') !== false, $description . ' — row visibility');
+            TinyAssert::true(strpos($html, '<select ') !== false, $description . ' — the control is a select');
+            TinyAssert::true(strpos($html, '<input') === false, $description . ' — never a text input');
+            TinyAssert::true(
+                strpos($html, '<option value="">Remove</option>') !== false,
+                $description . ' — remove is always offered'
+            );
+            TinyAssert::same(
+                $keep_option === '' ? 1 : 2,
+                substr_count($html, '<option '),
+                $description . ' — exactly the keep and remove options'
+            );
+            if ($keep_option !== '') {
+                TinyAssert::true(strpos($html, $keep_option) !== false, $description . ' — the keep option carries the stored value');
+            }
+            TinyAssert::true(
+                strpos($html, 'Legacy setting.') !== false,
+                $description . ' — the help text says the setting is legacy'
+            );
+        }
     }
 
     /**
-     * TWO-25498. A custom value matching an offered-but-currently-UNticked
-     * preset (60 is offered by the backend but wasn't ticked this save)
-     * must actually tick that preset, not just clear the custom value — the
-     * bug this fix targets: the old genuine-check only ever compared
-     * against the ticked set, so this fold-in branch was unreachable.
+     * ABN-522. Drives the real save loop. The stored value may be removed but never replaced;
+     * something that is not a number of days blocks the whole section save while it stands; and a
+     * value the merchant record offers as a standard term is folded onto that term's checkbox
+     * and announced, never cleared silently.
      */
-    private static function testCustomPaymentTermTicksAnUnofferedButOfferedUntickedMatch(): void
+    private static function testDeprecatedCustomTermSaveStates(): void
     {
-        $gateway = self::gateway();
-        $gateway->init_form_fields();
-        $option_key = $gateway->get_option_key();
-        $GLOBALS['__twoinc_test_options'][$option_key] = [
-            'payment_terms_days' => ['14'],
-            'payment_terms_custom_days' => '60',
+        // [stored custom, posted custom, saved custom, saved ticked days, error, notice, description]
+        $cases = [
+            ['', '', '', [14], '', '', 'nothing stored and nothing posted saves cleanly'],
+            ['0', '0', '0', [14], '', '', 'a zero is left where it lies'],
+            ['45', '45', '45', [14], '', '', 'a term no standard checkbox offers is kept as it is'],
+            ['45', '', '', [14], '', '', 'removal is accepted'],
+            [
+                '30',
+                '30',
+                '',
+                [14, 30],
+                '',
+                'is now one of the standard terms you offer',
+                'a term offered as standard folds onto its checkbox, announced',
+            ],
+            [
+                '45',
+                '60',
+                '45',
+                ['14'],
+                'can only be removed, not changed',
+                '',
+                'replacing the value is refused and nothing in the section saves',
+            ],
+            [
+                '',
+                '30',
+                '',
+                ['14'],
+                'can only be removed, not changed',
+                '',
+                'entering a new value is refused and nothing in the section saves',
+            ],
+            [
+                '30.0',
+                '30.0',
+                '30.0',
+                ['14'],
+                'which is not a usable number of days',
+                '',
+                'keeping an unusable value blocks the whole section save',
+            ],
+            ['30.0', '', '', [14], '', '', 'an unusable value can still be removed'],
         ];
-        // The merchant doesn't touch the checkboxes on this save — 60 stays
-        // unticked in the POST, but it matches an offered preset row.
-        $gateway->test_post_data = [
-            $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
-            $gateway->get_field_key('payment_terms_days') => ['14'],
-            $gateway->get_field_key('payment_terms_custom_days') => '60',
-        ];
-        $gateway->process_admin_options();
-        $saved = get_option($option_key, []);
+        foreach ($cases as [$stored, $posted, $saved_custom, $saved_days, $error, $notice, $description]) {
+            $gateway = self::gateway();
+            $gateway->init_form_fields();
+            $option_key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$option_key] = [
+                'payment_terms_days' => ['14'],
+                'payment_terms_custom_days' => $stored,
+            ];
+            $gateway->init_settings();
+            $GLOBALS['__twoinc_test_admin_messages'] = [];
+            $GLOBALS['__twoinc_test_admin_errors'] = [];
+            $gateway->test_post_data = [
+                $gateway->get_field_key('payment_terms_days') => ['14'],
+                $gateway->get_field_key('payment_terms_custom_days') => $posted,
+            ];
+            $gateway->process_admin_options();
+            $saved = get_option($option_key, []);
 
-        TinyAssert::same('', $saved['payment_terms_custom_days'], 'a custom value matching an offered preset must be cleared even when unticked');
-        TinyAssert::same([14, 60], $saved['payment_terms_days'], 'the matching preset must be ticked into the checkbox selection');
+            TinyAssert::same($saved_custom, $saved['payment_terms_custom_days'] ?? null, $description . ' — stored custom term');
+            TinyAssert::same($saved_days, $saved['payment_terms_days'] ?? null, $description . ' — ticked terms');
+            TinyAssert::same(
+                $error === '',
+                $GLOBALS['__twoinc_test_admin_errors'] === [],
+                $description . ' — whether the save is refused'
+            );
+            if ($error !== '') {
+                TinyAssert::true(
+                    strpos(implode("\n", $GLOBALS['__twoinc_test_admin_errors']), $error) !== false,
+                    $description . ' — the refusal says what to do'
+                );
+            }
+            TinyAssert::same(
+                $notice === '',
+                $GLOBALS['__twoinc_test_admin_messages'] === [],
+                $description . ' — whether anything is announced'
+            );
+            if ($notice !== '') {
+                TinyAssert::true(
+                    strpos(implode("\n", $GLOBALS['__twoinc_test_admin_messages']), $notice) !== false,
+                    $description . ' — the announcement names the fold-in'
+                );
+            }
+        }
     }
 
-    private static function testCustomPaymentTermNotReconciledWhenGenuinelyCustom(): void
+    /**
+     * ABN-522/ABN-493. An unresolvable offered set matches nothing rather than everything, so an
+     * API outage cannot delete a value carried in by an upgrade.
+     */
+    /**
+     * ABN-522. The deprecated field's copy, in every catalogue that carries the admin locale —
+     * source copy edited without the catalogues following renders English however good the
+     * msgstr is, and nothing else in the suite would report it.
+     */
+    private static function testDeprecatedCustomTermCopyIsTranslatedInEveryLocale(): void
     {
-        $gateway = self::gateway();
-        $gateway->init_form_fields();
-        $option_key = $gateway->get_option_key();
-        $GLOBALS['__twoinc_test_options'][$option_key] = [];
-        $gateway->test_post_data = [
-            $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
-            $gateway->get_field_key('payment_terms_days') => ['14'],
-            $gateway->get_field_key('payment_terms_custom_days') => '45',
+        $languages = dirname(__DIR__, 2) . '/languages/';
+        $cases = [
+            [
+                'Custom payment terms (days) can only be removed, not changed.',
+                [
+                    'nb_NO' => 'Egendefinerte betalingsvilkår (dager) kan bare fjernes, ikke endres.',
+                    'nl_NL' => 'Aangepaste betalingstermijnen (dagen) kunnen alleen worden verwijderd, niet gewijzigd.',
+                    'sv_SE' => 'Anpassade betalningsvillkor (dagar) kan endast tas bort, inte ändras.',
+                ],
+                'refusal of a changed value',
+            ],
+            [
+                'Custom payment terms (days) holds "%s", which is not a usable number of days. Choose Remove on that field to clear it.',
+                [
+                    'nb_NO' => 'Egendefinerte betalingsvilkår (dager) inneholder %s, som ikke er et brukbart antall dager. Velg Fjern på feltet for å tømme det.',
+                    'nl_NL' => 'Aangepaste betalingstermijnen (dagen) bevat %s, wat geen bruikbaar aantal dagen is. Kies Verwijderen bij dat veld om het te wissen.',
+                    'sv_SE' => 'Anpassade betalningsvillkor (dagar) innehåller %s, vilket inte är ett användbart antal dagar. Välj Ta bort på fältet för att tömma det.',
+                ],
+                'refusal of an unusable value',
+            ],
+            [
+                'Custom payment terms (days) of %s is now one of the standard terms you offer, so it has been selected under Payment terms and the custom field cleared.',
+                [
+                    'nb_NO' => 'Egendefinerte betalingsvilkår (dager) på %s er nå en av standardbetingelsene du tilbyr, så den er valgt under Betalingsbetingelser og det egendefinerte feltet er tømt.',
+                    'nl_NL' => 'Aangepaste betalingstermijnen (dagen) van %s is nu een van de standaardtermijnen die u aanbiedt, dus deze is geselecteerd onder Betalingstermijnen en het aangepaste veld is gewist.',
+                    'sv_SE' => 'Anpassade betalningsvillkor (dagar) på %s är nu ett av standardvillkoren du erbjuder, så det har valts under Betalningsvillkor och det anpassade fältet har tömts.',
+                ],
+                'fold-in announcement',
+            ],
+            [
+                'Legacy setting. This offers a custom term of %s days from fulfilment. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer.',
+                [
+                    'nb_NO' => 'Eldre innstilling. Denne tilbyr et egendefinert vilkår på %s dager fra oppfyllelse. Den støttes ikke lenger og kan ikke redigeres. Velg Fjern for å trekke den tilbake, eller bruk betalingsvilkårene ovenfor for å endre hva du tilbyr.',
+                    'nl_NL' => 'Verouderde instelling. Dit biedt een aangepaste termijn van %s dagen vanaf uitvoering. Deze wordt niet langer ondersteund en kan niet worden gewijzigd. Kies Verwijderen om deze in te trekken, of gebruik de betalingstermijnen hierboven om te wijzigen wat u aanbiedt.',
+                    'sv_SE' => 'Äldre inställning. Detta erbjuder ett anpassat villkor på %s dagar från leverans. Det stöds inte längre och kan inte redigeras. Välj Ta bort för att dra tillbaka det, eller använd betalningsvillkoren ovan för att ändra vad du erbjuder.',
+                ],
+                'legacy help text, standard terms',
+            ],
+            [
+                'Legacy setting. This offers a custom term of %s days after the end of the month. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer.',
+                [
+                    'nb_NO' => 'Eldre innstilling. Denne tilbyr et egendefinert vilkår på %s dager etter månedens slutt. Den støttes ikke lenger og kan ikke redigeres. Velg Fjern for å trekke den tilbake, eller bruk betalingsvilkårene ovenfor for å endre hva du tilbyr.',
+                    'nl_NL' => 'Verouderde instelling. Dit biedt een aangepaste termijn van %s dagen na het einde van de maand. Deze wordt niet langer ondersteund en kan niet worden gewijzigd. Kies Verwijderen om deze in te trekken, of gebruik de betalingstermijnen hierboven om te wijzigen wat u aanbiedt.',
+                    'sv_SE' => 'Äldre inställning. Detta erbjuder ett anpassat villkor på %s dagar efter månadens slut. Det stöds inte längre och kan inte redigeras. Välj Ta bort för att dra tillbaka det, eller använd betalningsvillkoren ovan för att ändra vad du erbjuder.',
+                ],
+                'legacy help text, end-of-month terms',
+            ],
         ];
-        $gateway->process_admin_options();
-        $saved = get_option($option_key, []);
+        foreach ($cases as [$msgid, $expected, $description]) {
+            TinyAssert::true(
+                strpos(
+                    (string) file_get_contents($languages . 'twoinc-payment-gateway.pot'),
+                    // A catalogue msgid escapes its quotes; the source string does not.
+                    addcslashes($msgid, '"\\')
+                ) !== false,
+                "the .pot is missing the $description — regenerate it"
+            );
+            foreach ($expected as $locale => $translation) {
+                TinyAssert::same(
+                    $translation,
+                    self::poTranslation(
+                        (string) file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.po'),
+                        $msgid
+                    ),
+                    "the $locale catalogue does not pair the $description with its translation"
+                );
+                TinyAssert::true(
+                    strpos(
+                        (string) file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.mo'),
+                        $translation
+                    ) !== false,
+                    "the compiled $locale catalogue predates the $description — recompile with msgfmt"
+                );
+            }
+        }
+    }
 
-        TinyAssert::same('45', $saved['payment_terms_custom_days'], 'a genuinely custom value must survive the save untouched');
-        TinyAssert::same([14], $saved['payment_terms_days'], 'ticked presets are unaffected when nothing needs reconciling');
+    private static function testDeprecatedCustomTermFoldsInOnlyAgainstAResolvedOfferedSet(): void
+    {
+        $cases = [
+            [[14, 30], '', [14, 30], true, 'a term the record offers folds onto its checkbox'],
+            [[], '30', [14], false, 'an unresolvable offered set leaves the stored term standing'],
+            [[14, 60], '30', [14], false, 'a record that does not offer the term leaves it standing'],
+        ];
+        foreach ($cases as [$offered, $saved_custom, $saved_days, $announced, $description]) {
+            $gateway = self::offeredTermsGateway($offered);
+            $gateway->init_form_fields();
+            $option_key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$option_key] = [
+                'payment_terms_days' => ['14'],
+                'payment_terms_custom_days' => '30',
+            ];
+            $gateway->init_settings();
+            $GLOBALS['__twoinc_test_admin_messages'] = [];
+            $GLOBALS['__twoinc_test_admin_errors'] = [];
+            $gateway->test_post_data = [
+                $gateway->get_field_key('payment_terms_days') => ['14'],
+                $gateway->get_field_key('payment_terms_custom_days') => '30',
+            ];
+            $gateway->process_admin_options();
+            $saved = get_option($option_key, []);
+
+            TinyAssert::same($saved_custom, $saved['payment_terms_custom_days'] ?? null, $description . ' — stored custom term');
+            TinyAssert::same($saved_days, $saved['payment_terms_days'] ?? null, $description . ' — ticked terms');
+            TinyAssert::same($announced, $GLOBALS['__twoinc_test_admin_messages'] !== [], $description . ' — whether it is announced');
+            TinyAssert::same([], $GLOBALS['__twoinc_test_admin_errors'], $description . ' — nothing is refused');
+        }
+    }
+
+    private static function offeredTermsGateway(array $offered): WC_Twoinc
+    {
+        return new class ($offered) extends WC_Twoinc {
+            private $offered;
+
+            public function __construct($offered)
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->offered = $offered;
+            }
+
+            public function get_merchant_available_terms(): array
+            {
+                return $this->offered;
+            }
+        };
     }
 
     private static function testDefaultTermCoercedToOfferedSet(): void

@@ -75,6 +75,7 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_FX.php';
     require_once __DIR__ . '/class/WC_Twoinc_Rate_Limiter.php';
     require_once __DIR__ . '/class/WC_Twoinc_Surcharge_Method_Exception.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Stored_Term.php';
     require_once __DIR__ . '/class/WC_Twoinc_Payment_Terms.php';
     require_once __DIR__ . '/class/WC_Twoinc_Sole_Trader.php';
     require_once __DIR__ . '/class/WC_Twoinc_Api_Proxy.php';

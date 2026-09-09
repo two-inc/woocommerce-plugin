@@ -558,33 +558,14 @@ jQuery(function ($) {
       $surchargeRoundingStep.closest("tr").toggle(type !== "none" && basis !== "none");
     }
 
-    // Custom Payment Terms (days) row is only meaningful for a genuinely
-    // custom value — hide it once the custom day duplicates one of the
-    // preset checkbox rows above, ticked or not (TWO-25498). Every row here
-    // is a backend-offered term regardless of tick state, so this matches
-    // WC_Twoinc::is_custom_payment_term_genuine() server-side without an
-    // extra fetch.
-    function updateCustomDaysVisibility() {
-      if ($customDays.length === 0) return;
-      const c = customDay();
-      const offered = $checkboxes
-        .map(function () {
-          return parseInt(this.value, 10);
-        })
-        .get();
-      const genuine = c > 0 && offered.indexOf(c) === -1;
-      $customDays.closest("tr").toggle(genuine);
-    }
-
     function onTermsChanged() {
       rebuildDefaultTerm();
       loadFees();
       updateGridRows();
-      updateCustomDaysVisibility();
     }
 
     $checkboxes.on("change", onTermsChanged);
-    $customDays.on("change keyup", onTermsChanged);
+    $customDays.on("change", onTermsChanged);
     $surchargeType.on("change", updateGridColumns);
     $surchargeType.on("change", updateTaxFields);
     $surchargeType.on("change", updateSurchargeOptionFields);
@@ -595,7 +576,6 @@ jQuery(function ($) {
     rebuildDefaultTerm();
     loadFees();
     updateGridRows();
-    updateCustomDaysVisibility();
     updateTaxFields();
     updateSurchargeOptionFields();
     updateRoundingStepVisibility();

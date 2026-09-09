@@ -371,10 +371,6 @@ msgstr ""
 msgid "Select at least one payment term or enter a custom term."
 msgstr "Välj minst ett betalningsvillkor eller ange ett anpassat villkor."
 
-#: class/WC_Twoinc.php:2118
-msgid "Custom payment terms (days) must be a whole number of days."
-msgstr "Anpassade betalningsvillkor (dagar) måste vara ett helt antal dagar."
-
 #. translators: %1$s opens and %2$s closes a link to the brand's FAQ page.
 #: class/WC_Twoinc.php:2254
 #, php-format
@@ -857,10 +853,6 @@ msgstr "Välj betalningsvillkor du vill erbjuda."
 #: class/WC_Twoinc.php:4691
 msgid "Custom payment terms (days)"
 msgstr "Anpassade betalningsvillkor (dagar)"
-
-#: class/WC_Twoinc.php:4692
-msgid "Optional. Enter a custom number of days to offer alongside the selected terms above."
-msgstr "Valfritt. Ange ett anpassat antal dagar att erbjuda tillsammans med de valda villkoren ovan."
 
 #: class/WC_Twoinc.php:4703
 msgid "Default payment terms"
@@ -1489,3 +1481,26 @@ msgstr "Kunde inte uppdatera säljarprofilen."
 msgid "Merchant profile refreshed."
 msgstr "Säljarprofilen har uppdaterats."
 
+#: class/WC_Twoinc.php
+msgid "Custom payment terms (days) can only be removed, not changed."
+msgstr "Anpassade betalningsvillkor (dagar) kan endast tas bort, inte ändras."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Custom payment terms (days) holds \"%s\", which is not a usable number of days. Choose Remove on that field to clear it."
+msgstr "Anpassade betalningsvillkor (dagar) innehåller %s, vilket inte är ett användbart antal dagar. Välj Ta bort på fältet för att tömma det."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Custom payment terms (days) of %s is now one of the standard terms you offer, so it has been selected under Payment terms and the custom field cleared."
+msgstr "Anpassade betalningsvillkor (dagar) på %s är nu ett av standardvillkoren du erbjuder, så det har valts under Betalningsvillkor och det anpassade fältet har tömts."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Legacy setting. This offers a custom term of %s days from fulfilment. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
+msgstr "Äldre inställning. Detta erbjuder ett anpassat villkor på %s dagar från leverans. Det stöds inte längre och kan inte redigeras. Välj Ta bort för att dra tillbaka det, eller använd betalningsvillkoren ovan för att ändra vad du erbjuder."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Legacy setting. This offers a custom term of %s days after the end of the month. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
+msgstr "Äldre inställning. Detta erbjuder ett anpassat villkor på %s dagar efter månadens slut. Det stöds inte längre och kan inte redigeras. Välj Ta bort för att dra tillbaka det, eller använd betalningsvillkoren ovan för att ändra vad du erbjuder."
