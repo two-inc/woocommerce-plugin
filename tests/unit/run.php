@@ -219,6 +219,7 @@ final class BrandConfigSpec
             'testUnquotableSurchargeIsReportedNotSilentlyDropped',
             'testAResolvedZeroSurchargeIsNotReportedAsAFailure',
             'testWrongCurrencyQuoteSaysWhyTheSurchargeIsMissing',
+            'testGateWithholdsMethodWhenTheChargedTermCouldNotBePriced',
             'testMerchantRatesRefuseAnUnrenderableAnswer',
             'testTermFeeChipsCarryNoStandInZero',
             'testBuyerFeeShareCapRoundingToZeroRelaysZeroCap',
@@ -8481,6 +8482,103 @@ final class BrandConfigSpec
      * is not in — correctly, rather than mischarging — but that drop was as
      * silent as a failed quote.
      */
+    /**
+     * Gateway fake for the fee-quote withhold tests: a real WC_Twoinc (so
+     * the availability-gate filter is reachable) serving canned pricing
+     * responses off a queue.
+     */
+    private static function quoteGateway(array $options, array $responses): WC_Twoinc
+    {
+        return new class ($options, $responses) extends WC_Twoinc {
+            private $options;
+            private $responses;
+
+            public function __construct($options, $responses)
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->options = $options;
+                $this->responses = $responses;
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function get_platform_minimum_order()
+            {
+                return null;
+            }
+
+            public function get_merchant_available_terms(bool $refresh = false): array
+            {
+                return array_map('intval', $this->options['payment_terms_days'] ?? [30]);
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                if (strpos($endpoint, '/v1/pricing/order/fee') === false) {
+                    return new WP_Error();
+                }
+                return array_shift($this->responses) ?? new WP_Error();
+            }
+        };
+    }
+
+    /**
+     * ABN-546: a term the pricing service could not price withholds the
+     * payment method, on the same gate the unmet-minimum and no-FX-rate
+     * withholds already use. The quote is made by whichever path would
+     * charge the fee; the gate reads what that attempt recorded.
+     */
+    private static function testGateWithholdsMethodWhenTheChargedTermCouldNotBePriced(): void
+    {
+        $two_terms = [
+            'payment_terms_days' => [30, 60],
+            'surcharge_type' => 'percentage',
+            'surcharge_grid' => [30 => ['percentage' => 1.5], 60 => ['percentage' => 2.5]],
+        ];
+        $wrong_currency = ['response' => ['code' => 200], 'body' => json_encode(['buyer_fee_share' => '12.50', 'currency' => 'GBP'])];
+
+        $cases = [
+            ['quote', self::termFeeSettings(), 30, 100.0, [new WP_Error('http_request_failed', 'timed out')], false, 'the pricing service could not be reached'],
+            ['quote', self::termFeeSettings(), 30, 100.0, [['response' => ['code' => 503], 'body' => '']], false, 'the pricing service answered a service error'],
+            ['quote', self::termFeeSettings(), 30, 100.0, [['response' => ['code' => 200], 'body' => 'not json']], false, 'the answer could not be read'],
+            ['fee', self::termFeeSettings(), 30, 100.0, [$wrong_currency], false, 'the quote came back in another currency'],
+            ['quote', $two_terms, 60, 100.0, [new WP_Error()], true, 'a failed term the basket is not charged for'],
+            ['quote', self::termFeeSettings(), 30, 100.0, [self::termFeeOk('0.00')], true, 'a quote that resolved to nothing to charge'],
+            ['quote', ['payment_terms_days' => [30], 'surcharge_type' => 'none'], 30, 100.0, [], true, 'no surcharge configured'],
+            ['quote', self::termFeeSettings(), 30, 0.0, [], true, 'an empty basket'],
+        ];
+
+        $key = WC_Twoinc_Brand::get('gateway_id');
+        foreach ($cases as $case) {
+            list($mode, $options, $term, $gross, $responses, $expected_offered, $description) = $case;
+            WC_Twoinc_Payment_Terms::reset_fee_cache();
+            $GLOBALS['__twoinc_test_logs'] = [];
+            $gateway = self::quoteGateway($options, $responses);
+
+            // The quote calculate_totals() makes before WooCommerce filters
+            // the gateways: the cart-fee hook on the charging path, or the
+            // chip render's own per-term quote.
+            self::withGatewayInstance($gateway, static function () use ($mode, $gateway, $term, $gross) {
+                if ($mode === 'fee') {
+                    WC()->session = new StubSession();
+                    WC()->session->set('chosen_payment_method', $gateway->id);
+                    WC()->session->set(WC_Twoinc_Payment_Terms::SESSION_KEY, $term);
+                    WC()->customer = new StubCustomer('NO');
+                    WC_Twoinc_Payment_Terms::apply_cart_fee(new StubFeeCart());
+                    return;
+                }
+                WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, $term, $gross, 'NO');
+            });
+
+            $result = $gateway->apply_brand_availability_gate([$key => 'gw']);
+            $outcome = $expected_offered ? 'offered' : 'withheld';
+            TinyAssert::same($expected_offered, isset($result[$key]), "the method is $outcome when $description");
+        }
+    }
+
     private static function testWrongCurrencyQuoteSaysWhyTheSurchargeIsMissing(): void
     {
         $gateway = new class () extends WC_Twoinc {
