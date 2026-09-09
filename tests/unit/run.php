@@ -99,7 +99,10 @@ final class BrandConfigSpec
             'testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList',
             'testSurchargeGridPreservesRowsNotOnTheForm',
             'testChipFeeAmountCarriesCurrencySymbolNotCode',
-            'testPaymentTermsDefaultFallsBackToShortest',
+            'testPaymentTermsDefaultPreferenceOrder',
+            'testMerchantDefaultTermStoredValueDistinguishesUnset',
+            'testDefaultTermOptionsLeadWithAutomatic',
+            'testFabricatedDueInDaysRowIsDroppedOnce',
             'testBuyerFeeShareShapes',
             'testBuyerFeeShareRounding',
             'testRoundingStepOptionsCanonicalAndNarrowed',
@@ -2824,17 +2827,22 @@ final class BrandConfigSpec
      * merchant's backend `available_terms` set is injectable; the default
      * mirrors a typical resolved merchant record (TWO-24812).
      */
-    private static function termsGateway(array $options, array $merchant_terms = [14, 30, 60, 90]): WC_Payment_Gateway
-    {
-        return new class ($options, $merchant_terms) extends WC_Payment_Gateway {
+    private static function termsGateway(
+        array $options,
+        array $merchant_terms = [14, 30, 60, 90],
+        ?int $merchant_default = null
+    ): WC_Payment_Gateway {
+        return new class ($options, $merchant_terms, $merchant_default) extends WC_Payment_Gateway {
             private $options;
             private $merchant_terms;
+            private $merchant_default;
 
-            public function __construct($options, $merchant_terms)
+            public function __construct($options, $merchant_terms, $merchant_default)
             {
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
                 $this->options = $options;
                 $this->merchant_terms = $merchant_terms;
+                $this->merchant_default = $merchant_default;
             }
 
             public function get_option($key, $empty_value = null)
@@ -2845,6 +2853,11 @@ final class BrandConfigSpec
             public function get_merchant_available_terms(): array
             {
                 return $this->merchant_terms;
+            }
+
+            public function get_merchant_default_term(): ?int
+            {
+                return $this->merchant_default;
             }
         };
     }
@@ -3562,9 +3575,21 @@ final class BrandConfigSpec
         TinyAssert::same(false, array_key_exists($attempted_option, $GLOBALS['__twoinc_test_options']));
     }
 
-    private static function testMerchantRecordFetchSharedAcrossConsumersAndOffTheBlob(): void
+    /**
+     * Gateway fake over a scripted merchant-record fetch, with the freshness
+     * stamps and the per-request memo cleared so each use fetches once.
+     * Returns the anonymous class, not WC_Twoinc: callers script `$responses`
+     * and read `$calls` off it.
+     */
+    private static function merchantRecordGateway()
     {
-        $gateway = new class () extends WC_Twoinc {
+        unset(
+            $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on')],
+            $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on')]
+        );
+        WC_Twoinc::reset_merchant_record_memo();
+
+        return new class () extends WC_Twoinc {
             public $options = [
                 'api_key' => 'key',
                 'merchant_id' => 'mid',
@@ -3598,6 +3623,42 @@ final class BrandConfigSpec
                 return array_shift($this->responses);
             }
         };
+    }
+
+    /**
+     * The stored row distinguishes a merchant with no default term from one
+     * whose default is a real day count; only the display reader stands 14 in
+     * for it, so the term resolver cannot preselect a term nobody granted.
+     */
+    private static function testMerchantDefaultTermStoredValueDistinguishesUnset(): void
+    {
+        $cases = [
+            [['due_in_days' => 21], 21, 21, 21, 'a real default term is stored and read back'],
+            [[], 0, null, 14, 'a record with no default term stores 0'],
+            [['due_in_days' => null], 0, null, 14, 'an explicit null stores 0'],
+            [['due_in_days' => 0], 0, null, 14, 'a zero is not a term'],
+        ];
+
+        foreach ($cases as [$extra, $expected_stored, $expected_default, $expected_display, $description]) {
+            $gateway = self::merchantRecordGateway();
+            $gateway->responses[] = [
+                'response' => ['code' => 200],
+                'body' => json_encode($extra + ['available_terms' => [14, 30]]),
+            ];
+
+            TinyAssert::same($expected_default, $gateway->get_merchant_default_term(), $description);
+            TinyAssert::same(
+                $expected_stored,
+                (int) $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_due_in_days')],
+                $description . ' (stored)'
+            );
+            TinyAssert::same($expected_display, $gateway->get_merchant_due_in_days(), $description . ' (display)');
+        }
+    }
+
+    private static function testMerchantRecordFetchSharedAcrossConsumersAndOffTheBlob(): void
+    {
+        $gateway = self::merchantRecordGateway();
 
         $record = [
             'due_in_days' => 21,
@@ -4194,17 +4255,25 @@ final class BrandConfigSpec
         TinyAssert::true(strpos(WC_Twoinc_Payment_Terms::format_fee_amount(12.5, 'EUR'), '<') === false);
     }
 
-    private static function testPaymentTermsDefaultFallsBackToShortest(): void
+    private static function testPaymentTermsDefaultPreferenceOrder(): void
     {
-        $gateway = self::termsGateway(['payment_terms_days' => ['30', '60'], 'default_payment_term' => '60']);
-        TinyAssert::same(60, WC_Twoinc_Payment_Terms::get_default_term($gateway));
+        $backend = [7, 14, 30, 60, 90];
 
-        // Configured default outside the offered set: shortest offered wins
-        $gateway = self::termsGateway([
-            'payment_terms_days' => ['30', '90'],
-            'default_payment_term' => '60',
-        ]);
-        TinyAssert::same(30, WC_Twoinc_Payment_Terms::get_default_term($gateway));
+        $cases = [
+            [['payment_terms_days' => ['30', '60'], 'default_payment_term' => '60'], null, 60, 'the admin default wins while it is offered'],
+            [['payment_terms_days' => ['7', '30', '60'], 'default_payment_term' => '60'], 7, 60, "the admin default outranks the merchant's own default term"],
+            [['payment_terms_days' => ['7', '30', '60'], 'default_payment_term' => '14'], 60, 60, "an unoffered admin default falls through to the merchant's own default term"],
+            [['payment_terms_days' => ['7', '30']], 45, 30, 'a merchant default term outside the offered set is ignored'],
+            [['payment_terms_days' => ['7', '30']], null, 30, '30 is preferred over a shorter offered term'],
+            [['payment_terms_days' => ['7', '14']], null, 7, 'without 30 offered the shortest offered term is used'],
+            [['payment_terms_days' => ['60', '90'], 'default_payment_term' => '14'], null, 60, 'an unoffered admin default with no 30 offered falls to the shortest'],
+            [[], 30, null, 'no offered term leaves no default at all'],
+        ];
+
+        foreach ($cases as [$options, $merchant_default, $expected, $description]) {
+            $gateway = self::termsGateway($options, $backend, $merchant_default);
+            TinyAssert::same($expected, WC_Twoinc_Payment_Terms::get_default_term($gateway), $description);
+        }
     }
 
     private static function testBuyerFeeShareShapes(): void
@@ -4265,27 +4334,40 @@ final class BrandConfigSpec
 
         // differential: the default term (shortest offered = 14) rides as reference_terms
         $gateway = self::termsGateway([
-            'payment_terms_days' => ['14', '30'],
+            'payment_terms_days' => ['14', '60'],
             'surcharge_type' => 'percentage',
-            'surcharge_grid' => [30 => ['percentage' => '2']],
+            'surcharge_grid' => [60 => ['percentage' => '2']],
             'surcharge_differential' => '1',
         ]);
         TinyAssert::same(
             ['percentage' => 2.0, 'surcharge_basis' => 'buyer_pays', 'reference_terms' => ['type' => 'NET_TERMS', 'duration_days' => 14]],
-            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 60)
+        );
+
+        // The reference is the resolved default, so an offered 30 is the basis
+        // even against a shorter offered term (ABN-548).
+        $gateway = self::termsGateway([
+            'payment_terms_days' => ['14', '30'],
+            'surcharge_type' => 'percentage',
+            'surcharge_grid' => [14 => ['percentage' => '1'], 30 => ['percentage' => '2']],
+            'surcharge_differential' => '1',
+        ]);
+        TinyAssert::same(
+            ['percentage' => 1.0, 'surcharge_basis' => 'buyer_pays', 'reference_terms' => ['type' => 'NET_TERMS', 'duration_days' => 30]],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 14)
         );
 
         // end_of_month: reference_terms carries duration_days_calculated_from
         $gateway = self::termsGateway([
-            'payment_terms_days' => ['14', '30'],
+            'payment_terms_days' => ['14', '60'],
             'surcharge_type' => 'percentage',
-            'surcharge_grid' => [30 => ['percentage' => '2']],
+            'surcharge_grid' => [60 => ['percentage' => '2']],
             'surcharge_differential' => '1',
             'payment_terms_type' => 'end_of_month',
         ]);
         TinyAssert::same(
             ['percentage' => 2.0, 'surcharge_basis' => 'buyer_pays', 'reference_terms' => ['type' => 'NET_TERMS', 'duration_days' => 14, 'duration_days_calculated_from' => 'END_OF_MONTH']],
-            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 60)
         );
 
         // Fixed amounts are configured in the store currency; when the
@@ -4337,7 +4419,7 @@ final class BrandConfigSpec
 
         // rounding rides alongside reference_terms (differential)
         $gateway = self::termsGateway($base + [
-            'payment_terms_days' => ['14', '30'],
+            'payment_terms_days' => ['14', '60'],
             'surcharge_differential' => '1',
             'surcharge_rounding_basis' => 'standard',
             'surcharge_rounding_step' => '0.50',
@@ -6300,28 +6382,63 @@ final class BrandConfigSpec
         };
     }
 
+    /**
+     * The empty option is what lets an admin leave the term to the checkout's
+     * resolver; without it the select can only name a day count and posts one
+     * on every save (ABN-548).
+     */
+    private static function testDefaultTermOptionsLeadWithAutomatic(): void
+    {
+        $cases = [
+            // PHP casts a numeric-string array key to an int; the empty one stays a string.
+            [['14', '30'], [14, 30, 60], ['', 14, 30], 'the empty option comes first, ahead of every offered term'],
+            [['14', '30'], [], [''], 'an unresolved backend list still offers the empty option'],
+            [[], [14, 30], [''], 'nothing ticked still offers the empty option'],
+        ];
+
+        foreach ($cases as [$ticked, $backend, $expected, $description]) {
+            $gateway = self::validationGateway(['payment_terms_days' => $ticked], $backend);
+            $method = new ReflectionMethod($gateway, 'get_offered_payment_term_options');
+            $method->setAccessible(true);
+
+            TinyAssert::same($expected, array_keys($method->invoke($gateway)), $description);
+        }
+    }
+
     private static function testDefaultTermCoercedToOfferedSet(): void
     {
         $gateway = self::gateway();
         $terms_key = $gateway->get_field_key('payment_terms_days');
         $custom_key = $gateway->get_field_key('payment_terms_custom_days');
+        // Seeded so a case can prove the validator does NOT reach for it.
+        $due_option = WC_Twoinc_Brand::prefixed_name('merchant_due_in_days');
 
-        // Offered = ticked checkboxes; a default within it is kept verbatim.
-        $_POST[$terms_key] = ['30', '60'];
-        unset($_POST[$custom_key]);
-        TinyAssert::same('60', $gateway->validate_default_payment_term_field('default_payment_term', '60'));
+        $cases = [
+            [['30', '60'], null, 0, '60', '60', 'a posted default within the offered set is kept verbatim'],
+            [['30', '60'], null, 0, '90', '', 'a default no longer offered is stored empty, never repointed'],
+            [['14', '30', '90'], null, 90, '60', '', "not even the merchant's own default term is synthesised here"],
+            [['60'], '45', 0, '45', '45', 'the custom day joins the offered set and can become the default'],
+            [['60'], '45', 0, '', '', 'an empty post is not an offered term either'],
+            [['60'], '45', 0, '14', '', 'an unofferable posted default is stored empty'],
+        ];
 
-        // A default no longer offered repoints to the shortest offered term.
-        TinyAssert::same('30', $gateway->validate_default_payment_term_field('default_payment_term', '90'));
+        foreach ($cases as [$ticked, $custom, $merchant_default, $posted, $expected, $description]) {
+            $_POST[$terms_key] = $ticked;
+            if ($custom === null) {
+                unset($_POST[$custom_key]);
+            } else {
+                $_POST[$custom_key] = $custom;
+            }
+            $GLOBALS['__twoinc_test_options'][$due_option] = $merchant_default;
 
-        // The custom day joins the offered set and can become the default.
-        $_POST[$terms_key] = ['60'];
-        $_POST[$custom_key] = '45';
-        TinyAssert::same('45', $gateway->validate_default_payment_term_field('default_payment_term', '45'));
-        // Shortest of {45,60} wins when the posted default is not offered.
-        TinyAssert::same('45', $gateway->validate_default_payment_term_field('default_payment_term', '14'));
+            TinyAssert::same(
+                $expected,
+                $gateway->validate_default_payment_term_field('default_payment_term', $posted),
+                $description
+            );
+        }
 
-        unset($_POST[$terms_key], $_POST[$custom_key]);
+        unset($_POST[$terms_key], $_POST[$custom_key], $GLOBALS['__twoinc_test_options'][$due_option]);
     }
 
     private static function testOrderPayloadCarriesSelectedAndAvailableTerms(): void
@@ -7684,6 +7801,30 @@ final class BrandConfigSpec
         return $key;
     }
 
+    /**
+     * ABN-548: the legacy row goes once, and the record's freshness stamp
+     * stays, because the admin's terms-state notice reads that.
+     */
+    private static function testFabricatedDueInDaysRowIsDroppedOnce(): void
+    {
+        $due = WC_Twoinc_Brand::prefixed_name('merchant_due_in_days');
+        $stamp = WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on');
+        $method = new ReflectionMethod(WC_Twoinc::class, 'drop_fabricated_due_in_days');
+        $method->setAccessible(true);
+
+        $GLOBALS['__twoinc_test_options'][$due] = 14;
+        $GLOBALS['__twoinc_test_options'][$stamp] = time();
+
+        $method->invoke(self::gateway());
+        TinyAssert::same(false, array_key_exists($due, $GLOBALS['__twoinc_test_options']), 'the legacy row is dropped');
+        TinyAssert::true(array_key_exists($stamp, $GLOBALS['__twoinc_test_options']), 'the freshness stamp stays');
+
+        // A value stored after the drop is the merchant's own and survives.
+        $GLOBALS['__twoinc_test_options'][$due] = 21;
+        $method->invoke(self::gateway());
+        TinyAssert::same(21, $GLOBALS['__twoinc_test_options'][$due], 'a later value is not dropped again');
+    }
+
     private static function runTaxSubtotalsBackfill(WC_Twoinc $gateway): void
     {
         $method = new ReflectionMethod(WC_Twoinc::class, 'migrate_se_tax_subtotals');
@@ -8952,6 +9093,11 @@ final class BrandConfigSpec
             public function get_merchant_available_terms(): array
             {
                 return [30];
+            }
+
+            public function get_merchant_default_term(): ?int
+            {
+                return null;
             }
 
             public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)

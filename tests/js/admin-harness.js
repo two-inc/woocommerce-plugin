@@ -325,6 +325,7 @@ async function loadAdmin(options) {
     ajax_url: "https://example.test/wp-admin/admin-ajax.php",
     csrf_token: "test-csrf-token",
     days_label: "%s days",
+    automatic_label: "Any term",
     decimal_separator: ".",
     merchant_available_terms: opts.merchantTerms || [14, 30, 60, 90],
     surcharge_grid: opts.stored || {},

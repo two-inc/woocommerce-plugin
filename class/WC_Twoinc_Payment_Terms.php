@@ -26,6 +26,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
     {
         public const SESSION_KEY = 'two_selected_term';
 
+        /** Preferred default term, in days (ABN-548). */
+        public const PREFERRED_DEFAULT_TERM = 30;
+
         /**
          * Decimal places every monetary value in the pricing request is
          * rounded to. Deliberately NOT wc_get_price_decimals(): the API
@@ -131,8 +134,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * The pre-selected term: the merchant's configured default when it is
-         * in the available set, else the shortest available term.
+         * The pre-selected term: the admin's configured default, the merchant's
+         * own default term, 30, then the shortest available term — each only
+         * while it is available, and an empty set has none at all (ABN-548).
          */
         public static function get_default_term($gateway): ?int
         {
@@ -141,7 +145,17 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return null;
             }
             $configured = (int) $gateway->get_option('default_payment_term');
-            return in_array($configured, $terms, true) ? $configured : $terms[0];
+            if (in_array($configured, $terms, true)) {
+                return $configured;
+            }
+            $merchant_default = $gateway->get_merchant_default_term();
+            if ($merchant_default !== null && in_array($merchant_default, $terms, true)) {
+                return $merchant_default;
+            }
+            if (in_array(self::PREFERRED_DEFAULT_TERM, $terms, true)) {
+                return self::PREFERRED_DEFAULT_TERM;
+            }
+            return $terms[0];
         }
 
         /**

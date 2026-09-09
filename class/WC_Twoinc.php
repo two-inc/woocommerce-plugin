@@ -92,6 +92,7 @@ if (!class_exists('WC_Twoinc')) {
             $this->init_settings();
             $this->drop_removed_settings();
             $this->drop_renamed_option_rows();
+            $this->drop_fabricated_due_in_days();
             $this->migrate_se_tax_subtotals();
 
             $this->title = $this->get_pay_title();
@@ -433,8 +434,9 @@ if (!class_exists('WC_Twoinc')) {
 
         private static function store_merchant_due_in_days(array $record): void
         {
-            // A null due_in_days on the record also means 14 days
-            $due_in_days = !empty($record['due_in_days']) ? (int) $record['due_in_days'] : 14;
+            // 0 when the record carries none, so the term resolver can tell
+            // "unset" from a real day count (ABN-548).
+            $due_in_days = !empty($record['due_in_days']) ? (int) $record['due_in_days'] : 0;
             update_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'), $due_in_days, false);
         }
 
@@ -547,13 +549,18 @@ if (!class_exists('WC_Twoinc')) {
             );
         }
 
-        /** The merchant's default due-in-days, 14 when nothing is cached. */
+        /** Display copy only: 14 stands in for a merchant with no default. */
         public function get_merchant_due_in_days()
+        {
+            return $this->get_merchant_default_term() ?? 14;
+        }
+
+        public function get_merchant_default_term(): ?int
         {
             $this->refresh_merchant_record_caches();
             $due_in_days = (int) get_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'));
 
-            return $due_in_days > 0 ? $due_in_days : 14;
+            return $due_in_days > 0 ? $due_in_days : null;
         }
 
         /**
@@ -1356,6 +1363,30 @@ if (!class_exists('WC_Twoinc')) {
             $this->update_option('enable_tax_subtotals', 'yes');
         }
 
+        /**
+         * Retire the `merchant_due_in_days` row written under the rule that
+         * stored 14 for a merchant with no default term (ABN-548) — it is
+         * indistinguishable from a real 14, and a shop whose record cannot
+         * resolve never overwrites it. Its absence reads as no default term
+         * until the next refresh restores it, which the resolver handles;
+         * the record's own freshness stamp stays, because the admin's
+         * terms-state notice reads that and would report a set it holds as
+         * never fetched.
+         *
+         * @return void
+         */
+        private function drop_fabricated_due_in_days()
+        {
+            $marker = WC_Twoinc_Brand::prefixed_name('merchant_due_in_days_dropped');
+            if (get_option($marker, null) !== null) {
+                return;
+            }
+            delete_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'));
+            // Last, so a failure before it retries rather than leaving the
+            // fabricated row behind for good.
+            update_option($marker, 'yes', false);
+        }
+
         private function get_abt_twoinc_html()
         {
             $abt_url = WC_Twoinc_Brand::get('about_url');
@@ -1726,7 +1757,9 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function get_offered_payment_term_options(): array
         {
-            $options = [];
+            // First, so an admin can leave the term to the checkout's own
+            // resolver rather than pin one (ABN-548).
+            $options = ['' => __('Automatic', 'twoinc-payment-gateway')];
             if (class_exists('WC_Twoinc_Payment_Terms')) {
                 foreach (WC_Twoinc_Payment_Terms::get_available_terms($this) as $days) {
                     $options[strval((int) $days)] = sprintf(__('%s days', 'twoinc-payment-gateway'), (int) $days);
@@ -2810,10 +2843,9 @@ if (!class_exists('WC_Twoinc')) {
          * Coerce the saved default to a term actually being offered. The
          * offered set is computed from the POSTed sibling fields (they save in
          * the same request, so the stored options are stale here), mirroring
-         * the offered set the admin JS rebuilds the dropdown from. If the
-         * posted default is no longer offered (e.g. its checkbox was just
-         * unticked), repoint to the shortest offered term so the stored
-         * default is always coherent.
+         * the offered set the admin JS rebuilds the dropdown from. A posted
+         * default that is not offered — including the empty Automatic option —
+         * is stored empty, leaving the choice to get_default_term() (ABN-548).
          */
         public function validate_default_payment_term_field($key, $value)
         {
@@ -2862,11 +2894,9 @@ if (!class_exists('WC_Twoinc')) {
             if (in_array($value, $offered, true)) {
                 return (string) $value;
             }
-            if (count($offered) > 0) {
-                return (string) $offered[0];
-            }
-            // Rendered but nothing survived (all ticks removed and rejected
-            // upstream) — no coherent default to point at.
+            // Automatic: get_default_term() owns the choice, so a stored day
+            // count never outranks the merchant's own default term or the
+            // 30-day preference (ABN-548).
             return '';
         }
 
@@ -3747,6 +3777,8 @@ if (!class_exists('WC_Twoinc')) {
                 'ajax_url' => admin_url('admin-ajax.php'),
                 // %s days label for the live Default Payment Term rebuild.
                 'days_label' => __('%s days', 'twoinc-payment-gateway'),
+                // Its leading empty option, which the rebuild re-creates.
+                'automatic_label' => __('Automatic', 'twoinc-payment-gateway'),
                 // Decimal separator for rendering fetched inline fee amounts.
                 'decimal_separator' => wc_get_price_decimal_separator(),
                 // The live surcharge grid mirrors ticked terms ∩ this list, like the PHP render.
@@ -5575,7 +5607,7 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'default_payment_term' => [
                     'title'       => __('Default payment terms', 'twoinc-payment-gateway'),
-                    'description' => __('Select the payment term that will be automatically selected for your customer.', 'twoinc-payment-gateway'),
+                    'description' => __('Select the payment term that will be automatically selected for your customer. Automatic leaves the choice to the checkout, which uses your own default term when you offer it.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
                     'options'     => $this->get_offered_payment_term_options(),
