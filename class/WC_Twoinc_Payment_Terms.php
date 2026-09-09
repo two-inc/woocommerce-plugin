@@ -634,19 +634,24 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
         /**
          * Whether the merchant configured anything for this term that a
-         * quote could actually charge. A zero percentage with no fixed
-         * amount and no cap prices to nothing in every currency, so it must
-         * not put the payment method behind a pricing call (ABN-546).
+         * quote could actually charge. A term that prices to nothing must
+         * not put the payment method behind a pricing call (ABN-546): on a
+         * single-term shop that is the whole storefront, over a fee of zero.
+         *
+         * A cap alone charges nothing — it bounds a percentage that is not
+         * there — and in fee-difference mode the default term is its own
+         * reference, so the difference is zero unless a fixed amount rides
+         * along with it.
          */
         private static function has_chargeable_surcharge($gateway, int $days): bool
         {
             $settings = self::get_surcharge_settings($gateway);
-            if (!$settings['enabled']) {
-                return false;
-            }
             $components = self::surcharge_monetary_components($settings, $days);
-            if ($components['fixed'] !== null || ($components['cap'] !== null && $components['cap'] > 0)) {
+            if ($components['fixed'] !== null) {
                 return true;
+            }
+            if ($settings['differential'] && $days === self::get_default_term($gateway)) {
+                return false;
             }
             $row = isset($settings['grid'][$days]) && is_array($settings['grid'][$days]) ? $settings['grid'][$days] : [];
             $percentage = in_array($settings['type'], ['percentage', 'fixed_and_percentage'], true) && isset($row['percentage'])
@@ -681,11 +686,11 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             if ($charged === null) {
                 return false;
             }
-            if (isset(self::$unquoted_terms[$charged])) {
-                return true;
-            }
             if (!self::has_chargeable_surcharge($gateway, $charged)) {
                 return false;
+            }
+            if (isset(self::$unquoted_terms[$charged])) {
+                return true;
             }
             if (!function_exists('is_checkout') || !is_checkout() || !function_exists('WC')) {
                 return false;
@@ -987,7 +992,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             }
 
             $selected = self::get_selected_term($gateway);
-            if ($selected === null) {
+            if ($selected === null || !self::has_chargeable_surcharge($gateway, $selected)) {
                 return;
             }
 
@@ -1001,7 +1006,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             // (any FX conversion happened on the request inputs, TWO-25104)
             // — never re-converted store-side. Backstop only: fetch_term_fee
             // refuses a mismatched answer before caching it, so this can fire
-            // only on a quote a pre-ABN-546 release left in the cache.
+            // only on a success already sitting in the transient store.
             // Normalised the same way the FX layer normalises currency codes
             // (case/whitespace) so it can't be defeated by a
             // harmlessly-differently-cased echo.

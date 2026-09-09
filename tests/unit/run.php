@@ -8621,6 +8621,8 @@ final class BrandConfigSpec
         // A real stored zero rather than a blank row: percentage-only and
         // zero prices to nothing in every currency.
         $zero_grid = ['payment_terms_days' => [30], 'surcharge_type' => 'percentage', 'surcharge_grid' => [30 => ['percentage' => 0]]];
+        $cap_only = ['payment_terms_days' => [30], 'surcharge_type' => 'percentage', 'surcharge_grid' => [30 => ['percentage' => 0, 'limit' => 50.0]]];
+        $differential = ['payment_terms_days' => [30, 60], 'surcharge_type' => 'percentage', 'surcharge_differential' => '1', 'default_payment_term' => 30, 'surcharge_grid' => [30 => ['percentage' => 1.5], 60 => ['percentage' => 2.5]]];
 
         // options, charged term, a term quoted before the gate runs, queued
         // pricing answers, request context, basket, offered, description
@@ -8631,7 +8633,9 @@ final class BrandConfigSpec
             [self::termFeeSettings(), 30, null, [$wrong_currency], 'checkout', 'full', false, 'the quote came back in another currency'],
             [$two_terms, 30, 60, [new WP_Error(), self::termFeeOk('1.50')], 'checkout', 'full', true, 'a failed term the basket is not charged for'],
             [self::termFeeSettings(), 30, null, [self::termFeeOk('0.00')], 'checkout', 'full', true, 'the quote resolved to nothing to charge'],
-            [['payment_terms_days' => [30], 'surcharge_type' => 'none'], 30, null, [], 'checkout', 'full', true, 'no surcharge is configured'],
+            [['payment_terms_days' => [30], 'surcharge_type' => 'none', 'surcharge_grid' => [30 => ['fixed' => 5.0]]], 30, null, [], 'checkout', 'full', true, 'no surcharge is configured, whatever the grid still holds'],
+            [$cap_only, 30, null, [], 'checkout', 'full', true, 'the term caps a percentage it does not have'],
+            [$differential, 30, null, [], 'checkout', 'full', true, 'fee-difference mode prices the default term against itself'],
             [$zero_grid, 30, null, [], 'checkout', 'full', true, 'the term is configured to charge nothing'],
             [self::termFeeSettings(), 30, null, [], 'checkout', 'empty', true, 'the basket is empty'],
             [self::termFeeSettings(), 30, null, [], 'cart', 'full', true, 'the request is not the checkout page'],
