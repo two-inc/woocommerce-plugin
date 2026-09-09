@@ -434,8 +434,7 @@ if (!class_exists('WC_Twoinc')) {
         private static function store_merchant_due_in_days(array $record): void
         {
             // 0 when the record carries none, so the term resolver can tell
-            // "unset" from a real day count (ABN-548). The display reader
-            // supplies the 14-day copy fallback.
+            // "unset" from a real day count (ABN-548).
             $due_in_days = !empty($record['due_in_days']) ? (int) $record['due_in_days'] : 0;
             update_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'), $due_in_days, false);
         }
@@ -549,16 +548,12 @@ if (!class_exists('WC_Twoinc')) {
             );
         }
 
-        /** The merchant's default due-in-days, 14 when nothing is cached. */
+        /** Display copy only: 14 stands in for a merchant with no default. */
         public function get_merchant_due_in_days()
         {
-            $this->refresh_merchant_record_caches();
-            $due_in_days = (int) get_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'));
-
-            return $due_in_days > 0 ? $due_in_days : 14;
+            return $this->get_merchant_default_term() ?? 14;
         }
 
-        /** The merchant's default due-in-days, null when nothing is cached. */
         public function get_merchant_default_term(): ?int
         {
             $this->refresh_merchant_record_caches();
@@ -2823,8 +2818,9 @@ if (!class_exists('WC_Twoinc')) {
          * the same request, so the stored options are stale here), mirroring
          * the offered set the admin JS rebuilds the dropdown from. If the
          * posted default is no longer offered (e.g. its checkbox was just
-         * unticked), repoint to the shortest offered term so the stored
-         * default is always coherent.
+         * unticked), repoint to the term the checkout would resolve, so the
+         * stored default is always coherent and never pins a term below the
+         * one the buyer would have been offered (ABN-548).
          */
         public function validate_default_payment_term_field($key, $value)
         {
@@ -2874,6 +2870,13 @@ if (!class_exists('WC_Twoinc')) {
                 return (string) $value;
             }
             if (count($offered) > 0) {
+                $merchant_default = $this->get_merchant_default_term();
+                if ($merchant_default !== null && in_array($merchant_default, $offered, true)) {
+                    return (string) $merchant_default;
+                }
+                if (in_array(WC_Twoinc_Payment_Terms::PREFERRED_DEFAULT_TERM, $offered, true)) {
+                    return (string) WC_Twoinc_Payment_Terms::PREFERRED_DEFAULT_TERM;
+                }
                 return (string) $offered[0];
             }
             // Rendered but nothing survived (all ticks removed and rejected

@@ -26,7 +26,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
     {
         public const SESSION_KEY = 'two_selected_term';
 
-        /** Preferred default term, in net days, when no explicit default resolves (ABN-548). */
+        /** Preferred default term, in days, when no explicit default resolves (ABN-548). */
         public const PREFERRED_DEFAULT_TERM = 30;
 
         /**
@@ -134,10 +134,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * The pre-selected term, in preference order: the admin's configured
-         * default, the merchant's own default term, 30 net days, and finally
-         * the shortest available term. Each is honoured only while it is in
-         * the available set, and an empty set has no default at all (ABN-548).
+         * The pre-selected term: the admin's configured default, the merchant's
+         * own default term, 30, then the shortest available term — each only
+         * while it is available, and an empty set has none at all (ABN-548).
          */
         public static function get_default_term($gateway): ?int
         {
