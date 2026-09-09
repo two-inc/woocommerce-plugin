@@ -7,9 +7,9 @@
  * other check in this repo silently. The digest below is the enforcement.
  *
  * It locks the file against being edited in place, and that alone: nothing
- * compares the two copies, which are out of step today. Changing the panel
- * means changing it upstream, re-copying the whole file and pasting the new
- * digest here — the only thing that puts them back in step.
+ * compares the two copies. Changing the panel means changing it upstream,
+ * re-copying the whole file and pasting the new digest here — the only thing
+ * that closes the gap between them.
  */
 
 "use strict";
