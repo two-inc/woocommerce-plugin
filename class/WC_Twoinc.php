@@ -3424,6 +3424,9 @@ if (!class_exists('WC_Twoinc')) {
                 'i18n_remove' => __('Remove', 'twoinc-payment-gateway'),
                 'i18n_refreshing' => __('Refreshing…', 'twoinc-payment-gateway'),
                 'i18n_refresh_failed' => __('Could not refresh the merchant profile.', 'twoinc-payment-gateway'),
+                // Beside a term the fee answer did not price; an empty gap
+                // there reads as "this term carries no fee" (ABN-540).
+                'i18n_no_fee_figure' => __('no figure', 'twoinc-payment-gateway'),
             ]);
         }
 

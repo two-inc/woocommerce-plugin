@@ -194,8 +194,14 @@ describe("payment terms chips", () => {
       {
         terms: [30, 60],
         fees: { 30: quote("12.50", "€12,50"), 60: null },
+        expected: ["+€12,50"],
+        description: "an unpriced term shows no amount beside a priced sibling"
+      },
+      {
+        terms: [30, 60],
+        fees: { 30: quote("12.50", "€12,50"), 60: quote("0", "€0,00") },
         expected: ["+€12,50", "+€0,00"],
-        description: "an unresolved term shows a zero amount beside a priced sibling"
+        description: "a term priced AT zero still shows its zero, unlike one never priced"
       },
       {
         terms: [30, 60],
@@ -208,7 +214,6 @@ describe("payment terms chips", () => {
         Object.assign({ enabled: true, terms: terms, selected: terms[0] }, COPY),
         fees
       );
-      chips.zeroFeeDisplay = "€0,00";
       chips.render(terms, terms[0]);
 
       expect(chipFees()).toEqual(expected);
@@ -259,15 +264,14 @@ describe("payment terms chips", () => {
         selected: 30,
         fees: {
           30: { buyer_fee_share: "9.00", currency: "EUR", buyer_fee_share_display: "€9,00" }
-        },
-        zero_fee_display: "€0,00"
+        }
       }
     };
 
     // jQuery routes a non-2xx and a dropped connection both through .fail with
     // textStatus 'error', so they are one row rather than two.
     const OUTCOMES = [
-      ["a fresh quote replaces the stale badge", (r) => r.succeed(QUOTE), ["+€9,00", "+€0,00"]],
+      ["a fresh quote replaces the stale badge", (r) => r.succeed(QUOTE), ["+€9,00"]],
       ["a network error or non-2xx clears", (r) => r.fail("error"), []],
       ["an unparseable body clears", (r) => r.fail("parsererror"), []],
       ["a declined quote clears", (r) => r.succeed({ success: false, data: {} }), []],

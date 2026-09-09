@@ -32,8 +32,8 @@
  *   - the inline-fee AJAX returns early unless the term container carries
  *     `data-fees`, and the API-key check returns early unless the key field
  *     holds a value. Neither is set, so no network call is ever attempted —
- *     UNLESS `options.apiKey` is passed (see buildSettingsPage), which opts a
- *     test into the API-key markup and value on purpose.
+ *     UNLESS `options.apiKey` or `options.inlineFees` is passed (see
+ *     buildSettingsPage), which opts a test into that markup on purpose.
  */
 
 "use strict";
@@ -86,6 +86,11 @@ function installJQuery() {
  * @param {Object} options.stored the stored grid, keyed by term days
  * @param {string} options.type stored surcharge_type
  * @param {number|string} options.customDays stored payment_terms_custom_days value
+ * @param {boolean} options.inlineFees render the term container with data-fees,
+ *   as the PHP does unless the brand disables inline fees — without it the
+ *   inline-fee code returns before any request is made
+ * @param {string} options.noFeeFigureLabel localized label for a term the fee
+ *   answer did not price, as PHP supplies it
  * @returns {void}
  */
 function buildSettingsPage(options) {
@@ -108,7 +113,9 @@ function buildSettingsPage(options) {
         (checked.indexOf(days) === -1 ? "" : " checked") +
         " /> " +
         days +
-        " days<span class='twoinc-term-fee'></span></label>"
+        " days" +
+        (opts.inlineFees ? '<span class="twoinc-term-fee" data-term="' + days + '"></span>' : "") +
+        "</label>"
       );
     })
     .join("\n");
@@ -190,7 +197,11 @@ function buildSettingsPage(options) {
     '  <table class="form-table"><tbody>',
     apiKeyBlock,
     refreshBlock,
-    '    <tr><td><div class="twoinc-term-checkboxes">' + checkboxes + "</div></td></tr>",
+    '    <tr><td><fieldset class="twoinc-term-checkboxes"' +
+      (opts.inlineFees ? ' data-fees="1"' : "") +
+      ">" +
+      checkboxes +
+      "</fieldset></td></tr>",
     '    <tr><td><select id="' +
       FIELD_PREFIX +
       'payment_terms_custom_days"><option value="' +
@@ -309,7 +320,8 @@ async function loadAdmin(options) {
     merchant_available_terms: opts.merchantTerms || [14, 30, 60, 90],
     surcharge_grid: opts.stored || {},
     i18n_refreshing: "Refreshing…",
-    i18n_refresh_failed: "Could not refresh the merchant profile."
+    i18n_refresh_failed: "Could not refresh the merchant profile.",
+    i18n_no_fee_figure: opts.noFeeFigureLabel || "no figure"
   };
   // Only set when a test opts in, so the default world keeps exercising
   // admin.js's brand-neutral fallback copy. WC_Twoinc::get_api_key_notices()

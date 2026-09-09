@@ -2880,7 +2880,6 @@ let twoincDomHelper = {
 let twoincTermChips = {
   fees: {},
   feesLoaded: false,
-  zeroFeeDisplay: "",
 
   config: function () {
     return (window.twoinc && window.twoinc.payment_terms) || { enabled: false };
@@ -2907,7 +2906,6 @@ let twoincTermChips = {
     // will happen, skip straight to the settled (no-fee) state.
     // Cleared here so every re-render without a fresh quote finds an empty map.
     twoincTermChips.fees = {};
-    twoincTermChips.zeroFeeDisplay = "";
     twoincTermChips.feesLoaded = !willFetchFees;
     twoincTermChips.render(cfg.terms, cfg.selected);
 
@@ -2918,7 +2916,6 @@ let twoincTermChips = {
           twoincTermChips.feesLoaded = true;
           if (response && response.success && response.data) {
             twoincTermChips.fees = response.data.fees || {};
-            twoincTermChips.zeroFeeDisplay = response.data.zero_fee_display || "";
             twoincTermChips.render(response.data.terms, response.data.selected);
           } else {
             twoincTermChips.render(cfg.terms, cfg.selected);
@@ -2934,11 +2931,11 @@ let twoincTermChips = {
   },
 
   /**
-   * One term's amount as the chip shows it. buyer_fee_share_display carries
-   * the currency SYMBOL in the store's position, matching Magento's
-   * priceUtils.formatPrice; amount plus currency CODE is the degraded
-   * fallback for a response that predates that field. A term with no
-   * resolvable quote reads as zero, never as a blank.
+   * One term's amount as the chip shows it, or '' when the quote did not price
+   * that term. buyer_fee_share_display carries the currency SYMBOL in the
+   * store's position; amount plus currency CODE is the degraded fallback for a
+   * response that predates that field. A formatted zero for an unpriced term
+   * is a wrong figure rather than a missing one (ABN-540).
    */
   feeLabel: function (days) {
     const fee = twoincTermChips.fees[days];
@@ -2948,7 +2945,7 @@ let twoincTermChips = {
     if (fee && fee.buyer_fee_share !== undefined) {
       return fee.buyer_fee_share + " " + fee.currency;
     }
-    return twoincTermChips.zeroFeeDisplay || "0.00";
+    return "";
   },
 
   render: function (terms, selected) {
@@ -3022,12 +3019,10 @@ let twoincTermChips = {
         }
         $chip.append($loading);
       } else if (!allFeesZero) {
-        $chip.append(
-          jQuery("<span>", {
-            class: "twoinc-term-chip__fee",
-            text: "+" + twoincTermChips.feeLabel(days)
-          })
-        );
+        const feeLabel = twoincTermChips.feeLabel(days);
+        if (feeLabel !== "") {
+          $chip.append(jQuery("<span>", { class: "twoinc-term-chip__fee", text: "+" + feeLabel }));
+        }
       }
       if (!single) {
         $chip.on("click", function () {
