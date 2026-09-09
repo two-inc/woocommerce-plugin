@@ -633,22 +633,47 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
+         * Whether the merchant configured anything for this term that a
+         * quote could actually charge. A zero percentage with no fixed
+         * amount and no cap prices to nothing in every currency, so it must
+         * not put the payment method behind a pricing call (ABN-546).
+         */
+        private static function has_chargeable_surcharge($gateway, int $days): bool
+        {
+            $settings = self::get_surcharge_settings($gateway);
+            if (!$settings['enabled']) {
+                return false;
+            }
+            $components = self::surcharge_monetary_components($settings, $days);
+            if ($components['fixed'] !== null || ($components['cap'] !== null && $components['cap'] > 0)) {
+                return true;
+            }
+            $row = isset($settings['grid'][$days]) && is_array($settings['grid'][$days]) ? $settings['grid'][$days] : [];
+            $percentage = in_array($settings['type'], ['percentage', 'fixed_and_percentage'], true) && isset($row['percentage'])
+                ? (float) $row['percentage']
+                : 0.0;
+            return $percentage > 0;
+        }
+
+        /**
          * Whether the term this checkout would be charged for cannot be
          * priced (ABN-546) — the fail-CLOSED condition the availability gate
          * withholds the payment method on, alongside a surcharge currency
          * no rate can express.
          *
-         * Judged on the charged term alone: only that term is charged, and
-         * withholding over another term's failure is the over-rejection
-         * surcharge_currency_unquotable() also avoids.
+         * Judged on the charged term alone, and only when that term has
+         * something to charge: withholding over another term's failure, or
+         * over a term whose surcharge is arithmetically zero, is the
+         * over-rejection surcharge_currency_unquotable() also avoids.
          *
          * Quotes rather than waiting for another call site to: on the first
          * checkout render nothing has selected Two yet, so the cart-fee hook
          * has not run, and reading only what it recorded would offer the
-         * method and then drop it mid-checkout. Restricted to the checkout
-         * page for that reason — the cart page and the mini-cart render no
-         * payment method, and an order-pay submit has no basket to quote
-         * (the fee it pays for is already a line on that order).
+         * method and then drop it mid-checkout. Confined to a checkout page
+         * carrying the basket the fee would be charged on — the cart page and
+         * the mini-cart render no payment method, and on the order-pay
+         * endpoint the session cart is not the basket being paid for (the
+         * fee that order carries is already a line on it).
          */
         public static function surcharge_quote_failed($gateway): bool
         {
@@ -659,10 +684,13 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             if (isset(self::$unquoted_terms[$charged])) {
                 return true;
             }
-            if (!self::get_surcharge_settings($gateway)['enabled']) {
+            if (!self::has_chargeable_surcharge($gateway, $charged)) {
                 return false;
             }
             if (!function_exists('is_checkout') || !is_checkout() || !function_exists('WC')) {
+                return false;
+            }
+            if (function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-pay')) {
                 return false;
             }
             $cart = WC()->cart ?? null;
@@ -972,8 +1000,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             // The fee enters the basket at the pricing endpoint's output
             // (any FX conversion happened on the request inputs, TWO-25104)
             // — never re-converted store-side. Backstop only: fetch_term_fee
-            // refuses an answer echoing another currency, so this fires only
-            // on a quote that reached the cache by some other route.
+            // refuses a mismatched answer before caching it, so this can fire
+            // only on a quote a pre-ABN-546 release left in the cache.
             // Normalised the same way the FX layer normalises currency codes
             // (case/whitespace) so it can't be defeated by a
             // harmlessly-differently-cased echo.

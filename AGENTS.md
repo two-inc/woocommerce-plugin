@@ -285,13 +285,15 @@ prices an order under a configuration nobody chose, and nobody is told.
 - A quote that never resolved withholds the method at checkout (ABN-546). The
   availability-gate filter quotes the term the basket would be charged for and
   drops the Two gateway when that quote fails, alongside the unmet-minimum and
-  no-FX-rate withholds. Only the charged term counts, so one misconfigured term
-  does not take the method offline for a checkout not using it, and a resolved
-  zero, an empty basket and a term with no surcharge configured withhold nothing.
-  The judgement runs on the checkout page only: the cart page renders no payment
-  method, an order-pay submit has no basket to quote, an admin request is never
-  judged on it, and the admin's own fee preview reads the merchant rates rather
-  than a basket quote.
+  no-FX-rate withholds. Only the charged term counts, and only when that term
+  has something to charge: one misconfigured term does not take the method
+  offline for a checkout not using it, and a resolved zero, a term configured to
+  charge nothing, a term with no surcharge configured and an empty basket
+  withhold nothing and cost no pricing call. The judgement runs on a checkout
+  page carrying the basket the fee applies to: the cart page renders no payment
+  method, the order-pay endpoint's session cart is not the basket being paid
+  for, an admin request is never judged on it, and the admin's own fee preview
+  reads the merchant rates rather than a basket quote.
 - A quote answering in another currency is refused, not cached (ABN-546). The
   answer is checked against the currency it was asked in before the quote is
   stored, so a mismatched answer is reported as a failure once and cannot be
