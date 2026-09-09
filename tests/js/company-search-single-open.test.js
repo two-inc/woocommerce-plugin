@@ -93,9 +93,9 @@ function mouseDownOn(node) {
 
 describe("single-open invariant", () => {
   test.each([
-    ["invoice", "opening the delivery popover closes the invoice one"],
-    ["delivery", "opening the invoice popover closes the delivery one"]
-  ])("%s first", (first, description) => {
+    ["invoice"],
+    ["delivery"]
+  ])("%s open first, so opening the other one closes it", (first) => {
     // Given one popover open
     const panels = setup();
     const second = OTHER[first];
@@ -105,7 +105,7 @@ describe("single-open invariant", () => {
     panels[second].open();
 
     // Then only the second is up
-    expect([isOpen(first), isOpen(second)]).toEqual([false, true], description);
+    expect([isOpen(first), isOpen(second)]).toEqual([false, true]);
   });
 
   test("re-opening the already-open popover leaves it open", () => {
@@ -127,14 +127,14 @@ describe("single-open invariant", () => {
 
 describe("tab stop of the popover that closes", () => {
   test.each([
-    ["at rest", function () {}, [null, null], "neither field is a tab stop"],
-    ["invoice open", function (p) { p.invoice.open(); }, ["-1", null], "only the open one holds it"],
-    ["delivery takes over", function (p) { p.invoice.open(); p.delivery.open(); }, [null, "-1"], "the closing field is given it back"],
-    ["both closed again", function (p) { p.invoice.open(); p.delivery.open(); p.delivery.close(); }, [null, null], "no field is left at -1"]
-  ])("%s", (name, act, expected, description) => {
+    ["at rest, neither field is a tab stop", function () {}, [null, null]],
+    ["invoice open, only that field holds it", function (p) { p.invoice.open(); }, ["-1", null]],
+    ["delivery taking over gives invoice its own back", function (p) { p.invoice.open(); p.delivery.open(); }, [null, "-1"]],
+    ["both closed again leaves no field at -1", function (p) { p.invoice.open(); p.delivery.open(); p.delivery.close(); }, [null, null]]
+  ])("%s", (name, act, expected) => {
     const panels = setup();
     act(panels);
-    expect([tabIndexOf("invoice"), tabIndexOf("delivery")]).toEqual(expected, description);
+    expect([tabIndexOf("invoice"), tabIndexOf("delivery")]).toEqual(expected);
   });
 });
 
