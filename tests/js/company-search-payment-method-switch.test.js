@@ -15,8 +15,8 @@
  * different one — WooCommerce checks the first available gateway by
  * default, so this is the ordinary case, not an edge one.
  *
- * `toggleBusinessFields()` itself used
- * to gate `#billing_company_display_field`'s own visibility on
+ * A second, separate defect on the same code path: `toggleBusinessFields()`
+ * itself used to gate `#billing_company_display_field`'s own visibility on
  * `isTwoincSelected` — a leftover from the removed
  * `enable_company_search_for_others` admin setting (TWO-25326). That made a
  * buyer Two itself rejects (e.g. an email resolving to a different
