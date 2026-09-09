@@ -8313,11 +8313,11 @@ final class BrandConfigSpec
         };
     }
 
-    private static function termFeeOk(string $buyer_fee_share): array
+    private static function termFeeOk(string $buyer_fee_share, string $currency = 'EUR'): array
     {
         return [
             'response' => ['code' => 200],
-            'body' => json_encode(['buyer_fee_share' => $buyer_fee_share, 'currency' => 'EUR']),
+            'body' => json_encode(['buyer_fee_share' => $buyer_fee_share, 'currency' => $currency]),
         ];
     }
 
@@ -8370,7 +8370,7 @@ final class BrandConfigSpec
     /** Same cart total, different checkout currency: must not share a quote priced in the other currency. */
     private static function testTermFeeCacheMissesOnCurrencyChange(): void
     {
-        $gateway = self::termFeeGateway(self::termFeeSettings(), [self::termFeeOk('1.50'), self::termFeeOk('1.65')]);
+        $gateway = self::termFeeGateway(self::termFeeSettings(), [self::termFeeOk('1.50'), self::termFeeOk('1.65', 'SEK')]);
         WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 100.0, 'NO');
         WC_Twoinc_Payment_Terms::reset_fee_cache();
 
@@ -8483,6 +8483,70 @@ final class BrandConfigSpec
      * silent as a failed quote.
      */
     /**
+     * ABN-546: the term the basket would be charged for decides whether the
+     * payment method is offered. The gate quotes that term itself, so the
+     * decision does not depend on another call site having quoted first.
+     */
+    private static function testGateWithholdsMethodWhenTheChargedTermCouldNotBePriced(): void
+    {
+        $two_terms = [
+            'payment_terms_days' => [30, 60],
+            'surcharge_type' => 'percentage',
+            'surcharge_grid' => [30 => ['percentage' => 1.5], 60 => ['percentage' => 2.5]],
+        ];
+        $wrong_currency = ['response' => ['code' => 200], 'body' => json_encode(['buyer_fee_share' => '12.50', 'currency' => 'GBP'])];
+
+        // options, charged term, a term quoted before the gate runs, queued
+        // pricing answers, on the checkout page, basket, offered, description
+        $cases = [
+            [self::termFeeSettings(), 30, null, [new WP_Error('http_request_failed', 'timed out')], true, 'full', false, 'the pricing service could not be reached'],
+            [self::termFeeSettings(), 30, null, [['response' => ['code' => 503], 'body' => '']], true, 'full', false, 'the pricing service answered a service error'],
+            [self::termFeeSettings(), 30, null, [['response' => ['code' => 200], 'body' => 'not json']], true, 'full', false, 'the answer could not be read'],
+            [self::termFeeSettings(), 30, null, [$wrong_currency], true, 'full', false, 'the quote came back in another currency'],
+            [$two_terms, 30, 60, [new WP_Error(), self::termFeeOk('1.50')], true, 'full', true, 'a failed term the basket is not charged for'],
+            [self::termFeeSettings(), 30, null, [self::termFeeOk('0.00')], true, 'full', true, 'the quote resolved to nothing to charge'],
+            [['payment_terms_days' => [30], 'surcharge_type' => 'none'], 30, null, [], true, 'full', true, 'no surcharge is configured'],
+            [self::termFeeSettings(), 30, null, [], true, 'empty', true, 'the basket is empty'],
+            [self::termFeeSettings(), 30, null, [new WP_Error()], false, 'full', true, 'the request is not the checkout page'],
+        ];
+
+        $key = WC_Twoinc_Brand::get('gateway_id');
+        $session = WC()->session ?? null;
+        $customer = WC()->customer ?? null;
+        $cart = WC()->cart ?? null;
+        try {
+            foreach ($cases as $case) {
+                list($options, $term, $prequoted, $responses, $on_checkout, $basket, $expected_offered, $description) = $case;
+                WC_Twoinc_Payment_Terms::reset_fee_cache();
+                $GLOBALS['__twoinc_test_logs'] = [];
+                $GLOBALS['__twoinc_test_is_checkout'] = $on_checkout;
+                $gateway = self::quoteGateway($options, $responses);
+                WC()->session = new StubSession();
+                WC()->session->set(WC_Twoinc_Payment_Terms::SESSION_KEY, $term);
+                WC()->customer = new StubCustomer('NO');
+                WC()->cart = new StubFeeCart();
+                WC()->cart->empty = $basket === 'empty';
+
+                if ($prequoted !== null) {
+                    WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, $prequoted, 100.0, 'NO');
+                }
+
+                $result = $gateway->apply_brand_availability_gate([$key => 'gw']);
+                $outcome = $expected_offered ? 'offered' : 'withheld';
+                TinyAssert::same($expected_offered, isset($result[$key]), "the method is $outcome when $description");
+                if (count($responses) === 0) {
+                    TinyAssert::same(0, $gateway->make_request_calls, "nothing is quoted when $description");
+                }
+            }
+        } finally {
+            unset($GLOBALS['__twoinc_test_is_checkout']);
+            WC()->session = $session;
+            WC()->customer = $customer;
+            WC()->cart = $cart;
+        }
+    }
+
+    /**
      * Gateway fake for the fee-quote withhold tests: a real WC_Twoinc (so
      * the availability-gate filter is reachable) serving canned pricing
      * responses off a queue.
@@ -8492,6 +8556,7 @@ final class BrandConfigSpec
         return new class ($options, $responses) extends WC_Twoinc {
             private $options;
             private $responses;
+            public $make_request_calls = 0;
 
             public function __construct($options, $responses)
             {
@@ -8520,63 +8585,10 @@ final class BrandConfigSpec
                 if (strpos($endpoint, '/v1/pricing/order/fee') === false) {
                     return new WP_Error();
                 }
+                $this->make_request_calls++;
                 return array_shift($this->responses) ?? new WP_Error();
             }
         };
-    }
-
-    /**
-     * ABN-546: a term the pricing service could not price withholds the
-     * payment method, on the same gate the unmet-minimum and no-FX-rate
-     * withholds already use. The quote is made by whichever path would
-     * charge the fee; the gate reads what that attempt recorded.
-     */
-    private static function testGateWithholdsMethodWhenTheChargedTermCouldNotBePriced(): void
-    {
-        $two_terms = [
-            'payment_terms_days' => [30, 60],
-            'surcharge_type' => 'percentage',
-            'surcharge_grid' => [30 => ['percentage' => 1.5], 60 => ['percentage' => 2.5]],
-        ];
-        $wrong_currency = ['response' => ['code' => 200], 'body' => json_encode(['buyer_fee_share' => '12.50', 'currency' => 'GBP'])];
-
-        $cases = [
-            ['quote', self::termFeeSettings(), 30, 100.0, [new WP_Error('http_request_failed', 'timed out')], false, 'the pricing service could not be reached'],
-            ['quote', self::termFeeSettings(), 30, 100.0, [['response' => ['code' => 503], 'body' => '']], false, 'the pricing service answered a service error'],
-            ['quote', self::termFeeSettings(), 30, 100.0, [['response' => ['code' => 200], 'body' => 'not json']], false, 'the answer could not be read'],
-            ['fee', self::termFeeSettings(), 30, 100.0, [$wrong_currency], false, 'the quote came back in another currency'],
-            ['quote', $two_terms, 60, 100.0, [new WP_Error()], true, 'a failed term the basket is not charged for'],
-            ['quote', self::termFeeSettings(), 30, 100.0, [self::termFeeOk('0.00')], true, 'a quote that resolved to nothing to charge'],
-            ['quote', ['payment_terms_days' => [30], 'surcharge_type' => 'none'], 30, 100.0, [], true, 'no surcharge configured'],
-            ['quote', self::termFeeSettings(), 30, 0.0, [], true, 'an empty basket'],
-        ];
-
-        $key = WC_Twoinc_Brand::get('gateway_id');
-        foreach ($cases as $case) {
-            list($mode, $options, $term, $gross, $responses, $expected_offered, $description) = $case;
-            WC_Twoinc_Payment_Terms::reset_fee_cache();
-            $GLOBALS['__twoinc_test_logs'] = [];
-            $gateway = self::quoteGateway($options, $responses);
-
-            // The quote calculate_totals() makes before WooCommerce filters
-            // the gateways: the cart-fee hook on the charging path, or the
-            // chip render's own per-term quote.
-            self::withGatewayInstance($gateway, static function () use ($mode, $gateway, $term, $gross) {
-                if ($mode === 'fee') {
-                    WC()->session = new StubSession();
-                    WC()->session->set('chosen_payment_method', $gateway->id);
-                    WC()->session->set(WC_Twoinc_Payment_Terms::SESSION_KEY, $term);
-                    WC()->customer = new StubCustomer('NO');
-                    WC_Twoinc_Payment_Terms::apply_cart_fee(new StubFeeCart());
-                    return;
-                }
-                WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, $term, $gross, 'NO');
-            });
-
-            $result = $gateway->apply_brand_availability_gate([$key => 'gw']);
-            $outcome = $expected_offered ? 'offered' : 'withheld';
-            TinyAssert::same($expected_offered, isset($result[$key]), "the method is $outcome when $description");
-        }
     }
 
     private static function testWrongCurrencyQuoteSaysWhyTheSurchargeIsMissing(): void

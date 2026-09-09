@@ -460,6 +460,12 @@ function sanitize_title($title)
 class StubFeeCart
 {
     public $fees = [];
+    public $empty = false;
+
+    public function is_empty()
+    {
+        return $this->empty;
+    }
 
     public function get_cart_contents_total()
     {

@@ -620,22 +620,58 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * Whether the term this checkout would be charged for failed to
-         * quote (ABN-546) — the fail-CLOSED condition the availability gate
-         * withholds on. Judged on the charged term alone: the chip render
-         * quotes every offered term, and one misconfigured term must not
-         * take Two offline for a checkout not using it.
+         * The term this request would be charged for: the posted selection
+         * (the hidden checkout field, which is the only signal on a
+         * sessionless submit) else the session's, resolved the same way
+         * get_order_payload_terms() resolves the term it puts on the order.
+         */
+        private static function resolve_charged_term($gateway): ?int
+        {
+            $terms = self::get_available_terms($gateway);
+            $posted = isset($_POST[self::SESSION_KEY]) ? (int) $_POST[self::SESSION_KEY] : 0;
+            return in_array($posted, $terms, true) ? $posted : self::get_selected_term($gateway);
+        }
+
+        /**
+         * Whether the term this checkout would be charged for cannot be
+         * priced (ABN-546) — the fail-CLOSED condition the availability gate
+         * withholds the payment method on, alongside a surcharge currency
+         * no rate can express.
          *
-         * Reads what a quote attempt recorded rather than attempting one:
-         * every path that can charge the fee quotes during
-         * calculate_totals(), which WooCommerce runs before it filters the
-         * payment gateways — including WC_Checkout::process_checkout()
-         * before it re-validates the chosen method.
+         * Judged on the charged term alone: only that term is charged, and
+         * withholding over another term's failure is the over-rejection
+         * surcharge_currency_unquotable() also avoids.
+         *
+         * Quotes rather than waiting for another call site to: on the first
+         * checkout render nothing has selected Two yet, so the cart-fee hook
+         * has not run, and reading only what it recorded would offer the
+         * method and then drop it mid-checkout. Restricted to the checkout
+         * page for that reason — the cart page and the mini-cart render no
+         * payment method, and an order-pay submit has no basket to quote
+         * (the fee it pays for is already a line on that order).
          */
         public static function surcharge_quote_failed($gateway): bool
         {
-            $selected = self::get_selected_term($gateway);
-            return $selected !== null && isset(self::$unquoted_terms[$selected]);
+            $charged = self::resolve_charged_term($gateway);
+            if ($charged === null) {
+                return false;
+            }
+            if (isset(self::$unquoted_terms[$charged])) {
+                return true;
+            }
+            if (!self::get_surcharge_settings($gateway)['enabled']) {
+                return false;
+            }
+            if (!function_exists('is_checkout') || !is_checkout() || !function_exists('WC')) {
+                return false;
+            }
+            $cart = WC()->cart ?? null;
+            if (!$cart || $cart->is_empty() || self::get_fee_basis($cart) <= 0) {
+                return false;
+            }
+            $customer = WC()->customer ?? null;
+            self::fetch_term_fee($gateway, $charged, self::get_fee_basis($cart), $customer ? $customer->get_billing_country() : '');
+            return isset(self::$unquoted_terms[$charged]);
         }
 
         /**
@@ -753,6 +789,18 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             $body = json_decode($response['body'] ?? '', true);
             if (!is_array($body) || !isset($body['buyer_fee_share'])) {
                 self::record_unquoted_surcharge($days, 'the answer from the pricing service could not be read');
+                return self::$fee_cache[$days] = null;
+            }
+            // Refused BEFORE the cache write: a quote in another currency
+            // cannot be charged, and caching it as a success left the
+            // failure re-reported and the method withheld for the whole
+            // TTL after the pricing service recovered (ABN-546).
+            $answer_currency = strtoupper(trim(strval($body['currency'] ?? '')));
+            if ($answer_currency !== '' && $answer_currency !== strtoupper($request['currency'])) {
+                self::record_unquoted_surcharge(
+                    $days,
+                    "it was quoted in $answer_currency while the basket is in " . strtoupper($request['currency'])
+                );
                 return self::$fee_cache[$days] = null;
             }
 
@@ -923,12 +971,12 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             }
             // The fee enters the basket at the pricing endpoint's output
             // (any FX conversion happened on the request inputs, TWO-25104)
-            // — never re-converted store-side. A response echoing a
-            // different currency than the cart's would land as a raw
-            // number in the wrong money; skip it rather than mischarge.
-            // Normalised the same way the FX layer normalises currency
-            // codes (case/whitespace) so this guard can't be defeated by
-            // a harmlessly-differently-cased echo.
+            // — never re-converted store-side. Backstop only: fetch_term_fee
+            // refuses an answer echoing another currency, so this fires only
+            // on a quote that reached the cache by some other route.
+            // Normalised the same way the FX layer normalises currency codes
+            // (case/whitespace) so it can't be defeated by a
+            // harmlessly-differently-cased echo.
             $fee_currency = strtoupper(trim((string) $fee['currency']));
             $cart_currency = strtoupper(get_woocommerce_currency());
             if ($fee_currency !== '' && $fee_currency !== $cart_currency) {
