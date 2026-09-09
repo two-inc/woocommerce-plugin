@@ -731,7 +731,28 @@ if (!class_exists('WC_Twoinc')) {
                 return [];
             }
             $terms = json_decode((string) $cached, true);
-            return is_array($terms) ? array_map('intval', $terms) : [];
+            if (!is_array($terms)) {
+                return [];
+            }
+            $days = [];
+            foreach ($terms as $key => $value) {
+                // Refused whole, not part-trusted: the gate reads any survivor of a corrupted row as resolved.
+                if (!is_int($key) || !is_numeric($value) || (int) $value <= 0) {
+                    return [];
+                }
+                $days[] = (int) $value;
+            }
+            return $days;
+        }
+
+        /**
+         * Whether the merchant has any offerable term at all. Empty either
+         * way — never resolved, or an account that offers none — withholds
+         * the payment method (ABN-495).
+         */
+        public function has_offerable_payment_terms(): bool
+        {
+            return count($this->get_merchant_available_terms()) > 0;
         }
 
         /**
@@ -2648,10 +2669,8 @@ if (!class_exists('WC_Twoinc')) {
                 ));
                 return false;
             }
-            // A verified key proves the shop's identity, not that the
-            // account can sell — an unresolved term set is no merchant
-            // configuration to offer the method under (ABN-495).
-            if (count($this->get_merchant_available_terms()) === 0) {
+            // A verified key proves identity, not that the account can sell (ABN-495).
+            if (!$this->has_offerable_payment_terms()) {
                 $this->log_withheld_from_checkout('merchant offerable payment terms not resolved');
                 return false;
             }

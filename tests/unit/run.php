@@ -9497,8 +9497,10 @@ final class BrandConfigSpec
             [null, ['id' => '42'], false, 'a record with no term field leaves the set unresolved'],
             [null, null, false, 'an unreachable merchant record leaves the set unresolved'],
             ['[30]', null, true, 'a cached term set survives a failed refresh'],
+            ['{"a":1}', null, false, 'a corrupted cached row is no resolved term set'],
         ];
 
+        $GLOBALS['__twoinc_test_is_checkout'] = true;
         foreach ($cases as [$cached, $record, $available, $description]) {
             $GLOBALS['__twoinc_test_transients'] = [];
             foreach (['merchant_record_checked_on', 'merchant_record_attempted_on'] as $stamp) {
@@ -9510,8 +9512,15 @@ final class BrandConfigSpec
                 $GLOBALS['__twoinc_test_options'][$terms_option] = $cached;
             }
             WC_Twoinc::reset_merchant_record_memo();
-            TinyAssert::same($available, $make_gateway($record)->is_available(), $description);
+            $gateway = $make_gateway($record);
+            TinyAssert::same($available, $gateway->is_available(), $description);
+
+            ob_start();
+            (new WC_Twoinc_Checkout($gateway))->inject_cart_details();
+            $printed = strpos((string) ob_get_clean(), 'window.twoinc') !== false;
+            TinyAssert::same($available, $printed, $description . ' — and the checkout bootstrap must agree');
         }
+        unset($GLOBALS['__twoinc_test_is_checkout']);
     }
 
     /**

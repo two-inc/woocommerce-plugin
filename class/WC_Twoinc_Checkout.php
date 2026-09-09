@@ -503,15 +503,15 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 return;
             }
 
-            // window.twoinc must not be printed when the stored API key
-            // cannot currently be verified — the payment-tile bootstrap and
-            // the address-block company-search widget are both gated behind
-            // its presence, so withholding it here stops company search from
-            // rendering on a broken integration (TWO-25326 follow-up). Uses
-            // the same cached check as is_available(), so this also avoids
-            // a live HTTP call on every checkout render.
+            // window.twoinc must not be printed on an integration the
+            // payment method itself is withheld from — the payment-tile
+            // bootstrap and the address-block company-search widget are
+            // both gated behind its presence, so withholding it here stops
+            // company search from rendering there (TWO-25326 follow-up,
+            // ABN-495). The same two cached conditions is_available()
+            // judges, so this costs no live HTTP call per checkout render.
             $status = $this->wc_twoinc->get_api_key_verification_status();
-            if ($status['status'] !== 'ok') {
+            if ($status['status'] !== 'ok' || !$this->wc_twoinc->has_offerable_payment_terms()) {
                 return;
             }
 
