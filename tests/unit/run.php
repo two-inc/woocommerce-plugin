@@ -4564,7 +4564,7 @@ final class BrandConfigSpec
      * admin.css) so the help text wraps at the grid's width rather than the
      * full width of the WooCommerce settings cell. The table therefore
      * carries no width of its own — admin.css makes it 100% of the
-     * container. Mirrors Magento's #surcharge-grid-container.
+     * container.
      */
     private static function testSurchargeGridNotesShareTheGridsWidthContainer(): void
     {

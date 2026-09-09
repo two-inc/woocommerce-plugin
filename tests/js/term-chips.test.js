@@ -13,10 +13,8 @@
  *   4. whether an amount shows is decided over the whole offered set
  *      (ABN-528), so chips never disagree about carrying a fee.
  *
- * Reference implementation is magento-plugin's Luma renderer
- * (view/frontend/web/js/view/payment/method-renderer/gateway_method.js and
- * view/frontend/web/template/payment/gateway_method.html) — the same template
- * the Amasty and Fire checkouts render.
+ * The chip contract is cross-platform: every platform's checkout renders the
+ * same four rules, so a change here belongs in all of them.
  */
 
 "use strict";
