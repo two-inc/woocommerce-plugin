@@ -262,10 +262,10 @@ final class BrandConfigSpec
             'testVerifyApiKeyDistinguishesUnreachableFromNotConfigured',
             'testOnlyARejectedApiKeyRevertsOnSave',
             'testApiKeyVerificationStatusCachedAcrossCallsWithinTtl',
-            'testIsAvailableFalseWhenApiKeyVerificationFails',
+            'testOnlyADefinitiveKeyRejectionWithholdsPaymentMethod',
             'testIsAvailableTrueOnlyWhenEnabledAndVerified',
-            'testRecordlessOkResponseWithholdsPaymentMethod',
-            'testUnresolvedMerchantTermsWithholdPaymentMethod',
+            'testRecordlessOkResponseIsCategorisedButDoesNotWithhold',
+            'testUnresolvedMerchantTermsDoNotWithholdPaymentMethod',
             'testCheckoutWindowTwoincSuppressedOnVerificationFailure',
             'testVerifyApiKeyMalformedResponseNotMiscategorizedAsNotConfigured',
             'testAdminLiveVerificationWarmsCheckoutCache',
@@ -2501,8 +2501,9 @@ final class BrandConfigSpec
             $notice = $gateway->get_merchant_terms_notice();
             TinyAssert::true($notice !== '', $description . ': an unresolved set must be explained');
             TinyAssert::true(
-                strpos($notice, 'hidden from checkout') !== false,
-                $description . ': the consequence must be stated'
+                strpos($notice, 'stays available') !== false
+                && strpos($notice, 'no payment term') !== false,
+                $description . ': the consequence must be stated, and it is no longer a withhold'
             );
             TinyAssert::same(
                 $expected_state === 'fetch_failed',
@@ -9731,13 +9732,13 @@ final class BrandConfigSpec
     }
 
     /**
-     * The Two payment method must not be listed as available when the
-     * stored key cannot currently be verified — for ANY of the failure
-     * categories, not only an actual 401/403 (TWO-25326 follow-up: today's
-     * incident was a routing failure, which must hide the gateway exactly
-     * as an actually-invalid key would).
+     * ABN-533. Only a definitive rejection of the stored key — Two said no,
+     * or there is no key — takes the gateway off checkout. Every other
+     * category is about the service, and an outage must leave a correctly
+     * configured shop selling. Drives the real gate off the wire response
+     * rather than a primed verdict.
      */
-    private static function testIsAvailableFalseWhenApiKeyVerificationFails(): void
+    private static function testOnlyADefinitiveKeyRejectionWithholdsPaymentMethod(): void
     {
         $make_gateway = static function ($response) {
             return new class ($response) extends WC_Twoinc {
@@ -9773,11 +9774,34 @@ final class BrandConfigSpec
             };
         };
 
-        TinyAssert::same(false, $make_gateway(['response' => ['code' => 401], 'body' => json_encode([])])->is_available());
+        // [verify response, category, offered at checkout, why].
+        $cases = [
+            [['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])], 'ok', true,
+                'a verifying key is offered'],
+            [['response' => ['code' => 401], 'body' => json_encode([])], 'invalid_key', false,
+                'Two rejected the key'],
+            [['response' => ['code' => 403], 'body' => json_encode([])], 'invalid_key', false,
+                'a 403 is the same rejection'],
+            [['response' => ['code' => 503], 'body' => json_encode([])], 'service_error', true,
+                'a 5xx says nothing about the key'],
+            [new WP_Error('http_request_failed', 'timed out'), 'unreachable', true,
+                'an outage must not empty a correctly configured checkout'],
+            [['response' => ['code' => 418], 'body' => json_encode([])], 'error', true,
+                'a non-2xx that is not a 401/403 is not a rejection of the key'],
+        ];
+
+        foreach ($cases as [$response, $category, $available, $description]) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $gateway = $make_gateway($response);
+            TinyAssert::same($category, $gateway->get_api_key_verification_status()['status'], $description);
+            TinyAssert::same($available, $gateway->is_available(), $description);
+        }
+
+        // No key at all is the other definitive rejection, and costs no call.
         $GLOBALS['__twoinc_test_transients'] = [];
-        TinyAssert::same(false, $make_gateway(['response' => ['code' => 503], 'body' => json_encode([])])->is_available());
-        $GLOBALS['__twoinc_test_transients'] = [];
-        TinyAssert::same(false, $make_gateway(new WP_Error('http_request_failed', 'timed out'))->is_available());
+        $bare = $make_gateway(['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])]);
+        $bare->options['api_key'] = '';
+        TinyAssert::same(false, $bare->is_available(), 'no key configured withholds');
     }
 
     /**
@@ -9829,15 +9853,14 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-495. A 200 from something that is not Two — a captive portal, a
-     * proxy, a maintenance page — carries no merchant record, so the shop
-     * has no resolved identity to sell under and the method must stay
-     * withheld. Drives the real gate
-     * (get_api_key_verification_status() into is_available()) rather than
-     * a primed verdict, and includes a full-record control so the table
-     * cannot pass by withholding everything.
+     * A 200 from something that is not Two — a captive portal, a proxy, a
+     * maintenance page — carries no merchant record, so it is categorised
+     * `error` and not `ok` (ABN-495). ABN-533: that is a statement about
+     * what answered, not a rejection of the key, so it no longer withholds.
+     * Drives the real gate off the wire response, with a full-record control
+     * so the table cannot pass by offering everything.
      */
-    private static function testRecordlessOkResponseWithholdsPaymentMethod(): void
+    private static function testRecordlessOkResponseIsCategorisedButDoesNotWithhold(): void
     {
         $make_gateway = static function ($response) {
             return new class ($response) extends WC_Twoinc {
@@ -9877,9 +9900,9 @@ final class BrandConfigSpec
         $cases = [
             ['{"id":"42","short_name":"shop","available_terms":[30]}', 'ok', true, 'a full merchant record is a verification'],
             ['{"id":"42","available_terms":[30]}', 'ok', true, 'a record without a short name still resolves the merchant'],
-            ['{}', 'error', false, 'a 200 carrying no merchant record must not open the gate'],
-            ['{"short_name":"shop"}', 'error', false, 'a 200 with a short name but no id resolves no merchant'],
-            ['<html><body>Sign in to continue</body></html>', 'error', false, 'an unreadable 200 must not open the gate'],
+            ['{}', 'error', true, 'a 200 carrying no merchant record is not a rejected key'],
+            ['{"short_name":"shop"}', 'error', true, 'a 200 with a short name but no id resolves no merchant, and rejects nothing'],
+            ['<html><body>Sign in to continue</body></html>', 'error', true, 'an unreadable 200 is an answer about the service'],
         ];
 
         foreach ($cases as [$body, $status, $available, $description]) {
@@ -9893,13 +9916,14 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-495. A verified API key proves the shop's identity, not that the
-     * account can sell — with no resolved offerable term set the method
-     * stays withheld, matching the other platforms. Drives the real gate
-     * end to end: the verify endpoint always succeeds, so only the merchant
-     * record varies.
+     * ABN-533. A valid key with an unresolvable offerable term set offers
+     * the tile with an EMPTY term set — the Magento behaviour every platform
+     * now aligns on. No term chip renders, no term is sent on the order and
+     * the account default applies; an invented term set never reaches the
+     * buyer. Drives the real gate end to end: the verify endpoint always
+     * succeeds, so only the merchant record varies.
      */
-    private static function testUnresolvedMerchantTermsWithholdPaymentMethod(): void
+    private static function testUnresolvedMerchantTermsDoNotWithholdPaymentMethod(): void
     {
         $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
         $make_gateway = static function ($record) {
@@ -9942,18 +9966,18 @@ final class BrandConfigSpec
             };
         };
 
-        // [cached term list (null = never stored), merchant record (null = fetch fails), offered at checkout, why].
+        // [cached term list (null = never stored), merchant record (null = fetch fails), terms offered, why].
         $cases = [
-            [null, ['id' => '42', 'available_terms' => [14, 30]], true, 'a resolved term set offers the method'],
-            [null, ['id' => '42', 'available_terms' => []], false, 'an account offering no terms withholds the method'],
-            [null, ['id' => '42'], false, 'a record with no term field leaves the set unresolved'],
-            [null, null, false, 'an unreachable merchant record leaves the set unresolved'],
-            ['[30]', null, true, 'a cached term set survives a failed refresh'],
-            ['{"a":1}', null, false, 'a corrupted cached row is no resolved term set'],
+            [null, ['id' => '42', 'available_terms' => [14, 30]], [14, 30], 'a resolved term set is offered as it stands'],
+            [null, ['id' => '42', 'available_terms' => []], [], 'an account offering no terms offers none'],
+            [null, ['id' => '42'], [], 'a record with no term field leaves the set unresolved'],
+            [null, null, [], 'an unreachable merchant record leaves the set unresolved'],
+            ['[30]', null, [30], 'a cached term set survives a failed refresh'],
+            ['{"a":1}', null, [], 'a corrupted cached row resolves no term'],
         ];
 
         $GLOBALS['__twoinc_test_is_checkout'] = true;
-        foreach ($cases as [$cached, $record, $available, $description]) {
+        foreach ($cases as [$cached, $record, $offered, $description]) {
             $GLOBALS['__twoinc_test_transients'] = [];
             foreach (['merchant_record_checked_on', 'merchant_record_attempted_on'] as $stamp) {
                 unset($GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name($stamp)]);
@@ -9965,12 +9989,18 @@ final class BrandConfigSpec
             }
             WC_Twoinc::reset_merchant_record_memo();
             $gateway = $make_gateway($record);
-            TinyAssert::same($available, $gateway->is_available(), $description);
+            $gateway->options['payment_terms_days'] = [14, 30];
+            TinyAssert::same(true, $gateway->is_available(), $description . ' — the tile is offered either way');
+            TinyAssert::same(
+                $offered,
+                WC_Twoinc_Payment_Terms::get_available_terms($gateway),
+                $description . ' — and the term set is what it resolves to, never a preset'
+            );
 
             ob_start();
             (new WC_Twoinc_Checkout($gateway))->inject_cart_details();
             $printed = strpos((string) ob_get_clean(), 'window.twoinc') !== false;
-            TinyAssert::same($available, $printed, $description . ' — and the checkout bootstrap must agree');
+            TinyAssert::same(true, $printed, $description . ' — and the checkout bootstrap must agree');
         }
         unset($GLOBALS['__twoinc_test_is_checkout']);
     }
@@ -9979,51 +10009,66 @@ final class BrandConfigSpec
      * `window.twoinc` is what the payment-tile bootstrap AND the
      * address-block company-search widget both gate on entirely (see the
      * top-level `if (window.twoinc)` guard in twoinc.js) — so withholding
-     * it on a verification failure is what stops company search from
-     * rendering/enabling itself on a broken integration, for ANY failure
-     * reason (TWO-25326 follow-up).
+     * it on a REJECTED key is what stops company search from
+     * rendering/enabling itself on an integration that cannot work
+     * (TWO-25326 follow-up, ABN-533).
      */
     private static function testCheckoutWindowTwoincSuppressedOnVerificationFailure(): void
     {
         $GLOBALS['__twoinc_test_is_checkout'] = true;
 
-        $gateway = new class () extends WC_Twoinc {
-            public $options = ['api_key' => 'key'];
-            public $responses = [];
+        $make_gateway = static function ($response) {
+            return new class ($response) extends WC_Twoinc {
+                public $options = ['api_key' => 'key'];
+                private $response;
 
-            public function __construct()
-            {
-            }
+                public function __construct($response)
+                {
+                    $this->response = $response;
+                }
 
-            public function get_twoinc_checkout_host()
-            {
-                return 'https://api.example';
-            }
+                public function get_twoinc_checkout_host()
+                {
+                    return 'https://api.example';
+                }
 
-            public function get_option($key, $empty_value = null)
-            {
-                return $this->options[$key] ?? $empty_value ?? '';
-            }
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
 
-            public function update_option($key, $value = '')
-            {
-                $this->options[$key] = $value;
-                return true;
-            }
+                public function update_option($key, $value = '')
+                {
+                    $this->options[$key] = $value;
+                    return true;
+                }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
-            {
-                return array_shift($this->responses);
-            }
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                {
+                    return $this->response;
+                }
+            };
         };
-        $gateway->responses[] = ['response' => ['code' => 401], 'body' => json_encode(['message' => 'invalid'])];
 
-        $checkout = new WC_Twoinc_Checkout($gateway);
-        ob_start();
-        $checkout->inject_cart_details();
-        $output = ob_get_clean();
+        // [verify response, bootstrap printed, why]. ABN-533: an outage keeps
+        // company search alive; a rejected key still stands it down.
+        $cases = [
+            [['response' => ['code' => 401], 'body' => json_encode(['message' => 'invalid'])], false,
+                'a rejected key suppresses the bootstrap'],
+            [['response' => ['code' => 503], 'body' => '{}'], true,
+                'a 5xx still prints it, with a null merchant'],
+            [new WP_Error('http_request_failed', 'timed out'), true,
+                'an unreachable Two still prints it'],
+        ];
 
-        TinyAssert::same('', trim($output));
+        foreach ($cases as [$response, $printed, $description]) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            ob_start();
+            (new WC_Twoinc_Checkout($make_gateway($response)))->inject_cart_details();
+            $output = (string) ob_get_clean();
+
+            TinyAssert::same($printed, strpos($output, 'window.twoinc') !== false, $description);
+        }
         unset($GLOBALS['__twoinc_test_is_checkout']);
     }
 
