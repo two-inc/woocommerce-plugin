@@ -4957,7 +4957,6 @@ class Twoinc {
 
     // Rearrange the DOMs in Twoinc payment
     twoincDomHelper.rearrangeDescription();
-
   }
 
   /**
