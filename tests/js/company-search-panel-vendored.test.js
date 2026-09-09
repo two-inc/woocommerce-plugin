@@ -1,16 +1,15 @@
 /**
  * TWO-25503. `assets/js/company-search-panel.js` is a copy of the panel the Two
- * Magento plugin maintains, so both checkouts render one control rather than
- * two that drift.
+ * Magento plugin maintains, so both checkouts render one control.
  *
  * `AGENTS.md` records that convention and `.prettierignore` keeps the formatter
  * off the file, but neither is enforceable: a one-line local edit passes every
  * other check in this repo silently. The digest below is the enforcement.
  *
  * It locks the file against being edited in place, and that alone: nothing
- * compares the two copies, and they have drifted. Re-copying the whole file
- * from upstream and pasting the new digest here is the only thing that would
- * close that gap.
+ * compares the two copies, which are out of step today. Changing the panel
+ * means changing it upstream, re-copying the whole file and pasting the new
+ * digest here — the only thing that puts them back in step.
  */
 
 "use strict";
