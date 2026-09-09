@@ -8636,6 +8636,7 @@ final class BrandConfigSpec
             [['payment_terms_days' => [30], 'surcharge_type' => 'none', 'surcharge_grid' => [30 => ['fixed' => 5.0]]], 30, null, [], 'checkout', 'full', true, 'no surcharge is configured, whatever the grid still holds'],
             [$cap_only, 30, null, [], 'checkout', 'full', true, 'the term caps a percentage it does not have'],
             [$differential, 30, null, [], 'checkout', 'full', true, 'fee-difference mode prices the default term against itself'],
+            [$zero_grid, 30, 30, [new WP_Error()], 'checkout', 'full', true, 'a quote was attempted for a term that prices to nothing'],
             [$zero_grid, 30, null, [], 'checkout', 'full', true, 'the term is configured to charge nothing'],
             [self::termFeeSettings(), 30, null, [], 'checkout', 'empty', true, 'the basket is empty'],
             [self::termFeeSettings(), 30, null, [], 'cart', 'full', true, 'the request is not the checkout page'],
@@ -8675,6 +8676,18 @@ final class BrandConfigSpec
                     TinyAssert::same(0, $gateway->make_request_calls, "nothing is quoted when $description");
                 }
             }
+            // The charging path is held to the same rule: the cart-fee hook
+            // must not spend a pricing call on a term that prices to nothing.
+            WC_Twoinc_Payment_Terms::reset_fee_cache();
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $gateway = self::quoteGateway($zero_grid, [new WP_Error()]);
+            WC()->session = new StubSession();
+            WC()->session->set('chosen_payment_method', $gateway->id);
+            WC()->session->set(WC_Twoinc_Payment_Terms::SESSION_KEY, 30);
+            self::withGatewayInstance($gateway, static function () {
+                WC_Twoinc_Payment_Terms::apply_cart_fee(new StubFeeCart());
+            });
+            TinyAssert::same(0, $gateway->make_request_calls, 'the cart-fee hook must not quote a term that prices to nothing');
         } finally {
             unset($GLOBALS['__twoinc_test_is_checkout'], $GLOBALS['__twoinc_test_is_order_pay']);
             WC()->session = $session;
