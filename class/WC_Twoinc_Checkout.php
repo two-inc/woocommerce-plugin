@@ -506,11 +506,11 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // payment method itself is withheld from — the payment-tile
             // bootstrap and the address-block company-search widget are
             // both gated behind its presence, so withholding it here stops
-            // company search from rendering there (TWO-25326 follow-up,
-            // ABN-495). The same two conditions is_available() judges, and
-            // neither adds a fetch of its own to a checkout render.
+            // company search from rendering there (TWO-25326 follow-up).
+            // The same condition is_available() judges, and it adds no fetch
+            // of its own to a checkout render.
             $status = $this->wc_twoinc->get_api_key_verification_status();
-            if ($status['status'] !== 'ok' || !$this->wc_twoinc->has_offerable_payment_terms()) {
+            if (WC_Twoinc::is_definitive_key_failure($status['status'])) {
                 return;
             }
 

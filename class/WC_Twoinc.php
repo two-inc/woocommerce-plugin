@@ -779,23 +779,12 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Whether the merchant has any offerable term at all. Empty either
-         * way — never resolved, or an account that offers none — withholds
-         * the payment method (ABN-495).
-         */
-        public function has_offerable_payment_terms(): bool
-        {
-            return count($this->get_merchant_available_terms()) > 0;
-        }
-
-        /**
          * Why the offerable term set is what it is, for the admin surfaces that
          * have to explain it and for the withhold log line (ABN-513). `state` is
          * one of 'resolved', 'fetch_failed' (`reason`/`code` name the failure),
          * 'none_offered' (a successful read of an account offering nothing),
-         * 'not_reported' (a successful read carrying no term list at all — the
-         * account is then withheld indefinitely), 'never_fetched',
-         * 'not_configured'.
+         * 'not_reported' (a successful read carrying no term list at all),
+         * 'never_fetched', 'not_configured'.
          *
          * @return array{state: string, reason: string|null, code: int|null, checked_on: int, count: int}
          */
@@ -854,7 +843,7 @@ if (!class_exists('WC_Twoinc')) {
                 self::describe_merchant_terms_cause($state, $product_name),
                 sprintf(
                     /* translators: %s is the brand product name (e.g. "Two") */
-                    __('The %s payment method is hidden from checkout until a payment term is available.', 'twoinc-payment-gateway'),
+                    __('The %s payment method stays available; buyers are offered no payment term to choose from until one can be read.', 'twoinc-payment-gateway'),
                     $product_name
                 ),
                 $state['checked_on'] > 0
@@ -2828,6 +2817,20 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Whether a category is a DEFINITIVE rejection of the stored key — Two
+         * said no, or there is no key to say no to. The ONE definition of that
+         * set; nothing else re-lists the categories (ABN-533).
+         *
+         * @param string $status one of categorize_verification_result()'s categories.
+         *
+         * @return bool
+         */
+        public static function is_definitive_key_failure($status)
+        {
+            return $status === 'invalid_key' || $status === 'not_configured';
+        }
+
+        /**
          * TTL for the cached verification status consulted by
          * is_available() and the checkout script bootstrap
          * (WC_Twoinc_Checkout::inject_cart_details()) — both can be
@@ -2941,13 +2944,11 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * The Two payment method must not be offered at checkout when the
-         * stored API key cannot currently be verified — for ANY reason
-         * (invalid/expired key, Two's API returning 5xx, a network/routing
-         * failure reaching it, …) — or when the merchant's offerable
-         * payment terms are not resolved. A buyer could otherwise select a
-         * payment method that is not actually functional (TWO-25326
-         * follow-up, ABN-495).
+         * The api-key verdict is the only upstream failure that may withhold
+         * the Two payment method, and only when it is a definitive rejection
+         * (TWO-25326 follow-up, ABN-533). An unresolvable offerable-term set
+         * does not withhold: the tile is offered with no term chips, no term
+         * is sent on the order and the account default applies.
          *
          * @return bool
          */
@@ -2957,22 +2958,11 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
             $status = $this->get_api_key_verification_status();
-            if ($status['status'] !== 'ok') {
+            if (self::is_definitive_key_failure($status['status'])) {
                 $this->log_withheld_from_checkout(sprintf(
                     'API key verification status "%s"%s',
                     $status['status'],
                     $status['code'] ? " (HTTP {$status['code']})" : ''
-                ));
-                return false;
-            }
-            // A verified key proves identity, not that the account can sell (ABN-495).
-            $terms = $this->get_merchant_terms_state();
-            if ($terms['state'] !== 'resolved') {
-                $this->log_withheld_from_checkout(sprintf(
-                    'merchant offerable payment terms unresolved: %s%s%s',
-                    $terms['state'],
-                    $terms['reason'] ? ", {$terms['reason']}" : '',
-                    $terms['code'] ? ", HTTP {$terms['code']}" : ''
                 ));
                 return false;
             }

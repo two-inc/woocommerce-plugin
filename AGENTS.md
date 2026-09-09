@@ -291,25 +291,34 @@ The merchant record refreshes on an event, never on expiry
 - **A failed fetch keeps last-known-good and advances no FRESHNESS clock** — only
   the attempt clock the 60-second bound reads — so it can neither overwrite a
   concurrent success nor blank a cached restriction to "unrestricted".
-- An input that pricing cannot resolve fails CLOSED for the BUYER — the availability
-  gate withdraws Two rather than let an order be priced with the fee silently
-  absent, and a 200 carrying no merchant record counts as unresolved: a proxy, a
-  captive portal or a maintenance page answers 200 too, and there is no identity to
-  offer the method under.
-- **An unresolved offerable term set withdraws Two from checkout too** (ABN-495) — a
-  verified key proves the shop's identity, not that the account can sell. Empty
-  whether the fetch never succeeded or the account offers nothing; the gate reads the
-  same cached list every other consumer does, so it adds no fetch of its own.
-- **A withheld term set is explained in the admin, and its cause is PERSISTED**
+- A SURCHARGE input that pricing cannot resolve fails CLOSED for the BUYER — the
+  availability gate withdraws Two rather than let an order be priced with the fee
+  silently absent.
+- **The api-key verdict is the only upstream failure that may withhold Two, and only
+  its definitive-rejection categories do** (ABN-533):
+  `WC_Twoinc::is_definitive_key_failure()` — `invalid_key` and `not_configured`.
+  `unreachable`, `service_error` and `error` fall through to the cached merchant
+  record, which never expires, so an outage leaves a correctly configured shop
+  selling. A 200 carrying no merchant record is `error`, not `ok` — a proxy, a
+  captive portal or a maintenance page answers 200 too — but it rejects no key and
+  so withholds nothing. That predicate is the ONE definition of the set; do not
+  re-list the categories at a gate, and do not add a second gate that withholds
+  because a call to Two failed.
+- **An unresolved offerable term set does NOT withhold Two** (ABN-533) — the tile is
+  offered with an EMPTY term set, aligning every platform on Magento. No term chip
+  renders, no term is sent on the order and the account default applies; a preset
+  term set must never be composed for a buyer. Empty whether the fetch never
+  succeeded or the account offers nothing; the read is the same cached list every
+  other consumer uses, so it adds no fetch of its own.
+- **An unresolved term set is explained in the admin, and its cause is PERSISTED**
   (ABN-513). A fetch that lands no record writes its own category — unreachable,
   rejected key, rate limited, server error, another status, an answer that cannot be
   read — to a dedicated option row that the next success deletes, because the render
   that has to explain the state is rarely the request whose fetch failed. The Payment
-  Terms field then states the cause, that the method is hidden from checkout, and when
-  the terms were last read successfully; the install health summary carries the same
-  verdict and that timestamp, and the withhold log line carries the category. A
-  successful read of an empty list and a record carrying no term list at all are named
-  separately: the second withholds the method indefinitely. The API key is named only
+  Terms field then states the cause, that buyers are offered no term to choose until
+  one can be read, and when the terms were last read successfully; the install health
+  summary carries the same verdict and that timestamp. A successful read of an empty
+  list and a record carrying no term list at all are named separately. The API key is named only
   in the two states where it is actually implicated — none saved, or one the API
   rejected — never as a guess at an unexplained failure.
 - **The admin save stays possible whatever the verification says** (ABN-495). An
