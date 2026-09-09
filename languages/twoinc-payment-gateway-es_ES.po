@@ -152,3 +152,12 @@ msgstr "Se muestra en la caja"
 #, php-format
 msgid "offered only to buyers in %s"
 msgstr "se ofrece solo a compradores en %s"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the buyer countries on your account could not be read. Contact %s."
+msgstr "los países del comprador de su cuenta no se han podido leer. Póngase en contacto con %s."
+
+#: class/WC_Twoinc.php
+msgid "minimum order value not known until your profile refreshes"
+msgstr "el valor mínimo del pedido no se conoce hasta que su perfil se actualice"

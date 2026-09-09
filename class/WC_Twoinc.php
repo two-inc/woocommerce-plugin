@@ -486,9 +486,16 @@ if (!class_exists('WC_Twoinc')) {
             );
         }
 
+        /** The storage step, reachable for a spec that drives the settings notice. */
+        public static function expose_store_supported_buyer_countries(array $record): void
+        {
+            self::store_supported_buyer_countries($record);
+        }
+
         private static function store_supported_buyer_countries(array $record): void
         {
             $countries = null;
+            $malformed = false;
             if (array_key_exists('supported_buyer_countries', $record)) {
                 $raw = $record['supported_buyer_countries'];
                 if (is_array($raw)) {
@@ -497,8 +504,17 @@ if (!class_exists('WC_Twoinc')) {
                     $countries = [];
                     if ($raw !== null) {
                         self::log_buyer_countries_malformed($raw);
+                        $malformed = true;
                     }
                 }
+            }
+            // Separate option, read only by the settings notice: the gate's own
+            // contract is "[] restricts and matches nothing" either way.
+            $marker = WC_Twoinc_Brand::prefixed_name('supported_buyer_countries_malformed');
+            if (!empty($malformed)) {
+                update_option($marker, '1', false);
+            } else {
+                delete_option($marker);
             }
             // JSON-encoded so absent, empty and listed all survive the round trip.
             update_option(
@@ -1031,11 +1047,20 @@ if (!class_exists('WC_Twoinc')) {
                 $reason = __('the saved surcharge method is not recognised. Check "Surcharge method".', 'twoinc-payment-gateway');
             }
             if ($reason === null && $this->get_supported_buyer_countries() === []) {
-                $reason = sprintf(
-                    /* translators: %s is the brand provider's full name */
-                    __('no buyer countries are currently enabled for your account. Contact %s to have them enabled.', 'twoinc-payment-gateway'),
-                    WC_Twoinc_Brand::get('provider_full_name')
+                $malformed = get_option(
+                    WC_Twoinc_Brand::prefixed_name('supported_buyer_countries_malformed')
                 );
+                $reason = $malformed
+                    ? sprintf(
+                        /* translators: %s is the brand provider's full name */
+                        __('the buyer countries on your account could not be read. Contact %s.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('provider_full_name')
+                    )
+                    : sprintf(
+                        /* translators: %s is the brand provider's full name */
+                        __('no buyer countries are currently enabled for your account. Contact %s to have them enabled.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('provider_full_name')
+                    );
             }
             if ($reason !== null) {
                 return ['label' => $label, 'value' => $not_shown . ' — ' . $reason, 'ok' => false];
@@ -1065,8 +1090,12 @@ if (!class_exists('WC_Twoinc')) {
                     implode(', ', $allowed)
                 );
             }
+            $platform = $this->get_platform_minimum_order();
+            if ($platform === null && $this->get_merchant_terms_state()['checked_on'] === 0) {
+                $clauses[] = __('minimum order value not known until your profile refreshes', 'twoinc-payment-gateway');
+            }
             $floors = self::binding_minimum_floors([
-                $this->get_platform_minimum_order(),
+                $platform,
                 $this->get_merchant_minimum_order(),
             ]);
             if ($floors) {
@@ -1082,6 +1111,13 @@ if (!class_exists('WC_Twoinc')) {
                         self::describe_minimum_floor($floors[0]),
                         self::describe_minimum_floor($floors[1])
                     );
+            }
+            $surcharge = WC_Twoinc_Payment_Terms::surcharge_settings_or_null($this);
+            if ($surcharge !== null && !empty($surcharge['enabled'])) {
+                $clauses[] = __(
+                    'hidden for baskets in a currency the buyer surcharge cannot be priced in',
+                    'twoinc-payment-gateway'
+                );
             }
             if (!$clauses) {
                 return $shown;

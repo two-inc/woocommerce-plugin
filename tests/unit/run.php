@@ -367,6 +367,7 @@ final class BrandConfigSpec
             'testTheHealthChecklistNamesTheBrandBillingCountryGate',
             'testTheTermsNoticeCarriesTheLastAttemptAndTheFieldsToCheck',
             'testTheTermsNoticeDoesNotContradictItself',
+            'testTheRowDistinguishesMalformedFromEmptyAndUnknown',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -693,6 +694,9 @@ final class BrandConfigSpec
             ['yes', [], 200, [], null, null, 'resolved',
                 'no buyer countries are currently enabled for your account',
                 'an empty allowlist hides the method for every buyer, which no local field explains'],
+            ['yes', ['surcharge_type' => 'percentage'], 200, null, null, null, 'resolved',
+                'hidden for baskets in a currency the buyer surcharge cannot be priced in',
+                'whether the fee can be priced depends on the basket currency, so it is a constraint'],
             ['yes', [], 200, null, null, null, 'none_offered',
                 'Shown at checkout',
                 "ABN-533's companion ruling offers the tile with an empty term set"],
@@ -817,6 +821,88 @@ final class BrandConfigSpec
      * a successful read to report, so "no attempt" would contradict it, and a
      * shop with no key saved has nothing to retry.
      */
+    /**
+     * ABN-518: a malformed buyer-country payload is a contract break, not a
+     * deliberate empty allowlist, and an unfetched profile has an unknown
+     * floor rather than none.
+     */
+    private static function testTheRowDistinguishesMalformedFromEmptyAndUnknown(): void
+    {
+        $make = static function (?array $countriesRaw, bool $recordFetched) {
+            $GLOBALS['__twoinc_test_options'] = [];
+            if ($countriesRaw !== null) {
+                WC_Twoinc::expose_store_supported_buyer_countries($countriesRaw);
+            }
+            if ($recordFetched) {
+                $GLOBALS['__twoinc_test_options'][
+                    WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on')
+                ] = 1757000000;
+            }
+
+            return new class () extends WC_Twoinc {
+                public $enabled = 'yes';
+
+                public function __construct()
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $key === 'api_key' ? 'key' : ($empty_value ?? '');
+                }
+
+                public function get_api_key_verification_status()
+                {
+                    return ['status' => 'ok', 'code' => 200, 'body' => []];
+                }
+
+                public function get_merchant_id()
+                {
+                    return '42';
+                }
+
+                /** The stored options are the fixture; no refresh is wanted. */
+                public function refresh_merchant_record_caches(bool $force = false): bool
+                {
+                    return true;
+                }
+
+                public function get_platform_minimum_order()
+                {
+                    return null;
+                }
+
+                public function get_merchant_minimum_order()
+                {
+                    return null;
+                }
+            };
+        };
+
+        // [raw supported_buyer_countries, record fetched, expected fragment, why].
+        $cases = [
+            [['supported_buyer_countries' => 'not-a-list'], true,
+                'the buyer countries on your account could not be read',
+                'an unreadable payload is not a deliberate restriction'],
+            [['supported_buyer_countries' => []], true,
+                'no buyer countries are currently enabled for your account',
+                'an explicit empty list is a deliberate restriction'],
+            [null, false,
+                'minimum order value not known until your profile refreshes',
+                'a profile that has never been fetched has an unknown floor, not none'],
+        ];
+
+        foreach ($cases as [$raw, $fetched, $fragment, $description]) {
+            $gateway = $make($raw, $fetched);
+            $html = $gateway->generate_two_health_checklist_html('health_checklist', ['title' => 'Install health']);
+            TinyAssert::true(
+                strpos($html, htmlspecialchars($fragment, ENT_QUOTES)) !== false,
+                $description . ': rendered ' . $html
+            );
+        }
+    }
+
     private static function testTheTermsNoticeDoesNotContradictItself(): void
     {
         $gateway = new class () extends WC_Twoinc {

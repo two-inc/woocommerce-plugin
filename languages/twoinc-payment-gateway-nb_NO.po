@@ -1577,3 +1577,12 @@ msgstr "Vises i kassen"
 #, php-format
 msgid "offered only to buyers in %s"
 msgstr "tilbys bare kjøpere i %s"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the buyer countries on your account could not be read. Contact %s."
+msgstr "kjøperlandene på kontoen din kunne ikke leses. Kontakt %s."
+
+#: class/WC_Twoinc.php
+msgid "minimum order value not known until your profile refreshes"
+msgstr "minste ordreverdi er ikke kjent før profilen din oppdateres"

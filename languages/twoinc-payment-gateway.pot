@@ -1578,3 +1578,12 @@ msgstr ""
 #, php-format
 msgid "offered only to buyers in %s"
 msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the buyer countries on your account could not be read. Contact %s."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "minimum order value not known until your profile refreshes"
+msgstr ""

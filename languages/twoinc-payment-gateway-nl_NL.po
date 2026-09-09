@@ -1576,3 +1576,12 @@ msgstr "Zichtbaar in de checkout"
 #, php-format
 msgid "offered only to buyers in %s"
 msgstr "alleen aangeboden aan kopers in %s"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the buyer countries on your account could not be read. Contact %s."
+msgstr "de landen van de koper op uw account konden niet worden gelezen. Neem contact op met %s."
+
+#: class/WC_Twoinc.php
+msgid "minimum order value not known until your profile refreshes"
+msgstr "minimumbestelwaarde nog niet bekend totdat uw profiel is vernieuwd"
