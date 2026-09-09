@@ -2903,12 +2903,11 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       /**
-       * The chip-node route into the hand-closed relaunch `onModeChipClick`
-       * already covers directly — the chip's one production caller is a click.
-       * The prevented `mousedown` is all this file can assert of "and so no
-       * `focusin`": jsdom raises no focus from a mouse event either way. The
-       * url arm is the `soleTraderAdopted` guard — nothing adopted, so an
-       * ordinary launch rather than a choice of registration.
+       * The chip-node route into the hand-closed relaunch that
+       * `onModeChipClick` already covers directly, the chip's one production
+       * caller being a click. The url arm is the `soleTraderAdopted` guard:
+       * nothing adopted, so an ordinary launch and not a choice of
+       * registration.
        */
       test("a pointer re-activation of the Sole trader chip inside a hand-closed popup's poll window launches afresh", () => {
         armListeners();
@@ -2932,7 +2931,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(first.focus).not.toHaveBeenCalled();
         expect(first.close).not.toHaveBeenCalled();
         expect(soleTrader.mode).toBe("sole_trader");
-        expect(chipNode("sole_trader").className).toContain("two-company-mode-chip--selected");
+        expect(panelControl('[data-two-chip="sole_trader"]').className).toContain(
+          "two-company-mode-chip--selected"
+        );
         expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
         expect($(".twoinc-sole-trader-spinner").length).toBe(1);
         jest.useRealTimers();
