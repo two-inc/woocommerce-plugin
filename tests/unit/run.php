@@ -2553,27 +2553,40 @@ final class BrandConfigSpec
     {
         $ttl = WC_Twoinc::MERCHANT_RECORD_TTL;
         $failure = ['status' => 'unreachable', 'code' => null, 'at' => time()];
+        // Which of the two wordings is expected, or '' for a green row. Figures
+        // read minutes ago whose refresh then failed are NOT out of date: the
+        // attempt to replace them did not land, which is a different sentence.
         $cases = [
-            [60, null, true, 'figures read a minute ago'],
-            [$ttl + 86400, null, false, 'figures read a day past the refresh window'],
-            [60, $failure, false, 'recent figures whose newest refresh failed'],
+            [60, null, '', '', 'figures read a minute ago'],
+            [$ttl + 86400, null, 'these figures are out of date', 'out of date', 'figures read a day past the refresh window'],
+            [60, $failure, 'last attempt to refresh these figures failed', 'last refresh failed', 'recent figures whose newest refresh failed'],
+            [$ttl + 86400, $failure, 'last attempt to refresh these figures failed', 'last refresh failed', 'old figures still failing to refresh'],
         ];
 
         foreach ($cases as $case) {
-            list($age, $error, $expected_green, $description) = $case;
+            list($age, $error, $age_wording, $terms_wording, $description) = $case;
+            $green = $age_wording === '';
             self::seedMerchantFigures($age, $error);
             $html = self::cachedTermsGateway()->generate_two_health_checklist_html('two_health_checklist', ['title' => 'Health']);
 
-            TinyAssert::same(!$expected_green, strpos($html, 'these figures are out of date') !== false, "the age row warns for $description");
-            TinyAssert::same(!$expected_green, strpos($html, 'but out of date') !== false, "the terms row warns for $description");
-            TinyAssert::same($expected_green, self::healthRowIsGreen($html, 'Merchant profile last read'), "the age row colour for $description");
-            TinyAssert::same($expected_green, self::healthRowIsGreen($html, 'Payment terms'), "the terms row colour for $description");
-            if (!$expected_green) {
-                TinyAssert::true(
-                    strpos($html, 'Refresh merchant profile') !== false,
-                    "the warning names what to do for $description"
-                );
+            TinyAssert::same($green, self::healthRowIsGreen($html, 'Merchant profile last read'), "the age row colour for $description");
+            TinyAssert::same($green, self::healthRowIsGreen($html, 'Payment terms'), "the terms row colour for $description");
+            if ($green) {
+                TinyAssert::same(false, strpos($html, 'out of date') !== false, "no warning wording for $description");
+                TinyAssert::same(false, strpos($html, 'refresh failed') !== false, "no failure wording for $description");
+                continue;
             }
+            TinyAssert::true(strpos($html, $age_wording) !== false, "the age row says '$age_wording' for $description");
+            TinyAssert::true(strpos($html, $terms_wording) !== false, "the terms row says '$terms_wording' for $description");
+            TinyAssert::true(
+                strpos($html, 'Refresh merchant profile') !== false,
+                "the warning names what to do for $description"
+            );
+            // The two causes must not be conflated in either direction.
+            $other = $age_wording === 'these figures are out of date'
+                ? 'last attempt to refresh these figures failed'
+                : 'these figures are out of date';
+            TinyAssert::same(false, strpos($html, $other) !== false, "the other cause is not claimed for $description");
         }
     }
 
@@ -2685,9 +2698,7 @@ final class BrandConfigSpec
         TinyAssert::true($gateway->get_merchant_terms_state()['checked_on'] > 0, 'a resolved set still reports when it was read');
         TinyAssert::same(null, $GLOBALS['__twoinc_test_options'][$error_option] ?? null, 'a success clears the recorded cause');
 
-        // Last-known-good outranks a failed refresh, so the method is not withheld
-        // and the withholding notice stays silent — but the figures are no longer
-        // current, and the state says so (ABN-538).
+        // Last-known-good outranks a failed refresh (ABN-538).
         unset($GLOBALS['__twoinc_test_options'][$stamp], $GLOBALS['__twoinc_test_options'][$attempted]);
         WC_Twoinc::reset_merchant_record_memo();
         $gateway->responses = [new WP_Error('http_request_failed', 'down')];

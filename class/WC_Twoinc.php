@@ -809,8 +809,9 @@ if (!class_exists('WC_Twoinc')) {
                 'code' => $recorded_failure && isset($error['code']) ? $error['code'] : null,
                 'checked_on' => $checked_on,
                 'count' => count($terms),
-                // The same test refresh_merchant_record_caches() uses to decide
-                // the figures need replacing, so the two cannot disagree.
+                // Age half is refresh_merchant_record_caches()'s own freshness
+                // test, negated; the recorded failure is an additional reason,
+                // and one that clock cannot see.
                 'stale' => $recorded_failure || !($checked_on + self::MERCHANT_RECORD_TTL > time()),
             ];
 
@@ -913,12 +914,12 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * When the figures were read, and whether they can still be trusted as
-         * current. A bare timestamp read as current however old it was, which
-         * is what let a merchant act on figures fetched days earlier during an
-         * outage that was still going on (ABN-538).
+         * When the figures were read, and why they cannot be trusted as current
+         * (ABN-538). A recorded failure is reported as the failure it is even
+         * when the read itself is minutes old — the figures are not out of
+         * date in that case, the attempt to replace them simply did not land.
          *
-         * @param array{checked_on: int, stale: bool} $state
+         * @param array{checked_on: int, stale: bool, reason: string|null} $state
          */
         private static function describe_merchant_record_age(array $state): string
         {
@@ -928,6 +929,13 @@ if (!class_exists('WC_Twoinc')) {
             $read_on = self::format_merchant_record_timestamp($state['checked_on']);
             if (!$state['stale']) {
                 return $read_on;
+            }
+            if ($state['reason'] !== null) {
+                return sprintf(
+                    /* translators: %s is a date and time in the site's own format */
+                    __('%s — the last attempt to refresh these figures failed; use "Refresh merchant profile" under Diagnostics to retry', 'twoinc-payment-gateway'),
+                    $read_on
+                );
             }
 
             return sprintf(
@@ -950,11 +958,16 @@ if (!class_exists('WC_Twoinc')) {
         {
             switch ($state['state']) {
                 case 'resolved':
-                    return $state['stale']
+                    if (!$state['stale']) {
                         /* translators: %d is a count of payment terms */
-                        ? sprintf(__('Resolved (%d available), but out of date', 'twoinc-payment-gateway'), (int) $state['count'])
+                        return sprintf(__('Resolved (%d available)', 'twoinc-payment-gateway'), (int) $state['count']);
+                    }
+
+                    return $state['reason'] !== null
                         /* translators: %d is a count of payment terms */
-                        : sprintf(__('Resolved (%d available)', 'twoinc-payment-gateway'), (int) $state['count']);
+                        ? sprintf(__('Resolved (%d available), last refresh failed', 'twoinc-payment-gateway'), (int) $state['count'])
+                        /* translators: %d is a count of payment terms */
+                        : sprintf(__('Resolved (%d available), out of date', 'twoinc-payment-gateway'), (int) $state['count']);
                 case 'not_configured':
                     return __('No API key saved', 'twoinc-payment-gateway');
                 case 'none_offered':
