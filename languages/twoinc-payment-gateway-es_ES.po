@@ -75,3 +75,57 @@ msgstr "Seleccione su empresa antes de pagar con %s."
 #, php-format
 msgid "Unrecognised surcharge method: %1$s. Choose one of: %2$s."
 msgstr "Método de recargo no reconocido: %1$s. Elija uno de: %2$s."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "The last attempt was on %s."
+msgstr "El último intento fue el %s."
+
+#: class/WC_Twoinc.php
+msgid "No attempt has been made yet."
+msgstr "Todavía no se ha realizado ningún intento."
+
+#: class/WC_Twoinc.php
+msgid "Check the API key and Environment settings above."
+msgstr "Compruebe los ajustes Clave API y Entorno anteriores."
+
+#: class/WC_Twoinc.php
+msgid "Payment method at checkout"
+msgstr "Método de pago en la caja"
+
+#: class/WC_Twoinc.php
+msgid "Not shown at checkout"
+msgstr "No se muestra en la caja"
+
+#: class/WC_Twoinc.php
+msgid "the payment method is disabled. Check Enable/Disable."
+msgstr "el método de pago está desactivado. Compruebe Activar/Desactivar."
+
+#: class/WC_Twoinc.php
+msgid "no API key is saved. Check API key."
+msgstr "no hay ninguna clave API guardada. Compruebe Clave API."
+
+#: class/WC_Twoinc.php
+msgid "the API key was rejected. Check API key and Environment."
+msgstr "la clave API fue rechazada. Compruebe Clave API y Entorno."
+
+#: class/WC_Twoinc.php
+msgid "Cannot be checked — the API key could not be verified just now."
+msgstr "No se puede comprobar: la clave API no se ha podido verificar en este momento."
+
+#: class/WC_Twoinc.php
+msgid "the buyer surcharge cannot be priced in the store currency. Check the surcharge settings."
+msgstr "el recargo al comprador no puede calcularse en la moneda de la tienda. Compruebe los ajustes de recargo."
+
+#: class/WC_Twoinc.php
+msgid "your account allows no buyer countries. Contact us to have them enabled."
+msgstr "su cuenta no permite ningún país de comprador. Póngase en contacto con nosotros para activarlos."
+
+#: class/WC_Twoinc.php
+msgid "Shown at checkout"
+msgstr "Se muestra en la caja"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %1$s %2$s (%3$s)"
+msgstr "oculto para cestas por debajo de %1$s %2$s (%3$s)"

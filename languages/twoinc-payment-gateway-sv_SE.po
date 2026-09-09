@@ -1500,3 +1500,57 @@ msgstr "Äldre inställning. Detta erbjuder ett anpassat villkor på %s dagar fr
 #, php-format
 msgid "Legacy setting. This offers a custom term of %s days after the end of the month. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
 msgstr "Äldre inställning. Detta erbjuder ett anpassat villkor på %s dagar efter månadens slut. Det stöds inte längre och kan inte redigeras. Välj Ta bort för att dra tillbaka det, eller använd betalningsvillkoren ovan för att ändra vad du erbjuder."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "The last attempt was on %s."
+msgstr "Senaste försöket var %s."
+
+#: class/WC_Twoinc.php
+msgid "No attempt has been made yet."
+msgstr "Inget försök har gjorts ännu."
+
+#: class/WC_Twoinc.php
+msgid "Check the API key and Environment settings above."
+msgstr "Kontrollera inställningarna API-nyckel och Miljö ovan."
+
+#: class/WC_Twoinc.php
+msgid "Payment method at checkout"
+msgstr "Betalningsmetod i kassan"
+
+#: class/WC_Twoinc.php
+msgid "Not shown at checkout"
+msgstr "Visas inte i kassan"
+
+#: class/WC_Twoinc.php
+msgid "the payment method is disabled. Check Enable/Disable."
+msgstr "betalningsmetoden är avstängd. Kontrollera Aktivera/Inaktivera."
+
+#: class/WC_Twoinc.php
+msgid "no API key is saved. Check API key."
+msgstr "ingen API-nyckel är sparad. Kontrollera API-nyckel."
+
+#: class/WC_Twoinc.php
+msgid "the API key was rejected. Check API key and Environment."
+msgstr "API-nyckeln avvisades. Kontrollera API-nyckel och Miljö."
+
+#: class/WC_Twoinc.php
+msgid "Cannot be checked — the API key could not be verified just now."
+msgstr "Kan inte kontrolleras — API-nyckeln kunde inte verifieras just nu."
+
+#: class/WC_Twoinc.php
+msgid "the buyer surcharge cannot be priced in the store currency. Check the surcharge settings."
+msgstr "köpartillägget kan inte prissättas i butikens valuta. Kontrollera tilläggsinställningarna."
+
+#: class/WC_Twoinc.php
+msgid "your account allows no buyer countries. Contact us to have them enabled."
+msgstr "ditt konto tillåter inga köparländer. Kontakta oss för att aktivera dem."
+
+#: class/WC_Twoinc.php
+msgid "Shown at checkout"
+msgstr "Visas i kassan"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %1$s %2$s (%3$s)"
+msgstr "döljs för varukorgar under %1$s %2$s (%3$s)"

@@ -1499,3 +1499,57 @@ msgstr "Verouderde instelling. Dit biedt een aangepaste termijn van %s dagen van
 #, php-format
 msgid "Legacy setting. This offers a custom term of %s days after the end of the month. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
 msgstr "Verouderde instelling. Dit biedt een aangepaste termijn van %s dagen na het einde van de maand. Deze wordt niet langer ondersteund en kan niet worden gewijzigd. Kies Verwijderen om deze in te trekken, of gebruik de betalingstermijnen hierboven om te wijzigen wat u aanbiedt."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "The last attempt was on %s."
+msgstr "De laatste poging was op %s."
+
+#: class/WC_Twoinc.php
+msgid "No attempt has been made yet."
+msgstr "Er is nog geen poging gedaan."
+
+#: class/WC_Twoinc.php
+msgid "Check the API key and Environment settings above."
+msgstr "Controleer de instellingen API-sleutel en Omgeving hierboven."
+
+#: class/WC_Twoinc.php
+msgid "Payment method at checkout"
+msgstr "Betaalmethode in de checkout"
+
+#: class/WC_Twoinc.php
+msgid "Not shown at checkout"
+msgstr "Niet zichtbaar in de checkout"
+
+#: class/WC_Twoinc.php
+msgid "the payment method is disabled. Check Enable/Disable."
+msgstr "de betaalmethode is uitgeschakeld. Controleer Inschakelen/Uitschakelen."
+
+#: class/WC_Twoinc.php
+msgid "no API key is saved. Check API key."
+msgstr "er is geen API-sleutel opgeslagen. Controleer API-sleutel."
+
+#: class/WC_Twoinc.php
+msgid "the API key was rejected. Check API key and Environment."
+msgstr "de API-sleutel is geweigerd. Controleer API-sleutel en Omgeving."
+
+#: class/WC_Twoinc.php
+msgid "Cannot be checked — the API key could not be verified just now."
+msgstr "Kan nu niet worden gecontroleerd — de API-sleutel kon niet worden geverifieerd."
+
+#: class/WC_Twoinc.php
+msgid "the buyer surcharge cannot be priced in the store currency. Check the surcharge settings."
+msgstr "de toeslag voor de koper kan niet in de winkelvaluta worden berekend. Controleer de toeslaginstellingen."
+
+#: class/WC_Twoinc.php
+msgid "your account allows no buyer countries. Contact us to have them enabled."
+msgstr "uw account staat geen enkel land van de koper toe. Neem contact met ons op om ze te laten activeren."
+
+#: class/WC_Twoinc.php
+msgid "Shown at checkout"
+msgstr "Zichtbaar in de checkout"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %1$s %2$s (%3$s)"
+msgstr "verborgen voor winkelwagens onder %1$s %2$s (%3$s)"

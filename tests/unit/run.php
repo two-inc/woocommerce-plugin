@@ -361,11 +361,374 @@ final class BrandConfigSpec
             'testCompanySearchSurvivesARealisticTypingSession',
             'testRateLimitRefusesEveryWcAjaxHandlerBeforeItReachesTheApi',
             'testRateLimitRefusesTheNonProxyHandlersToo',
+            'testEveryWithholdingBranchNamesItsReasonInTheLog',
+            'testTheGateLogNamesWhichConditionRefused',
+            'testTheHealthChecklistNamesWhyTheMethodIsAbsent',
+            'testTheTermsNoticeCarriesTheLastAttemptAndTheFieldsToCheck',
         ];
         foreach ($tests as $test) {
             self::reset();
             self::$test();
             print("PASS BrandConfigSpec::$test\n");
+        }
+    }
+
+
+    /**
+     * ABN-518. Every branch that withholds the method writes a line naming
+     * the reason: the merchant has no other way to tell a switched-off
+     * gateway from a rejected key.
+     */
+    private static function testEveryWithholdingBranchNamesItsReasonInTheLog(): void
+    {
+        $make_gateway = static function (array $options, $verify_code, $record) {
+            return new class ($options, $verify_code, $record) extends WC_Twoinc {
+                public $enabled = 'yes';
+                private $options;
+                private $verify_code;
+                private $record;
+
+                public function __construct($options, $verify_code, $record)
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                    $this->options = $options + ['api_key' => 'key', 'merchant_id' => '42'];
+                    $this->verify_code = $verify_code;
+                    $this->record = $record;
+                }
+
+                public function get_twoinc_checkout_host()
+                {
+                    return 'https://api.example';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+
+                public function update_option($key, $value = '')
+                {
+                    $this->options[$key] = $value;
+                    return true;
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                {
+                    if (strpos($endpoint, 'verify_api_key') !== false) {
+                        return $this->verify_code === 200
+                            ? ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])]
+                            : ['response' => ['code' => $this->verify_code], 'body' => '{}'];
+                    }
+                    return $this->record === null
+                        ? new WP_Error('http_request_failed', 'unreachable')
+                        : ['response' => ['code' => 200], 'body' => json_encode($this->record)];
+                }
+            };
+        };
+
+        // [gateway enabled, verify HTTP status, merchant record (null = fetch fails), log fragment, why].
+        $cases = [
+            ['no', 200, ['id' => '42', 'available_terms' => [30]], 'Enable/Disable is "no"',
+                'a switched-off gateway names the switch'],
+            ['yes', 401, ['id' => '42', 'available_terms' => [30]], 'API key verification status "invalid_key"',
+                'a rejected key names the verdict'],
+            ['yes', 503, ['id' => '42', 'available_terms' => [30]], 'API key verification status "service_error"',
+                'a transient verdict is named as itself, not as a rejection'],
+            ['yes', 200, null, 'merchant offerable payment terms unresolved',
+                'an unresolved term set names itself'],
+        ];
+
+        foreach ($cases as [$enabled, $verify_code, $record, $fragment, $description]) {
+            $GLOBALS['__twoinc_test_logs'] = [];
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $GLOBALS['__twoinc_test_options'] = [];
+            WC_Twoinc::reset_merchant_record_memo();
+            WC_Twoinc::reset_withhold_log_guard();
+
+            $gateway = $make_gateway([], $verify_code, $record);
+            $gateway->enabled = $enabled;
+            TinyAssert::same(false, $gateway->is_available(), $description . ': the method must be withheld');
+
+            $logged = implode("\n", array_column($GLOBALS['__twoinc_test_logs'], 'message'));
+            TinyAssert::true(strpos($logged, $fragment) !== false, $description . ": logged [$logged]");
+        }
+
+        // The checkout bootstrap withholds window.twoinc on the same two
+        // conditions and is a separate silent exit.
+        $GLOBALS['__twoinc_test_logs'] = [];
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $GLOBALS['__twoinc_test_options'] = [];
+        WC_Twoinc::reset_merchant_record_memo();
+        WC_Twoinc::reset_withhold_log_guard();
+        $GLOBALS['__twoinc_test_is_checkout'] = true;
+        ob_start();
+        (new WC_Twoinc_Checkout($make_gateway([], 401, null)))->inject_cart_details();
+        $printed = (string) ob_get_clean();
+        unset($GLOBALS['__twoinc_test_is_checkout']);
+        TinyAssert::true(strpos($printed, 'window.twoinc') === false, 'the bootstrap must be withheld');
+        $logged = implode("\n", array_column($GLOBALS['__twoinc_test_logs'], 'message'));
+        TinyAssert::true(
+            strpos($logged, 'checkout bootstrap withheld') !== false,
+            "the withheld bootstrap names itself: logged [$logged]"
+        );
+
+        // An unrecognised stored surcharge method is judged in the gate, not
+        // in is_available(), and fails closed the same way.
+        $GLOBALS['__twoinc_test_logs'] = [];
+        WC_Twoinc::reset_withhold_log_guard();
+        WC()->cart = new StubCart(1000.0);
+        WC()->customer = new StubCustomer('NL');
+        $gateway = $make_gateway(['surcharge_type' => 'not-a-method'], 200, ['id' => '42', 'available_terms' => [30]]);
+        $gateways = [$gateway->id => 'gw'];
+        TinyAssert::true(
+            !isset($gateway->apply_brand_availability_gate($gateways)[$gateway->id]),
+            'an unrecognised stored surcharge method withholds the method'
+        );
+        $logged = implode("\n", array_column($GLOBALS['__twoinc_test_logs'], 'message'));
+        TinyAssert::true(
+            strpos($logged, 'surcharge cannot be priced in the store currency') !== false,
+            "an unpriceable surcharge names itself: logged [$logged]"
+        );
+    }
+
+    /**
+     * ABN-518. Four conditions shared one log line that dumped the basket
+     * without saying which of them refused.
+     */
+    private static function testTheGateLogNamesWhichConditionRefused(): void
+    {
+        self::useTestbrand();
+        $GLOBALS['__twoinc_test_currency'] = 'EUR';
+
+        $make_gateway = static function ($platform_minimum, $buyer_countries, $merchant_minimum) {
+            return new class ($platform_minimum, $buyer_countries, $merchant_minimum) extends WC_Twoinc {
+                private $platform_minimum;
+                private $buyer_countries;
+                private $merchant_minimum;
+
+                public function __construct($platform_minimum, $buyer_countries, $merchant_minimum)
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                    $this->platform_minimum = $platform_minimum;
+                    $this->buyer_countries = $buyer_countries;
+                    $this->merchant_minimum = $merchant_minimum;
+                }
+
+                public function get_platform_minimum_order()
+                {
+                    return $this->platform_minimum;
+                }
+
+                public function get_supported_buyer_countries()
+                {
+                    return $this->buyer_countries;
+                }
+
+                public function get_merchant_minimum_order()
+                {
+                    return $this->merchant_minimum;
+                }
+
+                public function get_merchant_available_terms(): array
+                {
+                    return [30];
+                }
+            };
+        };
+
+        $eur250 = ['amount' => 250.0, 'currency' => 'EUR', 'basis' => 'net'];
+        $eur500 = ['amount' => 500.0, 'currency' => 'EUR', 'basis' => 'net'];
+
+        // [basket total, billing country, platform min, buyer allowlist, merchant min, log fragment, why].
+        $cases = [
+            [100.0, 'NL', $eur250, null, null, 'basket below the minimum order value set for your account',
+                'the platform floor names itself'],
+            [1000.0, 'DE', null, null, null, 'billing country not one this store offers the payment method in',
+                'the brand billing-country gate names itself'],
+            [1000.0, 'NL', null, ['GB'], null, 'buyer country not one your account may sell to',
+                'the merchant allowlist names itself'],
+            [100.0, 'NL', null, null, $eur500, 'basket below the Minimum order value in these settings',
+                'the merchant own minimum names its own admin field'],
+        ];
+
+        foreach ($cases as [$total, $country, $platform, $allowlist, $merchant, $fragment, $description]) {
+            $GLOBALS['__twoinc_test_logs'] = [];
+            WC_Twoinc::reset_withhold_log_guard();
+            WC()->cart = new StubCart($total);
+            WC()->customer = new StubCustomer($country);
+
+            $gateway = $make_gateway($platform, $allowlist, $merchant);
+            $gateways = [$gateway->id => 'gw'];
+            TinyAssert::true(
+                !isset($gateway->apply_brand_availability_gate($gateways)[$gateway->id]),
+                $description . ': the method must be withheld'
+            );
+
+            $logged = implode("\n", array_column($GLOBALS['__twoinc_test_logs'], 'message'));
+            TinyAssert::true(strpos($logged, $fragment) !== false, $description . ": logged [$logged]");
+        }
+    }
+
+    /**
+     * ABN-518. The settings page answers "why is it not in my checkout?"
+     * without a log file.
+     */
+    private static function testTheHealthChecklistNamesWhyTheMethodIsAbsent(): void
+    {
+        $make_gateway = static function (array $options, $verify_code, $buyer_countries, $platform_minimum) {
+            return new class ($options, $verify_code, $buyer_countries, $platform_minimum) extends WC_Twoinc {
+                public $enabled = 'yes';
+                private $options;
+                private $verify_code;
+                private $buyer_countries;
+                private $platform_minimum;
+
+                public function __construct($options, $verify_code, $buyer_countries, $platform_minimum)
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                    $this->options = $options + ['api_key' => 'key', 'merchant_id' => '42'];
+                    $this->verify_code = $verify_code;
+                    $this->buyer_countries = $buyer_countries;
+                    $this->platform_minimum = $platform_minimum;
+                }
+
+                public function get_twoinc_checkout_host()
+                {
+                    return 'https://api.example';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+
+                public function get_supported_buyer_countries()
+                {
+                    return $this->buyer_countries;
+                }
+
+                public function get_platform_minimum_order()
+                {
+                    return $this->platform_minimum;
+                }
+
+                public function get_merchant_available_terms(): array
+                {
+                    return [30];
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                {
+                    return $this->verify_code === 200
+                        ? ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])]
+                        : ['response' => ['code' => $this->verify_code], 'body' => '{}'];
+                }
+            };
+        };
+
+        $eur250 = ['amount' => 250.0, 'currency' => 'EUR', 'basis' => 'net'];
+
+        // [gateway enabled, options, verify HTTP status, buyer allowlist, platform min, expected row fragment, why].
+        $cases = [
+            ['no', [], 200, null, null, 'Not shown at checkout — the payment method is disabled. Check Enable/Disable.',
+                'the switched-off method names the switch'],
+            ['yes', ['api_key' => ''], 200, null, null, 'Not shown at checkout — no API key is saved. Check API key.',
+                'an unconfigured install is not a rejected key'],
+            ['yes', [], 401, null, null, 'Not shown at checkout — the API key was rejected. Check API key and Environment.',
+                'a definitive rejection names both fields'],
+            ['yes', [], 503, null, null, 'Cannot be checked — the API key could not be verified just now.',
+                'a transient verdict must not be reported as the method being withheld (ABN-533)'],
+            ['yes', ['surcharge_type' => 'not-a-method'], 200, null, null, 'the buyer surcharge cannot be priced',
+                'an unrecognised stored surcharge method names itself'],
+            ['yes', [], 200, [], null, 'your account allows no buyer countries',
+                'an empty allowlist hides the method for every buyer, which no local field explains'],
+            ['yes', [], 200, ['NL'], null, 'Shown at checkout',
+                'a populated allowlist is not a reason to withhold'],
+            ['yes', [], 200, null, $eur250, 'Shown at checkout — hidden for baskets below 250.00 EUR (net)',
+                'the basket-dependent gate is named as a constraint, not as the current state'],
+        ];
+
+        foreach ($cases as [$enabled, $options, $verify_code, $allowlist, $minimum, $fragment, $description]) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $gateway = $make_gateway($options, $verify_code, $allowlist, $minimum);
+            $gateway->enabled = $enabled;
+
+            $html = $gateway->generate_two_health_checklist_html('health_checklist', ['title' => 'Install health']);
+
+            TinyAssert::true(
+                strpos($html, 'Payment method at checkout') !== false,
+                $description . ': the row must be rendered'
+            );
+            TinyAssert::true(
+                strpos($html, htmlspecialchars($fragment, ENT_QUOTES)) !== false
+                    || strpos($html, $fragment) !== false,
+                $description . ": rendered [$html]"
+            );
+        }
+    }
+
+    /**
+     * ABN-515. An unresolved term set left the merchant with a cause but no
+     * time and no field to act on.
+     */
+    private static function testTheTermsNoticeCarriesTheLastAttemptAndTheFieldsToCheck(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'api_key' ? 'key' : ($empty_value ?? '');
+            }
+
+            public function get_merchant_available_terms(): array
+            {
+                return [];
+            }
+        };
+
+        $attempted = 1757000000;
+        // [recorded error, attempt stamp, expected fragment, why].
+        $cases = [
+            [
+                ['status' => 'unreachable', 'code' => null, 'at' => $attempted],
+                0,
+                'The last attempt was on ',
+                'a recorded failure supplies the attempt time',
+            ],
+            [
+                false,
+                $attempted,
+                'The last attempt was on ',
+                'the attempt stamp answers when no cause was recorded',
+            ],
+            [
+                false,
+                0,
+                'No attempt has been made yet.',
+                'never having tried is stated rather than left blank',
+            ],
+        ];
+
+        foreach ($cases as [$error, $stamp, $fragment, $description]) {
+            $GLOBALS['__twoinc_test_options'] = [];
+            if ($error !== false) {
+                $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_last_error')] = $error;
+            }
+            if ($stamp > 0) {
+                $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on')] = $stamp;
+            }
+
+            $notice = $gateway->get_merchant_terms_notice();
+
+            TinyAssert::true(strpos($notice, $fragment) !== false, $description . ": notice [$notice]");
+            TinyAssert::true(
+                strpos($notice, 'Check the API key and Environment settings') !== false,
+                $description . ': the fields to check must be named whatever the cause'
+            );
         }
     }
 
@@ -396,6 +759,7 @@ final class BrandConfigSpec
         WC_Twoinc_Payment_Terms::reset_fee_cache();
         WC_Twoinc_Sole_Trader::reset_cache();
         WC_Twoinc::reset_merchant_record_memo();
+        WC_Twoinc::reset_withhold_log_guard();
         WC_Twoinc_FX::reset_request_cache();
         unset($GLOBALS['__twoinc_test_translations']);
         $GLOBALS['__twoinc_test_transients'] = [];
@@ -2726,8 +3090,14 @@ final class BrandConfigSpec
             );
             TinyAssert::same(
                 $expected_reason === 'invalid_key',
-                strpos($notice, 'API key') !== false,
-                $description . ': the API key is named only where the API rejected it'
+                strpos($notice, 'rejected the saved API key') !== false,
+                $description . ': a rejection is claimed only where the API rejected it'
+            );
+            // ABN-515: every unresolved notice names the fields to check,
+            // whatever the cause.
+            TinyAssert::true(
+                strpos($notice, 'Check the API key and Environment settings') !== false,
+                $description . ': the fields to check must be named'
             );
             if ($expected_code !== null) {
                 TinyAssert::true(
