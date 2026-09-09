@@ -114,8 +114,8 @@ Vendored assets
   company FIELD.** `syncCompanySearchAvailability()` in `assets/js/twoinc.js` sets
   the field `disabled` whenever the country is outside the registry's coverage,
   with no exemption for manual mode — so a buyer in an uncovered country cannot
-  name their company by hand either. The panel carries no disabled state of its
-  own here; the carve-out that greys out search alone is in the other platform's
+  name their company by hand either. This repo's panel carries no disabled state
+  at all; the carve-out that greys out search alone is in the other platform's
   copy.
 - **The company field opens the panel on FOCUS**, through the same `open()` a
   mousedown runs, leaving the caret in the panel's query field — the same state a
