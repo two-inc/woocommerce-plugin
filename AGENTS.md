@@ -84,25 +84,31 @@ WordPress and WooCommerce Best Practices
 
 Vendored assets
 
-- `assets/js/company-search-panel.js` is a copy of the panel module the Two Magento
-  plugin maintains, vendored here so the two checkouts render one popover rather
-  than two that drift. **Never edit it in this repo** — change it in the Magento
-  plugin, then re-copy the whole file and re-run the JS suite. A local edit is
-  invisible to the upstream reviewer and silently forks the control.
-- **A change to shared panel behaviour is therefore TWO edits**, and nothing links
-  the copies: whoever changes one and stops has fixed one platform, and neither
-  reviewer sees the other half. **Nothing compares the two copies**, so re-copying
-  the whole file is the only thing that puts them back in step, and a panel change
-  made in one repo and nowhere else has landed on one platform.
+- `assets/js/company-search-panel.js` is one of TWO copies of the same panel
+  module — this one, and the one the Two Magento plugin carries — so both
+  checkouts render one control. The copies have DRIFTED: 98 lines differ across
+  15 hunks, 93 of them present only on the Magento side and 5 only here. A
+  whole-file re-copy is therefore NOT the route while that gap stands; it would
+  import the other platform's code into this one wholesale. The Two Hyvä
+  extension carries no copy at all — it loads the base Magento plugin's panel by
+  module reference — so there are two copies in total, not three.
+- **A change to shared panel behaviour is TWO edits in ONE change set.** Apply it
+  in place here and identically to the other copy, re-run the JS suite, and paste
+  the new digest into the edit-lock below in the same commit. Nothing links the
+  copies: whoever changes one and stops has fixed one platform, and neither
+  reviewer sees the other half.
 - `tests/js/company-search-panel-vendored.test.js` is an **edit-lock, not a parity
-  check** (TWO-25503). `EDIT_LOCK_SHA256` is the vendored panel's own digest, so
-  the suite catches an in-place edit here and says nothing whatever about whether
-  the two copies agree — it cannot reach the Magento repo at all. The digest moves
-  only on a deliberate re-copy from upstream.
-- The module is framework-free with a UMD tail, a constraint inherited from the
-  copy it is taken from: a Magento-side checkout loads that copy with no
-  RequireJS, jQuery or Knockout, and a framework dependency added here would be
-  re-copied back into a place that cannot satisfy it.
+  check** (TWO-25503). `EDIT_LOCK_SHA256` is this copy's own digest, so the suite
+  fails on any change to this file that did not move the digest with it — an
+  unintended edit, a stray formatter run, a bad merge — and passes on a
+  deliberate one. It cannot reach the Magento repo at all and says nothing
+  whatever about whether the two copies agree: **nothing compares them**, so
+  nothing detects the drift between them. `.prettierignore` keeps the formatter
+  off the file so the digest is not moved by a reformat nobody asked for.
+- The module is framework-free with a UMD tail, a constraint the other copy shares:
+  a Magento-side checkout loads it with no RequireJS, jQuery or Knockout, so a
+  framework dependency added to either copy has to be satisfied in a place that
+  cannot satisfy it.
 - **The unsupported-country gate greys out SEARCH, never manual entry.** Manual
   entry hands the field over as a plain typeable input that never reaches the
   registry, so disabling it there blocks a mode that was never going to search and
