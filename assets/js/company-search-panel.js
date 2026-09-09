@@ -185,6 +185,8 @@
         this._fieldTabIndex = null;
         /** The field whose tab stop this panel currently holds, or null. */
         this._tabStopHeldOn = null;
+        /** @see setDisabled */
+        this._disabled = false;
     }
 
     // ------------------------------------------------------------- DOM helpers
@@ -677,6 +679,9 @@
      * "return to registered-company mode" arrives here with the panel open and
      * the query row hidden, and an early return would leave the buyer looking
      * at a search box nothing put the caret in.
+     *
+     * Opens even while `setDisabled()` has withdrawn the search: the chips
+     * inside are the buyer's only route to manual entry (ABN-525).
      */
     CompanySearchPanel.prototype.open = function () {
         if (!this._panel) return;
@@ -699,7 +704,28 @@
         }
         if (this._field) this._field.setAttribute('aria-expanded', 'true');
         this._holdFieldTabStop();
-        this._query.focus();
+        this._focusOnOpen();
+    };
+
+    /**
+     * The query field where it is shown, else the first offered chip: a mode
+     * that suppresses the query row would otherwise open the panel with focus
+     * nowhere (ABN-525).
+     */
+    CompanySearchPanel.prototype._focusOnOpen = function () {
+        if (this._query && !this._queryRowIsHidden()) {
+            this._query.focus();
+            return;
+        }
+        if (!this._chips || this._chips.classList.contains(HIDDEN_CLASS)) return;
+        const chip = this._chips.querySelector('.' + CHIP_CLASS + ':not(.' + HIDDEN_CLASS + ')');
+        if (chip) chip.focus();
+    };
+
+    /** @returns {boolean} whether `_syncQueryVisibility` has the query row hidden */
+    CompanySearchPanel.prototype._queryRowIsHidden = function () {
+        const row = this._query && this._query.closest('.' + SEARCH_ROW_CLASS);
+        return !row || row.classList.contains(HIDDEN_CLASS);
     };
 
     /**
@@ -738,6 +764,25 @@
     /** @returns {boolean} whether the panel is currently open */
     CompanySearchPanel.prototype.isOpen = function () {
         return this._open;
+    };
+
+    /**
+     * Withdraw the registry search over a country it does not cover: the query
+     * row goes and the registered-company chip with it, while the panel stays
+     * openable so manual entry and the sole-trader route are still reachable
+     * (ABN-525). Never writes the field's native `disabled` flag — a buyer
+     * must always be able to type a company name by hand.
+     *
+     * @param {boolean} disabled
+     */
+    CompanySearchPanel.prototype.setDisabled = function (disabled) {
+        this._disabled = !!disabled;
+        this.syncChips();
+    };
+
+    /** @returns {boolean} whether the registry search is withdrawn */
+    CompanySearchPanel.prototype.isDisabled = function () {
+        return this._disabled;
     };
 
     // ----------------------------------------------------------------- search
@@ -908,8 +953,9 @@
      * changes with the country and the admin setting, and a rebuild cannot
      * leave a stale chip wired to a mode that is no longer offered.
      *
-     * The row itself is hidden when it is down to one chip: the survivor is
-     * always the mode the buyer is already in, so it offers no choice. Hidden
+     * The row is hidden unless it offers at least one mode the buyer is not
+     * already in: a lone chip for the current mode is no choice, a lone chip
+     * for a different one is the buyer's whole way out (ABN-525). Hidden
      * rather than removed, so the panel keeps its three children in order.
      */
     CompanySearchPanel.prototype.syncChips = function () {
@@ -919,10 +965,10 @@
         this._syncQueryVisibility(selected);
         this._unbind(this._chips);
         this._chips.innerHTML = '';
-        let offered = 0;
+        let actionable = 0;
         this.getChips().forEach(function (chip) {
             const visible = self.isChipVisible(chip.mode);
-            if (visible) offered++;
+            if (visible && chip.mode !== selected) actionable++;
             const button = document.createElement('button');
             button.type = 'button';
             button.className = CHIP_CLASS;
@@ -947,20 +993,21 @@
             });
             self._chips.appendChild(button);
         });
-        this._chips.classList.toggle(HIDDEN_CLASS, offered < 2);
+        this._chips.classList.toggle(HIDDEN_CLASS, actionable === 0);
     };
 
     /**
      * The search row belongs to registered-company mode alone. A sole trader is
      * enrolled through the hosted signup and a manual entry is typed into the
      * company field, so a query box in either mode offers a search that answers
-     * for neither.
+     * for neither. Nor does a country the registry search does not cover
+     * (ABN-525).
      *
      * @param {string} mode the selected capture mode
      */
     CompanySearchPanel.prototype._syncQueryVisibility = function (mode) {
         if (!this._query) return;
-        const searching = mode === 'registered';
+        const searching = mode === 'registered' && !this._disabled;
         const row = this._query.closest('.' + SEARCH_ROW_CLASS);
         if (row) row.classList.toggle(HIDDEN_CLASS, !searching);
         if (searching) return;

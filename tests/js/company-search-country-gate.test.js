@@ -1,13 +1,12 @@
 /**
  * The ordinary company-search control's own per-country gate.
  *
- * Bifrost's GET /companies/v2/supported-countries answers with the full list
- * of countries its registry search covers. Before this, an unsupported
- * country's search just failed at request time with a generic error; this
- * fetches the list once per page load and disables the search field itself
- * for a country outside it — the same shape as the sole-trader chip's own
- * per-country disable, but keyed against one global list instead of a
- * per-country lookup.
+ * The registry's supported-countries answer names every country its company
+ * search covers. It is fetched once per page load, and a country outside it
+ * withdraws the SEARCH — the query row inside the panel and the
+ * registered-company chip — and nothing else. The panel still opens and the
+ * field is never given the native `disabled` flag, because the chips inside
+ * the panel are the buyer's only route to manual entry (ABN-525).
  */
 
 "use strict";
@@ -41,6 +40,15 @@ describe("company search country gate", () => {
     return ctx.$(ctx.helper.companyFieldSelector()).prop("disabled");
   }
 
+  function searchIsWithdrawn() {
+    return ctx.helper.panel.isDisabled();
+  }
+
+  function queryRowIsHidden() {
+    const row = document.querySelector(".two-company-dropdown__search");
+    return !row || row.classList.contains("two-hidden");
+  }
+
   function wrapHasUnsupportedClass() {
     return ctx
       .$(ctx.helper.companyFieldSelector())
@@ -48,50 +56,89 @@ describe("company search country gate", () => {
       .hasClass(ctx.helper.companySearchUnsupportedCountryClass);
   }
 
-  test("a country the fetch reports as supported leaves the field enabled", () => {
+  test.each([
+    [["GB", "US"], false, "a covered country leaves the search offered"],
+    [["US"], true, "an uncovered country withdraws the search and marks the wrap"]
+  ])("supported %j withdraws the search: %s (%s)", (supported, withdrawn, description) => {
     ctx.helper.syncCompanySearchAvailability();
-    supportedCountriesRequest().succeed({ supported_countries: ["GB", "US"] });
+    supportedCountriesRequest().succeed({ supported_countries: supported });
 
+    expect(searchIsWithdrawn()).toBe(withdrawn);
+    expect(wrapHasUnsupportedClass()).toBe(withdrawn);
+    // The buyer's own company name reaches the form through this field in
+    // manual entry, so the gate must never make it unusable.
     expect(fieldIsDisabled()).toBe(false);
-    expect(wrapHasUnsupportedClass()).toBe(false);
+    expect(description).toBeTruthy();
   });
 
-  test("a country absent from the fetch's list disables the field and marks the wrap", () => {
+  test.each([
+    ["US", true, "switching to an uncovered country withdraws a search that was offered"],
+    ["GB", false, "switching back to a covered country offers it again"]
+  ])("country %s leaves the search withdrawn: %s (%s)", (country, withdrawn, description) => {
+    ctx.helper.syncCompanySearchAvailability();
+    supportedCountriesRequest().succeed({ supported_countries: ["GB"] });
+    ctx.helper.countryDidChange("GB");
+    expect(searchIsWithdrawn()).toBe(false);
+    ctx.$("#billing_country").append('<option value="US">US</option>');
+
+    ctx.$("#billing_country").val(country);
+    ctx.Twoinc.getInstance().syncBillingCountry();
+
+    expect(searchIsWithdrawn()).toBe(withdrawn);
+    expect(wrapHasUnsupportedClass()).toBe(withdrawn);
+    expect(fieldIsDisabled()).toBe(false);
+    expect(description).toBeTruthy();
+  });
+
+  test("an uncovered country still opens the panel, without its query row", () => {
+    // Given: a country the registry search does not cover.
     ctx.helper.syncCompanySearchAvailability();
     supportedCountriesRequest().succeed({ supported_countries: ["US"] });
 
-    expect(fieldIsDisabled()).toBe(true);
-    expect(wrapHasUnsupportedClass()).toBe(true);
+    // When: the buyer reaches for the control.
+    const opened = ctx.helper.openCompanySearchDropdown();
+
+    // Then: the panel is up, so its chips are reachable, and the search is not.
+    expect(opened).toBe(true);
+    expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
+    expect(queryRowIsHidden()).toBe(true);
   });
 
-  test("switching to an unsupported country disables a previously-enabled field", () => {
+  /** The chips the buyer can actually see, by mode; empty when the row is hidden. */
+  function visibleChipModes() {
+    const row = document.querySelector(".two-company-mode-chips");
+    if (!row || row.classList.contains("two-hidden")) return [];
+    return Array.prototype.slice
+      .call(row.querySelectorAll(".two-company-mode-chip"))
+      .filter(function (chip) {
+        return !chip.classList.contains("two-hidden");
+      })
+      .map(function (chip) {
+        return chip.getAttribute("data-two-chip");
+      });
+  }
+
+  test("the manual-entry chip is the one the buyer can still see", () => {
     ctx.helper.syncCompanySearchAvailability();
-    supportedCountriesRequest().succeed({ supported_countries: ["GB"] });
-    ctx.helper.countryDidChange("GB");
-    expect(fieldIsDisabled()).toBe(false);
+    supportedCountriesRequest().succeed({ supported_countries: ["US"] });
+    ctx.helper.openCompanySearchDropdown();
 
-    ctx.$("#billing_country").append('<option value="US">US</option>');
-    ctx.$("#billing_country").val("US");
-    ctx.Twoinc.getInstance().syncBillingCountry();
+    const visible = visibleChipModes();
 
-    expect(fieldIsDisabled()).toBe(true);
-    expect(wrapHasUnsupportedClass()).toBe(true);
+    expect(visible).toContain("manual");
+    expect(visible).not.toContain("registered");
   });
 
-  test("switching back to a supported country re-enables the field", () => {
+  test("manual entry survives as the ONLY offered mode, row and all", () => {
+    // Given: an uncovered country AND no sole-trader route — one chip left,
+    // and it is not the mode the buyer is in.
+    ctx.helper.soleTrader.isAvailable = () => false;
     ctx.helper.syncCompanySearchAvailability();
-    supportedCountriesRequest().succeed({ supported_countries: ["GB"] });
-    ctx.helper.countryDidChange("GB");
-    ctx.$("#billing_country").append('<option value="US">US</option>');
-    ctx.$("#billing_country").val("US");
-    ctx.Twoinc.getInstance().syncBillingCountry();
-    expect(fieldIsDisabled()).toBe(true);
+    supportedCountriesRequest().succeed({ supported_countries: ["US"] });
 
-    ctx.$("#billing_country").val("GB");
-    ctx.Twoinc.getInstance().syncBillingCountry();
+    ctx.helper.openCompanySearchDropdown();
 
-    expect(fieldIsDisabled()).toBe(false);
-    expect(wrapHasUnsupportedClass()).toBe(false);
+    expect(visibleChipModes()).toEqual(["manual"]);
   });
 
   test("a pending fetch fails open: the field stays enabled and usable", () => {

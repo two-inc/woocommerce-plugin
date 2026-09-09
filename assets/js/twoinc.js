@@ -1235,20 +1235,19 @@ class TwoCompanySearch {
   }
 
   /**
-   * Grey out the search field and close its dropdown once the country falls
-   * outside the registry's coverage; restore it once the country is back
-   * inside. Today an unsupported-country search just fails at
-   * request time with a generic error — this stops it being offered at all,
-   * mirroring the sole-trader chip's own per-country disable.
+   * Withdraw the registry search once the country falls outside the registry's
+   * coverage, and restore it once the country is back inside. The panel itself
+   * stays openable: its chips are the buyer's only route to manual entry and
+   * the sole-trader flow, so disabling the field or closing the panel here
+   * left a buyer in an uncovered country unable to name their company at all
+   * (ABN-525).
    */
   syncCompanySearchAvailability() {
     const available = this.registeredSearchIsAvailable();
-    const $field = jQuery(this.companyFieldSelector());
-    $field
+    jQuery(this.companyFieldSelector())
       .closest("." + this.fieldWrapClass)
       .toggleClass(this.companySearchUnsupportedCountryClass, !available);
-    $field.prop("disabled", !available);
-    if (!available) this.closeCompanySearchDropdown();
+    if (this.panel) this.panel.setDisabled(!available);
     this.syncModeChips();
   }
 
@@ -1325,10 +1324,6 @@ class TwoCompanySearch {
   openCompanySearchDropdown() {
     const panel = this.panel;
     if (!panel || !panel.isBound()) return false;
-    // Defense in depth alongside the disabled field attribute:
-    // any programmatic open (the registered chip, exiting manual entry) must
-    // refuse the same way a disabled field itself refuses focus.
-    if (!this.companySearchCountryIsSupported()) return false;
     panel.open();
     return true;
   }
