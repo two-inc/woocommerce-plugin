@@ -2322,7 +2322,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         node.focus();
       }
 
-      // A real chip activation. This role's own chip: a page-wide query finds the sibling role's (TWO-25554).
+      // A real chip activation.
       function mouseActivateChip(mode) {
         const chip = panelControl('[data-two-chip="' + mode + '"]');
         expect(chip).not.toBeNull();
