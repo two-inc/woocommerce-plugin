@@ -120,11 +120,26 @@ jQuery(function ($) {
   const $invalidIcon = $("#api-key-invalid");
   const $loadingIcon = $("#api-key-loading");
 
+  // The last verdict that judged the key, and the key it judged — an
+  // inconclusive verdict restores that indicator rather than inventing a red
+  // cross, but only while the field still holds the key it applied to.
+  let lastDefinitiveStatus = null;
+  let lastDefinitiveKey = null;
+
+  function indicatorForUnjudgedKey(apiKey) {
+    return apiKey === lastDefinitiveKey ? lastDefinitiveStatus : null;
+  }
+
   function showVerificationStatus(status) {
-    $verificationIcon.show();
     $validIcon.hide();
     $invalidIcon.hide();
     $loadingIcon.hide();
+
+    if (!status) {
+      $verificationIcon.hide();
+      return;
+    }
+    $verificationIcon.show();
 
     if (status === "valid") {
       $validIcon.show();
@@ -146,7 +161,7 @@ jQuery(function ($) {
     $("#twoinc-merchant-short-name").text(shortName ? " · " + shortName : "");
     $("#twoinc-merchant-info").show();
     $("#twoinc-signup-prompt").hide();
-    $("#twoinc-merchant-invalid-notice").hide();
+    $("#twoinc-merchant-invalid-notice").removeClass("twoinc-merchant-notice--unconfirmed").hide();
   }
 
   // Maps the categorized failure the AJAX handler reports (see
@@ -197,13 +212,25 @@ jQuery(function ($) {
     }
   }
 
-  // A failed verification must not leave the previously fetched Merchant ID
-  // on screen — that reads as "the integration is fine" when it isn't.
-  // Swap it for the categorized invalid-key notice instead.
-  function showMerchantInfoInvalid(status, code) {
+  // A key the API actually rejected must not leave the previously fetched
+  // Merchant ID on screen — that reads as "the integration is fine" when it
+  // isn't. Swap it for the categorized notice instead.
+  function showMerchantInfoRejected(status, code) {
     $("#twoinc-merchant-info").hide();
     $("#twoinc-signup-prompt").hide();
-    $("#twoinc-merchant-invalid-notice").text(invalidNoticeText(status, code)).show();
+    $("#twoinc-merchant-invalid-notice")
+      .removeClass("twoinc-merchant-notice--unconfirmed")
+      .text(invalidNoticeText(status, code))
+      .show();
+  }
+
+  // A verdict that judged nothing about the key: say the check did not
+  // complete, and leave the Merchant ID and the signup prompt where they are.
+  function showMerchantInfoUnconfirmed(status, code) {
+    $("#twoinc-merchant-invalid-notice")
+      .addClass("twoinc-merchant-notice--unconfirmed")
+      .text(invalidNoticeText(status, code))
+      .show();
   }
 
   function verifyApiKey(apiKey) {
@@ -224,17 +251,29 @@ jQuery(function ($) {
       },
       success: function (response) {
         if (response.success) {
+          lastDefinitiveStatus = "valid";
+          lastDefinitiveKey = apiKey;
           showVerificationStatus("valid");
           updateMerchantInfo(response.data);
-        } else {
-          showVerificationStatus("invalid");
-          const data = response.data || {};
-          showMerchantInfoInvalid(data.status, data.code);
+          return;
         }
+        // Whether the verdict judged the KEY is decided server-side, where the
+        // categories are defined once; anything else judged nothing about it
+        // and must leave the Merchant ID and key status alone (ABN-536).
+        const data = response.data || {};
+        if (!data.definitive) {
+          showVerificationStatus(indicatorForUnjudgedKey(apiKey));
+          showMerchantInfoUnconfirmed(data.status, data.code);
+          return;
+        }
+        lastDefinitiveStatus = "invalid";
+        lastDefinitiveKey = apiKey;
+        showVerificationStatus("invalid");
+        showMerchantInfoRejected(data.status, data.code);
       },
       error: function () {
-        showVerificationStatus("invalid");
-        showMerchantInfoInvalid("request_failed", null);
+        showVerificationStatus(indicatorForUnjudgedKey(apiKey));
+        showMerchantInfoUnconfirmed("request_failed", null);
       }
     });
   }

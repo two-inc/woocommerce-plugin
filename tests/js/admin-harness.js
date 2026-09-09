@@ -91,6 +91,9 @@ function installJQuery() {
  *   inline-fee code returns before any request is made
  * @param {string} options.noFeeFigureLabel localized label for a term the fee
  *   answer did not price, as PHP supplies it
+ * @param {string} options.merchantId server-rendered Merchant ID; present means
+ *   the identity block renders VISIBLE and the signup prompt hidden, as the PHP
+ *   does for an install whose key already resolved a merchant
  * @returns {void}
  */
 function buildSettingsPage(options) {
@@ -176,12 +179,18 @@ function buildSettingsPage(options) {
         '<span id="api-key-invalid" style="display:none"></span>' +
         '<span id="api-key-loading" style="display:none"></span>' +
         "</span>" +
-        '<div id="twoinc-merchant-info" style="display:none">' +
-        '<span id="twoinc-merchant-id"></span>' +
+        '<div id="twoinc-merchant-info"' +
+        (opts.merchantId === undefined ? ' style="display:none"' : "") +
+        ">" +
+        '<span id="twoinc-merchant-id">' +
+        (opts.merchantId === undefined ? "" : opts.merchantId) +
+        "</span>" +
         '<span id="twoinc-merchant-short-name"></span>' +
         "</div>" +
-        '<div id="twoinc-signup-prompt"></div>' +
-        '<div id="twoinc-merchant-invalid-notice" style="display:none"></div>' +
+        '<div id="twoinc-signup-prompt"' +
+        (opts.merchantId === undefined ? "" : ' style="display:none"') +
+        "></div>" +
+        '<div id="twoinc-merchant-invalid-notice" class="twoinc-merchant-notice" style="display:none"></div>' +
         "</td></tr>";
 
   // Mirrors generate_two_refresh_merchant_record_html(); opt-in, so the default page has no button.

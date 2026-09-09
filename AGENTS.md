@@ -341,6 +341,14 @@ The merchant record refreshes on an event, never on expiry
   summary names which of the two it is, because figures read minutes ago whose
   refresh then failed are not out of date. Withholding is unaffected: a cached set
   still resolves and the method is still offered.
+- **A key check that reached no verdict degrades nothing in the admin** (ABN-536).
+  Only a definitive rejection blanks the Merchant ID and marks the key bad, and
+  which verdicts those are is decided by the same predicate the gate uses, sent
+  with the verdict rather than re-listed in the admin script. An unreachable API,
+  a service error, an unexpected status or a request that never left the site
+  leave the identity block and the key indicator exactly as they were, and say
+  the check did not complete in a tone that is not an error colour. A green tick
+  applies only to the key it was earned for.
 - **The admin save stays possible whatever the verification says** (ABN-495). An
   unreachable API judges nothing about the key, and refusing the save locks the
   merchant out of storing the key that would fix the outage; the verdict is reported

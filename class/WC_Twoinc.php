@@ -5593,8 +5593,8 @@ if (!class_exists('WC_Twoinc')) {
                         <div id="twoinc-signup-prompt" style="margin-top: 8px; color: #666; font-size: 13px;<?php echo $merchant_id ? ' display: none;' : ''; ?>">
                             <strong><?php printf(__('Don\'t have an API key? Get one by signing up <a href=\'%s\'>here</a>.', 'twoinc-payment-gateway'), esc_url(WC_Twoinc_Helper::get_merchant_portal_signup_url($this))); ?></strong>
                         </div>
-                        <?php // Hidden by default; populated + shown by admin.js when the live re-verification on page load (or on typing a new key) cannot confirm the key. Text is set dynamically per failure category — invalid key vs Two service error vs unreachable — so an admin isn't stuck guessing "is my key wrong or is Two down" (TWO-25326 follow-up). ?>
-                        <div id="twoinc-merchant-invalid-notice" style="margin-top: 8px; color: #dc3232; font-size: 13px; display: none;"></div>
+                        <?php // Hidden by default; populated + shown by admin.js when the live re-verification on page load (or on typing a new key) cannot confirm the key. Text is set dynamically per failure category — invalid key vs Two service error vs unreachable — so an admin isn't stuck guessing "is my key wrong or is Two down" (TWO-25326 follow-up). The colour lives in admin.css so an inconclusive verdict can be toned down rather than reddened (ABN-536). ?>
+                        <div id="twoinc-merchant-invalid-notice" class="twoinc-merchant-notice" style="margin-top: 8px; font-size: 13px; display: none;"></div>
                         <?php echo $this->get_description_html($data); // WPCS: XSS ok.
                         ?>
                     </fieldset>
