@@ -8633,7 +8633,7 @@ final class BrandConfigSpec
             [self::termFeeSettings(), 30, null, [$wrong_currency], 'checkout', 'full', false, 'the quote came back in another currency'],
             [$two_terms, 30, 60, [new WP_Error(), self::termFeeOk('1.50')], 'checkout', 'full', true, 'a failed term the basket is not charged for'],
             [self::termFeeSettings(), 30, null, [self::termFeeOk('0.00')], 'checkout', 'full', true, 'the quote resolved to nothing to charge'],
-            [['payment_terms_days' => [30], 'surcharge_type' => 'none', 'surcharge_grid' => [30 => ['fixed' => 5.0]]], 30, null, [], 'checkout', 'full', true, 'no surcharge is configured, whatever the grid still holds'],
+            [['payment_terms_days' => [30], 'surcharge_type' => 'fixed_and_percentage', 'surcharge_grid' => [30 => ['fixed' => 0, 'percentage' => 0]]], 30, null, [], 'checkout', 'full', true, 'both components are configured at zero'],
             [$cap_only, 30, null, [], 'checkout', 'full', true, 'the term caps a percentage it does not have'],
             [$differential, 30, null, [], 'checkout', 'full', true, 'fee-difference mode prices the default term against itself'],
             [$zero_grid, 30, 30, [new WP_Error()], 'checkout', 'full', true, 'a quote was attempted for a term that prices to nothing'],
