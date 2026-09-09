@@ -129,6 +129,19 @@ describe("company search country gate", () => {
     expect(visible).not.toContain("registered");
   });
 
+  test("a panel built AFTER the answer landed still carries the gate", () => {
+    // Given: a resolved answer, and a checkout re-render that took the panel
+    // this control was carrying the gate on.
+    ctx.helper.syncCompanySearchAvailability();
+    supportedCountriesRequest().succeed({ supported_countries: ["US"] });
+    harness.releasePanel(ctx.helper);
+
+    // When: the control rebuilds, with no country change to re-ask the gate.
+    ctx.helper.attach();
+
+    expect(ctx.helper.panel.isDisabled()).toBe(true);
+  });
+
   test("manual entry survives as the ONLY offered mode, row and all", () => {
     // Given: an uncovered country AND no sole-trader route — one chip left,
     // and it is not the mode the buyer is in.

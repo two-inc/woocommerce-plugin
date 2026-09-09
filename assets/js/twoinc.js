@@ -1113,6 +1113,10 @@ class TwoCompanySearch {
     if (!panel) return null;
 
     panel.bind();
+    // The gate is answered page-wide and can already be resolved before this
+    // control has a panel to carry it, and nothing re-asks without a country
+    // change (ABN-525).
+    this.syncCompanySearchAvailability();
     this.syncFieldWrapMetrics();
     this.bindFieldWrapRefresh();
     twoincDomHelper.toggleTooltip(this.companyFieldSelector(), window.twoinc.text.tooltip_company);
