@@ -1024,7 +1024,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * independent overrides:
          *
          *   - 'api'      the checkout/merchant API
-         *   - 'checkout' the hosted checkout-page app — loaded by the BROWSER,
+         *   - 'checkout' Two's hosted checkout page — loaded by the BROWSER,
          *                so a Docker-network alias the shop's own server can
          *                reach is not necessarily one the buyer's browser can
          *                resolve

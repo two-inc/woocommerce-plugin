@@ -55,12 +55,12 @@ services:
       # Sibling overrides for the other two service hosts (TWO-40), each
       # independent and each falling back on its own when unset.
       #
-      # TWO_CHECKOUT_BASE_URL is the one the BROWSER loads — the hosted
-      # checkout-page app behind sole-trader signup and company search — so it
+      # TWO_CHECKOUT_BASE_URL is the one the BROWSER loads — Two's hosted
+      # checkout page, behind sole-trader signup and company search — so it
       # has to be a host the buyer's browser can resolve. `localhost` and
       # `host.docker.internal` are fine while the shop itself is local and
-      # resolve to nothing useful once it is not; a reverse tunnel exposing the
-      # local checkout-page dev server is what covers the remote-shop case.
+      # resolve to nothing useful once it is not; a reverse tunnel exposing a
+      # locally-run instance of it is what covers the remote-shop case.
       TWOINC_DEV_CHECKOUT_HOST: "${TWO_CHECKOUT_BASE_URL:-}"
       TWOINC_DEV_PORTAL_HOST: "${TWO_PORTAL_BASE_URL:-}"
     volumes:
