@@ -8518,6 +8518,10 @@ final class BrandConfigSpec
             foreach ($cases as $case) {
                 list($options, $term, $prequoted, $responses, $on_checkout, $basket, $expected_offered, $description) = $case;
                 WC_Twoinc_Payment_Terms::reset_fee_cache();
+                // Each row is its own request AND its own cache window: a
+                // quote left in the transient store would answer the next
+                // row's identical request without an HTTP call.
+                $GLOBALS['__twoinc_test_transients'] = [];
                 $GLOBALS['__twoinc_test_logs'] = [];
                 $GLOBALS['__twoinc_test_is_checkout'] = $on_checkout;
                 $gateway = self::quoteGateway($options, $responses);
