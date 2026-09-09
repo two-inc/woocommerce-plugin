@@ -1096,9 +1096,24 @@ msgstr "uitgerold %s UTC"
 msgid "%s API key verified."
 msgstr "%s API-sleutel geverifieerd."
 
-#: class/WC_Twoinc.php:5802
-msgid "Failed to verify API key."
-msgstr "Het verifiëren van de API-sleutel is mislukt."
+#: class/WC_Twoinc.php
+#, php-format
+msgid "%s rejected that API key, so the previously saved key was kept."
+msgstr "%s heeft deze API-sleutel geweigerd, dus de eerder opgeslagen sleutel is behouden."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "API key saved, but %s could not be reached to verify it."
+msgstr "De API-sleutel is opgeslagen, maar %s kon niet worden bereikt om deze te verifiëren."
+
+#: class/WC_Twoinc.php
+msgid "API key saved, but it could not be verified because no environment is configured."
+msgstr "De API-sleutel is opgeslagen, maar kon niet worden geverifieerd omdat er geen omgeving is geconfigureerd."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "API key saved, but %s returned an error while verifying it."
+msgstr "De API-sleutel is opgeslagen, maar %s gaf een fout tijdens het verifiëren."
 
 #: class/WC_Twoinc_Checkout.php:165 class/WC_Twoinc_Checkout.php:179
 #: class/WC_Twoinc_Checkout.php:193 class/WC_Twoinc_Checkout.php:217

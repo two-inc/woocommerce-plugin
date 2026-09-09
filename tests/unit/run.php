@@ -256,9 +256,11 @@ final class BrandConfigSpec
             'testEnableCompanySearchForOthersSettingDroppedFromUpgradedInstalls',
             'testCategorizeVerificationResultDistinguishesFailureReasons',
             'testVerifyApiKeyDistinguishesUnreachableFromNotConfigured',
+            'testOnlyARejectedApiKeyRevertsOnSave',
             'testApiKeyVerificationStatusCachedAcrossCallsWithinTtl',
             'testIsAvailableFalseWhenApiKeyVerificationFails',
             'testIsAvailableTrueOnlyWhenEnabledAndVerified',
+            'testRecordlessOkResponseWithholdsPaymentMethod',
             'testCheckoutWindowTwoincSuppressedOnVerificationFailure',
             'testVerifyApiKeyMalformedResponseNotMiscategorizedAsNotConfigured',
             'testAdminLiveVerificationWarmsCheckoutCache',
@@ -9100,6 +9102,93 @@ final class BrandConfigSpec
     }
 
     /**
+     * Gateway for a settings save. $checkout_host_configured false leaves no
+     * API host to send to, which is the one way the save reaches the
+     * 'not_configured' verdict.
+     */
+    private static function save_gateway(bool $checkout_host_configured): WC_Twoinc
+    {
+        return new class ($checkout_host_configured) extends WC_Twoinc {
+            private $checkout_host_configured;
+
+            public function __construct($checkout_host_configured)
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->checkout_host_configured = $checkout_host_configured;
+            }
+
+            public function get_twoinc_checkout_host()
+            {
+                return $this->checkout_host_configured ? parent::get_twoinc_checkout_host() : '';
+            }
+
+            public function get_merchant_available_terms(): array
+            {
+                return [14, 30, 60, 90];
+            }
+        };
+    }
+
+    /**
+     * ABN-495. The settings save reverted the submitted API key to the
+     * stored one on EVERY non-200, a network failure included. On a fresh
+     * install the stored key is empty, so a merchant could not configure
+     * the plugin at all while Two was unreachable — and the key they were
+     * typing may be the one that would have made the shop resolvable.
+     *
+     * Drives the real save and asserts the PERSISTED option, so a save that
+     * silently discards the submitted value fails here.
+     */
+    private static function testOnlyARejectedApiKeyRevertsOnSave(): void
+    {
+        // [canned verify_api_key response, key that must be persisted, the
+        // notice it must carry, whether that notice blocks, whether an API
+        // host resolves at all, why].
+        $cases = [
+            [new WP_Error('http_request_failed', 'could not resolve host'), 'new-key', 'could not be reached', false, true, 'a connection failure must not discard the submitted key'],
+            [false, 'new-key', 'could not be reached', false, true, 'a timeout that returns nothing must not discard the submitted key'],
+            [['response' => ['code' => 500], 'body' => '{}'], 'new-key', 'returned an error', false, true, 'a service error must not discard the submitted key'],
+            [['response' => ['code' => 401], 'body' => '{}'], 'old-key', 'rejected that API key', true, true, 'a 401 rejection must keep the stored key'],
+            [['response' => ['code' => 403], 'body' => '{}'], 'old-key', 'rejected that API key', true, true, 'a 403 rejection must keep the stored key'],
+            [['response' => ['code' => 200], 'body' => '{"id":"merchant-1","short_name":"shop"}'], 'new-key', 'API key verified', false, true, 'a verified key must persist'],
+            [['response' => ['code' => 200], 'body' => '{}'], 'new-key', 'returned an error', false, true, 'a 200 carrying no merchant record is not a verification'],
+            [['response' => ['code' => 200], 'body' => '<html><body>Sign in to continue</body></html>'], 'new-key', 'returned an error', false, true, 'an unreadable 200 must not be reported as verified'],
+            [['response' => ['code' => 200], 'body' => '{"id":"merchant-1"}'], 'new-key', 'no environment is configured', false, false, 'with no host resolved nothing was sent, so no error can be reported'],
+        ];
+
+        foreach ($cases as [$response, $expected_key, $notice, $blocking, $host_configured, $description]) {
+            $gateway = self::save_gateway($host_configured);
+            $gateway->init_form_fields();
+            $option_key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$option_key] = [
+                'api_key' => 'old-key',
+                'title' => 'stored title',
+            ];
+            $gateway->init_settings();
+            $GLOBALS['__twoinc_test_http_response'] = $response;
+            $GLOBALS['__twoinc_test_admin_messages'] = [];
+            $GLOBALS['__twoinc_test_admin_errors'] = [];
+            $gateway->test_post_data = [
+                $gateway->get_field_key('api_key') => 'new-key',
+                $gateway->get_field_key('title') => 'edited title',
+            ];
+            $gateway->process_admin_options();
+            $saved = get_option($option_key, []);
+
+            TinyAssert::same($expected_key, $saved['api_key'] ?? null, $description);
+            TinyAssert::same('edited title', $saved['title'] ?? null, $description . ' — and a sibling field in the same save must land');
+
+            $bucket = $blocking ? $GLOBALS['__twoinc_test_admin_errors'] : $GLOBALS['__twoinc_test_admin_messages'];
+            $other = $blocking ? $GLOBALS['__twoinc_test_admin_messages'] : $GLOBALS['__twoinc_test_admin_errors'];
+            TinyAssert::true(
+                strpos(implode("\n", $bucket), $notice) !== false,
+                $description . ' — and say why in the right notice bucket'
+            );
+            TinyAssert::same([], $other, $description . ' — and nothing in the other bucket');
+        }
+    }
+
+    /**
      * is_available() / the checkout bootstrap must not fire a live
      * verify_api_key() HTTP call on every evaluation — get_api_key_verification_status()
      * is expected to serve the second call from its transient cache
@@ -9282,6 +9371,68 @@ final class BrandConfigSpec
         $gateway->enabled = 'yes';
         $GLOBALS['__twoinc_test_transients'] = [];
         TinyAssert::same(true, $gateway->is_available());
+    }
+
+    /**
+     * ABN-495. A 200 from something that is not Two — a captive portal, a
+     * proxy, a maintenance page — carries no merchant record, so the shop
+     * has no resolved identity to sell under and the method must stay
+     * withheld. Drives the real gate
+     * (get_api_key_verification_status() into is_available()) rather than
+     * a primed verdict, and includes a full-record control so the table
+     * cannot pass by withholding everything.
+     */
+    private static function testRecordlessOkResponseWithholdsPaymentMethod(): void
+    {
+        $make_gateway = static function ($response) {
+            return new class ($response) extends WC_Twoinc {
+                public $options = ['api_key' => 'key'];
+                public $enabled = 'yes';
+                private $response;
+
+                public function __construct($response)
+                {
+                    $this->response = $response;
+                }
+
+                public function get_twoinc_checkout_host()
+                {
+                    return 'https://api.example';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+
+                public function update_option($key, $value = '')
+                {
+                    $this->options[$key] = $value;
+                    return true;
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                {
+                    return $this->response;
+                }
+            };
+        };
+
+        // [verify endpoint's 200 body, verdict, offered at checkout, why].
+        $cases = [
+            ['{"id":"42","short_name":"shop"}', 'ok', true, 'a full merchant record is a verification'],
+            ['{"id":"42"}', 'ok', true, 'a record without a short name still resolves the merchant'],
+            ['{}', 'error', false, 'a 200 carrying no merchant record must not open the gate'],
+            ['{"short_name":"shop"}', 'error', false, 'a 200 with a short name but no id resolves no merchant'],
+            ['<html><body>Sign in to continue</body></html>', 'error', false, 'an unreadable 200 must not open the gate'],
+        ];
+
+        foreach ($cases as [$body, $status, $available, $description]) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $gateway = $make_gateway(['response' => ['code' => 200], 'body' => $body]);
+            TinyAssert::same($status, $gateway->get_api_key_verification_status()['status'], $description);
+            TinyAssert::same($available, $gateway->is_available(), $description . ' — and the checkout gate must agree');
+        }
     }
 
     /**
