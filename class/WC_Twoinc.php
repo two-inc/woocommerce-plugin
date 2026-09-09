@@ -69,6 +69,7 @@ if (!class_exists('WC_Twoinc')) {
             'platform_minimum_order',
             'merchant_surcharge_limit',
             'supported_buyer_countries',
+            'merchant_record_last_error',
         ];
 
         private bool $twoinc_process_confirmation_called = false;
@@ -306,7 +307,42 @@ if (!class_exists('WC_Twoinc')) {
                     self::$merchant_record = $body;
                 }
             }
+            if (self::$merchant_record === null) {
+                self::record_merchant_record_error($response);
+            }
             return self::$merchant_record;
+        }
+
+        /**
+         * Persist why the last fetch produced no record. The render that has to
+         * explain an unresolved term set is rarely the request whose fetch
+         * failed, so the cause cannot live in a memo (ABN-513).
+         *
+         * @param array|WP_Error|null $response make_request()'s return value.
+         */
+        private static function record_merchant_record_error($response): void
+        {
+            $code = (is_array($response) && isset($response['response']['code']))
+                ? (int) $response['response']['code']
+                : null;
+            if (!$response || is_wp_error($response)) {
+                $status = 'unreachable';
+            } elseif ($code === 401 || $code === 403) {
+                $status = 'invalid_key';
+            } elseif ($code === 429) {
+                $status = 'rate_limited';
+            } elseif ($code !== null && $code >= 500) {
+                $status = 'service_error';
+            } elseif ($code !== null && $code !== 200) {
+                $status = 'error';
+            } else {
+                $status = 'malformed_response';
+            }
+            update_option(
+                WC_Twoinc_Brand::prefixed_name('merchant_record_last_error'),
+                ['status' => $status, 'code' => $code, 'at' => time()],
+                false
+            );
         }
 
         /**
@@ -361,6 +397,7 @@ if (!class_exists('WC_Twoinc')) {
             self::store_supported_buyer_countries($record);
             self::store_merchant_surcharge_limit($record);
             update_option($checked_option, time(), false);
+            delete_option(WC_Twoinc_Brand::prefixed_name('merchant_record_last_error'));
 
             return true;
         }
@@ -753,6 +790,160 @@ if (!class_exists('WC_Twoinc')) {
         public function has_offerable_payment_terms(): bool
         {
             return count($this->get_merchant_available_terms()) > 0;
+        }
+
+        /**
+         * Why the offerable term set is what it is, for the admin surfaces that
+         * have to explain it and for the withhold log line (ABN-513). `state` is
+         * one of 'resolved', 'fetch_failed' (`reason`/`code` name the failure),
+         * 'none_offered' (a successful read of an account offering nothing),
+         * 'not_reported' (a successful read carrying no term list at all — the
+         * account is then withheld indefinitely), 'never_fetched',
+         * 'not_configured'.
+         *
+         * @return array{state: string, reason: string|null, code: int|null, checked_on: int, count: int}
+         */
+        public function get_merchant_terms_state(): array
+        {
+            $terms = $this->get_merchant_available_terms();
+            $checked_on = (int) get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on'));
+            $error = get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_last_error'));
+            $state = [
+                'state' => 'resolved',
+                'reason' => null,
+                'code' => null,
+                'checked_on' => $checked_on,
+                'count' => count($terms),
+            ];
+
+            if ($state['count'] > 0) {
+                return $state;
+            }
+            if (!$this->get_option('api_key') || !$this->get_merchant_id()) {
+                $state['state'] = 'not_configured';
+                return $state;
+            }
+            if (is_array($error) && isset($error['status'])) {
+                $state['state'] = 'fetch_failed';
+                $state['reason'] = (string) $error['status'];
+                $state['code'] = isset($error['code']) ? $error['code'] : null;
+                return $state;
+            }
+            if ($checked_on > 0) {
+                // A stored "[]" is an account that offers nothing; no row at all
+                // means the record carried no term field to store.
+                $row = get_option(WC_Twoinc_Brand::prefixed_name('merchant_available_terms'));
+                $state['state'] = ($row === false || $row === '') ? 'not_reported' : 'none_offered';
+                return $state;
+            }
+            $state['state'] = 'never_fetched';
+
+            return $state;
+        }
+
+        /**
+         * Merchant-facing explanation of an unresolved term set: the cause, the
+         * consequence, and when the terms were last read. '' when resolved.
+         */
+        public function get_merchant_terms_notice(): string
+        {
+            $state = $this->get_merchant_terms_state();
+            if ($state['state'] === 'resolved') {
+                return '';
+            }
+            $product_name = WC_Twoinc_Brand::get('product_name');
+            $sentences = [
+                self::describe_merchant_terms_cause($state, $product_name),
+                sprintf(
+                    /* translators: %s is the brand product name (e.g. "Two") */
+                    __('The %s payment method is hidden from checkout until a payment term is available.', 'twoinc-payment-gateway'),
+                    $product_name
+                ),
+                $state['checked_on'] > 0
+                    ? sprintf(
+                        /* translators: %s is a date and time in the site's own format */
+                        __('Payment terms were last read successfully on %s.', 'twoinc-payment-gateway'),
+                        self::format_merchant_record_timestamp($state['checked_on'])
+                    )
+                    : __('Payment terms have never been read successfully on this site.', 'twoinc-payment-gateway'),
+            ];
+            if (in_array($state['state'], ['fetch_failed', 'never_fetched'], true)) {
+                $sentences[] = __('The plugin retries by itself; "Refresh merchant profile" under Diagnostics retries now.', 'twoinc-payment-gateway');
+            }
+
+            return implode(' ', $sentences);
+        }
+
+        /** One sentence naming the cause, with the HTTP status where the API gave one. */
+        private static function describe_merchant_terms_cause(array $state, string $product_name): string
+        {
+            switch ($state['state']) {
+                case 'not_configured':
+                    /* translators: %s is the brand product name (e.g. "Two") */
+                    return sprintf(__('No API key is saved, so your payment terms cannot be read from %s.', 'twoinc-payment-gateway'), $product_name);
+                case 'none_offered':
+                    /* translators: %s is the brand product name (e.g. "Two") */
+                    return sprintf(__('Your %s account currently offers no payment terms.', 'twoinc-payment-gateway'), $product_name);
+                case 'not_reported':
+                    /* translators: %s is the brand product name (e.g. "Two") */
+                    return sprintf(__('Your %s account returned no list of payment terms.', 'twoinc-payment-gateway'), $product_name);
+                case 'never_fetched':
+                    /* translators: %s is the brand product name (e.g. "Two") */
+                    return sprintf(__('Your payment terms have not been read from %s yet.', 'twoinc-payment-gateway'), $product_name);
+            }
+            $code = (int) $state['code'];
+            switch ($state['reason']) {
+                case 'unreachable':
+                    /* translators: %s is the brand product name (e.g. "Two") */
+                    return sprintf(__('Your payment terms could not be read: %s could not be reached (network failure or timeout).', 'twoinc-payment-gateway'), $product_name);
+                case 'invalid_key':
+                    /* translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code */
+                    return sprintf(__('Your payment terms could not be read: %1$s rejected the saved API key (HTTP %2$d).', 'twoinc-payment-gateway'), $product_name, $code);
+                case 'rate_limited':
+                    /* translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code */
+                    return sprintf(__('Your payment terms could not be read: %1$s refused the request as too frequent (HTTP %2$d).', 'twoinc-payment-gateway'), $product_name, $code);
+                case 'service_error':
+                    /* translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code */
+                    return sprintf(__('Your payment terms could not be read: %1$s reported a server error (HTTP %2$d).', 'twoinc-payment-gateway'), $product_name, $code);
+                case 'error':
+                    /* translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code */
+                    return sprintf(__('Your payment terms could not be read: %1$s answered HTTP %2$d.', 'twoinc-payment-gateway'), $product_name, $code);
+            }
+
+            /* translators: %s is the brand product name (e.g. "Two") */
+            return sprintf(__('Your payment terms could not be read: the answer from %s could not be understood.', 'twoinc-payment-gateway'), $product_name);
+        }
+
+        /** Site timezone, in the site's own date and time format. */
+        private static function format_merchant_record_timestamp(int $timestamp): string
+        {
+            $format = trim((string) get_option('date_format') . ' ' . (string) get_option('time_format'));
+
+            return (string) wp_date($format !== '' ? $format : 'Y-m-d H:i', $timestamp);
+        }
+
+        /** Terse resolved/unresolved wording for the install health summary. */
+        private static function summarise_merchant_terms_state(array $state): string
+        {
+            switch ($state['state']) {
+                case 'resolved':
+                    /* translators: %d is a count of payment terms */
+                    return sprintf(__('Resolved (%d available)', 'twoinc-payment-gateway'), (int) $state['count']);
+                case 'not_configured':
+                    return __('No API key saved', 'twoinc-payment-gateway');
+                case 'none_offered':
+                    return __('None offered by the account', 'twoinc-payment-gateway');
+                case 'not_reported':
+                    return __('Not returned by the account', 'twoinc-payment-gateway');
+                case 'never_fetched':
+                    return __('Not read yet', 'twoinc-payment-gateway');
+            }
+            $code = (int) $state['code'];
+
+            return $code > 0
+                /* translators: %d is an HTTP status code */
+                ? sprintf(__('Could not be read (HTTP %d)', 'twoinc-payment-gateway'), $code)
+                : __('Could not be read', 'twoinc-payment-gateway');
         }
 
         /**
@@ -2074,7 +2265,7 @@ if (!class_exists('WC_Twoinc')) {
                 </th>
                 <td class="forminp">
                     <?php if (empty($options)) : ?>
-                        <p><?php esc_html_e('No payment terms are available from your merchant account yet. Check that a valid API key is saved; if it is, the term list will load on the next refresh.', 'twoinc-payment-gateway'); ?></p>
+                        <p><?php echo esc_html($this->get_merchant_terms_notice()); ?></p>
                     <?php else : ?>
                     <fieldset class="twoinc-term-checkboxes"<?php echo $show_fees ? ' data-fees="1"' : ''; ?>>
                         <?php foreach ($options as $value => $label) :
@@ -2670,8 +2861,14 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
             // A verified key proves identity, not that the account can sell (ABN-495).
-            if (!$this->has_offerable_payment_terms()) {
-                $this->log_withheld_from_checkout('merchant offerable payment terms not resolved');
+            $terms = $this->get_merchant_terms_state();
+            if ($terms['state'] !== 'resolved') {
+                $this->log_withheld_from_checkout(sprintf(
+                    'merchant offerable payment terms unresolved: %s%s%s',
+                    $terms['state'],
+                    $terms['reason'] ? " ({$terms['reason']})" : '',
+                    $terms['code'] ? " (HTTP {$terms['code']})" : ''
+                ));
                 return false;
             }
             return true;
@@ -3024,8 +3221,11 @@ if (!class_exists('WC_Twoinc')) {
 
             $gateway = self::get_instance();
             if (!$gateway->refresh_merchant_record_caches(true)) {
+                $notice = $gateway->get_merchant_terms_notice();
                 wp_send_json_error([
-                    'message' => __('Could not refresh the merchant profile. Check that the API key is valid and that the API is reachable.', 'twoinc-payment-gateway'),
+                    'message' => $notice !== ''
+                        ? $notice
+                        : __('Could not refresh the merchant profile; the values read previously are still in use.', 'twoinc-payment-gateway'),
                 ]);
                 return;
             }
@@ -5492,10 +5692,11 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Read-only install health summary (TWO-25386, ported from
          * PrestaShop's renderTwoPluginHealthChecklist): API key status,
-         * environment, SSL verification state, and the PHP curl extension
-         * WooCommerce's own HTTP API needs. A row reporting "OK" when it
-         * isn't is worse than no row, so these read the same live state the
-         * rest of the gateway acts on rather than a cached snapshot.
+         * environment, SSL verification state, the PHP curl extension
+         * WooCommerce's own HTTP API needs, and the merchant profile the
+         * offerable term set comes from (ABN-513). A row reporting "OK" when
+         * it isn't is worse than no row, so these read the same live state
+         * the rest of the gateway acts on rather than a cached snapshot.
          */
         public function generate_two_health_checklist_html($key, $data)
         {
@@ -5504,6 +5705,7 @@ if (!class_exists('WC_Twoinc')) {
             $environment = WC_Twoinc_Helper::get_environment_mode($this);
             $ssl_disabled = $this->should_disable_ssl_verify();
             $curl_present = extension_loaded('curl');
+            $terms = $this->get_merchant_terms_state();
 
             $rows = [
                 [
@@ -5525,6 +5727,18 @@ if (!class_exists('WC_Twoinc')) {
                     'label' => __('PHP curl extension', 'twoinc-payment-gateway'),
                     'value' => $curl_present ? __('Present', 'twoinc-payment-gateway') : __('Missing', 'twoinc-payment-gateway'),
                     'ok'    => $curl_present,
+                ],
+                [
+                    'label' => __('Payment terms', 'twoinc-payment-gateway'),
+                    'value' => self::summarise_merchant_terms_state($terms),
+                    'ok'    => $terms['state'] === 'resolved',
+                ],
+                [
+                    'label' => __('Merchant profile last read', 'twoinc-payment-gateway'),
+                    'value' => $terms['checked_on'] > 0
+                        ? self::format_merchant_record_timestamp($terms['checked_on'])
+                        : __('Never', 'twoinc-payment-gateway'),
+                    'ok'    => $terms['checked_on'] > 0,
                 ],
             ];
 

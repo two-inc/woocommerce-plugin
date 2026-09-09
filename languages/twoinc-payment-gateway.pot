@@ -245,10 +245,129 @@ msgstr ""
 msgid "Surcharge fixed amount for the %1$s-day term exceeds the maximum of %2$s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1964
-msgid "No payment terms are available from your merchant account yet. Check that a valid API key is saved; if it is, the term list will load on the next refresh."
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Your payment terms could not be read: %s could not be reached (network failure or timeout)."
 msgstr ""
 
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Your payment terms could not be read: %1$s rejected the saved API key (HTTP %2$d)."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Your payment terms could not be read: %1$s refused the request as too frequent (HTTP %2$d)."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Your payment terms could not be read: %1$s reported a server error (HTTP %2$d)."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Your payment terms could not be read: %1$s answered HTTP %2$d."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Your payment terms could not be read: the answer from %s could not be understood."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Your %s account currently offers no payment terms."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Your %s account returned no list of payment terms."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Your payment terms have not been read from %s yet."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php
+#, php-format
+msgid "No API key is saved, so your payment terms cannot be read from %s."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php
+#, php-format
+msgid "The %s payment method is hidden from checkout until a payment term is available."
+msgstr ""
+
+#. translators: %s is a date and time in the site's own format
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Payment terms were last read successfully on %s."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Payment terms have never been read successfully on this site."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "The plugin retries by itself; \"Refresh merchant profile\" under Diagnostics retries now."
+msgstr ""
+
+#. translators: %d is a count of payment terms
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Resolved (%d available)"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "No API key saved"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "None offered by the account"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Not returned by the account"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Not read yet"
+msgstr ""
+
+#. translators: %d is an HTTP status code
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Could not be read (HTTP %d)"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Could not be read"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Merchant profile last read"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Never"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Could not refresh the merchant profile; the values read previously are still in use."
+msgstr ""
 #: class/WC_Twoinc.php:2040
 msgid "Select at least one payment term or enter a custom term."
 msgstr ""
@@ -1371,6 +1490,3 @@ msgstr ""
 msgid "Merchant profile refreshed."
 msgstr ""
 
-#: class/WC_Twoinc.php
-msgid "Could not refresh the merchant profile. Check that the API key is valid and that the API is reachable."
-msgstr ""

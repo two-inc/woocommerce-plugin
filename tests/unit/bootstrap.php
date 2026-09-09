@@ -1355,6 +1355,13 @@ function wp_timezone()
     return new DateTimeZone($GLOBALS['__twoinc_test_timezone'] ?? 'UTC');
 }
 
+function wp_date($format, $timestamp = null, $timezone = null)
+{
+    return (new DateTimeImmutable('@' . ($timestamp ?? time())))
+        ->setTimezone($timezone ?? wp_timezone())
+        ->format($format);
+}
+
 // The real one lives in tillit-payment-gateway.php, which the suite does
 // not load (it bootstraps WordPress hooks on include). Tests that care
 // override $GLOBALS['__twoinc_test_plugin_version'].
