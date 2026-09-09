@@ -1512,10 +1512,6 @@ msgid "No attempt has been made yet."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "Check the API key and Environment settings above."
-msgstr ""
-
-#: class/WC_Twoinc.php
 msgid "Payment method at checkout"
 msgstr ""
 
@@ -1524,34 +1520,62 @@ msgid "Not shown at checkout"
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "the payment method is disabled. Check Enable/Disable."
-msgstr ""
-
-#: class/WC_Twoinc.php
-msgid "no API key is saved. Check API key."
-msgstr ""
-
-#: class/WC_Twoinc.php
-msgid "the API key was rejected. Check API key and Environment."
-msgstr ""
-
-#: class/WC_Twoinc.php
 msgid "Cannot be checked — the API key could not be verified just now."
-msgstr ""
-
-#: class/WC_Twoinc.php
-msgid "the buyer surcharge cannot be priced in the store currency. Check the surcharge settings."
-msgstr ""
-
-#: class/WC_Twoinc.php
-msgid "your account allows no buyer countries. Contact us to have them enabled."
 msgstr ""
 
 #: class/WC_Twoinc.php
 msgid "Shown at checkout"
 msgstr ""
+#: class/WC_Twoinc.php
+msgid "the payment method is disabled. Check \"Turn on/off\"."
+msgstr ""
 
 #: class/WC_Twoinc.php
 #, php-format
-msgid "hidden for baskets below %1$s %2$s (%3$s)"
+msgid "no API key is saved. Check \"%s API key\"."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the API key was rejected. Check \"%s API key\" and \"Environment\"."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "the buyer surcharge cannot be priced in the store currency. Check \"Surcharge method\"."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "no buyer countries are currently enabled for your account. Contact %s to have them enabled."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "your account offers no payment term. See \"Payment terms\" above."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Cannot be checked — your payment terms could not be read just now."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %s"
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %1$s or %2$s"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "excluding tax"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "including tax"
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Check the \"%s API key\" and \"Environment\" settings."
 msgstr ""

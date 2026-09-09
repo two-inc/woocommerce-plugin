@@ -428,7 +428,7 @@ final class BrandConfigSpec
 
         // [gateway enabled, verify HTTP status, merchant record (null = fetch fails), log fragment, why].
         $cases = [
-            ['no', 200, ['id' => '42', 'available_terms' => [30]], 'Enable/Disable is "no"',
+            ['no', 200, ['id' => '42', 'available_terms' => [30]], '"Turn on/off" is "no"',
                 'a switched-off gateway names the switch'],
             ['yes', 401, ['id' => '42', 'available_terms' => [30]], 'API key verification status "invalid_key"',
                 'a rejected key names the verdict'],
@@ -575,21 +575,62 @@ final class BrandConfigSpec
      */
     private static function testTheHealthChecklistNamesWhyTheMethodIsAbsent(): void
     {
-        $make_gateway = static function (array $options, $verify_code, $buyer_countries, $platform_minimum) {
-            return new class ($options, $verify_code, $buyer_countries, $platform_minimum) extends WC_Twoinc {
+        $make_gateway = static function (
+            array $options,
+            $verify_code,
+            $buyer_countries,
+            $platform_minimum,
+            $merchant_minimum = null,
+            $terms_state = 'resolved'
+        ) {
+            return new class (
+                $options,
+                $verify_code,
+                $buyer_countries,
+                $platform_minimum,
+                $merchant_minimum,
+                $terms_state
+            ) extends WC_Twoinc {
                 public $enabled = 'yes';
                 private $options;
                 private $verify_code;
                 private $buyer_countries;
                 private $platform_minimum;
+                private $merchant_minimum;
+                private $terms_state;
 
-                public function __construct($options, $verify_code, $buyer_countries, $platform_minimum)
-                {
+                public function __construct(
+                    $options,
+                    $verify_code,
+                    $buyer_countries,
+                    $platform_minimum,
+                    $merchant_minimum,
+                    $terms_state
+                ) {
                     $this->id = WC_Twoinc_Brand::get('gateway_id');
                     $this->options = $options + ['api_key' => 'key', 'merchant_id' => '42'];
                     $this->verify_code = $verify_code;
                     $this->buyer_countries = $buyer_countries;
                     $this->platform_minimum = $platform_minimum;
+                    $this->merchant_minimum = $merchant_minimum;
+                    $this->terms_state = $terms_state;
+                }
+
+                public function get_merchant_minimum_order()
+                {
+                    return $this->merchant_minimum;
+                }
+
+                public function get_merchant_terms_state(): array
+                {
+                    return [
+                        'state' => $this->terms_state,
+                        'reason' => null,
+                        'code' => null,
+                        'checked_on' => 0,
+                        'attempted_on' => 0,
+                        'count' => $this->terms_state === 'resolved' ? 1 : 0,
+                    ];
                 }
 
                 public function get_twoinc_checkout_host()
@@ -628,29 +669,62 @@ final class BrandConfigSpec
 
         $eur250 = ['amount' => 250.0, 'currency' => 'EUR', 'basis' => 'net'];
 
-        // [gateway enabled, options, verify HTTP status, buyer allowlist, platform min, expected row fragment, why].
+        $gbp1000 = ['amount' => 1000.0, 'currency' => 'GBP', 'basis' => 'gross'];
+
+        // [gateway enabled, options, verify HTTP status, buyer allowlist, platform min,
+        //  merchant min, terms state, expected row fragment, why].
         $cases = [
-            ['no', [], 200, null, null, 'Not shown at checkout — the payment method is disabled. Check Enable/Disable.',
+            ['no', [], 200, null, null, null, 'resolved',
+                'Not shown at checkout — the payment method is disabled. Check "Turn on/off".',
                 'the switched-off method names the switch'],
-            ['yes', ['api_key' => ''], 200, null, null, 'Not shown at checkout — no API key is saved. Check API key.',
+            ['yes', ['api_key' => ''], 200, null, null, null, 'resolved',
+                'no API key is saved. Check "Two API key".',
                 'an unconfigured install is not a rejected key'],
-            ['yes', [], 401, null, null, 'Not shown at checkout — the API key was rejected. Check API key and Environment.',
+            ['yes', [], 401, null, null, null, 'resolved',
+                'the API key was rejected. Check "Two API key" and "Environment".',
                 'a definitive rejection names both fields'],
-            ['yes', [], 503, null, null, 'Cannot be checked — the API key could not be verified just now.',
+            ['yes', [], 503, null, null, null, 'resolved',
+                'Cannot be checked — the API key could not be verified just now.',
                 'a transient verdict must not be reported as the method being withheld (ABN-533)'],
-            ['yes', ['surcharge_type' => 'not-a-method'], 200, null, null, 'the buyer surcharge cannot be priced',
+            ['yes', ['surcharge_type' => 'not-a-method'], 200, null, null, null, 'resolved',
+                'the buyer surcharge cannot be priced',
                 'an unrecognised stored surcharge method names itself'],
-            ['yes', [], 200, [], null, 'your account allows no buyer countries',
+            ['yes', [], 200, [], null, null, 'resolved',
+                'no buyer countries are currently enabled for your account',
                 'an empty allowlist hides the method for every buyer, which no local field explains'],
-            ['yes', [], 200, ['NL'], null, 'Shown at checkout',
+            ['yes', [], 200, null, null, null, 'none_offered',
+                'your account offers no payment term',
+                'an account offering nothing withholds, and is not a credentials problem'],
+            ['yes', [], 200, null, null, null, 'fetch_failed',
+                'Cannot be checked — your payment terms could not be read just now.',
+                'a failed terms read is not evidence the account offers nothing'],
+            ['yes', [], 200, ['NL'], null, null, 'resolved',
+                'Shown at checkout',
                 'a populated allowlist is not a reason to withhold'],
-            ['yes', [], 200, null, $eur250, 'Shown at checkout — hidden for baskets below 250.00 EUR (net)',
+            ['yes', [], 200, null, $eur250, null, 'resolved',
+                'Shown at checkout — hidden for baskets below 250.00 EUR (excluding tax)',
                 'the basket-dependent gate is named as a constraint, not as the current state'],
+            ['yes', [], 200, null, null, $gbp1000, 'resolved',
+                'hidden for baskets below 1000.00 GBP (including tax)',
+                'the merchant own floor binds even with no platform floor'],
+            ['yes', [], 200, null, $eur250, $gbp1000, 'resolved',
+                '250.00 EUR (excluding tax) or 1000.00 GBP (including tax)',
+                'two floors in different currencies cannot be reduced to one, so both are named'],
         ];
 
-        foreach ($cases as [$enabled, $options, $verify_code, $allowlist, $minimum, $fragment, $description]) {
+        foreach ($cases as [
+            $enabled, $options, $verify_code, $allowlist, $minimum, $merchant_minimum, $terms_state,
+            $fragment, $description,
+        ]) {
             $GLOBALS['__twoinc_test_transients'] = [];
-            $gateway = $make_gateway($options, $verify_code, $allowlist, $minimum);
+            $gateway = $make_gateway(
+                $options,
+                $verify_code,
+                $allowlist,
+                $minimum,
+                $merchant_minimum,
+                $terms_state
+            );
             $gateway->enabled = $enabled;
 
             $html = $gateway->generate_two_health_checklist_html('health_checklist', ['title' => 'Install health']);
@@ -726,8 +800,8 @@ final class BrandConfigSpec
 
             TinyAssert::true(strpos($notice, $fragment) !== false, $description . ": notice [$notice]");
             TinyAssert::true(
-                strpos($notice, 'Check the API key and Environment settings') !== false,
-                $description . ': the fields to check must be named whatever the cause'
+                strpos($notice, 'API key" and "Environment" settings') !== false,
+                $description . ': a failed read names the fields to check'
             );
         }
     }
@@ -3093,11 +3167,12 @@ final class BrandConfigSpec
                 strpos($notice, 'rejected the saved API key') !== false,
                 $description . ': a rejection is claimed only where the API rejected it'
             );
-            // ABN-515: every unresolved notice names the fields to check,
-            // whatever the cause.
-            TinyAssert::true(
-                strpos($notice, 'Check the API key and Environment settings') !== false,
-                $description . ': the fields to check must be named'
+            // ABN-515: a read that failed names the fields to check; a
+            // successful read of an account offering nothing does not.
+            TinyAssert::same(
+                in_array($expected_state, ['fetch_failed', 'never_fetched', 'not_configured'], true),
+                strpos($notice, 'API key" and "Environment" settings') !== false,
+                $description . ': the fields to check are named only where the read failed'
             );
             if ($expected_code !== null) {
                 TinyAssert::true(

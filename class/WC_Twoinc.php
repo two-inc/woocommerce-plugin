@@ -810,7 +810,7 @@ if (!class_exists('WC_Twoinc')) {
                 'reason' => $recorded_failure ? (string) $error['status'] : null,
                 'code' => $recorded_failure && isset($error['code']) ? $error['code'] : null,
                 'checked_on' => $checked_on,
-                'attempted_on' => 0,
+                'attempted_on' => (int) get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on')),
                 'count' => count($terms),
                 // Age half is refresh_merchant_record_caches()'s own freshness
                 // test, negated; the recorded failure is an additional reason,
@@ -890,8 +890,14 @@ if (!class_exists('WC_Twoinc')) {
                     self::format_merchant_record_timestamp($state['attempted_on'])
                 )
                 : __('No attempt has been made yet.', 'twoinc-payment-gateway');
-            $sentences[] = __('Check the API key and Environment settings above.', 'twoinc-payment-gateway');
-            if (in_array($state['state'], ['fetch_failed', 'never_fetched'], true)) {
+            // Only where the read itself failed: a successful read of an
+            // account offering nothing is not a credentials problem.
+            if (in_array($state['state'], ['fetch_failed', 'never_fetched', 'not_configured'], true)) {
+                $sentences[] = sprintf(
+                    /* translators: %s is the brand product name (e.g. "Two") */
+                    __('Check the "%s API key" and "Environment" settings.', 'twoinc-payment-gateway'),
+                    $product_name
+                );
                 $sentences[] = __('The plugin retries by itself; "Refresh merchant profile" under Diagnostics retries now.', 'twoinc-payment-gateway');
             }
 
@@ -993,14 +999,22 @@ if (!class_exists('WC_Twoinc')) {
             $reason = null;
 
             if ($this->enabled !== 'yes') {
-                $reason = __('the payment method is disabled. Check Enable/Disable.', 'twoinc-payment-gateway');
+                $reason = __('the payment method is disabled. Check "Turn on/off".', 'twoinc-payment-gateway');
             } elseif ((string) $this->get_option('api_key') === '') {
-                $reason = __('no API key is saved. Check API key.', 'twoinc-payment-gateway');
+                $reason = sprintf(
+                    /* translators: %s is the brand product name (e.g. "Two") */
+                    __('no API key is saved. Check "%s API key".', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name')
+                );
             }
             if ($reason === null) {
                 $status = $this->get_api_key_verification_status();
                 if ($status['status'] === 'invalid_key') {
-                    $reason = __('the API key was rejected. Check API key and Environment.', 'twoinc-payment-gateway');
+                    $reason = sprintf(
+                        /* translators: %s is the brand product name (e.g. "Two") */
+                        __('the API key was rejected. Check "%s API key" and "Environment".', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name')
+                    );
                 } elseif ($status['status'] !== 'ok') {
                     // ABN-533 will stop transient verdicts withholding at all, so
                     // this row must not report one as the method being hidden.
@@ -1012,32 +1026,79 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
             if ($reason === null && WC_Twoinc_Payment_Terms::surcharge_currency_unquotable($this)) {
-                $reason = __('the buyer surcharge cannot be priced in the store currency. Check the surcharge settings.', 'twoinc-payment-gateway');
+                $reason = __('the buyer surcharge cannot be priced in the store currency. Check "Surcharge method".', 'twoinc-payment-gateway');
             }
             if ($reason === null && $this->get_supported_buyer_countries() === []) {
-                $reason = __('your account allows no buyer countries. Contact us to have them enabled.', 'twoinc-payment-gateway');
+                $reason = sprintf(
+                    /* translators: %s is the brand provider's full name */
+                    __('no buyer countries are currently enabled for your account. Contact %s to have them enabled.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('provider_full_name')
+                );
+            }
+            if ($reason === null) {
+                // Withholds today; the "Payment terms" row above carries the
+                // cause. Goes away with the ruling that offers the tile with an
+                // empty term set.
+                $terms = $this->get_merchant_terms_state();
+                if (in_array($terms['state'], ['none_offered', 'not_reported'], true)) {
+                    $reason = __('your account offers no payment term. See "Payment terms" above.', 'twoinc-payment-gateway');
+                } elseif ($terms['state'] !== 'resolved') {
+                    return [
+                        'label' => $label,
+                        'value' => __('Cannot be checked — your payment terms could not be read just now.', 'twoinc-payment-gateway'),
+                        'ok'    => false,
+                    ];
+                }
             }
             if ($reason !== null) {
                 return ['label' => $label, 'value' => $not_shown . ' — ' . $reason, 'ok' => false];
             }
 
+            return ['label' => $label, 'value' => $this->checkout_offered_value(), 'ok' => true];
+        }
+
+        /**
+         * "Shown at checkout", plus the minimum-order floors that hide it for a
+         * small basket. Both floors bind and can be denominated differently, so
+         * neither reduces to the other without an FX rate.
+         */
+        private function checkout_offered_value(): string
+        {
             $shown = __('Shown at checkout', 'twoinc-payment-gateway');
-            $minimum = $this->get_platform_minimum_order();
-            if ($minimum) {
-                return [
-                    'label' => $label,
-                    'value' => $shown . ' — ' . sprintf(
-                        /* translators: %1$s an amount, %2$s a currency code, %3$s "net" or "gross" */
-                        __('hidden for baskets below %1$s %2$s (%3$s)', 'twoinc-payment-gateway'),
-                        number_format($minimum['amount'], 2, '.', ''),
-                        $minimum['currency'],
-                        $minimum['basis']
-                    ),
-                    'ok' => true,
-                ];
+            $floors = array_values(array_filter([
+                $this->get_platform_minimum_order(),
+                $this->get_merchant_minimum_order(),
+            ]));
+            if (!$floors) {
+                return $shown;
+            }
+            if (count($floors) === 1) {
+                return $shown . ' — ' . sprintf(
+                    /* translators: %s is an amount with its currency, e.g. "250.00 EUR (excluding tax)" */
+                    __('hidden for baskets below %s', 'twoinc-payment-gateway'),
+                    self::describe_minimum_floor($floors[0])
+                );
             }
 
-            return ['label' => $label, 'value' => $shown, 'ok' => true];
+            return $shown . ' — ' . sprintf(
+                /* translators: %1$s and %2$s are amounts with their currencies */
+                __('hidden for baskets below %1$s or %2$s', 'twoinc-payment-gateway'),
+                self::describe_minimum_floor($floors[0]),
+                self::describe_minimum_floor($floors[1])
+            );
+        }
+
+        /** @param array{amount: float, currency: string, basis: string} $floor */
+        private static function describe_minimum_floor(array $floor): string
+        {
+            return sprintf(
+                '%s %s (%s)',
+                number_format((float) $floor['amount'], 2, '.', ''),
+                $floor['currency'],
+                $floor['basis'] === 'net'
+                    ? __('excluding tax', 'twoinc-payment-gateway')
+                    : __('including tax', 'twoinc-payment-gateway')
+            );
         }
 
         /** Terse resolved/unresolved wording for the install health summary. */
@@ -3146,11 +3207,7 @@ if (!class_exists('WC_Twoinc')) {
         public function is_available()
         {
             if (!parent::is_available()) {
-                // WooCommerce's own check covers more than the switch, so report the switch rather than assert it.
-                $this->log_withheld_from_checkout(sprintf(
-                    'WooCommerce reports the payment method as unavailable (Enable/Disable is "%s")',
-                    (string) $this->enabled
-                ));
+                $this->log_withheld_from_checkout(sprintf('"Turn on/off" is "%s"', (string) $this->enabled));
                 return false;
             }
             $status = $this->get_api_key_verification_status();
@@ -3165,11 +3222,7 @@ if (!class_exists('WC_Twoinc')) {
             return true;
         }
 
-        /**
-         * Withholding reasons already logged this request.
-         *
-         * @var array<string, true>
-         */
+        /** @var array<string, true> */
         private static $withhold_reasons_logged = [];
 
         /** Clears the per-request withholding-log guard. */
@@ -4422,8 +4475,7 @@ if (!class_exists('WC_Twoinc')) {
                 return $value >= $minimum['amount'];
             };
 
-            // Four conditions share one log line, so the line has to name which
-            // of them refused (ABN-518).
+            // ABN-518.
             $refused_by = null;
             if ($platform_minimum && $basket_is_judgeable && !$meets_minimum($platform_minimum)) {
                 $refused_by = 'basket below the minimum order value set for your account';
