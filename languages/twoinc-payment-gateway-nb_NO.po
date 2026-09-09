@@ -1586,3 +1586,7 @@ msgstr "kjøperlandene på kontoen din kunne ikke leses. Kontakt %s."
 #: class/WC_Twoinc.php
 msgid "minimum order value not known until your profile refreshes"
 msgstr "minste ordreverdi er ikke kjent før profilen din oppdateres"
+
+#: class/WC_Twoinc.php
+msgid "hidden for baskets in a currency the buyer surcharge cannot be priced in"
+msgstr "skjult for handlekorger i en valuta kjøpertillegget ikke kan prises i"

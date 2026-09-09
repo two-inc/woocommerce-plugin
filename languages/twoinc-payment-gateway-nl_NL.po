@@ -1585,3 +1585,7 @@ msgstr "de landen van de koper op uw account konden niet worden gelezen. Neem co
 #: class/WC_Twoinc.php
 msgid "minimum order value not known until your profile refreshes"
 msgstr "minimumbestelwaarde nog niet bekend totdat uw profiel is vernieuwd"
+
+#: class/WC_Twoinc.php
+msgid "hidden for baskets in a currency the buyer surcharge cannot be priced in"
+msgstr "verborgen voor winkelwagens in een valuta waarin de toeslag voor de koper niet kan worden berekend"

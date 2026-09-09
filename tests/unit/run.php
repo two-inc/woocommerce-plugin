@@ -813,15 +813,6 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-515. An unresolved term set left the merchant with a cause but no
-     * time and no field to act on.
-     */
-    /**
-     * ABN-515 review: an install upgraded before the attempt stamp existed has
-     * a successful read to report, so "no attempt" would contradict it, and a
-     * shop with no key saved has nothing to retry.
-     */
-    /**
      * ABN-518: a malformed buyer-country payload is a contract break, not a
      * deliberate empty allowlist, and an unfetched profile has an unknown
      * floor rather than none.
@@ -903,6 +894,11 @@ final class BrandConfigSpec
         }
     }
 
+    /**
+     * ABN-515 review: an install upgraded before the attempt stamp existed has
+     * a successful read to report, so "no attempt" would contradict it, and a
+     * shop with no key saved has nothing to retry.
+     */
     private static function testTheTermsNoticeDoesNotContradictItself(): void
     {
         $gateway = new class () extends WC_Twoinc {
@@ -949,6 +945,10 @@ final class BrandConfigSpec
         );
     }
 
+    /**
+     * ABN-515. An unresolved term set left the merchant with a cause but no
+     * time and no field to act on.
+     */
     private static function testTheTermsNoticeCarriesTheLastAttemptAndTheFieldsToCheck(): void
     {
         $gateway = new class () extends WC_Twoinc {

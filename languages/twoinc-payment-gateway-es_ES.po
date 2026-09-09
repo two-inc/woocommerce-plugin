@@ -161,3 +161,7 @@ msgstr "los países del comprador de su cuenta no se han podido leer. Póngase e
 #: class/WC_Twoinc.php
 msgid "minimum order value not known until your profile refreshes"
 msgstr "el valor mínimo del pedido no se conoce hasta que su perfil se actualice"
+
+#: class/WC_Twoinc.php
+msgid "hidden for baskets in a currency the buyer surcharge cannot be priced in"
+msgstr "oculto para cestas en una moneda en la que el recargo al comprador no puede calcularse"
