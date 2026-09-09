@@ -366,7 +366,7 @@ final class BrandConfigSpec
         unset($GLOBALS['__twoinc_test_store_currency']);
         unset($GLOBALS['__twoinc_test_base_country']);
         unset($GLOBALS['test_home_url']);
-        // Developer host overrides (TWO-40 §9). Real process env vars, so a
+        // Developer host overrides (TWO-40). Real process env vars, so a
         // test that sets one and then fails an assertion before its own
         // cleanup would leak it into every test after it.
         foreach (WC_Twoinc_Helper::DEV_HOST_ENV_VARS as $var) {
@@ -646,14 +646,14 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326 §7.1 (Doug's ruling). The ONE company-search control must
+     * TWO-25326 (Doug's ruling). The ONE company-search control must
      * always be registered by update_company_fields() — the checkbox this
      * ticket is about ("Enable company search in address entry") only ever
      * decides WHERE it renders (address area vs payment tile, via
      * `company_search_location` — see derive_company_search_location() and
      * twoincDomHelper.syncCompanySearchTileLocation() in twoinc.js), never
      * whether it exists. A gate here that skips registration when the
-     * checkbox is unchecked is exactly the bug this correction closes: the
+     * checkbox is unchecked is exactly the bug this ruling closes: the
      * payment-tile relocation JS then has nothing to move, and the buyer
      * sees no working search anywhere on the page. Checked in both
      * directions so a regression that reintroduces the gate in either
@@ -6071,7 +6071,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-40 §3. An internally-minted `TWO:`-prefixed identifier travels the
+     * TWO-40. An internally-minted `TWO:`-prefixed identifier travels the
      * same single write/pairing/validation/submission path as any registry
      * number — the ONE special case is display.
      *
@@ -6112,7 +6112,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-40 §4/§6. The organisation number is captured once, at checkout, on
+     * TWO-40. The organisation number is captured once, at checkout, on
      * the invoice-role address, and stored on the order — and no later
      * edit-time path can overwrite it with an empty value, because no
      * edit-time path sends it at all.
@@ -6144,7 +6144,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-40 §9. Three service hosts, three INDEPENDENT developer overrides,
+     * TWO-40. Three service hosts, three INDEPENDENT developer overrides,
      * every one of them refused on anything that could be a production shop.
      *
      * The checkout-page override matters on its own rather than riding on the
@@ -8304,8 +8304,8 @@ final class BrandConfigSpec
      * concatenated string, so ordering is a silent, easy regression.
      *
      * The sole-trader MODE chips themselves are not part of this box at all
-     * (TWO-40 §0 correction) — they render inside the company-search
-     * dropdown. `twoinc-sole-trader-note-slot` here only ever holds the
+     * (TWO-40) — they render inside the company-search dropdown.
+     * `twoinc-sole-trader-note-slot` here only ever holds the
      * signup-prompt note and in-flight error.
      */
     private static function testPaymentBoxOrdersTaglineChipsThenSoleTrader(): void
@@ -8330,9 +8330,8 @@ final class BrandConfigSpec
 
     /**
      * The company-search-tile-location slot renders between the sole-trader
-     * note slot and the intent message (TWO-25326 §7.1, ruling 2026-08-03,
-     * superseding the standalone company-tile-label this ticket originally
-     * shipped in PR #431).
+     * note slot and the intent message (TWO-25326), superseding the standalone
+     * company-tile-label this ticket originally shipped in PR #431.
      *
      * Position is asserted, not just presence: the requirement names the
      * sole-trader note slot and the intent message as its two anchors, and
@@ -8367,8 +8366,8 @@ final class BrandConfigSpec
             'the tile slot must ship empty and hidden'
         );
 
-        // §7.2/§7.3: the standalone tile label PR #431 shipped is gone
-        // outright, not just replaced in this position.
+        // The standalone tile label PR #431 shipped is gone outright, not
+        // just replaced in this position.
         TinyAssert::true(
             strpos($html, 'twoinc-company-tile-label') === false,
             'the superseded standalone company tile label must not be emitted'
@@ -8376,16 +8375,15 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326 §7.1, correction 2026-08-04. The short-lived standalone
-     * `company_search_location` admin setting from PR #436 is gone; the
-     * SAME location decision is now derived from the pre-existing
-     * `enable_company_search` checkbox by
+     * TWO-25326. The short-lived standalone `company_search_location` admin
+     * setting from PR #436 is gone; the SAME location decision is now derived
+     * from the pre-existing `enable_company_search` checkbox by
      * WC_Twoinc_Checkout::derive_company_search_location(). Flip both
-     * directions directly against that pure function — no gateway, no
-     * WP/WC stubs needed — so a mutation that inverts or drops the branch
-     * fails here rather than only in the JS suite (which drives
-     * `window.twoinc.company_search_location` directly and so cannot see
-     * this PHP-side derivation at all).
+     * directions directly against that pure function — no gateway, no WP/WC
+     * stubs needed — so a mutation that inverts or drops the branch fails here
+     * rather than only in the JS suite (which drives
+     * `window.twoinc.company_search_location` directly and so cannot see this
+     * PHP-side derivation at all).
      */
     private static function testCompanySearchLocationDerivedFromEnableCompanySearchBothDirections(): void
     {
@@ -8423,8 +8421,8 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326 §7.1. `company_search_location` (PR #436) lived for less than a day
-     * before this correction deleted the admin field and its getter — any merchant
+     * TWO-25326. `company_search_location` (PR #436) lived for less than a day
+     * before TWO-25326 deleted the admin field and its getter — any merchant
      * who touched it during that window has the key sitting inert in their settings
      * row. `drop_removed_settings()` (same mechanism as `enable_sole_trader`,
      * TWO-25163) must clean it up on an upgraded install, mirroring
@@ -8490,10 +8488,10 @@ final class BrandConfigSpec
 
     /**
      * The declined ("not available") box carries the same company-token
-     * mechanism as the approved notice (TWO-25326 §7.3, ruling 2026-08-03):
-     * %1$s is the brand product name, resolved here; %2$s is the buyer's
-     * captured company, left as the {company} token for twoinc.js to
-     * substitute, since only the browser knows it.
+     * mechanism as the approved notice (TWO-25326): %1$s is the brand product
+     * name, resolved here; %2$s is the buyer's captured company, left as the
+     * {company} token for twoinc.js to substitute, since only the browser
+     * knows it.
      */
     private static function testDeclinedBoxCarriesCompanyTemplate(): void
     {
@@ -9072,18 +9070,17 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326 §7.1-§7.3, ruling 2026-08-03: the standalone company-tile
-     * label this section originally tested (PR #431) is gone outright, on
-     * every brand, notice switch or not — it is superseded, not conditional.
-     * The company-search tile slot that replaces its POSITION is unrelated to
-     * the notice switch entirely: it exists to let the location SETTING
-     * (§7.1) move the search control into the tile, which has nothing to do
-     * with whether the approved-intent reassurance copy is on. It must
-     * therefore render on BOTH a brand that suppresses the notice and one
-     * that does not.
+     * TWO-25326: the standalone company-tile label this section originally
+     * tested (PR #431) is gone outright, on every brand, notice switch or not
+     * — it is superseded, not conditional. The company-search tile slot that
+     * replaces its POSITION is unrelated to the notice switch entirely: it
+     * exists to let the location SETTING move the search control into the
+     * tile, which has nothing to do with whether the approved-intent
+     * reassurance copy is on. It must therefore render on BOTH a brand that
+     * suppresses the notice and one that does not.
      *
      * The declined ("not available") box is the one still worth pinning
-     * against the switch here (TWO-25224's rule, extended by §7.3's new
+     * against the switch here (TWO-25224's rule, extended by TWO-25326's new
      * company template): it is NOT gated on 'intent_approved_notice_enabled'
      * (it has its own independent switch, tested separately), so its
      * data-company-template must survive even on a brand that suppresses

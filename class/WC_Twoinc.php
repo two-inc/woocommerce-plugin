@@ -205,7 +205,7 @@ if (!class_exists('WC_Twoinc')) {
             // TWOINC_DEV_API_HOST — a server env var, never a wp-admin field
             // (the merchant-editable test-host override was removed,
             // TWO-25386). The override lives in get_environment_host() as of
-            // TWO-40 §9, alongside the sibling overrides for the other two
+            // TWO-40, alongside the sibling overrides for the other two
             // service hosts, so all three are gated by one predicate rather
             // than a copy per call site.
             return WC_Twoinc_Helper::get_environment_host('api', $this);
@@ -216,7 +216,7 @@ if (!class_exists('WC_Twoinc')) {
          * Production and Sandbox; any other stored mode (e.g. 'staging' on
          * Two's own staging shops, set via wp-cli rather than the UI) is
          * preserved as a selectable option so saving the settings form
-         * doesn't silently reset it. Mirrors the Magento Mode source model.
+         * doesn't silently reset it.
          *
          * @return array
          */
@@ -257,8 +257,8 @@ if (!class_exists('WC_Twoinc')) {
          * `enable_company_name` option key for back-compat — merchants
          * configured before the field was renamed keep working unchanged.
          *
-         * Per TWO-25326 §7.1, this ALSO decides WHERE the one company-search control
-         * (§1-§4) renders — see WC_Twoinc_Checkout::prepare_twoinc_object(),
+         * Per TWO-25326, this ALSO decides WHERE the one company-search
+         * control renders — see WC_Twoinc_Checkout::prepare_twoinc_object(),
          * which derives `window.twoinc.company_search_location` from this
          * same value. This setting is never "on vs off" in the sense of
          * removing the control: the control always exists, this only
@@ -1266,11 +1266,11 @@ if (!class_exists('WC_Twoinc')) {
          * buyer's captured company, known only to the browser, so it's
          * emitted as a token on data-company-template for twoinc.js to
          * substitute at unhide time with the "<name> (<number>)" chunk
-         * (TWO-25326 §7.3). The div's own text is the no-company variant,
+         * (TWO-25326). The div's own text is the no-company variant,
          * for a buyer whose company is unknown or whose JS never runs.
          *
          * A brand override keeps its own wording and %1$s, and only needs
-         * %2$s placed somewhere to get the same substitution (§7.4).
+         * %2$s placed somewhere to get the same substitution (TWO-25326).
          *
          * @param bool $notice_enabled resolved once per render by the caller
          *                             (see get_intent_loader_html()).
@@ -1283,7 +1283,7 @@ if (!class_exists('WC_Twoinc')) {
 
             $template = WC_Twoinc_Brand::get('intent_approved_notice');
             if (!is_string($template) || trim($template) === '') {
-                // TWO-25326 §7.3 literal wording drops "subject to additional
+                // TWO-25326 literal wording drops "subject to additional
                 // checks" from this variant; it stays in the no-company
                 // fallback below, which the ruling doesn't cover.
                 /* translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side — reorderable, do not assume %1$s precedes %2$s in every locale */
@@ -1313,7 +1313,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Buyer-facing notice shown when order intent is NOT approved (or no
          * intent check has run) — the whole `.twoinc-err-payment-default`
-         * block, or '' (TWO-25326 §7.3).
+         * block, or '' (TWO-25326).
          *
          * On/off is 'intent_declined_notice_enabled' (see
          * is_intent_declined_notice_enabled() above), independent of the
@@ -1345,7 +1345,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function get_intent_declined_notice_template(): string
         {
-            // TWO-25326 §7.3 literal wording: "<product> is not available
+            // TWO-25326 literal wording: "<product> is not available
             // for this order by <name> (<number>)".
             /* translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side */
             $template = __('%1$s is not available for this order by %2$s', 'twoinc-payment-gateway');
@@ -1376,9 +1376,8 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
 
-            // Block order mirrors the Magento Luma renderer's
-            // gateway_method.html: term chips first, then the sole-trader
-            // signup note.
+            // Block order is cross-platform parity: term chips first, then
+            // the sole-trader signup note.
             //
             // $term_input stays AHEAD of the chips container: the chips JS
             // appends its own copy of the same input INSIDE that container,
@@ -1386,7 +1385,7 @@ if (!class_exists('WC_Twoinc')) {
             // would let a stale server-rendered term override the chip pick.
             //
             // Sole-trader MODE CHIPS (Registered company / Sole trader) are
-            // NOT rendered here (TWO-40 §0) — they render inside the
+            // NOT rendered here (TWO-40) — they render inside the
             // company-capture popover. `.twoinc-sole-trader-note-slot` below
             // only ever holds the signup-prompt note + in-flight error.
             //
@@ -1397,11 +1396,11 @@ if (!class_exists('WC_Twoinc')) {
             $declined_notice_enabled = $this->is_intent_declined_notice_enabled();
 
             // The standalone `<name> (<number>)` tile label is REMOVED
-            // (TWO-25326 §7.2/§7.3); the company lives only inside the
+            // (TWO-25326); the company lives only inside the
             // intent-approved/declined sentences (see those methods' doc
             // comments for the token mechanism).
             //
-            // This slot (§7.1) is empty/hidden by default. When the merchant
+            // This slot is empty/hidden by default. When the merchant
             // unchecks "Enable Company Search In Address Entry",
             // twoincSelectWooHelper.syncCompanySearchTileLocation() in
             // twoinc.js builds the company-name row inside it from state —
@@ -1457,10 +1456,9 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Option list for the "Default Payment Term" select: exactly the terms
-         * the merchant currently offers (ticked checkboxes plus a custom day), not
-         * every brand preset. Mirrors Magento's AvailablePaymentTerms source
-         * model, so the dropdown reflects the saved selection on render (admin
-         * JS keeps it in sync live before save).
+         * the merchant currently offers (ticked checkboxes plus a custom day),
+         * not every brand preset, so the dropdown reflects the saved selection
+         * on render (admin JS keeps it in sync live before save).
          *
          * @return array<string, string>
          */
@@ -1479,7 +1477,6 @@ if (!class_exists('WC_Twoinc')) {
          * Admin option list of the brand's surcharge rounding steps, in
          * canonical two-decimal form so the stored value round-trips
          * against the option list (WC_Twoinc_Payment_Terms reads it back).
-         * Mirrors the Magento RoundingStep source model.
          *
          * @return array<string, string>
          */
@@ -1494,8 +1491,8 @@ if (!class_exists('WC_Twoinc')) {
                 $value = number_format((float) $step, 2, '.', '');
                 $options[$value] = $value;
             }
-            // Ascending, mirroring the Magento Loader's numeric sort (keys
-            // are the formatted strings, so equal values already dedup).
+            // Ascending; keys are the formatted strings, so equal values
+            // already dedup.
             ksort($options, SORT_NUMERIC);
             return $options;
         }
@@ -1945,8 +1942,7 @@ if (!class_exists('WC_Twoinc')) {
                 ? $this->format_surcharge_limit_label($fixed_limit)
                 : '';
             // Shared trailing sentence on both percentage-bearing help
-            // variants, exactly as Magento's surcharge-grid.phtml composes
-            // it. %s is the currency SYMBOL there, not the code.
+            // variants. %s is the currency SYMBOL, not the code.
             $limit_sentence = sprintf(
                 /* translators: %s: store currency symbol, e.g. "€" */
                 __('Enter a limit amount (in %s) if you do not want to charge your customer more than a specific amount. Leave the limit field empty if you don\'t want to impose a limit amount.', 'twoinc-payment-gateway'),
@@ -1981,9 +1977,9 @@ if (!class_exists('WC_Twoinc')) {
             // Rendered rows mirror the SAVED offered set; admin.js keeps the
             // grid live against unsaved term ticks (rows keyed by data-days,
             // inputs named like the server-rendered ones) and toggles column
-            // visibility from the surcharge method — mirroring Magento's
-            // surcharge-grid.js. Keep the classes/data attributes in sync
-            // with initSurchargeGrid there.
+            // visibility from the surcharge method. Keep the classes and data
+            // attributes in sync with the equivalent grid initialiser on the
+            // other platforms.
             ?>
             <tr valign="top" class="twoinc-surcharge-grid-field">
                 <th scope="row" class="titledesc"><label><?php echo wp_kses_post($data['title']); ?></label></th>
@@ -1992,10 +1988,8 @@ if (!class_exists('WC_Twoinc')) {
                     // container. The grid table is width:100% of it and the
                     // paragraphs are its children, so the help text below the
                     // grid wraps at exactly the grid's width and stays locked
-                    // to it if that width ever changes. Mirrors Magento's
-                    // #surcharge-grid-container, where .surcharge-grid is
-                    // width:100% and the .note paragraphs are siblings inside
-                    // the same box. Without the container the paragraphs are
+                    // to it if that width ever changes. Without the container
+                    // the paragraphs are
                     // laid out against the full <td class="forminp">, which in
                     // a WooCommerce settings table runs to the page margin. ?>
                     <div class="twoinc-surcharge-grid-container">
@@ -2234,8 +2228,7 @@ if (!class_exists('WC_Twoinc')) {
          * `two_payment_terms`). One checkbox per term the merchant's account
          * makes available (GET /v1/merchant `available_terms`); the merchant
          * ticks which to offer the buyer. Stored as a single option array of
-         * int day counts (the offered subset). Mirrors Magento's
-         * PaymentTermsCheckboxes admin field.
+         * int day counts (the offered subset).
          */
         public function generate_two_payment_terms_html($key, $data)
         {
@@ -2252,9 +2245,9 @@ if (!class_exists('WC_Twoinc')) {
                 $stored = [$days[0]];
             }
 
-            // Inline merchant-rate fee beside each checkbox (mirrors Magento's
-            // showInlineFees). Brand overlays opt out by setting the brand
-            // 'inline_term_fees' config to false; default on.
+            // Inline merchant-rate fee beside each checkbox. Brand overlays
+            // opt out by setting the brand 'inline_term_fees' config to false;
+            // default on.
             $inline_fees = WC_Twoinc_Brand::get('inline_term_fees');
             $show_fees = ($inline_fees === null) ? true : (bool) $inline_fees;
 
@@ -2301,8 +2294,7 @@ if (!class_exists('WC_Twoinc')) {
          * it gives the merchant no feedback on the resulting behaviour, so we
          * insist on a selection every time they save. The custom-days sibling
          * field (posted in the same form) also satisfies it, so a single
-         * off-preset term may be offered alone. Mirrors Magento's
-         * PaymentTermsCheckboxes::beforeSave guard.
+         * off-preset term may be offered alone.
          */
         public function validate_two_payment_terms_field($key, $value)
         {
@@ -2433,8 +2425,7 @@ if (!class_exists('WC_Twoinc')) {
          * the offered set the admin JS rebuilds the dropdown from. If the
          * posted default is no longer offered (e.g. its checkbox was just
          * unticked), repoint to the shortest offered term so the stored
-         * default is always coherent. Mirrors Magento's payment-terms-config.js
-         * default-term repointing.
+         * default is always coherent.
          */
         public function validate_default_payment_term_field($key, $value)
         {
@@ -2494,9 +2485,8 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Assemble the checkout payment-box description.
          *
-         * Block order mirrors the Magento Luma renderer
-         * (view/frontend/web/template/payment/gateway_method.html): brand
-         * tagline directly under the method title, then the term chips,
+         * Block order is cross-platform parity: brand tagline directly
+         * under the method title, then the term chips,
          * then the sole-trader toggle, with the about block trailing.
          *
          * WooCommerce core renders the method title and the gateway icon
@@ -4415,8 +4405,8 @@ if (!class_exists('WC_Twoinc')) {
             $company_name = $posted_company_name !== '' ? $posted_company_name : $billing_company;
 
             // Billing (invoice) first, shipping (delivery) only as a fallback
-            // when billing captured no company number at all (Doug 2026-08-31
-            // §2) — same rule the client-side resolver
+            // when billing captured no company number at all (TWO-40) — the
+            // same rule the client-side resolver
             // (`twoincCompanyCapture.write()`/`syncOrderCompany()`) already
             // applies to the order-INTENT check; this is its order-CREATION
             // counterpart. Untrusted the same way `$company_id` above already
@@ -5692,13 +5682,12 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Read-only install health summary (TWO-25386, ported from
-         * PrestaShop's renderTwoPluginHealthChecklist): API key status,
-         * environment, SSL verification state, the PHP curl extension
-         * WooCommerce's own HTTP API needs, and the merchant profile the
-         * offerable term set comes from (ABN-513). A row reporting "OK" when
-         * it isn't is worse than no row, so these read the same live state
-         * the rest of the gateway acts on rather than a cached snapshot.
+         * Read-only install health summary (TWO-25386, cross-platform parity):
+         * API key status, environment, SSL verification state, the PHP curl
+         * extension WooCommerce's own HTTP API needs, and the merchant profile
+         * the offerable term set comes from (ABN-513). A row reporting "OK"
+         * when it isn't is worse than no row, so these read the same live
+         * state the rest of the gateway acts on rather than a cached snapshot.
          */
         public function generate_two_health_checklist_html($key, $data)
         {

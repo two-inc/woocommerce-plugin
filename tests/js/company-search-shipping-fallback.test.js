@@ -1,5 +1,5 @@
 /**
- * Doug 2026-08-31 §2 — a COMPLETE second `TwoCompanySearch` instance on the
+ * TWO-40 — a COMPLETE second `TwoCompanySearch` instance on the
  * delivery/shipping role, and the billing-first/shipping-fallback rule for
  * which role's captured company reaches the order intent / order creation.
  *
@@ -37,7 +37,7 @@ function buildForm() {
   ].join("\n");
 }
 
-describe("TWO-40 §2 — billing-first, shipping-fallback company resolution", () => {
+describe("TWO-40 — billing-first, shipping-fallback company resolution", () => {
   let ctx;
   let $;
   let capture;
@@ -132,7 +132,7 @@ describe("TWO-40 §2 — billing-first, shipping-fallback company resolution", (
   });
 });
 
-describe("TWO-40 §2 — the shipping instance is a genuine second TwoCompanySearch", () => {
+describe("TWO-40 — the shipping instance is a genuine second TwoCompanySearch", () => {
   test("owns its own role, DOM ids and sole-trader controller, independent of billing's", () => {
     const ctx = loadTwoinc();
     buildForm();

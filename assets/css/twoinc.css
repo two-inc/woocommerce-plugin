@@ -111,10 +111,10 @@
  * its sentence; that heading is being dropped in the same pass, and this
  * platform must not grow one — the sentence already names the product.
  *
- * `overflow-wrap: anywhere` predates the colour (TWO-25326 §7.3, ruling
- * 2026-08-03) and is why the two company-carrying boxes are grouped: they
- * hold the captured company (`<name> (<number>)`) directly in their sentence,
- * where the standalone `.twoinc-company-tile-label` used to, and registry
+ * `overflow-wrap: anywhere` predates the colour (TWO-25326) and is why the
+ * two company-carrying boxes are grouped: they hold the captured company
+ * (`<name> (<number>)`) directly in their sentence, where the standalone
+ * `.twoinc-company-tile-label` used to, and registry
  * names in DE/NL/NO routinely contain a single unbroken token wider than the
  * tile column. The phone-number box carries a fixed short sentence and needs
  * no such protection, which is the one declaration it does not share.
@@ -231,19 +231,19 @@
 
 /*
  * Read-only label carrying the captured company NUMBER (TWO-25288; narrowed
- * from name+number to number-only by TWO-25326 §7).
+ * from name+number to number-only by TWO-25326).
  *
  * Replaces the floating company-id overlay, which was absolutely positioned
  * over the picker's selection box and so could only ever hold one short value.
- * This sits in normal flow underneath the company fields, where §5 requires
- * the number to be.
+ * This sits in normal flow underneath the company fields, where the
+ * number belongs.
  *
- * The captured NAME no longer renders here. §7 rules out any company name or
- * number text in the address area beyond the company-name field itself and
- * this number label — the name was a second copy of what the control directly
- * above already shows. It no longer renders as a standalone label anywhere
- * (TWO-25326 §7.2/§7.3, ruling 2026-08-03): it lives inside the payment
- * tile's intent-message sentence instead.
+ * The captured NAME no longer renders here. TWO-25326 rules out any company
+ * name or number text in the address area beyond the company-name field
+ * itself and this number label — the name was a second copy of what the
+ * control directly above already shows. It no longer renders as a standalone
+ * label anywhere: it lives inside the payment tile's intent-message sentence
+ * instead.
  */
 .twoinc-company-summary {
   padding-bottom: 15px;
@@ -265,14 +265,13 @@
  * single-class selector so brand overlays can recolour it without raising
  * specificity.
  *
- * `display: block` + `text-align: end` (#30.x.9, Doug's canonical
- * cross-platform ruling): this used to sit on the SAME line as the name,
- * `margin-left: 8px` away from it. A long company name pushed the number
- * right up against — and on a narrow viewport, past — the edge of the
- * summary's own box, which is exactly what Doug found live: picking a
- * result left no number visibly on screen. Giving the number its own row,
- * right-aligned to the input's right edge (the summary div carries the
- * same horizontal padding as the field above it — see `.twoinc-company-
+ * `display: block` + `text-align: end` (TWO-25326): this used to sit on the
+ * SAME line as the name, `margin-left: 8px` away from it. A long company name
+ * pushed the number right up against — and on a narrow viewport, past — the
+ * edge of the summary's own box, which is exactly what Doug found live:
+ * picking a result left no number visibly on screen. Giving the number its
+ * own row, right-aligned to the input's right edge (the summary div carries
+ * the same horizontal padding as the field above it — see `.twoinc-company-
  * summary` above), means the two values never compete for the same
  * horizontal space regardless of how long the name is.
  *
@@ -384,12 +383,11 @@
 }
 
 /*
- * Explicit focus indicator (#30.x.7). Reported live: tabbing out of the
- * manual-entry name field lands focus here with no visible sign of it. The
- * button carries no host-supplied focus styling of its own — same class of
- * problem as the uppercase fix above (#30.x.5.1): a real <button> is a
- * target for a host theme's own button chrome, where the <div> this used to
- * be never was.
+ * Explicit focus indicator. Reported live: tabbing out of the manual-entry
+ * name field lands focus here with no visible sign of it. The button carries
+ * no host-supplied focus styling of its own — same class of problem as the
+ * uppercase fix above: a real <button> is a target for a host theme's own
+ * button chrome, where the <div> this used to be never was.
  *
  * An outline was too large (~4px wider than the button's own padding) and
  * visually inconsistent with this checkout's other focus states (a plain
@@ -575,11 +573,10 @@
 
 /* Sole trader toggle (TWO-24754) */
 /*
- * The signup-prompt note + in-flight error only (TWO-40 §0 correction). The
- * mode CHIPS themselves render inside the company-search panel — see
+ * The signup-prompt note + in-flight error only (TWO-40). The mode CHIPS
+ * themselves render inside the company-search panel — see
  * `.two-company-mode-chips` below — never in this always-present payment-tile
- * slot; this was the same DOM-placement defect ported wrong twice before this
- * correction.
+ * slot; that DOM-placement defect was ported wrong twice before this.
  */
 .twoinc-sole-trader-note-slot {
   margin: 12px 0;
@@ -589,11 +586,11 @@
 }
 
 /*
- * The company-search control's location in the payment tile (TWO-25326 §7.1,
- * ruling 2026-08-03; correction 2026-08-04 folded the standalone
- * `company_search_location` setting into the `enable_company_search`
- * checkbox — unchecked now means this slot, not "off"). Holds
- * `#billing_company_display_field` when twoincDomHelper.syncCompanySearchTileLocation()
+ * The company-search control's location in the payment tile (TWO-25326). The
+ * standalone `company_search_location` setting is folded into the
+ * `enable_company_search` checkbox — unchecked means this slot, not "off".
+ * Holds `#billing_company_display_field` when
+ * twoincDomHelper.syncCompanySearchTileLocation()
  * moves it out of the address area — NOT `#billing_company_field` or
  * `#company_id_field`, which deliberately stay put (see that function's own
  * doc comment). The field carries all its own styling from the address
@@ -602,7 +599,7 @@
  * anything at all.
  *
  * The standalone `.twoinc-company-tile-label` text label this replaced is
- * gone outright (§7.2/§7.3): the company now lives inside the intent-message
+ * gone outright (TWO-25326): the company now lives inside the intent-message
  * sentences instead, which need no CSS of their own beyond what
  * `.twoinc-pay-box` already provides.
  */
@@ -848,7 +845,7 @@
 }
 
 /*
- * In-flight state for the sole-trader round trip (TWO-40 §7).
+ * In-flight state for the sole-trader round trip (TWO-40).
  *
  * Wired to the real duration of the token-mint + buyer-lookup call graph, not
  * to a timeout, and paired with the in-field spinner the company-search
@@ -866,7 +863,7 @@
 }
 
 /*
- * "Select a different sole trader" (TWO-40 §7).
+ * "Select a different sole trader" (TWO-40).
  *
  * Deliberately the same visual slot and the same treatment as
  * #search_company_btn — one affordance pattern for "the identity I captured is

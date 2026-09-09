@@ -13,7 +13,7 @@ import * as store from "../pages/store.js";
  * without driving the cross-origin hosted-signup popup.
  *
  * The mode-chips group is a DOM child of the company-search dropdown, not a
- * standalone widget (TWO-40 §0): it only exists in the document while the
+ * standalone widget (TWO-40): it only exists in the document while the
  * dropdown is open. "Registered company" always renders, and "Enter manually"
  * renders here because this store has company search in the address area
  * (TWO-25503); only the "Sole trader" chip is added/removed per country, so

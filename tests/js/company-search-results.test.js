@@ -209,7 +209,7 @@ describe("company search results", () => {
 });
 
 /**
- * TWO-25288, element 4. The one hint the company-search control shows before it
+ * TWO-25288. The one hint the company-search control shows before it
  * can search: the below-threshold message on the panel's query field.
  *
  * It is plugin-owned, translatable, and names a fixed number rather than

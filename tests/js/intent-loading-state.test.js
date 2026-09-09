@@ -1387,7 +1387,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
   describe("the verdict names the company the request was ABOUT", () => {
     test("a company changed while a request is in flight does not rename its verdict", () => {
-      // These sentences carry the captured company (TWO-25326 §7.3) and were built
+      // These sentences carry the captured company (TWO-25326) and were built
       // by re-reading the DOM at PAINT time. Supersession only begins when the NEXT
       // request is issued, up to a second after the buyer changes company — so a
       // response for company A landing inside that window painted A's verdict with
@@ -2463,7 +2463,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     test("the two company-carrying boxes can wrap an unbroken registry name", () => {
       // Registry names in DE/NL/NO routinely contain a single unbroken token
       // wider than the tile column, and these two hold the company in their own
-      // sentence (TWO-25326 §7.3).
+      // sentence (TWO-25326).
       expect(unhidden(".twoinc-pay-box.twoinc-intent-approved").overflowWrap).toBe("anywhere");
       expect(unhidden(".twoinc-pay-box.twoinc-err-payment-default").overflowWrap).toBe("anywhere");
     });
