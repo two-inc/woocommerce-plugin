@@ -433,8 +433,10 @@ if (!class_exists('WC_Twoinc')) {
 
         private static function store_merchant_due_in_days(array $record): void
         {
-            // A null due_in_days on the record also means 14 days
-            $due_in_days = !empty($record['due_in_days']) ? (int) $record['due_in_days'] : 14;
+            // 0 when the record carries none, so the term resolver can tell
+            // "unset" from a real day count (ABN-548). The display reader
+            // supplies the 14-day copy fallback.
+            $due_in_days = !empty($record['due_in_days']) ? (int) $record['due_in_days'] : 0;
             update_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'), $due_in_days, false);
         }
 
@@ -554,6 +556,15 @@ if (!class_exists('WC_Twoinc')) {
             $due_in_days = (int) get_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'));
 
             return $due_in_days > 0 ? $due_in_days : 14;
+        }
+
+        /** The merchant's default due-in-days, null when nothing is cached. */
+        public function get_merchant_default_term(): ?int
+        {
+            $this->refresh_merchant_record_caches();
+            $due_in_days = (int) get_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'));
+
+            return $due_in_days > 0 ? $due_in_days : null;
         }
 
         /**

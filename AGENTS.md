@@ -388,6 +388,11 @@ The merchant record refreshes on an event, never on expiry
   list, the custom day included, and an unresolved list is unknown rather than
   empty so it narrows nothing. Refusing such a day at save time is deferred
   pending ABN-522.
+- **The preselected term prefers 30 net days** (ABN-548) — `get_default_term()`
+  resolves the admin's stored default, the merchant's own default term, 30, and
+  finally the shortest offered term, each only while it is in the offered set.
+  An empty offered set has no default at all. The differential surcharge basis
+  reads the same resolver, so it moves with it.
 
 Key Conventions
 

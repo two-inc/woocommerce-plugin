@@ -99,7 +99,7 @@ final class BrandConfigSpec
             'testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList',
             'testSurchargeGridPreservesRowsNotOnTheForm',
             'testChipFeeAmountCarriesCurrencySymbolNotCode',
-            'testPaymentTermsDefaultFallsBackToShortest',
+            'testPaymentTermsDefaultPreferenceOrder',
             'testBuyerFeeShareShapes',
             'testBuyerFeeShareRounding',
             'testRoundingStepOptionsCanonicalAndNarrowed',
@@ -2824,17 +2824,22 @@ final class BrandConfigSpec
      * merchant's backend `available_terms` set is injectable; the default
      * mirrors a typical resolved merchant record (TWO-24812).
      */
-    private static function termsGateway(array $options, array $merchant_terms = [14, 30, 60, 90]): WC_Payment_Gateway
-    {
-        return new class ($options, $merchant_terms) extends WC_Payment_Gateway {
+    private static function termsGateway(
+        array $options,
+        array $merchant_terms = [14, 30, 60, 90],
+        ?int $merchant_default = null
+    ): WC_Payment_Gateway {
+        return new class ($options, $merchant_terms, $merchant_default) extends WC_Payment_Gateway {
             private $options;
             private $merchant_terms;
+            private $merchant_default;
 
-            public function __construct($options, $merchant_terms)
+            public function __construct($options, $merchant_terms, $merchant_default)
             {
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
                 $this->options = $options;
                 $this->merchant_terms = $merchant_terms;
+                $this->merchant_default = $merchant_default;
             }
 
             public function get_option($key, $empty_value = null)
@@ -2845,6 +2850,11 @@ final class BrandConfigSpec
             public function get_merchant_available_terms(): array
             {
                 return $this->merchant_terms;
+            }
+
+            public function get_merchant_default_term(): ?int
+            {
+                return $this->merchant_default;
             }
         };
     }
@@ -4194,17 +4204,25 @@ final class BrandConfigSpec
         TinyAssert::true(strpos(WC_Twoinc_Payment_Terms::format_fee_amount(12.5, 'EUR'), '<') === false);
     }
 
-    private static function testPaymentTermsDefaultFallsBackToShortest(): void
+    private static function testPaymentTermsDefaultPreferenceOrder(): void
     {
-        $gateway = self::termsGateway(['payment_terms_days' => ['30', '60'], 'default_payment_term' => '60']);
-        TinyAssert::same(60, WC_Twoinc_Payment_Terms::get_default_term($gateway));
+        $backend = [7, 14, 30, 60, 90];
 
-        // Configured default outside the offered set: shortest offered wins
-        $gateway = self::termsGateway([
-            'payment_terms_days' => ['30', '90'],
-            'default_payment_term' => '60',
-        ]);
-        TinyAssert::same(30, WC_Twoinc_Payment_Terms::get_default_term($gateway));
+        $cases = [
+            [['payment_terms_days' => ['30', '60'], 'default_payment_term' => '60'], null, 60, 'the admin default wins while it is offered'],
+            [['payment_terms_days' => ['7', '30', '60'], 'default_payment_term' => '7'], 60, 7, "the admin default outranks the merchant's own default term"],
+            [['payment_terms_days' => ['7', '30', '60'], 'default_payment_term' => '14'], 60, 60, "an unoffered admin default falls through to the merchant's own default term"],
+            [['payment_terms_days' => ['7', '30']], 45, 30, 'a merchant default term outside the offered set is ignored'],
+            [['payment_terms_days' => ['7', '30']], null, 30, '30 is preferred over a shorter offered term'],
+            [['payment_terms_days' => ['7', '14']], null, 7, 'without 30 offered the shortest offered term is used'],
+            [['payment_terms_days' => ['60', '90'], 'default_payment_term' => '14'], null, 60, 'an unoffered admin default with no 30 offered falls to the shortest'],
+            [[], 30, null, 'no offered term leaves no default at all'],
+        ];
+
+        foreach ($cases as [$options, $merchant_default, $expected, $description]) {
+            $gateway = self::termsGateway($options, $backend, $merchant_default);
+            TinyAssert::same($expected, WC_Twoinc_Payment_Terms::get_default_term($gateway), $description);
+        }
     }
 
     private static function testBuyerFeeShareShapes(): void
@@ -4265,27 +4283,27 @@ final class BrandConfigSpec
 
         // differential: the default term (shortest offered = 14) rides as reference_terms
         $gateway = self::termsGateway([
-            'payment_terms_days' => ['14', '30'],
+            'payment_terms_days' => ['14', '60'],
             'surcharge_type' => 'percentage',
-            'surcharge_grid' => [30 => ['percentage' => '2']],
+            'surcharge_grid' => [60 => ['percentage' => '2']],
             'surcharge_differential' => '1',
         ]);
         TinyAssert::same(
             ['percentage' => 2.0, 'surcharge_basis' => 'buyer_pays', 'reference_terms' => ['type' => 'NET_TERMS', 'duration_days' => 14]],
-            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 60)
         );
 
         // end_of_month: reference_terms carries duration_days_calculated_from
         $gateway = self::termsGateway([
-            'payment_terms_days' => ['14', '30'],
+            'payment_terms_days' => ['14', '60'],
             'surcharge_type' => 'percentage',
-            'surcharge_grid' => [30 => ['percentage' => '2']],
+            'surcharge_grid' => [60 => ['percentage' => '2']],
             'surcharge_differential' => '1',
             'payment_terms_type' => 'end_of_month',
         ]);
         TinyAssert::same(
             ['percentage' => 2.0, 'surcharge_basis' => 'buyer_pays', 'reference_terms' => ['type' => 'NET_TERMS', 'duration_days' => 14, 'duration_days_calculated_from' => 'END_OF_MONTH']],
-            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 60)
         );
 
         // Fixed amounts are configured in the store currency; when the
@@ -4337,7 +4355,7 @@ final class BrandConfigSpec
 
         // rounding rides alongside reference_terms (differential)
         $gateway = self::termsGateway($base + [
-            'payment_terms_days' => ['14', '30'],
+            'payment_terms_days' => ['14', '60'],
             'surcharge_differential' => '1',
             'surcharge_rounding_basis' => 'standard',
             'surcharge_rounding_step' => '0.50',
