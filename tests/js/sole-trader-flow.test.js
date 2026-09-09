@@ -2322,6 +2322,16 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         node.focus();
       }
 
+      // A real chip activation: the prevented `mousedown` is why no focus, and so no `focusin`, follows.
+      function mouseActivateChip(mode) {
+        const chip = chipNode(mode);
+        expect(chip).not.toBeNull();
+        const mousedown = new window.MouseEvent("mousedown", { bubbles: true, cancelable: true });
+        chip.dispatchEvent(mousedown);
+        expect(mousedown.defaultPrevented).toBe(true);
+        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
+      }
+
       // A window return: the browser re-fires focusin at whatever holds focus, moving nothing.
       function refireFocus() {
         document.activeElement.dispatchEvent(new window.FocusEvent("focusin", { bubbles: true }));
@@ -2890,6 +2900,38 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(opened).toHaveLength(1);
         expect(opened[0].url).toContain("&autoselect=false");
         soleTrader.stopAllPopupWatchers();
+      });
+
+      /** A hand-closed popup re-activated by pointer: the chip's prevented `mousedown` gives it no focus, so this route reaches the click handler with no `focusin` at all (TWO-25658). */
+      test("a pointer re-activation of the Sole trader chip inside a hand-closed popup's poll window launches afresh", () => {
+        armListeners();
+        openWidgetWithChips();
+        const urls = [];
+        window.open = jest.fn((url) => {
+          urls.push(url);
+          return fakePopup();
+        });
+        jest.useFakeTimers();
+
+        mouseActivateChip("sole_trader");
+        // The panel's deferred focusout check for the focus the launch dropped.
+        jest.advanceTimersByTime(0);
+        expect(window.open).toHaveBeenCalledTimes(1);
+        const first = window.open.mock.results[0].value;
+        first.closed = true;
+
+        mouseActivateChip("sole_trader");
+        jest.advanceTimersByTime(0);
+
+        expect(window.open.mock.calls.length).toBe(2);
+        expect(urls[1]).not.toContain("autoselect");
+        expect(first.focus).not.toHaveBeenCalled();
+        expect(first.close).not.toHaveBeenCalled();
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect(chipNode("sole_trader").className).toContain("two-company-mode-chip--selected");
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
+        jest.useRealTimers();
       });
 
       /** A popup closed by hand and re-launched before its poll noticed: the chip click must still switch mode. */
