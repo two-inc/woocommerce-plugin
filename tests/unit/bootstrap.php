@@ -718,7 +718,8 @@ class WC_Payment_Gateway
     public function process_admin_options()
     {
         $this->init_settings();
-        $post_data = $this->get_post_data();
+        // Real WC reads $_POST here, which the gateway rewrites before delegating.
+        $post_data = !empty($_POST) ? $_POST : $this->get_post_data();
         foreach ($this->get_form_fields() as $key => $field) {
             if ($this->get_field_type($field) === 'title') {
                 continue;
@@ -994,6 +995,25 @@ function is_wp_error($thing)
 
 class WP_Error
 {
+    private $code;
+
+    private $message;
+
+    public function __construct($code = '', $message = '')
+    {
+        $this->code = $code;
+        $this->message = $message;
+    }
+
+    public function get_error_code()
+    {
+        return $this->code;
+    }
+
+    public function get_error_message()
+    {
+        return $this->message;
+    }
 }
 
 // The transport itself. Every outbound call funnels through make_request(),

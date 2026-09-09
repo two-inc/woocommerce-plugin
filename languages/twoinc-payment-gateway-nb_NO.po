@@ -1097,9 +1097,24 @@ msgstr "distribuert %s UTC"
 msgid "%s API key verified."
 msgstr "%s API-nøkkel bekreftet."
 
-#: class/WC_Twoinc.php:5802
-msgid "Failed to verify API key."
-msgstr "Kunne ikke bekrefte API-nøkkelen."
+#: class/WC_Twoinc.php
+#, php-format
+msgid "%s rejected that API key, so the previously saved key was kept."
+msgstr "%s avviste denne API-nøkkelen, så den tidligere lagrede nøkkelen ble beholdt."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "API key saved, but %s could not be reached to verify it."
+msgstr "API-nøkkelen er lagret, men %s kunne ikke nås for å bekrefte den."
+
+#: class/WC_Twoinc.php
+msgid "API key saved, but it could not be verified because no environment is configured."
+msgstr "API-nøkkelen er lagret, men kunne ikke bekreftes fordi ingen miljø er konfigurert."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "API key saved, but %s returned an error while verifying it."
+msgstr "API-nøkkelen er lagret, men %s returnerte en feil under bekreftelsen."
 
 #: class/WC_Twoinc_Checkout.php:165 class/WC_Twoinc_Checkout.php:179
 #: class/WC_Twoinc_Checkout.php:193 class/WC_Twoinc_Checkout.php:217
