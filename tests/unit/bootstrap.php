@@ -123,6 +123,11 @@ function esc_html_e($text, $domain = 'default')
     echo esc_html(__($text, $domain));
 }
 
+function _e($text, $domain = 'default')
+{
+    echo __($text, $domain);
+}
+
 function wp_kses_post($content)
 {
     return $content;

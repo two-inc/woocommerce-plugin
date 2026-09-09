@@ -241,7 +241,7 @@ describe("API key verification — categorized failure display", () => {
       ["unreachable", 0, "an unreachable API"],
       ["service_error", 503, "a service error"],
       ["error", 418, "an unexpected status"],
-      ["malformed_response", null, "an answer that could not be read"]
+      ["error", null, "an answer that could not be read, which carries no status"]
     ];
 
     test.each(definitive)(
@@ -328,6 +328,39 @@ describe("API key verification — categorized failure display", () => {
 
       expect($("#api-key-valid").css("display")).not.toBe("none");
       expect($("#api-key-invalid").css("display")).toBe("none");
+      expect(
+        $("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")
+      ).toBe(true);
+    });
+
+    test("a green tick does not carry over onto a different, unverified key", async () => {
+      const responses = [
+        { success: true, data: { merchant_id: RENDERED_MERCHANT_ID } },
+        { success: false, data: { status: "unreachable", code: 0 } }
+      ];
+      const { $ } = await loadAdmin({
+        apiKey: "an-old-stored-key",
+        merchantId: RENDERED_MERCHANT_ID,
+        checked: [30],
+        stubAjax: function (jq) {
+          jq.ajax = jest.fn(function (settings) {
+            settings.success(responses.shift());
+            return { done: function () {}, fail: function () {} };
+          });
+        }
+      });
+
+      // Page load verified the STORED key green.
+      expect($("#api-key-valid").css("display")).not.toBe("none");
+
+      // A DIFFERENT key is typed and the check cannot complete. The tick
+      // belonged to the old key and must not vouch for this one.
+      const $field = $("#woocommerce_" + GATEWAY_ID + "_api_key");
+      $field.val("a-freshly-typed-different-key").trigger("blur");
+
+      expect($("#api-key-valid").css("display")).toBe("none");
+      expect($("#api-key-invalid").css("display")).toBe("none");
+      expect($("#api-key-verification-icon").css("display")).toBe("none");
       expect(
         $("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")
       ).toBe(true);

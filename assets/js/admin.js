@@ -120,15 +120,19 @@ jQuery(function ($) {
   const $invalidIcon = $("#api-key-invalid");
   const $loadingIcon = $("#api-key-loading");
 
-  // Verdict categories that judged the KEY. Everything else — unreachable, a
-  // service error, an unexpected status, a request that never reached the API
-  // — judged nothing about it, and must leave the displayed Merchant ID and
-  // key status exactly as they were (ABN-536).
+  // Verdict categories that judged the key; anything else judged nothing about
+  // it and must leave the Merchant ID and key status alone (ABN-536).
   const DEFINITIVE_VERDICTS = ["invalid_key", "not_configured"];
 
-  // The last verdict that actually judged the key, so an inconclusive one can
-  // restore what the icon showed instead of inventing a red cross.
+  // The last verdict that judged the key, and the key it judged — an
+  // inconclusive verdict restores that indicator rather than inventing a red
+  // cross, but only while the field still holds the key it applied to.
   let lastDefinitiveStatus = null;
+  let lastDefinitiveKey = null;
+
+  function indicatorForUnjudgedKey(apiKey) {
+    return apiKey === lastDefinitiveKey ? lastDefinitiveStatus : null;
+  }
 
   function showVerificationStatus(status) {
     $validIcon.hide();
@@ -252,22 +256,24 @@ jQuery(function ($) {
       success: function (response) {
         if (response.success) {
           lastDefinitiveStatus = "valid";
+          lastDefinitiveKey = apiKey;
           showVerificationStatus("valid");
           updateMerchantInfo(response.data);
           return;
         }
         const data = response.data || {};
         if (DEFINITIVE_VERDICTS.indexOf(data.status) === -1) {
-          showVerificationStatus(lastDefinitiveStatus);
+          showVerificationStatus(indicatorForUnjudgedKey(apiKey));
           showMerchantInfoUnconfirmed(data.status, data.code);
           return;
         }
         lastDefinitiveStatus = "invalid";
+        lastDefinitiveKey = apiKey;
         showVerificationStatus("invalid");
         showMerchantInfoRejected(data.status, data.code);
       },
       error: function () {
-        showVerificationStatus(lastDefinitiveStatus);
+        showVerificationStatus(indicatorForUnjudgedKey(apiKey));
         showMerchantInfoUnconfirmed("request_failed", null);
       }
     });

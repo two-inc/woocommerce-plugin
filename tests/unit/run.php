@@ -283,6 +283,7 @@ final class BrandConfigSpec
             'testAnEmptyMerchantIdIsNoRecordSoTheScreenStopsRetrying',
             'testSettingsScreenVerificationTimeoutIsBoundedForAPageRender',
             'testCachedStatusMissTimeoutIsShortNotAdminDefault',
+            'testApiKeyNoticeElementCarriesTheClassItsColourComesFrom',
             'testApiKeyNoticesCarryTwoProductNameAndStatusPlaceholder',
             'testApiKeyNoticesUseOverlayProductNameNotTwo',
             'testApiKeyNoticeCatalogueWithBadPlaceholdersDegradesNotFatals',
@@ -10857,6 +10858,31 @@ final class BrandConfigSpec
         $gateway->get_api_key_verification_status();
         TinyAssert::same(WC_Twoinc::API_KEY_VERIFICATION_TIMEOUT, $gateway->seen_timeout);
         TinyAssert::same(true, WC_Twoinc::API_KEY_VERIFICATION_TIMEOUT < 30);
+    }
+
+    /**
+     * ABN-536. The notice's colour moved out of its inline style so an
+     * inconclusive verdict can be toned down instead of reddened, which makes
+     * the rendered class the only thing carrying it — and admin.js's amber
+     * override a two-class selector that needs the base class present. Nothing
+     * else in either suite would notice its removal.
+     */
+    private static function testApiKeyNoticeElementCarriesTheClassItsColourComesFrom(): void
+    {
+        $gateway = self::gateway();
+        $gateway->init_form_fields();
+        $html = $gateway->generate_api_key_with_verification_html('api_key', ['title' => 'API key']);
+
+        TinyAssert::true(
+            strpos($html, 'id="twoinc-merchant-invalid-notice" class="twoinc-merchant-notice"') !== false,
+            'the notice element carries the class its colour comes from'
+        );
+        // An inline colour would beat the class in both directions.
+        TinyAssert::same(
+            false,
+            (bool) preg_match('/id="twoinc-merchant-invalid-notice"[^>]*style="[^"]*color:/', $html),
+            'and no inline colour that would beat it'
+        );
     }
 
     private static function testApiKeyNoticesCarryTwoProductNameAndStatusPlaceholder(): void
