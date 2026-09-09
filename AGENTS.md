@@ -110,10 +110,13 @@ Vendored assets
   a Magento-side checkout loads it with no RequireJS, jQuery or Knockout, so a
   framework dependency added to either copy lands in a place that cannot satisfy
   it.
-- **The unsupported-country gate greys out SEARCH, never manual entry.** Manual
-  entry hands the field over as a plain typeable input that never reaches the
-  registry, so disabling it there blocks a mode that was never going to search and
-  leaves a buyer in an uncovered country with no way to name their company at all.
+- **The unsupported-country gate lives outside the panel, and disables the whole
+  company FIELD.** `syncCompanySearchAvailability()` in `assets/js/twoinc.js` sets
+  the field `disabled` whenever the country is outside the registry's coverage,
+  with no exemption for manual mode — so a buyer in an uncovered country cannot
+  name their company by hand either. The panel carries no disabled state of its
+  own here; the carve-out that greys out search alone is in the other platform's
+  copy.
 - **The company field opens the panel on FOCUS**, through the same `open()` a
   mousedown runs, leaving the caret in the panel's query field — the same state a
   click leaves it in, and the same on every platform that carries this control.
