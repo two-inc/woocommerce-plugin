@@ -1589,3 +1589,7 @@ msgstr "minimumbestelwaarde nog niet bekend totdat uw profiel is vernieuwd"
 #: class/WC_Twoinc.php
 msgid "hidden for baskets in a currency the buyer surcharge cannot be priced in"
 msgstr "verborgen voor winkelwagens in een valuta waarin de toeslag voor de koper niet kan worden berekend"
+
+#: class/WC_Twoinc.php
+msgid "Automatic"
+msgstr "Automatisch"

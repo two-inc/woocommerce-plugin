@@ -101,6 +101,7 @@ final class BrandConfigSpec
             'testChipFeeAmountCarriesCurrencySymbolNotCode',
             'testPaymentTermsDefaultPreferenceOrder',
             'testMerchantDefaultTermStoredValueDistinguishesUnset',
+            'testDefaultTermOptionsLeadWithAutomatic',
             'testBuyerFeeShareShapes',
             'testBuyerFeeShareRounding',
             'testRoundingStepOptionsCanonicalAndNarrowed',
@@ -3574,8 +3575,8 @@ final class BrandConfigSpec
     }
 
     /**
-     * Gateway fake over a scripted merchant-record fetch, with the record's
-     * cached rows and the per-request memo cleared so each use fetches once.
+     * Gateway fake over a scripted merchant-record fetch, with the freshness
+     * stamps and the per-request memo cleared so each use fetches once.
      * Returns the anonymous class, not WC_Twoinc: callers script `$responses`
      * and read `$calls` off it.
      */
@@ -6380,24 +6381,44 @@ final class BrandConfigSpec
         };
     }
 
+    /**
+     * The empty option is what lets an admin leave the term to the checkout's
+     * resolver; without it the select can only name a day count and posts one
+     * on every save (ABN-548).
+     */
+    private static function testDefaultTermOptionsLeadWithAutomatic(): void
+    {
+        $cases = [
+            // PHP casts a numeric-string array key to an int; the empty one stays a string.
+            [['14', '30'], [14, 30, 60], ['', 14, 30], 'the empty option comes first, ahead of every offered term'],
+            [['14', '30'], [], [''], 'an unresolved backend list still offers the empty option'],
+            [[], [14, 30], [''], 'nothing ticked still offers the empty option'],
+        ];
+
+        foreach ($cases as [$ticked, $backend, $expected, $description]) {
+            $gateway = self::validationGateway(['payment_terms_days' => $ticked], $backend);
+            $method = new ReflectionMethod($gateway, 'get_offered_payment_term_options');
+            $method->setAccessible(true);
+
+            TinyAssert::same($expected, array_keys($method->invoke($gateway)), $description);
+        }
+    }
+
     private static function testDefaultTermCoercedToOfferedSet(): void
     {
         $gateway = self::gateway();
         $terms_key = $gateway->get_field_key('payment_terms_days');
         $custom_key = $gateway->get_field_key('payment_terms_custom_days');
+        // Seeded so a case can prove the validator does NOT reach for it.
         $due_option = WC_Twoinc_Brand::prefixed_name('merchant_due_in_days');
-        // A fresh stamp keeps the reader off the wire.
-        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on')] = time();
-        WC_Twoinc::reset_merchant_record_memo();
 
         $cases = [
             [['30', '60'], null, 0, '60', '60', 'a posted default within the offered set is kept verbatim'],
-            [['30', '60'], null, 0, '90', '30', 'a default no longer offered repoints to 30'],
-            [['14', '90'], null, 0, '60', '14', 'without 30 offered it repoints to the shortest offered term'],
-            [['14', '30', '90'], null, 90, '60', '90', "the merchant's own default term outranks 30"],
-            [['14', '30', '90'], null, 45, '60', '30', 'a merchant default term that is not offered is ignored'],
+            [['30', '60'], null, 0, '90', '', 'a default no longer offered is stored empty, never repointed'],
+            [['14', '30', '90'], null, 90, '60', '', "not even the merchant's own default term is synthesised here"],
             [['60'], '45', 0, '45', '45', 'the custom day joins the offered set and can become the default'],
-            [['60'], '45', 0, '14', '45', 'the shortest of the offered set wins with no 30 and no merchant default'],
+            [['60'], '45', 0, '', '', 'the empty Automatic option is stored as posted'],
+            [['60'], '45', 0, '14', '', 'an unofferable posted default is stored empty'],
         ];
 
         foreach ($cases as [$ticked, $custom, $merchant_default, $posted, $expected, $description]) {
@@ -9047,6 +9068,11 @@ final class BrandConfigSpec
             public function get_merchant_available_terms(): array
             {
                 return [30];
+            }
+
+            public function get_merchant_default_term(): ?int
+            {
+                return null;
             }
 
             public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)

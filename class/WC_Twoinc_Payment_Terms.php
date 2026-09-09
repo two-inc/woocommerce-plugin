@@ -26,7 +26,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
     {
         public const SESSION_KEY = 'two_selected_term';
 
-        /** Preferred default term, in days, when no explicit default resolves (ABN-548). */
+        /** Preferred default term, in days (ABN-548). */
         public const PREFERRED_DEFAULT_TERM = 30;
 
         /**

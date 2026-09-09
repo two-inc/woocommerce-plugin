@@ -1590,3 +1590,7 @@ msgstr "minste ordreverdi er ikke kjent før profilen din oppdateres"
 #: class/WC_Twoinc.php
 msgid "hidden for baskets in a currency the buyer surcharge cannot be priced in"
 msgstr "skjult for handlekorger i en valuta kjøpertillegget ikke kan prises i"
+
+#: class/WC_Twoinc.php
+msgid "Automatic"
+msgstr "Automatisk"

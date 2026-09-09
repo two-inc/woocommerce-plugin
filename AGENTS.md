@@ -391,13 +391,18 @@ The merchant record refreshes on an event, never on expiry
 - **The preselected term prefers 30 days** (ABN-548) — `get_default_term()`
   resolves the admin's stored default, the merchant's own default term, 30, and
   finally the shortest offered term, each only while it is in the offered set.
-  An empty offered set has no default at all. The save-time validator repoints
-  an unofferable stored default by the same order, since that select posts on
-  every save and a synthesised shortest term would pin the stored default below
-  30 permanently. The differential surcharge basis reads the same resolver, so
-  it moves with it. The merchant's own default term is 0 in the option row when
-  the record carries none, so an install upgraded from the rule that wrote 14
-  there reads a term the merchant may not hold until its next record refresh.
+  An empty offered set has no default at all. The differential surcharge basis
+  reads the same resolver, so the reference term it prices against moves with
+  the preference.
+- **Nothing but the admin puts a day count in `default_payment_term`.** The
+  field's first option is Automatic, an empty value, and the save validator
+  stores empty for any posted default the offered set does not carry. That
+  select posts on every save, so a synthesised day count is stored, becomes the
+  resolver's first step and makes every later step unreachable. The merchant's
+  own default term is 0 in its option row when the record carries none; the row
+  written under the rule that stored 14 there is dropped once on upgrade, since
+  a shop whose record never resolves would otherwise keep reading it as a real
+  term.
 
 Key Conventions
 

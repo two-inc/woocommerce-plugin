@@ -1591,3 +1591,7 @@ msgstr ""
 #: class/WC_Twoinc.php
 msgid "hidden for baskets in a currency the buyer surcharge cannot be priced in"
 msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Automatic"
+msgstr ""
