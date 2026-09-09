@@ -389,7 +389,7 @@ function twoinc_ajax_verify_api_key()
  * AJAX endpoint for the admin inline merchant-rate fees beside the payment-term
  * checkboxes. Resolves the merchant's per-term pricing rate (percentage +
  * fixed) so the config page can preview what Two charges the merchant for each
- * offered term. Mirrors Magento's Controller\Adminhtml\Config\Fees.
+ * offered term, the same admin-side fee preview every platform exposes.
  *
  * Fail-soft: on any error returns success:false; the admin JS leaves the fee
  * spans empty so the config page never breaks on a pricing-API outage.
@@ -425,7 +425,7 @@ function twoinc_ajax_term_fees()
 
     $twoinc_instance = WC_Twoinc::get_instance();
     // No admin-side buyer-country config exists; use the shop base country as
-    // a stand-in for the rate preview (matches Magento's resolveBuyerCountry).
+    // a stand-in for the rate preview, as on every platform.
     $buyer_country = strtoupper((string) WC()->countries->get_base_country());
 
     $rates = WC_Twoinc_Payment_Terms::fetch_merchant_rates($twoinc_instance, $terms, $buyer_country);

@@ -25,9 +25,9 @@ concurrency:
 #     the image defaults here — WooCommerce gates its own WP/PHP support,
 #     so multiplying the axes re-tests WooCommerce, not this plugin.
 #
-# Honest-CI conventions (magento-plugin's support-matrix, TWO-24998): an
-# API/transport failure FAILS discovery rather than emitting an empty
-# matrix that would skip-green; every emitted leg is genuinely run.
+# Honest-CI conventions (TWO-24998): an API/transport failure FAILS
+# discovery rather than emitting an empty matrix that would skip-green;
+# every emitted leg is genuinely run.
 jobs:
   discover:
     name: Discover WooCommerce versions
