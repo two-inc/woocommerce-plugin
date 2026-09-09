@@ -261,6 +261,7 @@ final class BrandConfigSpec
             'testIsAvailableFalseWhenApiKeyVerificationFails',
             'testIsAvailableTrueOnlyWhenEnabledAndVerified',
             'testRecordlessOkResponseWithholdsPaymentMethod',
+            'testUnresolvedMerchantTermsWithholdPaymentMethod',
             'testCheckoutWindowTwoincSuppressedOnVerificationFailure',
             'testVerifyApiKeyMalformedResponseNotMiscategorizedAsNotConfigured',
             'testAdminLiveVerificationWarmsCheckoutCache',
@@ -9361,7 +9362,7 @@ final class BrandConfigSpec
 
             public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
             {
-                return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
+                return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42', 'available_terms' => [30]])];
             }
         };
 
@@ -9370,6 +9371,8 @@ final class BrandConfigSpec
 
         $gateway->enabled = 'yes';
         $GLOBALS['__twoinc_test_transients'] = [];
+        unset($GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_available_terms')]);
+        WC_Twoinc::reset_merchant_record_memo();
         TinyAssert::same(true, $gateway->is_available());
     }
 
@@ -9420,8 +9423,8 @@ final class BrandConfigSpec
 
         // [verify endpoint's 200 body, verdict, offered at checkout, why].
         $cases = [
-            ['{"id":"42","short_name":"shop"}', 'ok', true, 'a full merchant record is a verification'],
-            ['{"id":"42"}', 'ok', true, 'a record without a short name still resolves the merchant'],
+            ['{"id":"42","short_name":"shop","available_terms":[30]}', 'ok', true, 'a full merchant record is a verification'],
+            ['{"id":"42","available_terms":[30]}', 'ok', true, 'a record without a short name still resolves the merchant'],
             ['{}', 'error', false, 'a 200 carrying no merchant record must not open the gate'],
             ['{"short_name":"shop"}', 'error', false, 'a 200 with a short name but no id resolves no merchant'],
             ['<html><body>Sign in to continue</body></html>', 'error', false, 'an unreadable 200 must not open the gate'],
@@ -9429,10 +9432,95 @@ final class BrandConfigSpec
 
         foreach ($cases as [$body, $status, $available, $description]) {
             $GLOBALS['__twoinc_test_transients'] = [];
+            unset($GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_available_terms')]);
+            WC_Twoinc::reset_merchant_record_memo();
             $gateway = $make_gateway(['response' => ['code' => 200], 'body' => $body]);
             TinyAssert::same($status, $gateway->get_api_key_verification_status()['status'], $description);
             TinyAssert::same($available, $gateway->is_available(), $description . ' — and the checkout gate must agree');
         }
+    }
+
+    /**
+     * ABN-495. A verified API key proves the shop's identity, not that the
+     * account can sell — with no resolved offerable term set the method
+     * stays withheld, matching the other platforms. Drives the real gate
+     * end to end: the verify endpoint always succeeds, so only the merchant
+     * record varies.
+     */
+    private static function testUnresolvedMerchantTermsWithholdPaymentMethod(): void
+    {
+        $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
+        $make_gateway = static function ($record) {
+            return new class ($record) extends WC_Twoinc {
+                public $options = ['api_key' => 'key', 'merchant_id' => '42'];
+                public $enabled = 'yes';
+                private $record;
+
+                public function __construct($record)
+                {
+                    $this->record = $record;
+                }
+
+                public function get_twoinc_checkout_host()
+                {
+                    return 'https://api.example';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+
+                public function update_option($key, $value = '')
+                {
+                    $this->options[$key] = $value;
+                    return true;
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                {
+                    if (strpos($endpoint, 'verify_api_key') !== false) {
+                        return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
+                    }
+                    if ($this->record === null) {
+                        return new WP_Error('http_request_failed', 'unreachable');
+                    }
+                    return ['response' => ['code' => 200], 'body' => json_encode($this->record)];
+                }
+            };
+        };
+
+        // [cached term list (null = never stored), merchant record (null = fetch fails), offered at checkout, why].
+        $cases = [
+            [null, ['id' => '42', 'available_terms' => [14, 30]], true, 'a resolved term set offers the method'],
+            [null, ['id' => '42', 'available_terms' => []], false, 'an account offering no terms withholds the method'],
+            [null, ['id' => '42'], false, 'a record with no term field leaves the set unresolved'],
+            [null, null, false, 'an unreachable merchant record leaves the set unresolved'],
+            ['[30]', null, true, 'a cached term set survives a failed refresh'],
+            ['{"a":1}', null, false, 'a corrupted cached row is no resolved term set'],
+        ];
+
+        $GLOBALS['__twoinc_test_is_checkout'] = true;
+        foreach ($cases as [$cached, $record, $available, $description]) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            foreach (['merchant_record_checked_on', 'merchant_record_attempted_on'] as $stamp) {
+                unset($GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name($stamp)]);
+            }
+            if ($cached === null) {
+                unset($GLOBALS['__twoinc_test_options'][$terms_option]);
+            } else {
+                $GLOBALS['__twoinc_test_options'][$terms_option] = $cached;
+            }
+            WC_Twoinc::reset_merchant_record_memo();
+            $gateway = $make_gateway($record);
+            TinyAssert::same($available, $gateway->is_available(), $description);
+
+            ob_start();
+            (new WC_Twoinc_Checkout($gateway))->inject_cart_details();
+            $printed = strpos((string) ob_get_clean(), 'window.twoinc') !== false;
+            TinyAssert::same($available, $printed, $description . ' — and the checkout bootstrap must agree');
+        }
+        unset($GLOBALS['__twoinc_test_is_checkout']);
     }
 
     /**

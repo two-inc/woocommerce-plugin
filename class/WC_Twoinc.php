@@ -716,7 +716,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * The merchant's offerable payment terms (net days, ascending) from GET /v1/merchant
          * `available_terms`, the authoritative set the admin narrows from (TWO-24812). Empty,
-         * whether unresolved or explicitly empty, offers no terms and the backend applies its default.
+         * whether unresolved or explicitly empty, withholds the payment method — see is_available().
          * A cache read, except on a cold or >24h clock, where one request pays one 10s-capped fetch;
          * a failed fetch leaves that clock unmoved, so one request every 60s pays it again until one succeeds.
          *
@@ -731,7 +731,28 @@ if (!class_exists('WC_Twoinc')) {
                 return [];
             }
             $terms = json_decode((string) $cached, true);
-            return is_array($terms) ? array_map('intval', $terms) : [];
+            if (!is_array($terms)) {
+                return [];
+            }
+            $days = [];
+            foreach ($terms as $key => $value) {
+                // Refused whole, not part-trusted: the gate reads any survivor of a corrupted row as resolved.
+                if (!is_int($key) || !is_numeric($value) || (int) $value <= 0) {
+                    return [];
+                }
+                $days[] = (int) $value;
+            }
+            return $days;
+        }
+
+        /**
+         * Whether the merchant has any offerable term at all. Empty either
+         * way — never resolved, or an account that offers none — withholds
+         * the payment method (ABN-495).
+         */
+        public function has_offerable_payment_terms(): bool
+        {
+            return count($this->get_merchant_available_terms()) > 0;
         }
 
         /**
@@ -2627,9 +2648,10 @@ if (!class_exists('WC_Twoinc')) {
          * The Two payment method must not be offered at checkout when the
          * stored API key cannot currently be verified — for ANY reason
          * (invalid/expired key, Two's API returning 5xx, a network/routing
-         * failure reaching it, …). A buyer could otherwise select a
+         * failure reaching it, …) — or when the merchant's offerable
+         * payment terms are not resolved. A buyer could otherwise select a
          * payment method that is not actually functional (TWO-25326
-         * follow-up).
+         * follow-up, ABN-495).
          *
          * @return bool
          */
@@ -2639,28 +2661,38 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
             $status = $this->get_api_key_verification_status();
-            if ($status['status'] === 'ok') {
-                return true;
+            if ($status['status'] !== 'ok') {
+                $this->log_withheld_from_checkout(sprintf(
+                    'API key verification status "%s"%s',
+                    $status['status'],
+                    $status['code'] ? " (HTTP {$status['code']})" : ''
+                ));
+                return false;
             }
-            // Removing the gateway is invisible to the merchant — log the
-            // reason once per request so a verification failure doesn't
-            // read as the gateway simply vanishing (mirrors
-            // apply_brand_availability_gate()'s own "log once" pattern
-            // below; TWO-25326 follow-up).
+            // A verified key proves identity, not that the account can sell (ABN-495).
+            if (!$this->has_offerable_payment_terms()) {
+                $this->log_withheld_from_checkout('merchant offerable payment terms not resolved');
+                return false;
+            }
+            return true;
+        }
+
+        /**
+         * Removing the gateway is invisible to the merchant — log the reason
+         * once per request so a withhold doesn't read as the gateway simply
+         * vanishing (mirrors apply_brand_availability_gate()'s own pattern).
+         */
+        private function log_withheld_from_checkout(string $reason): void
+        {
             static $logged = false;
-            if (!$logged && function_exists('wc_get_logger')) {
-                $logged = true;
-                wc_get_logger()->info(
-                    sprintf(
-                        '%s hidden from checkout: API key verification status "%s"%s',
-                        $this->id,
-                        $status['status'],
-                        $status['code'] ? " (HTTP {$status['code']})" : ''
-                    ),
-                    ['source' => 'twoinc-payment-gateway']
-                );
+            if ($logged || !function_exists('wc_get_logger')) {
+                return;
             }
-            return false;
+            $logged = true;
+            wc_get_logger()->info(
+                sprintf('%s hidden from checkout: %s', $this->id, $reason),
+                ['source' => 'twoinc-payment-gateway']
+            );
         }
 
 
