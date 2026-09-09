@@ -2334,56 +2334,91 @@ if (!class_exists('WC_Twoinc')) {
             sort($clean);
 
             $custom_key = $this->get_field_key('payment_terms_custom_days');
-            $posted_custom = isset($_POST[$custom_key]) ? (int) $_POST[$custom_key] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
-            if (count($clean) === 0 && $posted_custom <= 0) {
+            $posted_custom = WC_Twoinc_Stored_Term::days($_POST[$custom_key] ?? null); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+            // The deprecated sibling holds a term the merchant record offers as a standard one; it
+            // belongs on that term's checkbox instead (ABN-522).
+            if ($this->custom_term_folds_in($posted_custom) && !in_array($posted_custom, $clean, true)) {
+                $clean[] = $posted_custom;
+                sort($clean);
+            }
+
+            // Counted only where checkout would offer it, else a save with no ticks at all leaves
+            // the shop offering no term and withholding the method, with nothing said (ABN-522).
+            $reaches_checkout = WC_Twoinc_Stored_Term::reaches_checkout(
+                $posted_custom,
+                $this->get_merchant_available_terms()
+            );
+            if (count($clean) === 0 && !$reaches_checkout) {
                 throw new Exception(__('Select at least one payment term or enter a custom term.', 'twoinc-payment-gateway'));
             }
             return $clean;
         }
 
         /**
-         * True when a custom day count doesn't already duplicate a term the
-         * backend offers (checked or not) — the "Custom Payment Terms (days)"
-         * field is only shown/meaningful for a genuinely custom value, not a
-         * value that already has a preset checkbox row (TWO-25498). Compared
-         * against the full backend-available set, not just the currently
-         * ticked subset, so a match on an unticked preset also folds in
-         * (see reconcile_custom_payment_term).
+         * True where the stored term is one the merchant record offers as a standard term, so the
+         * save folds it onto that term's checkbox. An unresolvable offered set matches nothing
+         * rather than everything, so an API outage cannot delete a migration value (ABN-493).
+         *
+         * @param int|null $days
          */
-        private function is_custom_payment_term_genuine(int $custom_days): bool
+        private function custom_term_folds_in($days): bool
         {
-            if ($custom_days <= 0) {
+            if ($days === null) {
                 return false;
             }
-            return !in_array($custom_days, $this->get_merchant_available_terms(), true);
+            $offered = $this->get_merchant_available_terms();
+
+            return count($offered) > 0 && in_array($days, $offered, true);
+        }
+
+        /** Names End-of-Month semantics in the legacy help text only where that type is stored (ABN-495). */
+        private function legacy_custom_term_description(string $days): string
+        {
+            if ($this->get_option('payment_terms_type') === 'end_of_month') {
+                return sprintf(
+                    /* translators: %s is the stored number of days. */
+                    __('Legacy setting. This offers a custom term of %s days after the end of the month. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer.', 'twoinc-payment-gateway'),
+                    $days
+                );
+            }
+
+            return sprintf(
+                /* translators: %s is the stored number of days. */
+                __('Legacy setting. This offers a custom term of %s days from fulfilment. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer.', 'twoinc-payment-gateway'),
+                $days
+            );
         }
 
         /**
-         * Render the "Custom Payment Terms (days)" number field, hidden
-         * server-side (no JS flash) unless the stored value is genuinely
-         * custom. admin.js keeps this live against unsaved checkbox ticks;
-         * see updateCustomDaysVisibility there. Mirrors WC_Settings_API's
-         * own generate_number_html, with the added visibility guard.
+         * Render the deprecated "Custom payment terms (days)" field as keep-or-remove, so the only
+         * edit the merchant is offered is the only one the save accepts (ABN-522). The row is
+         * hidden where nothing is stored and where the value folds into an offered term's
+         * checkbox — hidden but still posted, which is what lets that fold-in happen.
          */
         public function generate_two_custom_payment_days_html($key, $data)
         {
             $field_key = $this->get_field_key($key);
             $defaults  = array(
-                'title'             => '',
-                'disabled'          => false,
-                'class'             => '',
-                'css'               => '',
-                'placeholder'       => '',
-                'type'              => 'number',
-                'desc_tip'          => false,
-                'description'       => '',
-                'custom_attributes' => array(),
+                'title'    => '',
+                'disabled' => false,
+                'class'    => '',
+                'css'      => '',
+                'desc_tip' => false,
             );
             $data = wp_parse_args($data, $defaults);
-            $genuine = $this->is_custom_payment_term_genuine((int) $this->get_option($key));
+            $stored = $this->stored_custom_payment_term();
+            $days = WC_Twoinc_Stored_Term::days($stored);
+            $data['description'] = $this->legacy_custom_term_description(
+                esc_html($days === null ? $stored : (string) $days)
+            );
+            $hidden = WC_Twoinc_Stored_Term::is_blank($stored) || $this->custom_term_folds_in($days);
+            $keep_label = $days === null
+                ? $stored
+                : sprintf(__('%s days', 'twoinc-payment-gateway'), $days);
             ob_start();
             ?>
-            <tr valign="top" class="twoinc-custom-payment-days-field" <?php echo $genuine ? '' : 'style="display:none;"'; ?>>
+            <tr valign="top" class="twoinc-custom-payment-days-field" <?php echo $hidden ? 'style="display:none;"' : ''; ?>>
                 <th scope="row" class="titledesc">
                     <label for="<?php echo esc_attr($field_key); ?>"><?php echo wp_kses_post($data['title']); ?> <?php echo $this->get_tooltip_html($data); // WPCS: XSS ok.
                     ?></label>
@@ -2391,8 +2426,12 @@ if (!class_exists('WC_Twoinc')) {
                 <td class="forminp">
                     <fieldset>
                         <legend class="screen-reader-text"><span><?php echo wp_kses_post($data['title']); ?></span></legend>
-                        <input class="input-text regular-input <?php echo esc_attr($data['class']); ?>" type="<?php echo esc_attr($data['type']); ?>" name="<?php echo esc_attr($field_key); ?>" id="<?php echo esc_attr($field_key); ?>" style="<?php echo esc_attr($data['css']); ?>" value="<?php echo esc_attr($this->get_option($key)); ?>" placeholder="<?php echo esc_attr($data['placeholder']); ?>" <?php disabled($data['disabled'], true); ?> <?php echo $this->get_custom_attribute_html($data); // WPCS: XSS ok.
-                        ?> />
+                        <select class="select <?php echo esc_attr($data['class']); ?>" name="<?php echo esc_attr($field_key); ?>" id="<?php echo esc_attr($field_key); ?>" style="<?php echo esc_attr($data['css']); ?>" <?php disabled($data['disabled'], true); ?>>
+                            <?php if ($stored !== '') : ?>
+                                <option value="<?php echo esc_attr($stored); ?>" selected="selected"><?php echo esc_html($keep_label); ?></option>
+                            <?php endif; ?>
+                            <option value=""><?php echo esc_html(__('Remove', 'twoinc-payment-gateway')); ?></option>
+                        </select>
                         <?php echo $this->get_description_html($data); // WPCS: XSS ok.
                         ?>
                     </fieldset>
@@ -2403,20 +2442,107 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Validate the optional custom payment term: a non-negative whole number
-         * of days, or blank. Save-time refusal of a day the account does not offer
-         * is deferred pending ABN-522; the runtime read enforces it (ABN-521).
+         * The deprecated custom term may be removed but never replaced, whatever writes the
+         * settings row: the admin form is one of several routes to it, and the REST settings
+         * endpoint runs none of the field validators (ABN-522).
+         *
+         * @param mixed $value
+         * @param mixed $option
+         * @param mixed $old_value
+         * @return mixed
+         */
+        public static function keep_stored_custom_payment_term($value, $option, $old_value)
+        {
+            if (!is_array($value) || !is_string($option) || substr($option, -9) !== '_settings') {
+                return $value;
+            }
+            if ($option !== 'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings') {
+                return $value;
+            }
+            // No row yet on a fresh install, so the stored term is nothing and any value is a change.
+            $stored = is_array($old_value)
+                ? WC_Twoinc_Stored_Term::text($old_value['payment_terms_custom_days'] ?? '')
+                : '';
+            if (!array_key_exists('payment_terms_custom_days', $value)) {
+                // A write that omits the row would drop the value; only an empty one removes it.
+                $value['payment_terms_custom_days'] = $stored;
+
+                return $value;
+            }
+            $raw = $value['payment_terms_custom_days'];
+            $posted = WC_Twoinc_Stored_Term::text($raw);
+            if (!is_scalar($raw) || ($posted !== '' && $posted !== $stored)) {
+                $value['payment_terms_custom_days'] = $stored;
+            }
+
+            return $value;
+        }
+
+        /**
+         * The persisted custom term. Read off the settings row, not $this->settings: the save
+         * compares against what is stored, whatever the in-memory copy holds. ABN-522.
+         */
+        private function stored_custom_payment_term(): string
+        {
+            $saved = get_option($this->get_option_key(), null);
+
+            return is_array($saved) ? WC_Twoinc_Stored_Term::text($saved['payment_terms_custom_days'] ?? '') : '';
+        }
+
+        /**
+         * Why the posted custom term cannot be saved, or null where it can. Removal is the only
+         * edit accepted, and a stored value that is not a number of days blocks the save while it
+         * stands: hiding or silently dropping it would leave nothing to correct (ABN-522).
+         *
+         * @param mixed $posted
+         */
+        private function custom_payment_term_refusal($posted): ?string
+        {
+            $posted = WC_Twoinc_Stored_Term::text(wp_unslash($posted));
+            if ($posted !== '' && $posted !== $this->stored_custom_payment_term()) {
+                return __('Custom payment terms (days) can only be removed, not changed.', 'twoinc-payment-gateway');
+            }
+            if (WC_Twoinc_Stored_Term::is_unusable($posted)) {
+                return sprintf(
+                    /* translators: %s is the unusable stored value. */
+                    __('Custom payment terms (days) holds "%s", which is not a usable number of days. Choose Remove on that field to clear it.', 'twoinc-payment-gateway'),
+                    $posted
+                );
+            }
+
+            return null;
+        }
+
+        /**
+         * The deprecated custom term may be removed but never replaced, and clears itself once the
+         * merchant record offers the same term as a standard one — announced, since the merchant
+         * did not ask for it and the checkbox above is where it lands (ABN-522).
          */
         public function validate_payment_terms_custom_days_field($key, $value)
         {
-            $value = trim((string) $value);
-            if ($value === '') {
+            // Only an empty row removes the value: a post that carries no row, or something other
+            // than a value, leaves it alone. The admin form always posts a row.
+            if (!is_scalar($value)) {
+                return $this->stored_custom_payment_term();
+            }
+
+            $refusal = $this->custom_payment_term_refusal($value);
+            if ($refusal !== null) {
+                throw new Exception($refusal);
+            }
+
+            $posted = WC_Twoinc_Stored_Term::text(wp_unslash($value));
+            $days = WC_Twoinc_Stored_Term::days($posted);
+            if ($this->custom_term_folds_in($days)) {
+                WC_Admin_Settings::add_message(sprintf(
+                    /* translators: %s is the stored number of days. */
+                    __('Custom payment terms (days) of %s is now one of the standard terms you offer, so it has been selected under Payment terms and the custom field cleared.', 'twoinc-payment-gateway'),
+                    $days
+                ));
                 return '';
             }
-            if (!ctype_digit($value)) {
-                throw new Exception(__('Custom payment terms (days) must be a whole number of days.', 'twoinc-payment-gateway'));
-            }
-            return (string) (int) $value;
+
+            return $posted;
         }
 
         /**
@@ -2463,8 +2589,8 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             $custom_key = $this->get_field_key('payment_terms_custom_days');
-            $posted_custom = isset($_POST[$custom_key]) ? (int) $_POST[$custom_key] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
-            if ($posted_custom > 0) {
+            $posted_custom = WC_Twoinc_Stored_Term::days($_POST[$custom_key] ?? null); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            if ($posted_custom !== null) {
                 $offered[] = $posted_custom;
             }
 
@@ -5095,16 +5221,10 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'two_payment_terms',
                 ],
                 'payment_terms_custom_days' => [
-                    'title'             => __('Custom payment terms (days)', 'twoinc-payment-gateway'),
-                    'description'       => __('Optional. Enter a custom number of days to offer alongside the selected terms above.', 'twoinc-payment-gateway'),
-                    'desc_tip'          => true,
-                    // Custom render (not the default 'number' generator):
-                    // the row is hidden server-side unless the stored value
-                    // is a genuine custom term, not a duplicate of a preset
-                    // the checkboxes above already offer (TWO-25498).
-                    'type'              => 'two_custom_payment_days',
-                    'custom_attributes' => ['min' => '0', 'step' => '1'],
-                    'default'           => ''
+                    'title'   => __('Custom payment terms (days)', 'twoinc-payment-gateway'),
+                    // Deprecated: rendered keep-or-remove, and hidden unless a value is stored. ABN-522.
+                    'type'    => 'two_custom_payment_days',
+                    'default' => ''
                 ],
                 'default_payment_term' => [
                     'title'       => __('Default payment terms', 'twoinc-payment-gateway'),
@@ -6538,6 +6658,15 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Admin_Settings::add_error($e->getMessage());
                 return;
             }
+            $custom_days_field = 'woocommerce_' . $this->id . '_payment_terms_custom_days';
+            $refusal = array_key_exists($custom_days_field, $post_data)
+                ? $this->custom_payment_term_refusal($post_data[$custom_days_field])
+                : null;
+            if ($refusal !== null) {
+                // Refused before anything persists: the field's own notice says the value still stands.
+                WC_Admin_Settings::add_error($refusal);
+                return;
+            }
             $api_key_field = 'woocommerce_' . $this->id . '_api_key';
             $api_key_in_post = array_key_exists($api_key_field, $post_data);
             $api_key = $api_key_in_post ? $post_data[$api_key_field] : '';
@@ -6567,7 +6696,6 @@ if (!class_exists('WC_Twoinc')) {
             $_POST = $post_data;
             parent::process_admin_options();
             $this->refetch_merchant_record_on_identity_save();
-            $this->reconcile_custom_payment_term();
         }
 
         /** After the save, so the refetch authenticates with the persisted key and a re-resolved merchant_id. */
@@ -6582,29 +6710,6 @@ if (!class_exists('WC_Twoinc')) {
             // Capped: three calls run in series in one admin POST.
             $this->verify_api_key(null, 10);
             $this->refresh_merchant_record_caches(true);
-        }
-
-        /**
-         * A custom day count that now duplicates a backend-offered preset
-         * (ticked or not, e.g. it re-entered the backend's available list)
-         * is redundant — clear it and tick that preset's checkbox so a
-         * later render doesn't show a "custom" field for a value that
-         * already has a preset row (TWO-25498).
-         */
-        private function reconcile_custom_payment_term(): void
-        {
-            $custom = (int) $this->get_option('payment_terms_custom_days');
-            if ($custom <= 0 || $this->is_custom_payment_term_genuine($custom)) {
-                return;
-            }
-            $days = $this->get_option('payment_terms_days');
-            $days = is_array($days) ? array_map('intval', $days) : [];
-            if (!in_array($custom, $days, true)) {
-                $days[] = $custom;
-                sort($days);
-                $this->update_option('payment_terms_days', $days);
-            }
-            $this->update_option('payment_terms_custom_days', '');
         }
 
         /**

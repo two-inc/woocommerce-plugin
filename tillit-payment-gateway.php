@@ -75,11 +75,16 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_FX.php';
     require_once __DIR__ . '/class/WC_Twoinc_Rate_Limiter.php';
     require_once __DIR__ . '/class/WC_Twoinc_Surcharge_Method_Exception.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Stored_Term.php';
     require_once __DIR__ . '/class/WC_Twoinc_Payment_Terms.php';
     require_once __DIR__ . '/class/WC_Twoinc_Sole_Trader.php';
     require_once __DIR__ . '/class/WC_Twoinc_Api_Proxy.php';
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
     require_once __DIR__ . '/class/WC_Twoinc.php';
+
+    // The option name is resolved inside the callback: reading the brand here would cache it
+    // before an overlay loading at this same priority has registered its own.
+    add_filter('pre_update_option', ['WC_Twoinc', 'keep_stored_custom_payment_term'], 10, 3);
 
     // Checkout AJAX endpoints (term-fee chips, term selection, sole-trader
     // availability/tokens). Registered here at plugins_loaded — NOT in the

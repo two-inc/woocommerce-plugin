@@ -370,10 +370,6 @@ msgstr ""
 msgid "Select at least one payment term or enter a custom term."
 msgstr "Selecteer ten minste één betalingstermijn of voer een aangepaste termijn in."
 
-#: class/WC_Twoinc.php:2118
-msgid "Custom payment terms (days) must be a whole number of days."
-msgstr "Aangepaste betalingstermijnen (dagen) moet een geheel aantal dagen zijn."
-
 #. translators: %1$s opens and %2$s closes a link to the brand's FAQ page.
 #: class/WC_Twoinc.php:2254
 #, php-format
@@ -856,10 +852,6 @@ msgstr "Selecteer de betalingstermijn(en) die u wilt aanbieden."
 #: class/WC_Twoinc.php:4691
 msgid "Custom payment terms (days)"
 msgstr "Aangepaste betalingstermijnen (dagen)"
-
-#: class/WC_Twoinc.php:4692
-msgid "Optional. Enter a custom number of days to offer alongside the selected terms above."
-msgstr "Optioneel. Voer een aangepast aantal dagen in om aan te bieden naast de hierboven geselecteerde termijnen."
 
 #: class/WC_Twoinc.php:4703
 msgid "Default payment terms"
@@ -1488,3 +1480,26 @@ msgstr "Het verkopersprofiel kon niet worden vernieuwd."
 msgid "Merchant profile refreshed."
 msgstr "Verkopersprofiel vernieuwd."
 
+#: class/WC_Twoinc.php
+msgid "Custom payment terms (days) can only be removed, not changed."
+msgstr "Aangepaste betalingstermijnen (dagen) kunnen alleen worden verwijderd, niet gewijzigd."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Custom payment terms (days) holds \"%s\", which is not a usable number of days. Choose Remove on that field to clear it."
+msgstr "Aangepaste betalingstermijnen (dagen) bevat %s, wat geen bruikbaar aantal dagen is. Kies Verwijderen bij dat veld om het te wissen."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Custom payment terms (days) of %s is now one of the standard terms you offer, so it has been selected under Payment terms and the custom field cleared."
+msgstr "Aangepaste betalingstermijnen (dagen) van %s is nu een van de standaardtermijnen die u aanbiedt, dus deze is geselecteerd onder Betalingstermijnen en het aangepaste veld is gewist."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Legacy setting. This offers a custom term of %s days from fulfilment. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
+msgstr "Verouderde instelling. Dit biedt een aangepaste termijn van %s dagen vanaf uitvoering. Deze wordt niet langer ondersteund en kan niet worden gewijzigd. Kies Verwijderen om deze in te trekken, of gebruik de betalingstermijnen hierboven om te wijzigen wat u aanbiedt."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Legacy setting. This offers a custom term of %s days after the end of the month. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
+msgstr "Verouderde instelling. Dit biedt een aangepaste termijn van %s dagen na het einde van de maand. Deze wordt niet langer ondersteund en kan niet worden gewijzigd. Kies Verwijderen om deze in te trekken, of gebruik de betalingstermijnen hierboven om te wijzigen wat u aanbiedt."

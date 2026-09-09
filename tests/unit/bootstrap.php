@@ -1395,6 +1395,7 @@ require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Helper.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_FX.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Rate_Limiter.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Surcharge_Method_Exception.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Stored_Term.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Payment_Terms.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Sole_Trader.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Api_Proxy.php';

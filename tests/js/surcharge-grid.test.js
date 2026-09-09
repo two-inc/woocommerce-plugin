@@ -131,4 +131,23 @@ describe("grid rows follow the merchant's offered terms", () => {
     });
     expect(rowDays($)).toEqual(expected);
   });
+
+  // Same rule as the server's one normalisation of the stored value: anything but a run of
+  // digits over zero denotes no term, so it can add no row of its own (ABN-522).
+  test.each([
+    ["45", [30, 45], "a run of digits is that term"],
+    ["045", [30, 45], "leading zeros denote the same term"],
+    ["0", [30], "a zero denotes no term"],
+    ["45.0", [30], "a decimal denotes no term"],
+    ["1e2", [30], "exponent notation denotes no term"],
+    ["-45", [30], "a negative denotes no term"],
+    ["abc", [30], "text denotes no term"]
+  ])("stored custom value %s -> rows=%s (%s)", async (customDays, expected) => {
+    const { $ } = await harness.loadAdmin({
+      checked: [30],
+      customDays: customDays,
+      merchantTerms: [30, 45]
+    });
+    expect(rowDays($)).toEqual(expected);
+  });
 });

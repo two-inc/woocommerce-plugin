@@ -191,11 +191,11 @@ function buildSettingsPage(options) {
     apiKeyBlock,
     refreshBlock,
     '    <tr><td><div class="twoinc-term-checkboxes">' + checkboxes + "</div></td></tr>",
-    '    <tr><td><input type="text" id="' +
+    '    <tr><td><select id="' +
       FIELD_PREFIX +
-      'payment_terms_custom_days" value="' +
+      'payment_terms_custom_days"><option value="' +
       (opts.customDays === undefined ? "" : opts.customDays) +
-      '" /></td></tr>',
+      '" selected></option><option value="">Remove</option></select></td></tr>',
     '    <tr><td><select id="' + FIELD_PREFIX + 'default_payment_term"></select></td></tr>',
     '    <tr><td><select id="' + FIELD_PREFIX + 'surcharge_type">',
     ["none", "fixed", "percentage", "fixed_and_percentage"]

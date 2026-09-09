@@ -59,31 +59,4 @@ describe("surcharge option field visibility", () => {
       expectRow($, "surcharge_rounding_step", hidden);
     }
   );
-
-  test.each([
-    [undefined, [14], true, "empty custom value stays hidden"],
-    ["30", [14, 30], true, "custom value matching a ticked preset row stays hidden"],
-    [
-      "30",
-      [14],
-      true,
-      "custom value matching an unticked-but-offered preset row is folded (hidden)"
-    ],
-    ["45", [14, 30], false, "genuinely custom value (no matching offered row) is shown"]
-  ])("custom days=%s, checked=%s -> hidden=%s (%s)", async (customDays, checked, hidden) => {
-    const { $ } = await harness.loadAdmin({ customDays: customDays, checked: checked });
-    expectRow($, "payment_terms_custom_days", hidden);
-  });
-
-  test("typing a custom value that duplicates an offered row hides it live", async () => {
-    const { $ } = await harness.loadAdmin({ customDays: "45", checked: [14] });
-    // 45 matches no rendered preset row (default terms are 14/30/60/90).
-    expectRow($, "payment_terms_custom_days", false);
-
-    $("#" + harness.FIELD_PREFIX + "payment_terms_custom_days")
-      .val("30")
-      .trigger("change");
-
-    expectRow($, "payment_terms_custom_days", true);
-  });
 });
