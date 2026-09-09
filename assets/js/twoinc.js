@@ -2881,6 +2881,7 @@ let twoincDomHelper = {
 let twoincTermChips = {
   fees: {},
   feesLoaded: false,
+  zeroFeeDisplay: "",
 
   config: function () {
     return (window.twoinc && window.twoinc.payment_terms) || { enabled: false };
@@ -2907,6 +2908,7 @@ let twoincTermChips = {
     // will happen, skip straight to the settled (no-fee) state.
     // Cleared here so every re-render without a fresh quote finds an empty map.
     twoincTermChips.fees = {};
+    twoincTermChips.zeroFeeDisplay = "";
     twoincTermChips.feesLoaded = !willFetchFees;
     twoincTermChips.render(cfg.terms, cfg.selected);
 
@@ -2917,6 +2919,7 @@ let twoincTermChips = {
           twoincTermChips.feesLoaded = true;
           if (response && response.success && response.data) {
             twoincTermChips.fees = response.data.fees || {};
+            twoincTermChips.zeroFeeDisplay = response.data.zero_fee_display || "";
             twoincTermChips.render(response.data.terms, response.data.selected);
           } else {
             twoincTermChips.render(cfg.terms, cfg.selected);
@@ -2931,6 +2934,24 @@ let twoincTermChips = {
     }
   },
 
+  /**
+   * One term's amount as the chip shows it. buyer_fee_share_display carries
+   * the currency SYMBOL in the store's position, matching Magento's
+   * priceUtils.formatPrice; amount plus currency CODE is the degraded
+   * fallback for a response that predates that field. A term with no
+   * resolvable quote reads as zero, never as a blank.
+   */
+  feeLabel: function (days) {
+    const fee = twoincTermChips.fees[days];
+    if (fee && fee.buyer_fee_share_display) {
+      return fee.buyer_fee_share_display;
+    }
+    if (fee && fee.buyer_fee_share !== undefined) {
+      return fee.buyer_fee_share + " " + fee.currency;
+    }
+    return twoincTermChips.zeroFeeDisplay || "0.00";
+  },
+
   render: function (terms, selected) {
     const $container = jQuery(".twoinc-term-chips");
     if ($container.length === 0) return;
@@ -2938,6 +2959,14 @@ let twoincTermChips = {
 
     const cfg = twoincTermChips.config();
     const single = terms.length === 1;
+
+    // Whether a fee shows is decided over the whole offered set, never per
+    // chip (Magento parity — gateway_method.js `termOptions`). An unresolved
+    // quote counts as zero.
+    const allFeesZero = terms.every(function (days) {
+      const fee = twoincTermChips.fees[days];
+      return (fee ? parseFloat(fee.buyer_fee_share) || 0 : 0) < 0.005;
+    });
 
     // Heading placement mirrors Magento's Luma template: shown ABOVE the
     // chips only when the buyer has a choice to make. A single chip carries
@@ -2993,24 +3022,13 @@ let twoincTermChips = {
           $loading.append(jQuery("<span>", { text: "." }));
         }
         $chip.append($loading);
-      } else {
-        const fee = twoincTermChips.fees[days];
-        if (fee && parseFloat(fee.buyer_fee_share) > 0) {
-          // buyer_fee_share_display is the amount run through the store's
-          // own price format server-side, so it carries the currency SYMBOL
-          // in the store's position — "+€12,50", matching Magento's
-          // priceUtils.formatPrice. The raw amount + currency CODE is kept
-          // only as the degraded fallback for a response that predates it.
-          const feeLabel = fee.buyer_fee_share_display
-            ? fee.buyer_fee_share_display
-            : fee.buyer_fee_share + " " + fee.currency;
-          $chip.append(
-            jQuery("<span>", {
-              class: "twoinc-term-chip__fee",
-              text: "+" + feeLabel
-            })
-          );
-        }
+      } else if (!allFeesZero) {
+        $chip.append(
+          jQuery("<span>", {
+            class: "twoinc-term-chip__fee",
+            text: "+" + twoincTermChips.feeLabel(days)
+          })
+        );
       }
       if (!single) {
         $chip.on("click", function () {
