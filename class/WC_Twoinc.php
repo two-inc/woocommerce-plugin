@@ -4428,13 +4428,15 @@ if (!class_exists('WC_Twoinc')) {
             if ($platform_minimum && $basket_is_judgeable && !$meets_minimum($platform_minimum)) {
                 $refused_by = 'basket below the minimum order value set for your account';
             }
-            if ($refused_by === null
+            if (
+                $refused_by === null
                 && $gate
                 && !in_array(WC()->customer->get_billing_country(), $gate['billing_countries'], true)
             ) {
                 $refused_by = 'billing country not one this store offers the payment method in';
             }
-            if ($refused_by === null
+            if (
+                $refused_by === null
                 && $supported_buyer_countries !== null
                 && !$this->is_buyer_country_supported(self::resolve_buyer_country())
             ) {
