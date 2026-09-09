@@ -171,8 +171,8 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
         }
 
         /**
-         * Base URL of Two's hosted sole-trader signup page (the checkout-page
-         * app, not the API). Brand overlays adjust via the
+         * Base URL of Two's hosted sole-trader signup page — served from the
+         * checkout host, not the API. Brand overlays adjust via the
          * `twoinc_sole_trader_signup_url` filter (e.g. appending brand params).
          */
         public static function get_signup_page_url($gateway): string

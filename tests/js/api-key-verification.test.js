@@ -1,8 +1,8 @@
 /**
  * TWO-25326 follow-up (2026-08-05 incident). Before this change, EVERY
- * non-200 response from /v1/merchant/verify_api_key — an actual 401/403
- * invalid key, a Two 5xx, or a network/routing failure reaching Two at all
- * — was reported to the admin identically as "API key is invalid". That
+ * non-200 response from the API-key verification call — an actual 401/403
+ * invalid key, a Two 5xx, or a network/routing failure reaching Two at all —
+ * was reported to the admin identically as "API key is invalid". That
  * made a routing failure look exactly like a merchant typo, and cost real
  * time diagnosing today's incident from the settings page alone.
  *

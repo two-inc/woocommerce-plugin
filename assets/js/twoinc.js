@@ -2020,12 +2020,11 @@ function twoincSoleTraderLaunching() {
 let twoincCompanySearchControls = [twoincSelectWooHelper, twoincSelectWooHelperShipping];
 
 /**
- * The ISO country codes bifrost's company registry search covers, from
- * GET /companies/v2/supported-countries — the ordinary
- * company-search control's own gate, parallel to
+ * The ISO country codes the company registry search covers, from Two's API —
+ * the ordinary company-search control's own gate, parallel to
  * `twoincSoleTrader.availabilityByCountry` but a single global list rather
- * than a per-country lookup: the endpoint answers with every supported
- * country at once, so one fetch for the page's lifetime covers every role.
+ * than a per-country lookup: one response carries every supported country at
+ * once, so one fetch for the page's lifetime covers every role.
  */
 let twoincSupportedSearchCountries = {
   /** @type {string[]|null} null until the first fetch resolves. */
