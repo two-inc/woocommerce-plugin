@@ -284,6 +284,7 @@ final class BrandConfigSpec
             'testSettingsScreenVerificationTimeoutIsBoundedForAPageRender',
             'testCachedStatusMissTimeoutIsShortNotAdminDefault',
             'testApiKeyNoticeElementCarriesTheClassItsColourComesFrom',
+            'testTheAdminVerdictCarriesTheOneDefinitionOfADefinitiveFailure',
             'testApiKeyNoticesCarryTwoProductNameAndStatusPlaceholder',
             'testApiKeyNoticesUseOverlayProductNameNotTwo',
             'testApiKeyNoticeCatalogueWithBadPlaceholdersDegradesNotFatals',
@@ -10858,6 +10859,48 @@ final class BrandConfigSpec
         $gateway->get_api_key_verification_status();
         TinyAssert::same(WC_Twoinc::API_KEY_VERIFICATION_TIMEOUT, $gateway->seen_timeout);
         TinyAssert::same(true, WC_Twoinc::API_KEY_VERIFICATION_TIMEOUT < 30);
+    }
+
+    /**
+     * ABN-536 on ABN-533's rule that the definitive-rejection categories live in
+     * exactly one place. admin.js decides whether to degrade the admin from a
+     * flag the verdict carries, so the flag has to come from that predicate —
+     * a JS-side list of categories would be the second listing the rule forbids.
+     */
+    private static function testTheAdminVerdictCarriesTheOneDefinitionOfADefinitiveFailure(): void
+    {
+        $cases = [
+            ['invalid_key', true, 'a rejected key'],
+            ['not_configured', true, 'nothing configured to verify'],
+            ['unreachable', false, 'an unreachable API'],
+            ['service_error', false, 'a service error'],
+            ['error', false, 'an unexpected status'],
+            ['ok', false, 'a verified key'],
+        ];
+
+        foreach ($cases as $case) {
+            list($status, $expected, $description) = $case;
+            TinyAssert::same($expected, WC_Twoinc::is_definitive_key_failure($status), "definitive verdict for $description");
+        }
+
+        // The suite never loads the plugin file, so the wiring is asserted
+        // against the source it lives in (as the settings-write guard is).
+        $source = (string) file_get_contents(dirname(__DIR__, 2) . '/tillit-payment-gateway.php');
+        TinyAssert::true(
+            strpos($source, "'definitive' => WC_Twoinc::is_definitive_key_failure(\$category['status']),") !== false,
+            'the verdict the settings page receives carries the flag, computed by that predicate'
+        );
+
+        // Naming a category to pick its notice copy is fine; what the rule
+        // forbids is the SET, so no single expression may pair the two.
+        $admin_js = (string) file_get_contents(dirname(__DIR__, 2) . '/assets/js/admin.js');
+        foreach (preg_split('/\\r?\\n/', $admin_js) as $number => $line) {
+            TinyAssert::same(
+                false,
+                strpos($line, 'invalid_key') !== false && strpos($line, 'not_configured') !== false,
+                'admin.js must not re-list the definitive set, line ' . ($number + 1)
+            );
+        }
     }
 
     /** ABN-536. The class is the only thing carrying the notice's colour now. */

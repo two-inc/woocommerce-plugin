@@ -120,10 +120,6 @@ jQuery(function ($) {
   const $invalidIcon = $("#api-key-invalid");
   const $loadingIcon = $("#api-key-loading");
 
-  // Verdict categories that judged the key; anything else judged nothing about
-  // it and must leave the Merchant ID and key status alone (ABN-536).
-  const DEFINITIVE_VERDICTS = ["invalid_key", "not_configured"];
-
   // The last verdict that judged the key, and the key it judged — an
   // inconclusive verdict restores that indicator rather than inventing a red
   // cross, but only while the field still holds the key it applied to.
@@ -261,8 +257,11 @@ jQuery(function ($) {
           updateMerchantInfo(response.data);
           return;
         }
+        // Whether the verdict judged the KEY is decided server-side, where the
+        // categories are defined once; anything else judged nothing about it
+        // and must leave the Merchant ID and key status alone (ABN-536).
         const data = response.data || {};
-        if (DEFINITIVE_VERDICTS.indexOf(data.status) === -1) {
+        if (!data.definitive) {
           showVerificationStatus(indicatorForUnjudgedKey(apiKey));
           showMerchantInfoUnconfirmed(data.status, data.code);
           return;

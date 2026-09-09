@@ -377,6 +377,10 @@ function twoinc_ajax_verify_api_key()
             'message' => 'API key could not be verified',
             'status' => $category['status'],
             'code' => $category['code'],
+            // Travels with the verdict rather than being re-listed in JS: the
+            // categories live in exactly one place (ABN-533), and the admin
+            // degrades nothing on a verdict that judged no key (ABN-536).
+            'definitive' => WC_Twoinc::is_definitive_key_failure($category['status']),
         ]);
     }
 }

@@ -17,12 +17,22 @@
 
 const { loadAdmin, GATEWAY_ID } = require("./admin-harness");
 
+// Mirrors twoinc_ajax_verify_api_key()'s error envelope, `definitive` included:
+// that flag is computed server-side by WC_Twoinc::is_definitive_key_failure(),
+// the one place the categories are listed (ABN-533).
+const DEFINITIVE_STATUSES = ["invalid_key", "not_configured"];
+
 function stubAjaxError(status, code) {
   return function (jq) {
     jq.ajax = jest.fn(function (settings) {
       settings.success({
         success: false,
-        data: { message: "API key could not be verified", status: status, code: code }
+        data: {
+          message: "API key could not be verified",
+          status: status,
+          code: code,
+          definitive: DEFINITIVE_STATUSES.indexOf(status) !== -1
+        }
       });
       return { done: function () {}, fail: function () {} };
     });
@@ -308,7 +318,7 @@ describe("API key verification — categorized failure display", () => {
     test("an inconclusive verdict after a green tick leaves the tick standing", async () => {
       const responses = [
         { success: true, data: { merchant_id: RENDERED_MERCHANT_ID } },
-        { success: false, data: { status: "unreachable", code: 0 } }
+        { success: false, data: { status: "unreachable", code: 0, definitive: false } }
       ];
       const { $ } = await loadAdmin({
         apiKey: "an-old-stored-key",
@@ -336,7 +346,7 @@ describe("API key verification — categorized failure display", () => {
     test("a green tick does not carry over onto a different, unverified key", async () => {
       const responses = [
         { success: true, data: { merchant_id: RENDERED_MERCHANT_ID } },
-        { success: false, data: { status: "unreachable", code: 0 } }
+        { success: false, data: { status: "unreachable", code: 0, definitive: false } }
       ];
       const { $ } = await loadAdmin({
         apiKey: "an-old-stored-key",
@@ -368,8 +378,8 @@ describe("API key verification — categorized failure display", () => {
 
     test("a key the API then rejects clears the unconfirmed tone", async () => {
       const responses = [
-        { success: false, data: { status: "unreachable", code: 0 } },
-        { success: false, data: { status: "invalid_key", code: 401 } }
+        { success: false, data: { status: "unreachable", code: 0, definitive: false } },
+        { success: false, data: { status: "invalid_key", code: 401, definitive: true } }
       ];
       const { $ } = await loadAdmin({
         apiKey: "an-old-stored-key",
