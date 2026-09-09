@@ -1,7 +1,7 @@
 /**
  * The payment-terms chip renderer in assets/js/twoinc.js.
  *
- * Three behaviours are pinned here because all three are silent when they
+ * Four behaviours are pinned here because all four are silent when they
  * regress — the chips still render, just saying the wrong thing:
  *
  *   1. exactly one offered term  → the single chip names itself
@@ -9,7 +9,9 @@
  *   2. more than one            → the heading ("Selected payment terms") sits
  *      above and the chips carry the bare "N days";
  *   3. the fee label shows the currency SYMBOL (the server-formatted
- *      buyer_fee_share_display), never the currency code.
+ *      buyer_fee_share_display), never the currency code;
+ *   4. whether an amount shows is decided over the whole offered set
+ *      (ABN-528), so chips never disagree about carrying a fee.
  *
  * Reference implementation is magento-plugin's Luma renderer
  * (view/frontend/web/js/view/payment/method-renderer/gateway_method.js and
@@ -138,22 +140,49 @@ describe("payment terms chips", () => {
     });
   });
 
-  describe("the fee label", () => {
-    test("uses the server-formatted amount, so the symbol not the code shows", () => {
-      const chips = mount(Object.assign({ enabled: true, terms: [30, 60], selected: 30 }, COPY), {
-        30: { buyer_fee_share: "12.50", currency: "EUR", buyer_fee_share_display: "€12,50" },
-        60: { buyer_fee_share: "0", currency: "EUR", buyer_fee_share_display: "€0,00" }
-      });
-      chips.render([30, 60], 30);
-
-      const fees = ctx
+  describe("the fee amount", () => {
+    /** @returns {string[]} the fee text of each rendered chip, in order */
+    function chipFees() {
+      return ctx
         .$(".twoinc-term-chip__fee")
         .map(function () {
           return ctx.$(this).text();
         })
         .get();
-      // Only the non-zero quote gets a label.
-      expect(fees).toEqual(["+€12,50"]);
+    }
+
+    /** One term's entry as the fees endpoint returns it. */
+    function quote(amount, display) {
+      return { buyer_fee_share: amount, currency: "EUR", buyer_fee_share_display: display };
+    }
+
+    // Whether an amount shows is decided over the whole set: any priced term
+    // puts an amount on every chip, all-zero puts one on none. A term whose
+    // quote failed (null) counts as zero and still shows an amount when a
+    // sibling is priced.
+    test.each([
+      { terms: [30, 60], fees: { 30: quote("0", "€0,00"), 60: quote("0", "€0,00") }, expected: [], description: "every term zero shows nothing anywhere" },
+      { terms: [30, 60], fees: { 30: quote("12.50", "€12,50"), 60: quote("0", "€0,00") }, expected: ["+€12,50", "+€0,00"], description: "one priced term puts a zero amount on the zero-fee chip" },
+      { terms: [30, 60], fees: { 30: quote("12.50", "€12,50"), 60: quote("18.00", "€18,00") }, expected: ["+€12,50", "+€18,00"], description: "every priced term shows its own amount" },
+      { terms: [30], fees: { 30: quote("0", "€0,00") }, expected: [], description: "a lone zero-fee chip shows nothing" },
+      { terms: [30], fees: { 30: quote("9.00", "€9,00") }, expected: ["+€9,00"], description: "a lone priced chip shows its amount" },
+      { terms: [30, 60], fees: { 30: quote("12.50", "€12,50"), 60: null }, expected: ["+€12,50", "+€0,00"], description: "an unresolved term shows a zero amount beside a priced sibling" },
+      { terms: [30, 60], fees: { 30: null, 60: null }, expected: [], description: "no term resolving shows nothing anywhere" }
+    ])("$description", ({ terms, fees, expected }) => {
+      const chips = mount(Object.assign({ enabled: true, terms: terms, selected: terms[0] }, COPY), fees);
+      chips.zeroFeeDisplay = "€0,00";
+      chips.render(terms, terms[0]);
+
+      expect(chipFees()).toEqual(expected);
+    });
+
+    test("uses the server-formatted amount, so the symbol not the code shows", () => {
+      const chips = mount(Object.assign({ enabled: true, terms: [30, 60], selected: 30 }, COPY), {
+        30: quote("12.50", "€12,50"),
+        60: quote("0", "€0,00")
+      });
+      chips.render([30, 60], 30);
+
       expect(ctx.$(".twoinc-term-chips").text()).not.toContain("EUR");
     });
 
@@ -192,14 +221,15 @@ describe("payment terms chips", () => {
         selected: 30,
         fees: {
           30: { buyer_fee_share: "9.00", currency: "EUR", buyer_fee_share_display: "€9,00" }
-        }
+        },
+        zero_fee_display: "€0,00"
       }
     };
 
     // jQuery routes a non-2xx and a dropped connection both through .fail with
     // textStatus 'error', so they are one row rather than two.
     const OUTCOMES = [
-      ["a fresh quote replaces the stale badge", (r) => r.succeed(QUOTE), ["+€9,00"]],
+      ["a fresh quote replaces the stale badge", (r) => r.succeed(QUOTE), ["+€9,00", "+€0,00"]],
       ["a network error or non-2xx clears", (r) => r.fail("error"), []],
       ["an unparseable body clears", (r) => r.fail("parsererror"), []],
       ["a declined quote clears", (r) => r.succeed({ success: false, data: {} }), []],

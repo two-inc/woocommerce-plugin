@@ -960,6 +960,10 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 'terms' => self::get_available_terms($gateway),
                 'selected' => self::get_selected_term($gateway),
                 'fees' => $fees,
+                // A term whose quote did not resolve still shows an amount
+                // when a sibling term is priced, so the chips need a formatted
+                // zero they cannot derive from a missing entry.
+                'zero_fee_display' => self::format_fee_amount(0.0, get_woocommerce_currency()),
             ]);
         }
 
