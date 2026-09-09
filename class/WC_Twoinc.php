@@ -792,7 +792,7 @@ if (!class_exists('WC_Twoinc')) {
          * a failure is on record, or the figures are older than the refresh
          * window they should have been replaced within.
          *
-         * @return array{state: string, reason: string|null, code: int|null, checked_on: int, count: int, stale: bool}
+         * @return array{state: string, reason: string|null, code: int|null, checked_on: int, count: int, stale: bool, refresh_failed: bool}
          */
         public function get_merchant_terms_state(): array
         {
@@ -813,6 +813,10 @@ if (!class_exists('WC_Twoinc')) {
                 // test, negated; the recorded failure is an additional reason,
                 // and one that clock cannot see.
                 'stale' => $recorded_failure || !($checked_on + self::MERCHANT_RECORD_TTL > time()),
+                // Separate from `reason`, which not_configured nulls to keep the
+                // withhold log line's shape: the display still has to say which
+                // of the two staleness causes it is looking at.
+                'refresh_failed' => $recorded_failure,
             ];
 
             if ($state['count'] > 0) {
@@ -919,7 +923,7 @@ if (!class_exists('WC_Twoinc')) {
          * when the read itself is minutes old — the figures are not out of
          * date in that case, the attempt to replace them simply did not land.
          *
-         * @param array{checked_on: int, stale: bool, reason: string|null} $state
+         * @param array{checked_on: int, stale: bool, refresh_failed: bool} $state
          */
         private static function describe_merchant_record_age(array $state): string
         {
@@ -930,7 +934,7 @@ if (!class_exists('WC_Twoinc')) {
             if (!$state['stale']) {
                 return $read_on;
             }
-            if ($state['reason'] !== null) {
+            if ($state['refresh_failed']) {
                 return sprintf(
                     /* translators: %s is a date and time in the site's own format */
                     __('%s — the last attempt to refresh these figures failed; use "Refresh merchant profile" under Diagnostics to retry', 'twoinc-payment-gateway'),
@@ -963,7 +967,7 @@ if (!class_exists('WC_Twoinc')) {
                         return sprintf(__('Resolved (%d available)', 'twoinc-payment-gateway'), (int) $state['count']);
                     }
 
-                    return $state['reason'] !== null
+                    return $state['refresh_failed']
                         /* translators: %d is a count of payment terms */
                         ? sprintf(__('Resolved (%d available), last refresh failed', 'twoinc-payment-gateway'), (int) $state['count'])
                         /* translators: %d is a count of payment terms */

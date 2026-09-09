@@ -83,6 +83,7 @@ final class BrandConfigSpec
             'testMerchantAvailableTermsFetchNormalisesCachesAndServesStale',
             'testUnresolvedTermSetNamesItsRealCause',
             'testStaleMerchantFiguresAreNeverPresentedAsCurrent',
+            'testTheNoKeyStateStillNamesTheRealStalenessCause',
             'testHealthSummaryIsGreenOnlyWhileTheFiguresAreCurrent',
             'testMerchantAvailableTermsInvalidatedOnMerchantIdChange',
             'testDeactivationNeverClearsSettings',
@@ -2512,6 +2513,7 @@ final class BrandConfigSpec
         $failure = ['status' => 'unreachable', 'code' => null, 'at' => time()];
         $cases = [
             [60, null, false, null, 'read a minute ago with nothing on record'],
+            [$ttl + 60, ['status' => 'invalid_key', 'code' => 401, 'at' => time()], true, 'invalid_key', 'old and refusing to refresh with a rejected key'],
             [$ttl - 60, null, false, null, 'read inside the refresh window'],
             [$ttl + 60, null, true, null, 'read longer ago than the refresh window'],
             [60, $failure, true, 'unreachable', 'read a minute ago but the newest refresh failed'],
@@ -2542,6 +2544,58 @@ final class BrandConfigSpec
         }
 
         return trim($m[1]) === '#2a7f2a';
+    }
+
+    /**
+     * ABN-538. `reason` is nulled once no API key is stored, to leave the
+     * withhold log line's shape alone — so a display branching on it would
+     * claim recent figures are out of date when the real cause is a failed
+     * refresh.
+     */
+    private static function testTheNoKeyStateStillNamesTheRealStalenessCause(): void
+    {
+        self::seedMerchantFigures(60, ['status' => 'unreachable', 'code' => null, 'at' => time()]);
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_available_terms')] = json_encode([]);
+        WC_Twoinc::reset_merchant_record_memo();
+
+        $keyless = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+            }
+
+            public function get_merchant_id()
+            {
+                return 'mid';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $empty_value ?? '';
+            }
+        };
+        $state = $keyless->get_merchant_terms_state();
+
+        TinyAssert::same('not_configured', $state['state']);
+        TinyAssert::same(null, $state['reason'], 'the gate-facing cause stays null with no key stored');
+        TinyAssert::same(true, $state['refresh_failed'], 'but the display can still see the failure');
+        TinyAssert::same(
+            false,
+            strpos(self::describeAge($state), 'out of date') !== false,
+            'so recent figures are not called out of date'
+        );
+        TinyAssert::true(
+            strpos(self::describeAge($state), 'failed') !== false,
+            'and the failure is named instead'
+        );
+    }
+
+    /** The age row's rendered text for one state. */
+    private static function describeAge(array $state): string
+    {
+        $method = new ReflectionMethod(WC_Twoinc::class, 'describe_merchant_record_age');
+        $method->setAccessible(true);
+
+        return (string) $method->invoke(null, $state);
     }
 
     /**
