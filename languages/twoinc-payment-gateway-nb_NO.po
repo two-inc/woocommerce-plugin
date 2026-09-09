@@ -1568,3 +1568,12 @@ msgstr "tilbys bare kjøpere som faktureres i %s"
 #: class/WC_Twoinc.php
 msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
 msgstr "den lagrede tilleggsstrategien gjenkjennes ikke. Kontroller \"Tilleggsstrategi\"."
+
+#: class/WC_Twoinc.php
+msgid "Shown at checkout"
+msgstr "Vises i kassen"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers in %s"
+msgstr "tilbys bare kjøpere i %s"

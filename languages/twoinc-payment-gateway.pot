@@ -1522,6 +1522,7 @@ msgstr ""
 #: class/WC_Twoinc.php
 msgid "Shown at checkout"
 msgstr ""
+
 #: class/WC_Twoinc.php
 msgid "the payment method is disabled. Check \"Turn on/off\"."
 msgstr ""
@@ -1571,4 +1572,9 @@ msgstr ""
 
 #: class/WC_Twoinc.php
 msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers in %s"
 msgstr ""

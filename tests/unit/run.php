@@ -627,6 +627,9 @@ final class BrandConfigSpec
                         'checked_on' => 0,
                         'attempted_on' => 0,
                         'count' => $this->terms_state === 'resolved' ? 1 : 0,
+                        // ABN-537's keys: the display reads both.
+                        'stale' => $this->terms_state !== 'resolved',
+                        'refresh_failed' => $this->terms_state === 'fetch_failed',
                     ];
                 }
 
@@ -696,8 +699,8 @@ final class BrandConfigSpec
                 'Shown at checkout',
                 'and a failed terms read withholds nothing either'],
             ['yes', [], 200, ['NL'], null, null, 'resolved',
-                'Shown at checkout',
-                'a populated allowlist is not a reason to withhold'],
+                'offered only to buyers in NL',
+                'a populated allowlist withholds from every other buyer, which no local field explains'],
             ['yes', [], 200, null, $eur250, null, 'resolved',
                 'Shown at checkout — hidden for baskets below 250.00 EUR (excluding tax)',
                 'the basket-dependent gate is named as a constraint, not as the current state'],
@@ -785,6 +788,8 @@ final class BrandConfigSpec
                     'checked_on' => 0,
                     'attempted_on' => 0,
                     'count' => 1,
+                    'stale' => false,
+                    'refresh_failed' => false,
                 ];
             }
 

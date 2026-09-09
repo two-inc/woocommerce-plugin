@@ -1567,3 +1567,12 @@ msgstr "alleen aangeboden aan kopers die worden gefactureerd in %s"
 #: class/WC_Twoinc.php
 msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
 msgstr "de opgeslagen toeslagmethode wordt niet herkend. Controleer \"Toeslagmethode\"."
+
+#: class/WC_Twoinc.php
+msgid "Shown at checkout"
+msgstr "Zichtbaar in de checkout"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers in %s"
+msgstr "alleen aangeboden aan kopers in %s"

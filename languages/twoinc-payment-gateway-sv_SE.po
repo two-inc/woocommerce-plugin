@@ -1568,3 +1568,12 @@ msgstr "erbjuds endast köpare som faktureras i %s"
 #: class/WC_Twoinc.php
 msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
 msgstr "den sparade tilläggsstrategin känns inte igen. Kontrollera \"Tilläggsstrategi\"."
+
+#: class/WC_Twoinc.php
+msgid "Shown at checkout"
+msgstr "Visas i kassan"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers in %s"
+msgstr "erbjuds endast köpare i %s"

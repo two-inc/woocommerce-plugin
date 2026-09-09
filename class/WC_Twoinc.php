@@ -1050,6 +1050,14 @@ if (!class_exists('WC_Twoinc')) {
             if ($countries !== '') {
                 $clauses[] = $countries;
             }
+            $allowed = $this->get_supported_buyer_countries();
+            if (is_array($allowed) && $allowed) {
+                $clauses[] = sprintf(
+                    /* translators: %s is a comma-separated list of ISO country codes */
+                    __('offered only to buyers in %s', 'twoinc-payment-gateway'),
+                    implode(', ', $allowed)
+                );
+            }
             $floors = self::binding_minimum_floors([
                 $this->get_platform_minimum_order(),
                 $this->get_merchant_minimum_order(),
@@ -3233,6 +3241,8 @@ if (!class_exists('WC_Twoinc')) {
         public function is_available()
         {
             if (!parent::is_available()) {
+                // Logged even though it is a deliberate setting: this is the
+                // branch a merchant hunting an absent method reaches first.
                 $this->log_withheld_from_checkout(sprintf('"Turn on/off" is "%s"', (string) $this->enabled));
                 return false;
             }
@@ -3251,6 +3261,7 @@ if (!class_exists('WC_Twoinc')) {
         /** @var array<string, true> */
         private static $withhold_reasons_logged = [];
 
+        /** The per-request guard is request state, and the suite shares a process. */
         public static function reset_withhold_log_guard(): void
         {
             self::$withhold_reasons_logged = [];

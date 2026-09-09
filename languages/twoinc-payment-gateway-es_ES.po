@@ -143,3 +143,12 @@ msgstr "se ofrece solo a compradores facturados en %s"
 #: class/WC_Twoinc.php
 msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
 msgstr "el método de recargo guardado no se reconoce. Compruebe \"Surcharge method\"."
+
+#: class/WC_Twoinc.php
+msgid "Shown at checkout"
+msgstr "Se muestra en la caja"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers in %s"
+msgstr "se ofrece solo a compradores en %s"
