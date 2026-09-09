@@ -944,9 +944,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         /**
          * Buyer-facing label for the fee line. A merchant-set
          * surcharge_line_description wins (with %s replaced by the selected
-         * term days, Magento parity); otherwise the brand label, else a
-         * translated default matching Magento's "Payment terms fee - %1
-         * days" wording.
+         * term days, as on every platform); otherwise the brand label, else the
+         * translated cross-platform default wording.
          */
         public static function get_fee_label(): string
         {

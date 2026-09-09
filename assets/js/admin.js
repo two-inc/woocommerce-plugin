@@ -299,7 +299,7 @@ jQuery(function ($) {
     verifyApiKey($apiKeyField.val());
   }
 
-  // ── Payment terms config (mirrors Magento payment-terms-config.js) ──────
+  // ── Payment terms config ────────────────────────────────────────────────
   //
   // (A) Keep the "Default Payment Term" dropdown in sync with the offered
   //     set (ticked checkboxes ∪ custom day) live, before save.
@@ -391,7 +391,7 @@ jQuery(function ($) {
         return; // brand opted out of inline fees
       }
       // Fees show beside EVERY checkbox regardless of checked state, plus the
-      // custom day if set (mirrors Magento's loadFees).
+      // custom day if set.
       let terms = $checkboxes
         .map(function () {
           return parseInt(this.value, 10);
@@ -470,7 +470,7 @@ jQuery(function ($) {
         });
     }
 
-    // ── (C) Live surcharge grid (mirrors Magento's surcharge-grid.js) ────
+    // ── (C) Live surcharge grid ──────────────────────────────────────────
     // Rows follow ticked terms ∩ merchant-offered terms without a save;
     // column visibility follows the surcharge method. Server render is the
     // template contract: <tr data-days> with inputs named
@@ -565,10 +565,9 @@ jQuery(function ($) {
       $grid.find(".twoinc-col-limit").toggle(showPct);
       // No surcharge method: the whole grid row is noise.
       $(".twoinc-surcharge-grid-field").toggle(type !== "none");
-      // Help text below the grid follows the surcharge method, exactly as
-      // Magento's surcharge-grid.js switches its .surcharge-grid__helper-
-      // text--<type> paragraphs. Only one is ever visible; "none" shows
-      // none of them (the whole field row is hidden anyway).
+      // Help text below the grid follows the surcharge method: one method-
+      // keyed paragraph is visible at a time, and "none" shows none of them
+      // (the whole field row is hidden anyway).
       $(".twoinc-surcharge-grid-help").hide();
       $(".twoinc-surcharge-grid-help--" + type).show();
     }

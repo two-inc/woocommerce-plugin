@@ -5821,10 +5821,9 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Read-only link to WooCommerce's own log viewer, filtered to this
-         * plugin's log source (TWO-25386, ported from Magento's "View error
-         * log" admin action). Errors are logged unconditionally at several
-         * call sites regardless of the "Enable debug logging" setting above,
-         * so this link is useful even when that setting is off.
+         * plugin's log source (TWO-25386). Errors are logged unconditionally
+         * at several call sites regardless of the "Enable debug logging"
+         * setting above, so this link is useful even when that setting is off.
          */
         public function generate_two_view_log_link_html($key, $data)
         {

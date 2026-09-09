@@ -2957,14 +2957,14 @@ let twoincTermChips = {
     const single = terms.length === 1;
 
     // Whether a fee shows is decided over the whole offered set, never per
-    // chip (Magento parity — gateway_method.js `termOptions`). An unresolved
-    // quote counts as zero.
+    // chip — the rule every platform follows. An unresolved quote counts as
+    // zero.
     const allFeesZero = terms.every(function (days) {
       const fee = twoincTermChips.fees[days];
       return (fee ? parseFloat(fee.buyer_fee_share) || 0 : 0) < 0.005;
     });
 
-    // Heading placement mirrors Magento's Luma template: shown ABOVE the
+    // Heading placement follows the cross-platform rule: shown ABOVE the
     // chips only when the buyer has a choice to make. A single chip carries
     // its own "Payment Terms N days" label instead, so a heading there would
     // say the same thing twice.
@@ -2988,9 +2988,9 @@ let twoincTermChips = {
         "data-days": days,
         disabled: single
       });
-      // A lone chip is not a choice, so it names what it is: Magento's
-      // singleTermLabel ("Payment Terms N days") rather than the bare
-      // "N days" used when the buyer is picking between chips.
+      // A lone chip is not a choice, so it names what it is: the
+      // single-term label rather than the bare "N days" used when the buyer
+      // is picking between chips.
       // Both templates come from PHP, already translated. The fallbacks
       // degrade to the SHORTER localised form rather than to an English
       // sentence: an English literal here renders as plausible copy on a

@@ -37,8 +37,7 @@ jobs:
           set -o pipefail
           # git ls-remote (not the GitHub tags API): no token, no per_page
           # cap, and a transport error FAILS the step rather than yielding
-          # empty JSON that would skip-green having tested nothing (pattern
-          # from magento-plugin's upgrade-smoke job, TWO-24998).
+          # empty JSON that would skip-green having tested nothing (TWO-24998).
           if ! raw_tags=$(git ls-remote --tags --refs \
             https://github.com/two-inc/woocommerce-plugin.git 2>&1); then
             echo "::error::upgrade-smoke: could not list remote tags: $raw_tags"
