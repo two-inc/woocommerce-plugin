@@ -10326,9 +10326,11 @@ final class BrandConfigSpec
 
     /**
      * Gateway that counts verification calls and records the timeout each was
-     * given. $api_key '' models an install with nothing stored.
+     * given. $api_key '' models an install with nothing stored. Return type
+     * left off deliberately: the counters live on the anonymous subclass, and
+     * a WC_Twoinc annotation would hide them from static analysis.
      */
-    private static function verificationCountingGateway(string $api_key = 'key'): WC_Twoinc
+    private static function verificationCountingGateway(string $api_key = 'key')
     {
         return new class ($api_key) extends WC_Twoinc {
             public $options;
