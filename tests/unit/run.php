@@ -5067,6 +5067,7 @@ final class BrandConfigSpec
             ['0', '0', '0', [14], '', '', 'a zero is left where it lies'],
             ['45', '45', '45', [14], '', '', 'a term no standard checkbox offers is kept as it is'],
             ['45', '', '', [14], '', '', 'removal is accepted'],
+            ['45', null, '45', [14], '', '', 'a post carrying no row leaves the stored term alone'],
             [
                 '30',
                 '30',
@@ -5116,10 +5117,10 @@ final class BrandConfigSpec
             $gateway->init_settings();
             $GLOBALS['__twoinc_test_admin_messages'] = [];
             $GLOBALS['__twoinc_test_admin_errors'] = [];
-            $gateway->test_post_data = [
-                $gateway->get_field_key('payment_terms_days') => ['14'],
-                $gateway->get_field_key('payment_terms_custom_days') => $posted,
-            ];
+            $gateway->test_post_data = [$gateway->get_field_key('payment_terms_days') => ['14']];
+            if ($posted !== null) {
+                $gateway->test_post_data[$gateway->get_field_key('payment_terms_custom_days')] = $posted;
+            }
             $gateway->process_admin_options();
             $saved = get_option($option_key, []);
 

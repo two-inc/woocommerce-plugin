@@ -2450,7 +2450,7 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @param mixed $posted
          */
-        public function custom_payment_term_refusal($posted): ?string
+        private function custom_payment_term_refusal($posted): ?string
         {
             $posted = trim((string) $posted);
             if ($posted !== '' && $posted !== $this->stored_custom_payment_term()) {
@@ -2474,6 +2474,12 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function validate_payment_terms_custom_days_field($key, $value)
         {
+            // Absent from the post is "leave it alone", not "remove it": a partial save through
+            // another route posts no row, and the admin form always posts one.
+            if ($value === null) {
+                return $this->stored_custom_payment_term();
+            }
+
             $refusal = $this->custom_payment_term_refusal($value);
             if ($refusal !== null) {
                 throw new Exception($refusal);
@@ -6607,7 +6613,9 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
             $custom_days_field = 'woocommerce_' . $this->id . '_payment_terms_custom_days';
-            $refusal = $this->custom_payment_term_refusal($post_data[$custom_days_field] ?? '');
+            $refusal = array_key_exists($custom_days_field, $post_data)
+                ? $this->custom_payment_term_refusal($post_data[$custom_days_field])
+                : null;
             if ($refusal !== null) {
                 // Refused before anything persists: the field's own notice says the value still stands.
                 WC_Admin_Settings::add_error($refusal);
