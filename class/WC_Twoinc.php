@@ -763,11 +763,11 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * The merchant's offerable payment terms (net days, ascending) from the merchant record's
-         * `available_terms`, the authoritative set the admin narrows from (TWO-24812). Empty,
-         * whether unresolved or explicitly empty, withholds the payment method — see
-         * is_available(). A cache read, except on a cold or >24h clock, where one request pays one
-         * 10s-capped fetch; a failed fetch leaves that clock unmoved, so one request every 60s pays
-         * it again until one succeeds.
+         * `available_terms`, the authoritative set the admin narrows from (TWO-24812). Empty is
+         * offered as empty (ABN-544): the method stays available, no term is sent, and the
+         * merchant account's own default applies. A cache read, except on a cold or >24h clock,
+         * where one request pays one 10s-capped fetch; a failed fetch leaves that clock unmoved,
+         * so one request every 60s pays it again until one succeeds.
          *
          * @return int[]
          */
@@ -796,7 +796,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Why the offerable term set is what it is, for the admin surfaces that
-         * have to explain it and for the withhold log line (ABN-513). `state` is
+         * have to explain it (ABN-513). `state` is
          * one of 'resolved', 'fetch_failed' (`reason`/`code` name the failure),
          * 'none_offered' (a successful read of an account offering nothing),
          * 'not_reported' (a successful read carrying no term list at all),
