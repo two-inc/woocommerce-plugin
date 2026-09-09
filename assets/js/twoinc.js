@@ -3944,14 +3944,27 @@ function createSoleTraderController(companySearch) {
       active.blur();
     },
 
-    /** @returns {Element|null} this role's own controls — field, popover and affordances — never a sibling role's (TWO-25554) */
+    /** @returns {Element|null} this role's own field wrap — field, popover and affordances — never a sibling role's (TWO-25554) */
     ownControlNode: function () {
+      return (
+        jQuery(companySearch.companyFieldSelector()).closest(
+          "." + companySearch.fieldWrapClass
+        )[0] || null
+      );
+    },
+
+    /**
+     * @returns {Element|null} this role's own popover
+     *
+     * The panel builds it as the field's SIBLING, and the field is what a host that morphs
+     * its markup over the live DOM keeps — so this survives a re-render that deletes the
+     * wrap, and a sibling scan cannot reach another role's the way a descendant search
+     * under a container holding both can (TWO-25658).
+     */
+    ownPopover: function () {
       const field = jQuery(companySearch.companyFieldSelector())[0];
       if (!field) return null;
-      // The field's parent when the wrap is gone: a morph re-render deletes the wrap and keeps
-      // the field, and without it this role's re-rendered Sole trader chip reads as another
-      // role's, inverting the rule on it (TWO-25658).
-      return field.closest("." + companySearch.fieldWrapClass) || field.parentElement || null;
+      return jQuery(field).siblings("." + companySearch.panelClass)[0] || null;
     },
 
     /** TWO-25658: (1) this role's Sole trader chip changes nothing; (2) anything else closes the popup, and ANOTHER role's Sole trader chip gets one of its own; (3) anything outside the popover closes that too. */
@@ -3967,10 +3980,10 @@ function createSoleTraderController(companySearch) {
         ) {
           return;
         }
-        const own = controller.ownControlNode();
+        const popover = controller.ownPopover();
         const chip = target.closest("." + companySearch.modeChipClass);
         const isSoleTraderChip = !!chip && chip.getAttribute("data-two-chip") === "sole_trader";
-        if (isSoleTraderChip && own && own.contains(chip)) {
+        if (isSoleTraderChip && popover && popover.contains(chip)) {
           // Only an activation moves the popup: Tabbing onto this chip is the buyer passing through, and it must leave the popup as they left it (TWO-25658).
           return;
         }
@@ -3983,7 +3996,6 @@ function createSoleTraderController(companySearch) {
         }
         // The field counts as inside: it is the popover's own trigger, and its focus opener would otherwise race rule (3) on event order.
         const field = jQuery(companySearch.companyFieldSelector())[0];
-        const popover = own ? own.querySelector("." + companySearch.panelClass) : null;
         if (target !== field && !(popover && popover.contains(target))) {
           companySearch.closeCompanySearchDropdown();
         }
