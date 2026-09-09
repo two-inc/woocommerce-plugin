@@ -2213,9 +2213,9 @@ let twoincDomHelper = {
     // The company NAME is always on screen, as exactly one of two elements —
     // this search control or WooCommerce's native `#billing_company`. Never
     // neither: a buyer with nowhere to see or enter the company name is the
-    // regression this replaces (an unsupported country
-    // hid the search control and left a bare "Company ID" box behind, with no
-    // name capture anywhere). Never both in the same place either — the one
+    // regression this replaces (an unsupported country hid the search control
+    // and left a bare "Company ID" box behind, with no name capture
+    // anywhere). Never both in the same place either — the one
     // exception is `company_search_location === "payment_tile"` below, where
     // the two are not competing for the same position: the search control has
     // been relocated into the payment tile, so the native field is what the
@@ -4713,9 +4713,9 @@ class Twoinc {
     $body.on("updated_checkout", Twoinc.getInstance().onUpdatedCheckout);
 
     // A payment-method switch must re-DECIDE company-field visibility, not
-    // just relocate whatever is already there (TWO-25326 bugfix, live-verified:
-    // the search control never appeared in the payment tile at all).
-    // `onUpdatedCheckout()` below only calls
+    // just relocate whatever is already there (TWO-25326 bugfix,
+    // live-verified: the search control never appeared in the payment tile at
+    // all). `onUpdatedCheckout()` below only calls
     // `syncCompanySearchTileLocation()` — it never revisits which field
     // `toggleBusinessFields()` decided to show, so a buyer who starts on a
     // DIFFERENT gateway (the ordinary case: WooCommerce checks the first
@@ -4903,9 +4903,9 @@ class Twoinc {
 
     // The delivery control's tracker needs the same seed as billing's above:
     // unseeded, its first `previous` is null, so `countryDidChange` reads the
-    // buyer's FIRST shipping-country change as
-    // "no previous country to have moved away from" and swallows it — leaving
-    // a shipping company captured under a country the buyer has left.
+    // buyer's FIRST shipping-country change as "no previous country to have
+    // moved away from" and swallows it — leaving a shipping company captured
+    // under a country the buyer has left.
     twoincSelectWooHelperShipping.countryDidChange(twoincSelectWooHelperShipping.currentCountry());
 
     // Mint eagerly and unconditionally, once per checkout load (TWO-40) —

@@ -525,9 +525,9 @@ describe("company-search manual-entry affordance", () => {
     test.each([["#search_company_btn"], [".two-company-mode-chip"]])(
       "%s declares text-transform: none !important",
       (selector) => {
-        // A real Astra selector list includes the bare
-        // `button` element selector with `!important`, which a non-!important
-        // override cannot beat regardless of specificity.
+        // A real Astra selector list includes the bare `button` element
+        // selector with `!important`, which a non-!important override cannot
+        // beat regardless of specificity.
         expect(ruleBodyFor(stylesheetSource(), selector)).toMatch(
           /text-transform:\s*none\s*!important/
         );

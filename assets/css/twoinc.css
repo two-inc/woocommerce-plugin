@@ -330,8 +330,9 @@
  * the checkout page, where there is no such wrapper.
  *
  * `#billing_company_field` needs the identical cancellation: it carries the
- * same 15px `padding-bottom` (above), and it is the anchor `getCompanySummaryNode()` picks whenever the search control is
- * the hidden one of the two company-name elements.
+ * same 15px `padding-bottom` (above), and it is the anchor
+ * `getCompanySummaryNode()` picks whenever the search control is the hidden
+ * one of the two company-name elements.
  */
 #billing_company_display_field + .twoinc-company-summary,
 #billing_company_field + .twoinc-company-summary,

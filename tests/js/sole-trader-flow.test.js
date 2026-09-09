@@ -415,10 +415,10 @@ describe("TWO-40 — sole-trader flow", () => {
     );
 
     /**
-     * The "select a different sole trader" link takes focus but opens
-     * nothing. The popup that would answer the activation was already
-     * on screen, and a refusal that does nothing at all leaves a buyer who
-     * cannot see it with a dead control.
+     * Symptom (ABN-526): the link took focus but opened nothing. The popup
+     * that would answer the activation was already on screen, and a refusal
+     * that does nothing at all leaves a buyer who cannot see it with a dead
+     * control.
      */
     test.each([
       {
@@ -2071,7 +2071,7 @@ describe("TWO-40 — sole-trader flow", () => {
     });
   });
 
-  describe("TWO-40", () => {
+  describe("TWO-40 — regressions found live", () => {
     describe("a chip click resolves to the popup or a populated company, never a note", () => {
       /**
        * The note is the browser-blocked-popup fallback ONLY — never an outcome
@@ -3526,10 +3526,10 @@ describe("TWO-40 — sole-trader flow", () => {
       });
 
       /**
-       * Item 6.1: the Sole trader chip is the ONE
-       * exception to the abandon. Re-clicking the chip that launched the popup
-       * asks for that popup back, so it is raised rather than closed and the
-       * flow it is halfway through survives.
+       * Item 6.1: the Sole trader chip is the ONE exception to the abandon.
+       * Re-clicking the chip that launched the popup asks for that popup back,
+       * so it is raised rather than closed and the flow it is halfway through
+       * survives.
        */
       test("the Sole trader chip keeps the popup and raises it instead", () => {
         const win = launchFromChips();
@@ -4484,9 +4484,8 @@ describe("TWO-40 — sole-trader flow", () => {
     });
 
     describe("bug 1/item 4.3 — re-clicking the Sole Trader chip once already adopted", () => {
-      // Item 4.3: re-clicking the chip must act
-      // exactly like the "select a different sole trader" link, not do
-      // nothing.
+      // Item 4.3: re-clicking the chip must act exactly like the "select a
+      // different sole trader" link, not do nothing.
       test("opens a re-signup popup for an adoption that came through the hosted flow", () => {
         $("#billing_email").val("buyer@example.test");
         soleTrader.onModeChipClick("sole_trader");
@@ -4650,8 +4649,7 @@ describe("TWO-40 — sole-trader flow", () => {
         // trader name into the company name field in the address area, nor
         // render the 'Select a different sole trader' control underneath it
         // there. This reverses the 2026-08-04 placement, which put the link in
-        // the native field's slot
-        // whenever tile mode left that field visible.
+        // the native field's slot whenever tile mode left that field visible.
         ctx.twoinc.company_search_location = "payment_tile";
         $("form[name='checkout']").append('<div class="twoinc-company-search-tile-slot"></div>');
         ctx.helper.syncCompanySearchTileLocation();

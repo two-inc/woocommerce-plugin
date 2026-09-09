@@ -7823,13 +7823,12 @@ final class BrandConfigSpec
 
     private static function testFxFreshTableMissingCurrencyDoesNotRefetch(): void
     {
-        // The bug: a currency missing from a
-        // table that is ALREADY FRESH must not trigger a re-fetch. The
-        // endpoint always returns its complete table, so "fresh but
-        // missing DKK" already conclusively means DKK is unsupported —
-        // re-fetching would repeat that same conclusion on every request
-        // for every buyer in that currency (an unbounded synchronous-fetch
-        // loop disguised as a cache).
+        // A currency missing from a table that is ALREADY FRESH must not
+        // trigger a re-fetch. The endpoint always returns its complete table,
+        // so "fresh but missing DKK" already conclusively means DKK is
+        // unsupported — re-fetching would repeat that same conclusion on
+        // every request for every buyer in that currency (an unbounded
+        // synchronous-fetch loop disguised as a cache).
         $seeder = self::fxGateway(null, [self::fxOk(['NOK' => 0.085])]);
         WC_Twoinc_FX::get_rate($seeder, 'NOK', 'EUR');
 
