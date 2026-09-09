@@ -2933,9 +2933,24 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       // A host that morphs its markup over the live DOM rebuilds the popover and keeps the
       // field, and can take the wrap the panel built with it.
       test.each([
-        ["own chip", true, 0, "the launching role's own re-rendered chip is still its own: the popup it launched stays"],
-        ["own chip", false, 0, "and still its own when the re-render took the wrap too, leaving the field where it is"],
-        ["outside control", true, 1, "and the rule still fires for everything else: an outside control closes it"]
+        [
+          "own chip",
+          true,
+          0,
+          "the launching role's own re-rendered chip is still its own: the popup it launched stays"
+        ],
+        [
+          "own chip",
+          false,
+          0,
+          "and still its own when the re-render took the wrap too, leaving the field where it is"
+        ],
+        [
+          "outside control",
+          true,
+          1,
+          "and the rule still fires for everything else: an outside control closes it"
+        ]
       ])(
         "after a re-render, focus on the %s (wrap kept=%s) leaves the billing popup closes=%s — %s",
         (which, keepWrap, closes) => {
