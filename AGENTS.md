@@ -98,8 +98,8 @@ Vendored assets
   catches an in-place edit here and says nothing whatever about whether the two
   copies agree — it cannot reach the Magento repo at all. The digest moves only on
   a deliberate re-copy from upstream.
-- The module is framework-free with a UMD tail and stays that way: another Magento
-  checkout loads it with no RequireJS, no jQuery and no Knockout, so a dependency on
+- The module is framework-free with a UMD tail and stays that way: the Hyvä
+  checkout loads it with no RequireJS, jQuery or Knockout, so a dependency on
   this plugin's own jQuery would break it there.
 - **The unsupported-country gate greys out SEARCH, never manual entry.** Manual
   entry hands the field over as a plain typeable input that never reaches the
@@ -109,8 +109,8 @@ Vendored assets
   mousedown runs, leaving the caret in the panel's query field — the same state a
   click leaves it in, and the same on every platform that carries this control.
 - **The open panel takes the field's tab stop** — `tabindex="-1"` while it is up,
-  and on close the field's PRIOR value restored exactly, which is removal because
-  nothing sets one: the field is a tab stop by being a native `<input>`
+  and on close the field's PRIOR value restored exactly, which is removal when
+  there was none — a theme's own `tabindex` is given back, not removed
   (TWO-25503). Without it the focus opener is a keyboard trap: the opener puts the
   caret in the query field, Shift+Tab returns to the field, and the opener pushes
   focus forward again, so the buyer cannot get back past the control (WCAG 2.1.2).
@@ -125,6 +125,9 @@ Keyboard behaviour is not verifiable in jsdom
   one contiguous run in document order, a closed panel carries `hidden` — and the
   keyboard behaviour itself is verified in a real browser. A passing jsdom Tab test
   is never evidence that a trap is absent.
+
+Three more traps in the same suites:
+
 - **A real chip click fires no `focusin`.** The chip's `mousedown` handler calls
   `preventDefault()`, which suppresses the native focus, so a rule written only
   against `focusin` never sees a pointer buyer at all.
@@ -145,8 +148,8 @@ A popup window is in no tab listing
 
 What focus landing on the checkout does to an open signup popup
 
-Every `focusin` while the hosted sole-trader signup window is up is classified
-once, and these are the three rules (TWO-25658):
+Every `focusin` on the checkout is classified once, whether a popup is up or not,
+and these are the three rules (TWO-25658):
 
 - **The role's own Sole trader chip is inert.** Arrival moves the popup neither way
   — only an activation raises it, and the browser delivers Enter and Space on a
@@ -154,17 +157,18 @@ once, and these are the three rules (TWO-25658):
 - **Any other target closes an open popup.**
 - **A target outside that role's popover closes the popover too**, with the company
   field counted as INSIDE it: the field is the popover's own trigger and sits
-  outside the panel node, so treating it as outside tore down the results the buyer
-  was still typing against, and its own focus opener races the rule on event order.
+  outside the panel node, and a buyer typing a query is still inside the control;
+  its own focus opener would otherwise race this rule on event order.
 
 A window or application switch lands on no control at all and settles nothing.
 Launchers are not exempt from rule two — a launch blurs whatever holds focus first,
 so a window return re-fires focus on nothing.
 
-The ruling adds a fourth: **a DIFFERENT role's Sole trader chip gets a popup of its
-own**, raised through that chip's own click handler so a launch stays spelled out in
-one place. This checkout does not do that: a chip outside the popup's own role
-closes it and raises nothing.
+A fourth rule (TWO-25658): **a DIFFERENT role's Sole trader chip gets a popup of
+its own**, raised through that chip's own click handler so a launch stays spelled
+out in one place. Reaching that chip by FOCUS does not raise it here — the popup
+closes and nothing replaces it; activating the chip does, each role holding its own
+sole-trader controller.
 
 The custom request-header table
 
@@ -173,13 +177,14 @@ The custom request-header table
   — reserved names, matched case-insensitively, and printable-ASCII values — is
   re-applied on the READ path, because a stored value can arrive from a hand-edited
   row or an import that no form validated.
-- **There is deliberately no data patch** for the single token field it replaced.
-  That field never reached a production release on any platform, so no merchant ever
-  had one configured. Do not add one on the assumption that stored values exist.
+- **The header table gets no data patch or migration, deliberately.** The
+  single-value setting it replaces never reached a production release on any
+  platform, so no merchant ever had one configured; do not add one on the
+  assumption that stored values exist.
 - **A browser-ticked header must already be allowed by the API for
   browser-originated calls**, or the one direct call the browser makes fails CORS
   preflight and the sole-trader autofill silently finds no buyer. Nothing enforces
-  that; the field help says it.
+  it and no field help states it.
 - A refusal names the rule, never who sets the header — the reason has to be true of
   every reserved name, not of the one example that prompted the question.
 - **The printable-ASCII value pattern carries `/D`** (or is anchored `\z`). A bare
@@ -239,8 +244,9 @@ The merchant record refreshes on an event, never on expiry
   if a DST shift drifts it off midnight, and the Diagnostics refresh button. No
   render path refreshes on purpose; a render on a cold clock pays the fetch that
   repopulates it, bounded to one attempt per 60 seconds while the API is failing.
-- **A failed fetch keeps last-known-good and advances no clock**, so it can neither
-  overwrite a concurrent success nor blank a cached restriction to "unrestricted".
+- **A failed fetch keeps last-known-good and advances no FRESHNESS clock** — only
+  the attempt clock the 60-second bound reads — so it can neither overwrite a
+  concurrent success nor blank a cached restriction to "unrestricted".
 - An input that pricing cannot resolve fails CLOSED for the BUYER — the availability
   gate withdraws Two rather than let an order be priced with the fee silently
   absent, and a 200 carrying no merchant record counts as unresolved: a proxy, a
