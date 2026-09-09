@@ -9,9 +9,10 @@
  *
  * Term availability: `get_available_terms()` is the single seam — the
  * merchant's ticked presets intersected with the backend's offered set
- * (TWO-24812) plus an optional custom term. An empty result means "offer
- * nothing": no term is sent and the backend applies the account default. The
- * merchant cannot save into that empty state once terms are configured (see
+ * (TWO-24812) plus an optional custom term, which that same set must also
+ * offer (ABN-521). An empty result means "offer nothing": no term is sent and
+ * the backend applies the account default. The merchant cannot save into that
+ * empty state once terms are configured (see
  * WC_Twoinc::validate_two_payment_terms_field). Do not read term lists
  * anywhere else.
  *
@@ -89,8 +90,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * The merchant's ticked presets intersected with the backend's
          * `available_terms` (so a term the backend withdrew drops out even
          * while a stale admin subset still lists it), plus an optional
-         * custom term unioned in. An empty result is meaningful: no term is
-         * offered, so none is sent and the backend applies the account default.
+         * custom term the backend must also offer. An empty result is
+         * meaningful: no term is offered, so none is sent and the backend
+         * applies the account default.
          *
          * @return int[]
          */
@@ -106,9 +108,10 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 $terms = array_values(array_intersect($backend_terms, $admin_subset));
             }
 
-            // Custom term offered alongside the presets, unioned rather than intersected.
+            // A stored custom term the backend no longer offers must not reach a buyer; an
+            // unresolved backend set is unknown, not a refusal, so it stands (ABN-521).
             $custom = (int) $gateway->get_option('payment_terms_custom_days');
-            if ($custom > 0) {
+            if ($custom > 0 && (count($backend_terms) === 0 || in_array($custom, $backend_terms, true))) {
                 $terms[] = $custom;
             }
 

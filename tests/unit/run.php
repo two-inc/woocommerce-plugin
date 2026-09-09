@@ -2159,34 +2159,22 @@ final class BrandConfigSpec
 
     private static function testPaymentTermsResolveBackendIntersectAdminSubset(): void
     {
-        // No admin subset and no custom term: nothing offered → backend default
-        $gateway = self::termsGateway([]);
-        TinyAssert::same([], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
-        TinyAssert::same(false, WC_Twoinc_Payment_Terms::is_enabled($gateway));
+        $cases = [
+            [[], [14, 30, 60, 90], [], 'no admin subset and no custom term offers nothing'],
+            [['payment_terms_days' => ['60', '30', '7']], [14, 30, 60, 90], [30, 60], 'the admin subset narrows within the backend set, entries outside it drop'],
+            [['payment_terms_days' => ['30', '60']], [30], [30], 'a term the backend withdrew drops out of a stale admin subset (TWO-24812)'],
+            [['payment_terms_days' => ['30', '60']], [], [], 'an unresolved backend set offers no presets'],
+            [['payment_terms_days' => ['30'], 'payment_terms_custom_days' => '45'], [14, 30, 45, 60, 90], [30, 45], 'an offered custom term is offered alongside the presets'],
+            [['payment_terms_days' => ['30'], 'payment_terms_custom_days' => '45'], [14, 30, 60, 90], [30], 'a custom term the backend does not offer drops out (ABN-521)'],
+            [['payment_terms_custom_days' => '45'], [14, 30, 45, 60, 90], [45], 'an offered custom term alone still offers a term'],
+            [['payment_terms_custom_days' => '45'], [], [45], 'an unresolved backend set refuses nothing, so a stored custom term stands (ABN-521)'],
+        ];
 
-        // Admin narrows within the backend set; entries outside it drop
-        $gateway = self::termsGateway(['payment_terms_days' => ['60', '30', '7']]);
-        TinyAssert::same([30, 60], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
-        TinyAssert::true(WC_Twoinc_Payment_Terms::is_enabled($gateway));
-
-        // A term the backend has withdrawn drops out even while the stale
-        // admin subset still ticks it (TWO-24812: backend list is source)
-        $gateway = self::termsGateway(['payment_terms_days' => ['30', '60']], [30]);
-        TinyAssert::same([30], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
-
-        // Unresolved backend set (no record yet): presets gone, feature off
-        $gateway = self::termsGateway(['payment_terms_days' => ['30', '60']], []);
-        TinyAssert::same([], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
-        TinyAssert::same(false, WC_Twoinc_Payment_Terms::is_enabled($gateway));
-
-        // A custom term is unioned in even when outside the backend presets
-        $gateway = self::termsGateway(['payment_terms_days' => ['30'], 'payment_terms_custom_days' => '45']);
-        TinyAssert::same([30, 45], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
-
-        // Custom term alone (no presets ticked) still offers a term
-        $gateway = self::termsGateway(['payment_terms_custom_days' => '45']);
-        TinyAssert::same([45], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
-        TinyAssert::true(WC_Twoinc_Payment_Terms::is_enabled($gateway));
+        foreach ($cases as [$options, $merchant_terms, $expected, $description]) {
+            $gateway = self::termsGateway($options, $merchant_terms);
+            TinyAssert::same($expected, WC_Twoinc_Payment_Terms::get_available_terms($gateway), $description);
+            TinyAssert::same(count($expected) > 0, WC_Twoinc_Payment_Terms::is_enabled($gateway), $description . ' (is_enabled)');
+        }
     }
 
     private static function testMerchantAvailableTermsFetchNormalisesCachesAndServesStale(): void
@@ -4232,7 +4220,7 @@ final class BrandConfigSpec
 
             public function get_merchant_available_terms(): array
             {
-                return [30, 60];
+                return [14, 30, 60, 90];
             }
 
             public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
