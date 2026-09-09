@@ -72,7 +72,6 @@ describe("API key verification — categorized failure display", () => {
     expect(text).toMatch(/could not complete verification/i);
     expect(text).not.toMatch(/invalid or has expired/i);
     expect(text).not.toMatch(/two's api/i);
-    expect($("#twoinc-merchant-info").css("display")).toBe("none");
   });
 
   // The localisation contract only: a literal creeping back in front of a
@@ -217,6 +216,150 @@ describe("API key verification — categorized failure display", () => {
       jest.useRealTimers();
 
       expect(ajax).toHaveBeenCalledTimes(1); // still just the blur call, not a second one
+    });
+  });
+
+  /**
+   * ABN-536. Every non-ok category took the reject branch, so an unreachable
+   * API blanked the Merchant ID and reddened a perfectly valid key. Only a
+   * verdict that judged the key may do that.
+   *
+   * `merchantId` renders the identity block VISIBLE, as the PHP does for an
+   * install whose stored key already resolved a merchant — without it the
+   * harness renders it hidden and "still shown" would pass vacuously.
+   */
+  describe("a verdict that judged nothing about the key leaves the admin alone", () => {
+    const RENDERED_MERCHANT_ID = "42";
+
+    const definitive = [
+      ["invalid_key", 401, "a rejected key"],
+      ["invalid_key", 403, "a forbidden key"],
+      ["not_configured", null, "no environment configured"]
+    ];
+
+    const inconclusive = [
+      ["unreachable", 0, "an unreachable API"],
+      ["service_error", 503, "a service error"],
+      ["error", 418, "an unexpected status"],
+      ["malformed_response", null, "an answer that could not be read"]
+    ];
+
+    test.each(definitive)(
+      "%s (HTTP %s) blanks the identity and reddens the key — %s",
+      async (status, code) => {
+        const { $ } = await loadAdmin({
+          apiKey: "an-old-stored-key",
+          merchantId: RENDERED_MERCHANT_ID,
+          checked: [30],
+          stubAjax: stubAjaxError(status, code)
+        });
+
+        expect($("#twoinc-merchant-info").css("display")).toBe("none");
+        expect($("#api-key-invalid").css("display")).not.toBe("none");
+        expect($("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")).toBe(
+          false
+        );
+      }
+    );
+
+    test.each(inconclusive)(
+      "%s (HTTP %s) keeps the Merchant ID and does not redden the key — %s",
+      async (status, code) => {
+        const { $ } = await loadAdmin({
+          apiKey: "an-old-stored-key",
+          merchantId: RENDERED_MERCHANT_ID,
+          checked: [30],
+          stubAjax: stubAjaxError(status, code)
+        });
+
+        expect($("#twoinc-merchant-info").css("display")).not.toBe("none");
+        expect($("#twoinc-merchant-id").text()).toBe(RENDERED_MERCHANT_ID);
+        expect($("#api-key-invalid").css("display")).toBe("none");
+        expect($("#api-key-verification-icon").css("display")).toBe("none");
+        // Shown, but toned down: a check that did not complete is not a rejection.
+        expect($("#twoinc-merchant-invalid-notice").css("display")).not.toBe("none");
+        expect($("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")).toBe(
+          true
+        );
+      }
+    );
+
+    test("a request that never reached the API keeps the Merchant ID too", async () => {
+      const { $ } = await loadAdmin({
+        apiKey: "an-old-stored-key",
+        merchantId: RENDERED_MERCHANT_ID,
+        checked: [30],
+        stubAjax: function (jq) {
+          jq.ajax = jest.fn(function (settings) {
+            settings.error({}, "error", "Network error");
+            return { done: function () {}, fail: function () {} };
+          });
+        }
+      });
+
+      expect($("#twoinc-merchant-info").css("display")).not.toBe("none");
+      expect($("#twoinc-merchant-id").text()).toBe(RENDERED_MERCHANT_ID);
+      expect($("#api-key-invalid").css("display")).toBe("none");
+      expect($("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")).toBe(
+        true
+      );
+    });
+
+    test("an inconclusive verdict after a green tick leaves the tick standing", async () => {
+      const responses = [
+        { success: true, data: { merchant_id: RENDERED_MERCHANT_ID } },
+        { success: false, data: { status: "unreachable", code: 0 } }
+      ];
+      const { $ } = await loadAdmin({
+        apiKey: "an-old-stored-key",
+        merchantId: RENDERED_MERCHANT_ID,
+        checked: [30],
+        stubAjax: function (jq) {
+          jq.ajax = jest.fn(function (settings) {
+            settings.success(responses.shift());
+            return { done: function () {}, fail: function () {} };
+          });
+        }
+      });
+
+      // Page load verified; the outage lands on the next keystroke.
+      expect($("#api-key-valid").css("display")).not.toBe("none");
+      $("#woocommerce_" + GATEWAY_ID + "_api_key").trigger("blur");
+
+      expect($("#api-key-valid").css("display")).not.toBe("none");
+      expect($("#api-key-invalid").css("display")).toBe("none");
+      expect($("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")).toBe(
+        true
+      );
+    });
+
+    test("a key the API then rejects clears the unconfirmed tone", async () => {
+      const responses = [
+        { success: false, data: { status: "unreachable", code: 0 } },
+        { success: false, data: { status: "invalid_key", code: 401 } }
+      ];
+      const { $ } = await loadAdmin({
+        apiKey: "an-old-stored-key",
+        merchantId: RENDERED_MERCHANT_ID,
+        checked: [30],
+        stubAjax: function (jq) {
+          jq.ajax = jest.fn(function (settings) {
+            settings.success(responses.shift());
+            return { done: function () {}, fail: function () {} };
+          });
+        }
+      });
+
+      expect($("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")).toBe(
+        true
+      );
+      $("#woocommerce_" + GATEWAY_ID + "_api_key").trigger("blur");
+
+      expect($("#twoinc-merchant-info").css("display")).toBe("none");
+      expect($("#api-key-invalid").css("display")).not.toBe("none");
+      expect($("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")).toBe(
+        false
+      );
     });
   });
 
