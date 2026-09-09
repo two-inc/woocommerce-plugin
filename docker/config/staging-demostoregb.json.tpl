@@ -19,5 +19,5 @@
   "enable_company_search": "yes",
   "enable_company_search_for_others": "yes",
   "enable_address_lookup": "yes",
-  "merchant_id": "2e2bf194-a56e-44c3-af50-342fe9ebf32f"
+  "merchant_id": "06fad246-f305-47a2-8a25-1c7e0bcf02d5"
 }

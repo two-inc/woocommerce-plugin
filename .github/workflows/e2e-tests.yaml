@@ -40,7 +40,10 @@ jobs:
       - name: Fetch secrets
         id: secrets
         run: |
-          MERCHANT_API_KEY=$(gcloud secrets versions access latest --secret="STAGING_SHOP_MERCHANT_API_KEY_TILLITTESTUK" --project=two-beta)
+          # Temporary merchant: tillittestuk has accumulated too much e2e order
+          # volume to pass fraud velocity checks, so every order it places is
+          # declined. Revert to it once CI is trusted again.
+          MERCHANT_API_KEY=$(gcloud secrets versions access latest --secret="STAGING_SHOP_MERCHANT_API_KEY_GB" --project=two-beta)
           echo "::add-mask::$MERCHANT_API_KEY"
           echo "MERCHANT_API_KEY=$MERCHANT_API_KEY" >> $GITHUB_OUTPUT
 
@@ -51,7 +54,7 @@ jobs:
       - name: Generate Docker plugin config
         run: |
           mkdir -p docker/config
-          sed "s|\${MERCHANT_API_KEY}|${MERCHANT_API_KEY}|g" docker/config/staging-tillittestuk.json.tpl > docker/config/staging-tillittestuk.json
+          sed "s|\${MERCHANT_API_KEY}|${MERCHANT_API_KEY}|g" docker/config/staging-demostoregb.json.tpl > docker/config/staging-demostoregb.json
         env:
           MERCHANT_API_KEY: ${{ steps.secrets.outputs.MERCHANT_API_KEY }}
 
@@ -60,7 +63,7 @@ jobs:
           # Compose defaults WOOCOM_PLUGIN_CONFIG_JSON to the local-dev
           # config; CI must seed the gateway with the staging config the
           # previous step rendered.
-          echo "WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-tillittestuk.json" > .env
+          echo "WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-demostoregb.json" > .env
           docker compose up -d
 
       - name: Wait for bootstrap to complete
