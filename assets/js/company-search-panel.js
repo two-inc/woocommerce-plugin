@@ -88,6 +88,24 @@
     let instanceSeq = 0;
 
     /**
+     * The one popover that may be open, page-wide.
+     *
+     * ABN-510: a pointer click on another mount need not deliver a focus event
+     * to the control it hits, so the first popover never sees focus leave it.
+     * Enforced here, at open time, rather than inferred from a focus signal.
+     */
+    let openPanel = null;
+
+    function claimOpenSlot(panel) {
+        if (openPanel && openPanel !== panel) openPanel.close();
+        openPanel = panel;
+    }
+
+    function releaseOpenSlot(panel) {
+        if (openPanel === panel) openPanel = null;
+    }
+
+    /**
      * @param {object} options
      * @param {string} options.fieldSelector selector for the company-name input
      *        this panel anchors to. Re-read on every `bind()`, so a node
@@ -409,6 +427,7 @@
         panel.setAttribute('hidden', 'hidden');
         // A freshly built panel is hidden, so the field it belongs to is closed.
         this._open = false;
+        releaseOpenSlot(this);
         this._releaseFieldTabStop();
 
         const searchRow = document.createElement('div');
@@ -661,6 +680,9 @@
      */
     CompanySearchPanel.prototype.open = function () {
         if (!this._panel) return;
+        // Before the tab stop below: the popover being closed must give its own
+        // field's tab stop back before this one takes its.
+        claimOpenSlot(this);
         const wasOpen = this._open;
         this._open = true;
         this._panel.removeAttribute('hidden');
@@ -691,6 +713,7 @@
     CompanySearchPanel.prototype.close = function (options) {
         if (!this._panel || !this._open) return;
         this._open = false;
+        releaseOpenSlot(this);
         // Ahead of the injected abortActiveRequest, which can throw: _open is
         // already false, so a throw below would strand the field at `-1`.
         this._releaseFieldTabStop();
@@ -1110,6 +1133,7 @@
         this._results = null;
         this._chips = null;
         this._open = false;
+        releaseOpenSlot(this);
     };
 
     CompanySearchPanel.SEARCH_API_CONTRACT = SEARCH_API_CONTRACT;

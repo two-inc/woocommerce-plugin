@@ -116,6 +116,12 @@ Vendored assets
   (TWO-25503). Without it the focus opener is a keyboard trap: the opener puts the
   caret in the query field, Shift+Tab returns to the field, and the opener pushes
   focus forward again, so the buyer cannot get back past the control (WCAG 2.1.2).
+- **Only one popover is open, page-wide.** Opening one closes whichever other one
+  was open, enforced at open time rather than inferred from focus leaving the
+  first: a real pointer press on the other role need not deliver a focus event to
+  the control it hits (ABN-510). The popover that closes gives its own field's tab
+  stop back before the newly opened one takes its. A pointer press outside the open
+  popover closes it too, with the company field counted as inside the control.
 
 Keyboard behaviour is not verifiable in jsdom
 
