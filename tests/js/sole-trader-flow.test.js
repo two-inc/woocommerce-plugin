@@ -114,10 +114,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     // a test that reaches a real successful mint starts it, and it would
     // otherwise keep firing against a stale module for the rest of the file.
     soleTrader.stopTokenRefresh();
-    // The delivery role's controller is a second instance with its own listener
-    // and its own popup polls, and only the tests that mount it touch it. Left
-    // armed, it keeps judging focus for the rest of the file against a stale
-    // popup - which under TWO-25658's cross-role rule relaunches a chip.
+    // Left armed, the delivery role's own controller judges the rest of the file's focus against its stale popup, which under TWO-25658 relaunches a chip.
     const shippingSoleTrader = ctx.shippingHelper && ctx.shippingHelper.soleTrader;
     if (shippingSoleTrader) {
       shippingSoleTrader.unbindPopupMessageListener();
@@ -2918,9 +2915,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           // Before the launch: mounting focuses the delivery panel's own query field.
           const chip = deliveryChip(mode);
           const win = launchFromChips();
-          // The exempt control is the chip whose activation opened THIS popup.
-          // The delivery role's chip is a different control, so the rule takes
-          // this popup down and hands that one a popup instead.
           const relaunched = fakePopup();
           window.open = jest.fn(() => relaunched);
 

@@ -3973,9 +3973,7 @@ function createSoleTraderController(companySearch) {
           // Only an activation moves the popup: Tabbing onto this chip is the buyer passing through, and it must leave the popup as they left it (TWO-25658).
           return;
         }
-        // Another role's chip is a different control: this popup goes down and
-        // that chip gets one, and its own click handler is the one place a
-        // launch is spelled out (TWO-25658).
+        // Another role's chip is a different control: this popup goes down and that chip gets one, its own click handler being the one place a launch is spelled out (TWO-25658).
         const relaunch = isSoleTraderChip && controller.abandonablePopups().length ? chip : null;
         if (controller.abandonablePopups().length) {
           controller.closeAbandonedPopups();
@@ -3988,8 +3986,7 @@ function createSoleTraderController(companySearch) {
         if (target !== field && !(popover && popover.contains(target))) {
           companySearch.closeCompanySearchDropdown();
         }
-        // Last, so this controller's popups are already closed and a focus the
-        // launch moves finds nothing left here to relaunch.
+        // Last, so a focus the launch moves finds this controller's popups already closed and nothing left here to relaunch.
         if (relaunch && typeof relaunch.click === "function") relaunch.click();
       };
       document.addEventListener("focusin", controller.focusinHandler, true);
