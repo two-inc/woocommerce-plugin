@@ -5302,8 +5302,7 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos(
                 (string) file_get_contents(dirname(__DIR__, 2) . '/tillit-payment-gateway.php'),
-                "add_filter(\n        'pre_update_option_woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',\n"
-                . "        ['WC_Twoinc', 'keep_stored_custom_payment_term'],"
+                "add_filter('pre_update_option', ['WC_Twoinc', 'keep_stored_custom_payment_term'], 10, 3);"
             ) !== false,
             'the guard must be registered on every write to the settings row'
         );
@@ -5312,9 +5311,20 @@ final class BrandConfigSpec
             if ($incoming !== null) {
                 $value['payment_terms_custom_days'] = $incoming;
             }
+            $option = 'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings';
             $guarded = WC_Twoinc::keep_stored_custom_payment_term(
                 $value,
+                $option,
                 ['payment_terms_custom_days' => $stored]
+            );
+            TinyAssert::same(
+                $value,
+                WC_Twoinc::keep_stored_custom_payment_term(
+                    $value,
+                    'woocommerce_other_gateway_settings',
+                    ['payment_terms_custom_days' => $stored]
+                ),
+                $description . ' — and another plugin\'s settings row is left alone'
             );
 
             TinyAssert::same($expected, $guarded['payment_terms_custom_days'] ?? '', $description);
@@ -5329,6 +5339,7 @@ final class BrandConfigSpec
         foreach ($fresh as [$incoming, $expected, $description]) {
             $guarded = WC_Twoinc::keep_stored_custom_payment_term(
                 ['payment_terms_custom_days' => $incoming],
+                'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',
                 false
             );
 

@@ -82,12 +82,9 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
     require_once __DIR__ . '/class/WC_Twoinc.php';
 
-    add_filter(
-        'pre_update_option_woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',
-        ['WC_Twoinc', 'keep_stored_custom_payment_term'],
-        10,
-        2
-    );
+    // The option name is resolved inside the callback: reading the brand here would cache it
+    // before an overlay loading at this same priority has registered its own.
+    add_filter('pre_update_option', ['WC_Twoinc', 'keep_stored_custom_payment_term'], 10, 3);
 
     // Checkout AJAX endpoints (term-fee chips, term selection, sole-trader
     // availability/tokens). Registered here at plugins_loaded — NOT in the

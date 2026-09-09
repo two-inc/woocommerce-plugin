@@ -2446,12 +2446,16 @@ if (!class_exists('WC_Twoinc')) {
          * endpoint runs none of the field validators (ABN-522).
          *
          * @param mixed $value
+         * @param mixed $option
          * @param mixed $old_value
          * @return mixed
          */
-        public static function keep_stored_custom_payment_term($value, $old_value)
+        public static function keep_stored_custom_payment_term($value, $option, $old_value)
         {
-            if (!is_array($value)) {
+            if (!is_array($value) || !is_string($option) || substr($option, -9) !== '_settings') {
+                return $value;
+            }
+            if ($option !== 'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings') {
                 return $value;
             }
             // No row yet on a fresh install, so the stored term is nothing and any value is a change.
