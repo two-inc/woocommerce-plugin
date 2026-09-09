@@ -161,15 +161,53 @@ describe("payment terms chips", () => {
     // quote failed (null) counts as zero and still shows an amount when a
     // sibling is priced.
     test.each([
-      { terms: [30, 60], fees: { 30: quote("0", "€0,00"), 60: quote("0", "€0,00") }, expected: [], description: "every term zero shows nothing anywhere" },
-      { terms: [30, 60], fees: { 30: quote("12.50", "€12,50"), 60: quote("0", "€0,00") }, expected: ["+€12,50", "+€0,00"], description: "one priced term puts a zero amount on the zero-fee chip" },
-      { terms: [30, 60], fees: { 30: quote("12.50", "€12,50"), 60: quote("18.00", "€18,00") }, expected: ["+€12,50", "+€18,00"], description: "every priced term shows its own amount" },
-      { terms: [30], fees: { 30: quote("0", "€0,00") }, expected: [], description: "a lone zero-fee chip shows nothing" },
-      { terms: [30], fees: { 30: quote("9.00", "€9,00") }, expected: ["+€9,00"], description: "a lone priced chip shows its amount" },
-      { terms: [30, 60], fees: { 30: quote("12.50", "€12,50"), 60: null }, expected: ["+€12,50", "+€0,00"], description: "an unresolved term shows a zero amount beside a priced sibling" },
-      { terms: [30, 60], fees: { 30: null, 60: null }, expected: [], description: "no term resolving shows nothing anywhere" }
+      {
+        terms: [30, 60],
+        fees: { 30: quote("0", "€0,00"), 60: quote("0", "€0,00") },
+        expected: [],
+        description: "every term zero shows nothing anywhere"
+      },
+      {
+        terms: [30, 60],
+        fees: { 30: quote("12.50", "€12,50"), 60: quote("0", "€0,00") },
+        expected: ["+€12,50", "+€0,00"],
+        description: "one priced term puts a zero amount on the zero-fee chip"
+      },
+      {
+        terms: [30, 60],
+        fees: { 30: quote("12.50", "€12,50"), 60: quote("18.00", "€18,00") },
+        expected: ["+€12,50", "+€18,00"],
+        description: "every priced term shows its own amount"
+      },
+      {
+        terms: [30],
+        fees: { 30: quote("0", "€0,00") },
+        expected: [],
+        description: "a lone zero-fee chip shows nothing"
+      },
+      {
+        terms: [30],
+        fees: { 30: quote("9.00", "€9,00") },
+        expected: ["+€9,00"],
+        description: "a lone priced chip shows its amount"
+      },
+      {
+        terms: [30, 60],
+        fees: { 30: quote("12.50", "€12,50"), 60: null },
+        expected: ["+€12,50", "+€0,00"],
+        description: "an unresolved term shows a zero amount beside a priced sibling"
+      },
+      {
+        terms: [30, 60],
+        fees: { 30: null, 60: null },
+        expected: [],
+        description: "no term resolving shows nothing anywhere"
+      }
     ])("$description", ({ terms, fees, expected }) => {
-      const chips = mount(Object.assign({ enabled: true, terms: terms, selected: terms[0] }, COPY), fees);
+      const chips = mount(
+        Object.assign({ enabled: true, terms: terms, selected: terms[0] }, COPY),
+        fees
+      );
       chips.zeroFeeDisplay = "€0,00";
       chips.render(terms, terms[0]);
 
