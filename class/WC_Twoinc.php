@@ -2695,19 +2695,65 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Using admin_enqueue_scripts passes the page name as the first
-         * argument, which prevents the merchant_id from being updated.
+         * Re-verify the stored key on the gateway's own settings screen. The
+         * hook fires on every wp-admin request, so without the screen check an
+         * unreachable API blocked the whole administration area (ABN-537).
+         *
+         * @param string $hook_suffix current admin page, from the hook.
          */
-        public function verify_api_key_action()
+        public function verify_api_key_action($hook_suffix = '')
         {
-            $result = $this->verify_api_key();
-            // This admin-page load is a fresh, live re-check of the STORED
-            // key — strictly more current than whatever the checkout-side
-            // cache (get_api_key_verification_status()) might be holding.
-            // Feed it forward so a merchant who just fixed a broken key
-            // doesn't have to wait out API_KEY_VERIFICATION_TTL for
+            if (!$this->is_gateway_settings_screen((string) $hook_suffix)) {
+                return;
+            }
+
+            $api_key = (string) $this->get_option('api_key');
+            if ($api_key === '') {
+                return;
+            }
+
+            // A cached verdict spares the call, EXCEPT a cached 'ok' with no
+            // merchant identity: the Validate button caches an 'ok' for a
+            // TYPED key, and only a live check of the STORED key persists
+            // merchant_id (ABN-537).
+            $cached = get_transient(self::verification_cache_key($api_key));
+            if (is_array($cached) && isset($cached['status'])) {
+                if ($cached['status'] !== 'ok' || (string) $this->get_merchant_id() !== '') {
+                    return;
+                }
+            }
+
+            // Feeds the checkout-side cache too, so a merchant who just fixed
+            // a broken key doesn't wait out API_KEY_VERIFICATION_TTL for
             // checkout to notice (TWO-25326 follow-up).
-            $this->cache_verification_result($this->get_option('api_key'), $result);
+            $this->cache_verification_result(
+                $api_key,
+                $this->verify_api_key(null, self::ADMIN_API_KEY_VERIFICATION_TIMEOUT)
+            );
+        }
+
+        /** WooCommerce's settings page, Payments tab, this gateway's own section. */
+        private function is_gateway_settings_screen(string $hook_suffix): bool
+        {
+            if ($hook_suffix !== 'woocommerce_page_wc-settings') {
+                return false;
+            }
+            $tab = self::settings_query_arg('tab');
+            $section = self::settings_query_arg('section');
+            // WooCommerce's payment-gateway settings router accepts either the
+            // gateway id or its sanitized class name as the section, and older
+            // Manage links use the latter.
+            $sections = [strtolower((string) $this->id), strtolower(sanitize_title(get_class($this)))];
+
+            return $tab === 'checkout' && in_array($section, $sections, true);
+        }
+
+        /** Lower-cased scalar $_GET value; a nested array is not a section name. */
+        private static function settings_query_arg(string $key): string
+        {
+            $value = $_GET[$key] ?? '';
+
+            return is_string($value) ? strtolower((string) wp_unslash($value)) : '';
         }
 
         /**
@@ -2747,7 +2793,7 @@ if (!class_exists('WC_Twoinc')) {
             if (isset($response['body'])) {
                 $body = json_decode($response['body'], true);
                 $code = $response['response']['code'];
-                if ($code == 200 && isset($body['id']) && !$api_key) {
+                if ($code == 200 && isset($body['id']) && is_scalar($body['id']) && (string) $body['id'] !== '' && !$api_key) {
                     // Only persist when verifying the saved API key. verify_api_key
                     // returns {id, short_name}; cache both for the settings display.
                     if ((string) $this->get_option('merchant_id') !== (string) $body['id']) {
@@ -2802,7 +2848,10 @@ if (!class_exists('WC_Twoinc')) {
             $code = isset($result['code']) ? (int) $result['code'] : null;
             if ($code === 200) {
                 // A captive portal or maintenance page answers 200 too; with no merchant record there is no identity to offer the method under.
-                if (!isset($result['body']['id'])) {
+                // An empty id is no record either: reported as 'ok' it left the
+                // settings screen re-verifying on every load, never resolving
+                // an identity (ABN-537).
+                if (!isset($result['body']['id']) || !is_scalar($result['body']['id']) || (string) $result['body']['id'] === '') {
                     return ['status' => 'error', 'code' => $code];
                 }
                 return ['status' => 'ok', 'code' => $code];
@@ -2853,6 +2902,9 @@ if (!class_exists('WC_Twoinc')) {
          * WC_Twoinc_FX::FETCH_TIMEOUT's reasoning for the same constraint.
          */
         const API_KEY_VERIFICATION_TIMEOUT = 5;
+
+        /** Bounded because it runs inline in a page render (ABN-537). */
+        const ADMIN_API_KEY_VERIFICATION_TIMEOUT = 10;
 
         /**
          * Request-scoped memo so a single page load never reads the

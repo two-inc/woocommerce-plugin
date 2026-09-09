@@ -274,6 +274,11 @@ final class BrandConfigSpec
             'testCheckoutWindowTwoincSuppressedOnVerificationFailure',
             'testVerifyApiKeyMalformedResponseNotMiscategorizedAsNotConfigured',
             'testAdminLiveVerificationWarmsCheckoutCache',
+            'testSettingsScreenVerificationDoesNotFireOnOtherAdminPages',
+            'testSettingsScreenVerificationSpendsNoCallWhenTheVerdictIsCached',
+            'testCachedOkStillVerifiesWhileTheMerchantIdIsUnresolved',
+            'testAnEmptyMerchantIdIsNoRecordSoTheScreenStopsRetrying',
+            'testSettingsScreenVerificationTimeoutIsBoundedForAPageRender',
             'testCachedStatusMissTimeoutIsShortNotAdminDefault',
             'testApiKeyNoticesCarryTwoProductNameAndStatusPlaceholder',
             'testApiKeyNoticesUseOverlayProductNameNotTwo',
@@ -10314,6 +10319,251 @@ final class BrandConfigSpec
      * merchant who just fixed their key doesn't wait out
      * API_KEY_VERIFICATION_TTL for checkout to notice.
      */
+    /** Puts $_GET where WooCommerce puts it for this gateway's settings section. */
+    private static function onGatewaySettingsScreen(string $gateway_id): void
+    {
+        $_GET['tab'] = 'checkout';
+        $_GET['section'] = $gateway_id;
+    }
+
+    /**
+     * Gateway that counts verification calls and records the timeout each was
+     * given. $api_key '' models an install with nothing stored; $merchant_id ''
+     * one whose identity has never resolved. Return type left off deliberately:
+     * the counters live on the anonymous subclass, and a WC_Twoinc annotation
+     * would hide them from static analysis.
+     */
+    private static function verificationCountingGateway(string $api_key = 'key', string $merchant_id = 'mid')
+    {
+        return new class ($api_key, $merchant_id) extends WC_Twoinc {
+            public $options;
+
+            public $make_request_calls = 0;
+
+            public $seen_timeout = null;
+
+            /** Queued make_request() returns; empty means the default 200 with an id. */
+            public $responses = [];
+
+            public function __construct($api_key, $merchant_id)
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->options = ['api_key' => $api_key, 'merchant_id' => $merchant_id];
+            }
+
+            public function get_twoinc_checkout_host()
+            {
+                return 'https://api.example';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function update_option($key, $value = '')
+            {
+                $this->options[$key] = $value;
+                return true;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                $this->make_request_calls++;
+                $this->seen_timeout = $timeout;
+                return array_shift($this->responses)
+                    ?: ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
+            }
+        };
+    }
+
+    /**
+     * ABN-537. admin_enqueue_scripts fires on EVERY wp-admin request, so an
+     * unscoped verification blocked the whole of wp-admin for the duration of
+     * one wire call while the API was unreachable. Only the gateway's own
+     * settings section may spend a call.
+     */
+    private static function testSettingsScreenVerificationDoesNotFireOnOtherAdminPages(): void
+    {
+        $gateway_id = WC_Twoinc_Brand::get('gateway_id');
+        $cases = [
+            ['woocommerce_page_wc-settings', 'checkout', $gateway_id, 1, "the gateway's own settings section"],
+            ['woocommerce_page_wc-settings', 'checkout', strtoupper($gateway_id), 1, 'the same section upper-cased'],
+            ['woocommerce_page_wc-settings', 'checkout', 'other-gateway', 0, 'another gateway\'s settings section'],
+            ['woocommerce_page_wc-settings', 'shipping', '', 0, 'the shipping settings tab'],
+            ['woocommerce_page_wc-settings', '', '', 0, 'the settings page with no tab'],
+            ['index.php', 'checkout', $gateway_id, 0, 'the wp-admin dashboard'],
+            ['edit.php', '', '', 0, 'the posts list'],
+            ['plugins.php', '', '', 0, 'the plugins page'],
+            ['woocommerce_page_wc-orders', '', '', 0, 'the WooCommerce orders screen'],
+            ['', '', '', 0, 'a hook that passed no page at all'],
+        ];
+
+        foreach ($cases as $case) {
+            list($hook_suffix, $tab, $section, $expected, $description) = $case;
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $_GET['tab'] = $tab;
+            $_GET['section'] = $section;
+            $gateway = self::verificationCountingGateway();
+            $gateway->verify_api_key_action($hook_suffix);
+            TinyAssert::same($expected, $gateway->make_request_calls, "verification calls on $description");
+        }
+
+        // A nested query arg is not a section name, and casting an array to
+        // string raises a PHP warning on every admin page load. The call count
+        // alone cannot see that, so the handler is what makes it assertable.
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $_GET['tab'] = 'checkout';
+        $_GET['section'] = ['array'];
+        $raised = null;
+        set_error_handler(static function ($errno, $message) use (&$raised) {
+            $raised = $message;
+            return true;
+        });
+        $arrayed = self::verificationCountingGateway();
+        $arrayed->verify_api_key_action('woocommerce_page_wc-settings');
+        restore_error_handler();
+        TinyAssert::same(null, $raised, 'a section posted as an array raises nothing');
+        TinyAssert::same(0, $arrayed->make_request_calls, 'and spends no call');
+
+        // WooCommerce's settings router also accepts the gateway's sanitized
+        // class name as the section, which older Manage links still use.
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $by_class = self::verificationCountingGateway();
+        $_GET['tab'] = 'checkout';
+        $_GET['section'] = sanitize_title(get_class($by_class));
+        $by_class->verify_api_key_action('woocommerce_page_wc-settings');
+        TinyAssert::same(1, $by_class->make_request_calls, 'verification calls on the sanitized-class-name section');
+
+        unset($_GET['tab'], $_GET['section']);
+    }
+
+    /**
+     * ABN-537. The cached verdict is written after the call, so it never
+     * spared a later page load: every reload of the settings page during an
+     * outage paid its own wire call.
+     */
+    private static function testSettingsScreenVerificationSpendsNoCallWhenTheVerdictIsCached(): void
+    {
+        $gateway_id = WC_Twoinc_Brand::get('gateway_id');
+        self::onGatewaySettingsScreen($gateway_id);
+
+        $first = self::verificationCountingGateway();
+        $first->verify_api_key_action('woocommerce_page_wc-settings');
+        TinyAssert::same(1, $first->make_request_calls, 'a cold cache pays one call');
+
+        // A separate instance, as a second page load would be, reading the
+        // transient the first one wrote.
+        $second = self::verificationCountingGateway();
+        $second->verify_api_key_action('woocommerce_page_wc-settings');
+        TinyAssert::same(0, $second->make_request_calls, 'a warm cache pays none');
+
+        // Nothing stored to verify is not a cache question at all.
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $unconfigured = self::verificationCountingGateway('');
+        $unconfigured->verify_api_key_action('woocommerce_page_wc-settings');
+        TinyAssert::same(0, $unconfigured->make_request_calls, 'no stored key pays none');
+
+        unset($_GET['tab'], $_GET['section']);
+    }
+
+    /**
+     * ABN-537. Only a live check of the STORED key persists merchant_id, so a
+     * cache read that honoured the Validate button's 'ok' for a TYPED key left
+     * the identity unresolved on the one screen that can heal it.
+     */
+    private static function testCachedOkStillVerifiesWhileTheMerchantIdIsUnresolved(): void
+    {
+        $gateway_id = WC_Twoinc_Brand::get('gateway_id');
+        self::onGatewaySettingsScreen($gateway_id);
+        $key = 'stored-key';
+
+        $cases = [
+            [['status' => 'ok', 'code' => 200, 'body' => null], '', 1, "a cached 'ok' with no merchant identity"],
+            [['status' => 'error', 'code' => 200, 'body' => null], '', 0, 'a cached recordless 200'],
+            [['status' => 'ok', 'code' => 200, 'body' => null], 'mid', 0, "a cached 'ok' with the identity resolved"],
+            [['status' => 'unreachable', 'code' => null, 'body' => null], '', 0, 'a cached outage verdict'],
+            [['status' => 'invalid_key', 'code' => 401, 'body' => null], '', 0, 'a cached rejection'],
+        ];
+
+        foreach ($cases as $case) {
+            list($cached, $merchant_id, $expected, $description) = $case;
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $gateway = self::verificationCountingGateway($key, $merchant_id);
+            set_transient(WC_Twoinc_Brand::prefixed_name('api_key_status_' . md5($key)), $cached, 300);
+
+            $gateway->verify_api_key_action('woocommerce_page_wc-settings');
+            TinyAssert::same($expected, $gateway->make_request_calls, "verification calls for $description");
+        }
+
+        unset($_GET['tab'], $_GET['section']);
+    }
+
+    /**
+     * ABN-537. An empty id passes isset(), so a 200 carrying one read as 'ok'
+     * with nothing to resolve — and the settings screen, which re-verifies
+     * precisely while the identity is unresolved, then called on every load
+     * with nothing to converge on.
+     */
+    private static function testAnEmptyMerchantIdIsNoRecordSoTheScreenStopsRetrying(): void
+    {
+        $cases = [
+            [['id' => '42'], 'ok', '42', 'a real merchant id'],
+            [['id' => ''], 'error', '', 'an empty merchant id'],
+            // Non-empty but falsy in PHP: a truthiness test here would re-verify forever.
+            [['id' => 0], 'ok', '0', 'a merchant id of zero'],
+            [[], 'error', '', 'no id field at all'],
+            [['id' => ['nested']], 'error', '', 'an id that is not a scalar at all'],
+        ];
+
+        foreach ($cases as $case) {
+            list($body, $expected_status, $expected_stored, $description) = $case;
+            $verdict = WC_Twoinc::categorize_verification_result(['body' => $body, 'code' => 200]);
+            TinyAssert::same($expected_status, $verdict['status'], "verdict for $description");
+
+            self::onGatewaySettingsScreen(WC_Twoinc_Brand::get('gateway_id'));
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $gateway = self::verificationCountingGateway('key', '');
+            $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode($body)]];
+            $gateway->verify_api_key_action('woocommerce_page_wc-settings');
+            TinyAssert::same($expected_stored, (string) $gateway->options['merchant_id'], "stored merchant id for $description");
+
+            // The second page load must not call again: either the identity
+            // resolved, or the verdict is no longer 'ok'.
+            $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode($body)]];
+            $gateway->verify_api_key_action('woocommerce_page_wc-settings');
+            TinyAssert::same(1, $gateway->make_request_calls, "calls across two page loads for $description");
+        }
+
+        // A 200 carrying an empty id must not overwrite an identity that IS
+        // resolved — the old write wiped it and dropped every cached
+        // derivative with it.
+        self::onGatewaySettingsScreen(WC_Twoinc_Brand::get('gateway_id'));
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $resolved = self::verificationCountingGateway('key', '42');
+        $resolved->responses = [['response' => ['code' => 200], 'body' => json_encode(['id' => ''])]];
+        $resolved->verify_api_key(null, 10);
+        TinyAssert::same('42', (string) $resolved->options['merchant_id'], 'a resolved identity survives an empty id in the answer');
+
+        unset($_GET['tab'], $_GET['section']);
+    }
+
+    /**
+     * ABN-537. wp_remote_request()'s 30s default stalled the settings page for
+     * half a minute against an unreachable API.
+     */
+    private static function testSettingsScreenVerificationTimeoutIsBoundedForAPageRender(): void
+    {
+        self::onGatewaySettingsScreen(WC_Twoinc_Brand::get('gateway_id'));
+        $gateway = self::verificationCountingGateway();
+        $gateway->verify_api_key_action('woocommerce_page_wc-settings');
+
+        TinyAssert::same(WC_Twoinc::ADMIN_API_KEY_VERIFICATION_TIMEOUT, $gateway->seen_timeout);
+        TinyAssert::same(true, WC_Twoinc::ADMIN_API_KEY_VERIFICATION_TIMEOUT < 30);
+
+        unset($_GET['tab'], $_GET['section']);
+    }
+
     private static function testAdminLiveVerificationWarmsCheckoutCache(): void
     {
         $gateway = new class () extends WC_Twoinc {
@@ -10322,6 +10572,7 @@ final class BrandConfigSpec
 
             public function __construct()
             {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
             }
 
             public function get_twoinc_checkout_host()
@@ -10349,7 +10600,8 @@ final class BrandConfigSpec
 
         // Simulates the settings-page load: a fresh, live, uncached check —
         // exactly what verify_api_key_action() does.
-        $gateway->verify_api_key_action();
+        self::onGatewaySettingsScreen($gateway->id);
+        $gateway->verify_api_key_action('woocommerce_page_wc-settings');
         TinyAssert::same(1, $gateway->make_request_calls);
 
         // The checkout-facing cache must already be warm from that — no

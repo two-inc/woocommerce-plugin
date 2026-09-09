@@ -327,6 +327,11 @@ The merchant record refreshes on an event, never on expiry
   list and a record carrying no term list at all are named separately. The API key is named only
   in the two states where it is actually implicated — none saved, or one the API
   rejected — never as a guess at an unexplained failure.
+- **Only the gateway's own settings section re-verifies the stored key on load**
+  (ABN-537). The hook it rides fires on every wp-admin request, so the screen check
+  is what stops an unreachable API blocking the whole administration area; the
+  cached verdict is read before a call is spent, and the call is capped well under
+  wp_remote_request()'s own 30-second default.
 - **The admin save stays possible whatever the verification says** (ABN-495). An
   unreachable API judges nothing about the key, and refusing the save locks the
   merchant out of storing the key that would fix the outage; the verdict is reported
