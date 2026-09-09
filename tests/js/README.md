@@ -186,7 +186,8 @@ TWO-40, TWO-25503):
   pay-for-order surface.
 
 `company-search-tab-stop.test.js` — the state the browser derives tab order from, which is
-all jsdom can see. The Tab traversal itself is a real-browser check:
+all jsdom can see. The Tab traversal itself is covered by no automated test in this repo
+(ABN-499):
 
 - an open popover leaves the field with `tabindex="-1"`, and every route out — the panel's
   own close, Escape, a mousedown outside, focus settling outside, teardown, a host re-render

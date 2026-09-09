@@ -149,9 +149,11 @@ Keyboard behaviour is not verifiable in jsdom
   or a reverse-Tab dead end, however many cases it carries and however green it is.
   `tests/js/company-search-tab-stop.test.js` therefore asserts only the state the
   browser derives tab order FROM — `tabindex` on the field, `hidden` on the panel,
-  document order of the control's parts — and the keyboard behaviour itself is
-  verified in a real browser. A passing jsdom Tab test is never evidence that a trap
-  is absent, so no case here may dispatch `Tab` and assert on what did not happen:
+  document order of the control's parts. The traversal itself is covered by no
+  automated test in this repo — the e2e suite has no keyboard case — so it is
+  hand-verification only until ABN-499 adds one. A passing jsdom Tab test is never
+  evidence that a trap is absent, so no case here may dispatch `Tab` and assert on
+  what did not happen:
   an event left undefaulted is what a trap implemented by moving focus looks like
   too (ABN-499).
 
