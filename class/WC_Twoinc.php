@@ -2402,7 +2402,9 @@ if (!class_exists('WC_Twoinc')) {
             $data = wp_parse_args($data, $defaults);
             $stored = $this->stored_custom_payment_term();
             $days = WC_Twoinc_Stored_Term::days($stored);
-            $data['description'] = $this->legacy_custom_term_description($days === null ? $stored : (string) $days);
+            $data['description'] = $this->legacy_custom_term_description(
+                esc_html($days === null ? $stored : (string) $days)
+            );
             $hidden = WC_Twoinc_Stored_Term::is_blank($stored) || $this->custom_term_folds_in($days);
             $keep_label = $days === null
                 ? $stored
@@ -2433,6 +2435,35 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * The deprecated custom term may be removed but never replaced, whatever writes the
+         * settings row: the admin form is one of several routes to it, and the REST settings
+         * endpoint runs none of the field validators (ABN-522).
+         *
+         * @param mixed $value
+         * @param mixed $old_value
+         * @return mixed
+         */
+        public static function keep_stored_custom_payment_term($value, $old_value)
+        {
+            if (!is_array($value) || !is_array($old_value)) {
+                return $value;
+            }
+            $stored = WC_Twoinc_Stored_Term::text($old_value['payment_terms_custom_days'] ?? '');
+            if (!array_key_exists('payment_terms_custom_days', $value)) {
+                // A write that omits the row would drop the value; only an empty one removes it.
+                $value['payment_terms_custom_days'] = $stored;
+
+                return $value;
+            }
+            $posted = WC_Twoinc_Stored_Term::text($value['payment_terms_custom_days']);
+            if ($posted !== '' && $posted !== $stored) {
+                $value['payment_terms_custom_days'] = $stored;
+            }
+
+            return $value;
+        }
+
+        /**
          * The persisted custom term. Read off the settings row, not $this->settings: the save
          * compares against what is stored, whatever the in-memory copy holds. ABN-522.
          */
@@ -2440,7 +2471,7 @@ if (!class_exists('WC_Twoinc')) {
         {
             $saved = get_option($this->get_option_key(), null);
 
-            return is_array($saved) ? trim((string) ($saved['payment_terms_custom_days'] ?? '')) : '';
+            return is_array($saved) ? WC_Twoinc_Stored_Term::text($saved['payment_terms_custom_days'] ?? '') : '';
         }
 
         /**
@@ -2452,7 +2483,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function custom_payment_term_refusal($posted): ?string
         {
-            $posted = trim((string) $posted);
+            $posted = WC_Twoinc_Stored_Term::text(wp_unslash($posted));
             if ($posted !== '' && $posted !== $this->stored_custom_payment_term()) {
                 return __('Custom payment terms (days) can only be removed, not changed.', 'twoinc-payment-gateway');
             }
@@ -2485,7 +2516,7 @@ if (!class_exists('WC_Twoinc')) {
                 throw new Exception($refusal);
             }
 
-            $posted = trim((string) $value);
+            $posted = WC_Twoinc_Stored_Term::text(wp_unslash($value));
             $days = WC_Twoinc_Stored_Term::days($posted);
             if ($this->custom_term_folds_in($days)) {
                 WC_Admin_Settings::add_message(sprintf(

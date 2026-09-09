@@ -276,9 +276,11 @@ jQuery(function ($) {
     const $defaultTerm = $("#" + prefix + "default_payment_term");
     const daysLabel = twoinc_admin.days_label || "%s days";
 
+    // Same rule as the server's one normalisation of the stored value: a run of digits over
+    // zero denotes a term, anything else denotes none.
     function customDay() {
-      const c = parseInt($customDays.val(), 10);
-      return c > 0 ? c : 0;
+      const raw = String($customDays.val() == null ? "" : $customDays.val()).trim();
+      return /^\d+$/.test(raw) && Number(raw) > 0 ? Number(raw) : 0;
     }
 
     function uniqueSorted(arr) {

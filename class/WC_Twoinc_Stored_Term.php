@@ -8,6 +8,12 @@ if (!class_exists('WC_Twoinc_Stored_Term')) {
      */
     class WC_Twoinc_Stored_Term
     {
+        /** The value as stored: a trimmed string, and '' for anything that is not one. */
+        public static function text($configured): string
+        {
+            return is_scalar($configured) ? trim((string) $configured) : '';
+        }
+
         /** Nothing worth showing: absent, empty, or a zero, which is not a term and reads as blank. */
         public static function is_blank($configured): bool
         {

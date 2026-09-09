@@ -82,6 +82,15 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
     require_once __DIR__ . '/class/WC_Twoinc.php';
 
+    // Every write to the settings row goes through this, not just the admin form: the REST
+    // settings endpoint runs none of the gateway's own field validators (ABN-522).
+    add_filter(
+        'pre_update_option_woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',
+        ['WC_Twoinc', 'keep_stored_custom_payment_term'],
+        10,
+        2
+    );
+
     // Checkout AJAX endpoints (term-fee chips, term selection, sole-trader
     // availability/tokens). Registered here at plugins_loaded — NOT in the
     // gateway constructor — because a wc-ajax request is dispatched at

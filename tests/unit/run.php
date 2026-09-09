@@ -107,6 +107,7 @@ final class BrandConfigSpec
             'testDeprecatedCustomTermRendersKeepOrRemove',
             'testDeprecatedCustomTermSaveStates',
             'testDeprecatedCustomTermFoldsInOnlyAgainstAResolvedOfferedSet',
+            'testDeprecatedCustomTermWriteGuardHoldsEverySettingsWrite',
             'testDeprecatedCustomTermCopyIsTranslatedInEveryLocale',
             'testZeroCapOnAnUnrenderedRowDoesNotBlockEnabling',
             'testDisablingSurchargesIsNeverBlockedByAZeroCap',
@@ -5020,6 +5021,12 @@ final class BrandConfigSpec
             ['45', false, '<option value="45" selected="selected">45 days</option>', 'a term no standard checkbox offers — shown, keep or remove'],
             ['30', true, '<option value="30" selected="selected">30 days</option>', 'a term offered as standard — hidden, the save folds it in'],
             ['abc', false, '<option value="abc" selected="selected">abc</option>', 'an unusable value — shown verbatim so it can be corrected'],
+            [
+                '<b>x',
+                false,
+                '<option value="&lt;b&gt;x" selected="selected">&lt;b&gt;x</option>',
+                'a value carrying markup — escaped in the option and in the help text',
+            ],
         ];
         $gateway = self::gateway();
         $option_key = $gateway->get_option_key();
@@ -5035,6 +5042,10 @@ final class BrandConfigSpec
             TinyAssert::true(strpos($html, '<select ') !== false, $description . ' — the control is a select');
             TinyAssert::true(strpos($html, '<input') === false, $description . ' — never a text input');
             TinyAssert::true(
+                strpos($html, 'disabled') === false,
+                $description . ' — a row that does not post reads as a removal'
+            );
+            TinyAssert::true(
                 strpos($html, '<option value="">Remove</option>') !== false,
                 $description . ' — remove is always offered'
             );
@@ -5049,6 +5060,10 @@ final class BrandConfigSpec
             TinyAssert::true(
                 strpos($html, 'Legacy setting.') !== false,
                 $description . ' — the help text says the setting is legacy'
+            );
+            TinyAssert::true(
+                strpos($html, '<b>') === false,
+                $description . ' — the stored value never renders as markup'
             );
         }
     }
@@ -5105,6 +5120,15 @@ final class BrandConfigSpec
                 'keeping an unusable value blocks the whole section save',
             ],
             ['30.0', '', '', [14], '', '', 'an unusable value can still be removed'],
+            [
+                'a"b',
+                'a\\"b',
+                'a"b',
+                ['14'],
+                'which is not a usable number of days',
+                '',
+                'a slashed post of the stored value is the same value, so it reads as keeping it',
+            ],
         ];
         foreach ($cases as [$stored, $posted, $saved_custom, $saved_days, $error, $notice, $description]) {
             $gateway = self::gateway();
@@ -5151,10 +5175,6 @@ final class BrandConfigSpec
         }
     }
 
-    /**
-     * ABN-522/ABN-493. An unresolvable offered set matches nothing rather than everything, so an
-     * API outage cannot delete a value carried in by an upgrade.
-     */
     /**
      * ABN-522. The deprecated field's copy, in every catalogue that carries the admin locale —
      * source copy edited without the catalogues following renders English however good the
@@ -5239,6 +5259,39 @@ final class BrandConfigSpec
         }
     }
 
+    /**
+     * ABN-522. Every write to the settings row is held to remove-or-keep, not just the admin
+     * form's: the REST settings endpoint runs none of the gateway's own field validators.
+     */
+    private static function testDeprecatedCustomTermWriteGuardHoldsEverySettingsWrite(): void
+    {
+        $cases = [
+            ['45', '60', '45', 'a different term is refused and the stored one stands'],
+            ['', '30', '', 'a value written where none was stored is refused'],
+            ['45', '', '', 'removal is written through'],
+            ['45', '45', '45', 'the same value is written through'],
+            ['45', null, '45', 'a write that omits the row leaves the stored term alone'],
+            ['0030', '30', '0030', 'the same term written differently is still a change'],
+        ];
+        foreach ($cases as [$stored, $incoming, $expected, $description]) {
+            $value = ['title' => 'edited'];
+            if ($incoming !== null) {
+                $value['payment_terms_custom_days'] = $incoming;
+            }
+            $guarded = WC_Twoinc::keep_stored_custom_payment_term(
+                $value,
+                ['payment_terms_custom_days' => $stored]
+            );
+
+            TinyAssert::same($expected, $guarded['payment_terms_custom_days'] ?? '', $description);
+            TinyAssert::same('edited', $guarded['title'], $description . ' — and every sibling field is written as posted');
+        }
+    }
+
+    /**
+     * ABN-522/ABN-493. An unresolvable offered set matches nothing rather than everything, so an
+     * API outage cannot delete a value carried in by an upgrade.
+     */
     private static function testDeprecatedCustomTermFoldsInOnlyAgainstAResolvedOfferedSet(): void
     {
         $cases = [
