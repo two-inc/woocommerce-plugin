@@ -213,6 +213,9 @@ final class BrandConfigSpec
             'testTermFeeCacheMissesOnBuyerCountryChange',
             'testTermFeeCacheMissesOnDifferentTerm',
             'testTermFeeTransportFailureNotCachedAcrossRequests',
+            'testUnquotableSurchargeIsReportedNotSilentlyDropped',
+            'testAResolvedZeroSurchargeIsNotReportedAsAFailure',
+            'testWrongCurrencyQuoteSaysWhyTheSurchargeIsMissing',
             'testBuyerFeeShareCapRoundingToZeroRelaysZeroCap',
             'testBuyerFeeShareFixedRoundingToZeroChargesZero',
             'testSurchargeFxDiagnosticLogsGatedByDebugLogging',
@@ -8206,6 +8209,104 @@ final class BrandConfigSpec
         $retry = WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 100.0, 'NO');
         TinyAssert::same('1.50', $retry['buyer_fee_share']);
         TinyAssert::same(2, $gateway->make_request_calls, 'a prior failure must not be served from cache; the next request must retry');
+    }
+
+    /**
+     * ABN-539. A pricing quote that failed left the order with no surcharge
+     * on it, no notice and no log line, so the lost revenue was discoverable
+     * only by reconciling orders against expected fees afterwards.
+     */
+    private static function testUnquotableSurchargeIsReportedNotSilentlyDropped(): void
+    {
+        $cases = [
+            [new WP_Error('http_request_failed', 'timed out'), 'the pricing service could not be reached', 'a transport failure'],
+            [['response' => ['code' => 503], 'body' => ''], 'the pricing service answered HTTP 503', 'a service error'],
+            [['response' => ['code' => 404], 'body' => ''], 'the pricing service answered HTTP 404', 'an unexpected status'],
+            [['response' => ['code' => 200], 'body' => 'not json'], 'the answer from the pricing service could not be read', 'an unreadable body'],
+            [['response' => ['code' => 200], 'body' => json_encode(['currency' => 'EUR'])], 'the answer from the pricing service could not be read', 'a body carrying no fee'],
+        ];
+
+        foreach ($cases as $case) {
+            list($response, $cause, $description) = $case;
+            $GLOBALS['__twoinc_test_logs'] = [];
+            WC_Twoinc_Payment_Terms::reset_fee_cache();
+            $gateway = self::termFeeGateway(self::termFeeSettings(), [$response]);
+
+            TinyAssert::same(null, WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 100.0, 'NO'), "quote fails soft on $description");
+            self::assertLogged('error', 'Surcharge for the 30-day payment term could not be quoted: ' . $cause);
+            self::assertLogged('error', 'No surcharge is charged on this order.');
+            TinyAssert::same(1, count($GLOBALS['__twoinc_test_logs']), "one line per failed quote on $description");
+        }
+    }
+
+    /**
+     * ABN-539's line must not fire where nothing failed: a quote that resolved
+     * to nothing to charge, and a term the merchant configured no surcharge
+     * for, are both correct outcomes.
+     */
+    private static function testAResolvedZeroSurchargeIsNotReportedAsAFailure(): void
+    {
+        WC_Twoinc_Payment_Terms::reset_fee_cache();
+        $priced = self::termFeeGateway(self::termFeeSettings(), [self::termFeeOk('0.00')]);
+        TinyAssert::same('0.00', WC_Twoinc_Payment_Terms::fetch_term_fee($priced, 30, 100.0, 'NO')['buyer_fee_share']);
+        TinyAssert::same(0, count($GLOBALS['__twoinc_test_logs']), 'a quote answering zero is not a failure');
+
+        WC_Twoinc_Payment_Terms::reset_fee_cache();
+        $unconfigured = self::termFeeGateway(['payment_terms_days' => [30], 'surcharge_type' => 'none'], []);
+        TinyAssert::same(null, WC_Twoinc_Payment_Terms::fetch_term_fee($unconfigured, 30, 100.0, 'NO'));
+        TinyAssert::same(0, count($GLOBALS['__twoinc_test_logs']), 'no surcharge configured is not a failure');
+
+        WC_Twoinc_Payment_Terms::reset_fee_cache();
+        $empty_basket = self::termFeeGateway(self::termFeeSettings(), []);
+        TinyAssert::same(null, WC_Twoinc_Payment_Terms::fetch_term_fee($empty_basket, 30, 0.0, 'NO'));
+        TinyAssert::same(0, count($GLOBALS['__twoinc_test_logs']), 'an empty basket is not a failure');
+    }
+
+    /**
+     * ABN-539. The cart-fee hook drops a quote echoing a currency the basket
+     * is not in — correctly, rather than mischarging — but that drop was as
+     * silent as a failed quote.
+     */
+    private static function testWrongCurrencyQuoteSaysWhyTheSurchargeIsMissing(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                $options = [
+                    'surcharge_type' => 'percentage',
+                    'payment_terms_days' => [30],
+                    'surcharge_grid' => [30 => ['percentage' => 2.0]],
+                ];
+                return $options[$key] ?? $empty_value ?? '';
+            }
+
+            public function get_merchant_available_terms(): array
+            {
+                return [30];
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                return ['response' => ['code' => 200], 'body' => json_encode(['buyer_fee_share' => '12.50', 'currency' => 'GBP'])];
+            }
+        };
+
+        self::withGatewayInstance($gateway, static function () use ($gateway) {
+            WC_Twoinc_Payment_Terms::reset_fee_cache();
+            WC()->session = new StubSession();
+            WC()->session->set('chosen_payment_method', $gateway->id);
+            WC()->customer = new StubCustomer('US');
+            $cart = new StubFeeCart();
+            WC_Twoinc_Payment_Terms::apply_cart_fee($cart);
+
+            TinyAssert::same(0, count($cart->fees), 'a wrong-currency quote must not become a cart fee');
+            self::assertLogged('error', 'could not be quoted: it was quoted in GBP while the basket is in EUR');
+        });
     }
 
     private static function testBuyerFeeShareCapRoundingToZeroRelaysZeroCap(): void

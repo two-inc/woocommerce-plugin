@@ -589,6 +589,25 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
+         * Report a configured surcharge that could not be quoted (ABN-539).
+         * Error, not warning, and the same reasoning as
+         * log_surcharge_fx_failure(): the merchant loses that revenue on the
+         * order and nothing else on any surface says so, which leaves it
+         * discoverable only by reconciling orders against expected fees.
+         * Once per term per request, via fetch_term_fee()'s own memo.
+         */
+        private static function log_unquoted_surcharge(int $days, string $cause): void
+        {
+            if (!function_exists('wc_get_logger')) {
+                return;
+            }
+            wc_get_logger()->error(
+                "Surcharge for the {$days}-day payment term could not be quoted: {$cause}. No surcharge is charged on this order.",
+                ['source' => 'twoinc-payment-gateway']
+            );
+        }
+
+        /**
          * A NET_TERMS block for a duration, adding
          * duration_days_calculated_from = END_OF_MONTH when the merchant has
          * selected the end-of-month payment terms type (Magento parity).
@@ -627,12 +646,14 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
         /**
          * Quote the buyer's fee share for one term via the pricing endpoint.
-         * A failed or malformed HTTP quote is fail-soft: returns null and
-         * the chip renders without a fee label. That covers transport
-         * errors only — it is NOT a licence to drop a surcharge the
-         * merchant configured. An unquotable currency pair is a
-         * fail-CLOSED condition handled upstream by the availability gate
-         * (TWO-25269), which withholds the payment method outright.
+         * A failed or malformed HTTP quote is fail-soft — returns null, the
+         * chip renders without a fee label — but never silent: the failure is
+         * logged at error level naming the term and the cause (ABN-539),
+         * because a configured surcharge missing from an order is otherwise
+         * discoverable only by reconciling fees afterwards. An unquotable
+         * currency pair is a fail-CLOSED condition handled upstream by the
+         * availability gate (TWO-25269), which withholds the payment method
+         * outright.
          *
          * Cached across requests (not just within one), keyed by the exact
          * request body: cart total, currency, buyer country, the term, and
@@ -692,10 +713,16 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             $response = $gateway->make_request('/v1/pricing/order/fee', $request, 'POST', array(), null, 10);
 
             if (is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) < 200 || (int) wp_remote_retrieve_response_code($response) >= 300) {
+                $code = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
+                self::log_unquoted_surcharge(
+                    $days,
+                    $code > 0 ? "the pricing service answered HTTP $code" : 'the pricing service could not be reached'
+                );
                 return self::$fee_cache[$days] = null;
             }
             $body = json_decode($response['body'] ?? '', true);
             if (!is_array($body) || !isset($body['buyer_fee_share'])) {
+                self::log_unquoted_surcharge($days, 'the answer from the pricing service could not be read');
                 return self::$fee_cache[$days] = null;
             }
 
@@ -864,7 +891,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             // codes (case/whitespace) so this guard can't be defeated by
             // a harmlessly-differently-cased echo.
             $fee_currency = strtoupper(trim((string) $fee['currency']));
-            if ($fee_currency !== '' && $fee_currency !== strtoupper(get_woocommerce_currency())) {
+            $cart_currency = strtoupper(get_woocommerce_currency());
+            if ($fee_currency !== '' && $fee_currency !== $cart_currency) {
+                self::log_unquoted_surcharge($selected, "it was quoted in $fee_currency while the basket is in $cart_currency");
                 return;
             }
 
