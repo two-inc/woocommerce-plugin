@@ -10860,27 +10860,26 @@ final class BrandConfigSpec
         TinyAssert::same(true, WC_Twoinc::API_KEY_VERIFICATION_TIMEOUT < 30);
     }
 
-    /**
-     * ABN-536. The notice's colour moved out of its inline style so an
-     * inconclusive verdict can be toned down instead of reddened, which makes
-     * the rendered class the only thing carrying it — and admin.js's amber
-     * override a two-class selector that needs the base class present. Nothing
-     * else in either suite would notice its removal.
-     */
+    /** ABN-536. The class is the only thing carrying the notice's colour now. */
     private static function testApiKeyNoticeElementCarriesTheClassItsColourComesFrom(): void
     {
         $gateway = self::gateway();
         $gateway->init_form_fields();
         $html = $gateway->generate_api_key_with_verification_html('api_key', ['title' => 'API key']);
 
+        if (preg_match('/<div id="twoinc-merchant-invalid-notice"([^>]*)>/', $html, $m) !== 1) {
+            throw new RuntimeException('the api-key field renders no notice element');
+        }
+        $attributes = $m[1];
+
         TinyAssert::true(
-            strpos($html, 'id="twoinc-merchant-invalid-notice" class="twoinc-merchant-notice"') !== false,
+            strpos($attributes, 'class="twoinc-merchant-notice"') !== false,
             'the notice element carries the class its colour comes from'
         );
         // An inline colour would beat the class in both directions.
         TinyAssert::same(
             false,
-            (bool) preg_match('/id="twoinc-merchant-invalid-notice"[^>]*style="[^"]*color:/', $html),
+            (bool) preg_match('/style="[^"]*color:/', $attributes),
             'and no inline colour that would beat it'
         );
     }
