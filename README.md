@@ -150,8 +150,10 @@ are out of scope here — they live in the `e2e-tests` repo.
 - Store: <http://localhost:8888>, admin at `/wp-admin` (`admin` / `twoinb2b`)
 - Products: "Product 1"–"Product 4" (random prices 100–200) plus "Expensive
   Product" (500000) for the max-limit test
-- Merchant: `tillittestuk` (UK, org 13078389) — has a merchant-wide
-  `skip_verification` rule, so checkout completes without an identity step
+- Merchant: `demostoregb` (UK). This is a temporary repoint: `tillittestuk`
+  has accumulated too much e2e order volume to pass fraud velocity checks, so
+  every order it places is declined. It goes back to `tillittestuk` once CI is
+  trusted again.
 
 ### Prerequisites
 
@@ -165,7 +167,7 @@ are out of scope here — they live in the `e2e-tests` repo.
 ```bash
 # The compose default seeds the LOCAL dev config; e2e runs against the
 # staging shop, so pin the staging config first (CI does the same):
-echo WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-tillittestuk.json > .env
+echo WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-demostoregb.json > .env
 docker compose up -d
 # wait ~90s for wpcli bootstrap to finish (installs WooCommerce, creates products, activates plugin)
 
@@ -175,17 +177,17 @@ make e2e-install
 ### Running
 
 ```bash
-export MERCHANT_API_KEY=$(gcloud secrets versions access latest --secret=STAGING_SHOP_MERCHANT_API_KEY_TILLITTESTUK --project=two-beta)
+export MERCHANT_API_KEY=$(gcloud secrets versions access latest --secret=STAGING_SHOP_MERCHANT_API_KEY_GB --project=two-beta)
 export TWO_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=STAGING_TWO_ADMIN_PASSWORD --project=two-beta)
 
 make e2e-test              # headless
 make e2e-test-headed       # with browser visible
 ```
 
-Or if you have a local `docker/config/staging-tillittestuk.json`:
+Or if you have a local `docker/config/staging-demostoregb.json`:
 
 ```bash
-export MERCHANT_API_KEY=$(python3 -c "import json; print(json.load(open('docker/config/staging-tillittestuk.json'))['api_key'])")
+export MERCHANT_API_KEY=$(python3 -c "import json; print(json.load(open('docker/config/staging-demostoregb.json'))['api_key'])")
 ```
 
 ### Tests
