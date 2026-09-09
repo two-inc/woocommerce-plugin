@@ -275,6 +275,18 @@ The merchant record refreshes on an event, never on expiry
   verified key proves the shop's identity, not that the account can sell. Empty
   whether the fetch never succeeded or the account offers nothing; the gate reads the
   same cached list every other consumer does, so it adds no fetch of its own.
+- **A withheld term set is explained in the admin, and its cause is PERSISTED**
+  (ABN-513). A fetch that lands no record writes its own category — unreachable,
+  rejected key, rate limited, server error, another status, an answer that cannot be
+  read — to a dedicated option row that the next success deletes, because the render
+  that has to explain the state is rarely the request whose fetch failed. The Payment
+  Terms field then states the cause, that the method is hidden from checkout, and when
+  the terms were last read successfully; the install health summary carries the same
+  verdict and that timestamp, and the withhold log line carries the category. A
+  successful read of an empty list and a record carrying no term list at all are named
+  separately: the second withholds the method indefinitely. The API key is named only
+  in the two states where it is actually implicated — none saved, or one the API
+  rejected — never as a guess at an unexplained failure.
 - **The admin save stays possible whatever the verification says** (ABN-495). An
   unreachable API judges nothing about the key, and refusing the save locks the
   merchant out of storing the key that would fix the outage; the verdict is reported

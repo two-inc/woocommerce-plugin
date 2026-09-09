@@ -80,6 +80,7 @@ final class BrandConfigSpec
             'testConfirmationCsrfTokenAcceptsOldAndNewParamName',
             'testPaymentTermsResolveBackendIntersectAdminSubset',
             'testMerchantAvailableTermsFetchNormalisesCachesAndServesStale',
+            'testUnresolvedTermSetNamesItsRealCause',
             'testMerchantAvailableTermsInvalidatedOnMerchantIdChange',
             'testDeactivationNeverClearsSettings',
             'testUninstallCleanupClearsSettingsAndTermCache',
@@ -2390,6 +2391,144 @@ final class BrandConfigSpec
         $bare->responses = [['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [7]])]];
         $bare->get_merchant_available_terms();
         TinyAssert::same(0, $bare->calls);
+    }
+
+    /**
+     * Given no last-known-good term list, when a fetch cannot resolve one, then the
+     * state names the real cause and the copy blames the API key only where the API
+     * rejected it (ABN-513).
+     */
+    private static function testUnresolvedTermSetNamesItsRealCause(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public $options = ['api_key' => 'key'];
+            public $responses = [];
+
+            public function __construct()
+            {
+            }
+
+            public function get_merchant_id()
+            {
+                return $this->options['merchant_id'] ?? 'mid';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function update_option($key, $value = '')
+            {
+                $this->options[$key] = $value;
+                return true;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                return array_shift($this->responses);
+            }
+        };
+        $stamp = WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on');
+        $attempted = WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on');
+        $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
+        $error_option = WC_Twoinc_Brand::prefixed_name('merchant_record_last_error');
+        // The route that reaches this state: an install with nothing cached and no attempt yet.
+        $cold = static function () use ($stamp, $attempted, $terms_option, $error_option) {
+            unset(
+                $GLOBALS['__twoinc_test_options'][$stamp],
+                $GLOBALS['__twoinc_test_options'][$attempted],
+                $GLOBALS['__twoinc_test_options'][$terms_option],
+                $GLOBALS['__twoinc_test_options'][$error_option]
+            );
+            WC_Twoinc::reset_merchant_record_memo();
+        };
+
+        $causes = [
+            [new WP_Error('http_request_failed', 'down'), 'fetch_failed', 'unreachable', null, 'a transport failure or timeout reads as unreachable'],
+            [['response' => ['code' => 503], 'body' => '{}'], 'fetch_failed', 'service_error', 503, 'a 5xx carries its status'],
+            [['response' => ['code' => 401], 'body' => '{}'], 'fetch_failed', 'invalid_key', 401, 'a 401 is the one arm that implicates the API key'],
+            [['response' => ['code' => 429], 'body' => '{}'], 'fetch_failed', 'rate_limited', 429, 'a 429 is a rate limit, not a generic error'],
+            [['response' => ['code' => 418], 'body' => '{}'], 'fetch_failed', 'error', 418, 'any other status is reported with its status'],
+            [['response' => ['code' => 200], 'body' => json_encode(['available_terms' => []])], 'none_offered', null, null, 'an explicit empty list is an account offering nothing'],
+            [['response' => ['code' => 200], 'body' => json_encode(['due_in_days' => 14])], 'not_reported', null, null, 'a record with no term field is not the same as an empty list'],
+        ];
+        foreach ($causes as $case) {
+            list($response, $expected_state, $expected_reason, $expected_code, $description) = $case;
+            $cold();
+            $gateway->responses = [$response];
+
+            $state = $gateway->get_merchant_terms_state();
+            TinyAssert::same($expected_state, $state['state'], $description);
+            TinyAssert::same($expected_reason, $state['reason'], $description);
+            TinyAssert::same($expected_code, $state['code'], $description);
+
+            $notice = $gateway->get_merchant_terms_notice();
+            TinyAssert::true($notice !== '', $description . ': an unresolved set must be explained');
+            TinyAssert::true(
+                strpos($notice, 'hidden from checkout') !== false,
+                $description . ': the consequence must be stated'
+            );
+            TinyAssert::same(
+                $expected_state === 'fetch_failed',
+                strpos($notice, 'never been read successfully') !== false,
+                $description . ': the last successful read is reported as found'
+            );
+            TinyAssert::same(
+                $expected_reason === 'invalid_key',
+                strpos($notice, 'API key') !== false,
+                $description . ': the API key is named only where the API rejected it'
+            );
+            if ($expected_code !== null) {
+                TinyAssert::true(
+                    strpos($notice, 'HTTP ' . $expected_code) !== false,
+                    $description . ': the status must reach the merchant'
+                );
+            }
+        }
+
+        // Configured, throttled, nothing ever attempted: no cause to report.
+        $cold();
+        $GLOBALS['__twoinc_test_options'][$attempted] = time();
+        $gateway->responses = [];
+        TinyAssert::same('never_fetched', $gateway->get_merchant_terms_state()['state']);
+
+        // A success clears the cause, so no later render can report a stale one.
+        $cold();
+        $gateway->responses = [new WP_Error('http_request_failed', 'down')];
+        $gateway->get_merchant_terms_state();
+        TinyAssert::true(is_array($GLOBALS['__twoinc_test_options'][$error_option] ?? null), 'a failed fetch records its cause');
+        unset($GLOBALS['__twoinc_test_options'][$attempted]);
+        WC_Twoinc::reset_merchant_record_memo();
+        $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [30]])]];
+        TinyAssert::same('resolved', $gateway->get_merchant_terms_state()['state']);
+        TinyAssert::true($gateway->get_merchant_terms_state()['checked_on'] > 0, 'a resolved set still reports when it was read');
+        TinyAssert::same(null, $GLOBALS['__twoinc_test_options'][$error_option] ?? null, 'a success clears the recorded cause');
+
+        // Last-known-good outranks a failed refresh: nothing is wrong for the merchant to be told.
+        unset($GLOBALS['__twoinc_test_options'][$stamp], $GLOBALS['__twoinc_test_options'][$attempted]);
+        WC_Twoinc::reset_merchant_record_memo();
+        $gateway->responses = [new WP_Error('http_request_failed', 'down')];
+        TinyAssert::same('resolved', $gateway->get_merchant_terms_state()['state'], 'a failed refresh over a cached list stays resolved');
+        TinyAssert::same('', $gateway->get_merchant_terms_notice(), 'a served cached list needs no explanation');
+
+        // The one state where pointing at the API key is correct.
+        $cold();
+        $bare = clone $gateway;
+        $bare->options = [];
+        TinyAssert::same('not_configured', $bare->get_merchant_terms_state()['state']);
+        TinyAssert::true(strpos($bare->get_merchant_terms_notice(), 'No API key is saved') !== false);
+
+        // A saved key whose identity never resolved is not "no key saved".
+        $cold();
+        $unidentified = clone $gateway;
+        $unidentified->options = ['api_key' => 'key', 'merchant_id' => ''];
+        TinyAssert::same('never_fetched', $unidentified->get_merchant_terms_state()['state']);
+        TinyAssert::same(
+            false,
+            strpos($unidentified->get_merchant_terms_notice(), 'No API key is saved') !== false,
+            'a saved key must not be reported as missing'
+        );
     }
 
     private static function testMerchantAvailableTermsInvalidatedOnMerchantIdChange(): void
