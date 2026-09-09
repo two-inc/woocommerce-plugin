@@ -159,7 +159,7 @@ function load_twoinc_classes()
     add_action('admin_init', ['WC_Twoinc_Rate_Limiter', 'maybe_raise_upgrade_notice']);
     add_action('admin_notices', ['WC_Twoinc_Rate_Limiter', 'render_upgrade_notice']);
 
-    // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
+    // Confirm order after returning from Two's hosted checkout page, DO NOT CHANGE HOOKS
     add_action('template_redirect', 'WC_Twoinc::process_confirmation_header_redirect');
     // add_action('template_redirect', 'WC_Twoinc::before_process_confirmation');
     // add_action('get_header', 'WC_Twoinc::process_confirmation_header_redirect');

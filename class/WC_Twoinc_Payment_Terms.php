@@ -640,12 +640,12 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * the merchant's surcharge config (embedded in buyer_fee_share/
          * order_terms) all fall out of the key naturally — any of them
          * changing is a cache miss, so re-selecting a chip the buyer already
-         * priced this cart at reuses the quote instead of re-calling
-         * checkout-api. TERM_FEE_CACHE_TTL is a backstop only, for a quote
-         * that would change with none of those inputs moving (e.g. the
-         * backend's own FX rate shifting). Only a SUCCESSFUL quote is
-         * persisted; a transport failure stays request-scoped so a flapping
-         * API isn't remembered as "no fee" for the TTL.
+         * priced this cart at reuses the quote instead of re-calling the API.
+         * TERM_FEE_CACHE_TTL is a backstop only, for a quote that would change
+         * with none of those inputs moving (e.g. the backend's own FX rate
+         * shifting). Only a SUCCESSFUL quote is persisted; a transport failure
+         * stays request-scoped so a flapping API isn't remembered as "no fee"
+         * for the TTL.
          *
          * @return array{buyer_fee_share: string, total_fee_tax_rate: string|null, currency: string}|null
          */
