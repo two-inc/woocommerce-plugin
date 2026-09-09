@@ -10034,8 +10034,8 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326. `company_search_location` lived for less than a day
-     * before TWO-25326 deleted the admin field and its getter — any merchant
+     * `company_search_location` lived for less than a day before TWO-25326
+     * deleted the admin field and its getter — any merchant
      * who touched it during that window has the key sitting inert in their settings
      * row. `drop_removed_settings()` (same mechanism as `enable_sole_trader`,
      * TWO-25163) must clean it up on an upgraded install, mirroring

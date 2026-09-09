@@ -3828,7 +3828,7 @@ describe("TWO-40 — sole-trader flow", () => {
 
         describe("the panel's own free-text query is suppressed for the whole of sole-trader mode", () => {
           /**
-           * The field must not be VISIBLE, only non-editable: readonly
+           * The field must be hidden, not merely non-editable: readonly
            * alone reads as a search box that has stopped working.
            */
           test("the whole query row is hidden, not merely readonly", () => {
