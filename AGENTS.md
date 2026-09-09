@@ -273,6 +273,12 @@ The standard for EVERY gateway setting, not only the surcharge method.
 Degrading a junk value to a working default is the failure this replaces: it
 prices an order under a configuration nobody chose, and nobody is told.
 
+- A quote that never resolved is reported (ABN-539). A configured surcharge the
+  pricing service could not price — unreachable, a non-2xx status, an answer that
+  cannot be read, or one quoted in a currency the basket is not in — is logged at
+  error level naming the term and the cause. A quote that resolved to nothing to
+  charge is not a failure and is not reported.
+
 The merchant record refreshes on an event, never on expiry
 
 - One read path fetches the merchant record and one fetch writes every derivative
