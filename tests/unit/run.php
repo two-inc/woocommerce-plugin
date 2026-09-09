@@ -8555,7 +8555,7 @@ final class BrandConfigSpec
      * the availability-gate filter is reachable) serving canned pricing
      * responses off a queue.
      */
-    private static function quoteGateway(array $options, array $responses): WC_Twoinc
+    private static function quoteGateway(array $options, array $responses)
     {
         return new class ($options, $responses) extends WC_Twoinc {
             private $options;
