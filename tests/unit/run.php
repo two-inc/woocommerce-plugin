@@ -8306,6 +8306,14 @@ final class BrandConfigSpec
 
             TinyAssert::same(0, count($cart->fees), 'a wrong-currency quote must not become a cart fee');
             self::assertLogged('error', 'could not be quoted: it was quoted in GBP while the basket is in EUR');
+            TinyAssert::same(1, count($GLOBALS['__twoinc_test_logs']), 'one line, not one per recalculation');
+
+            // woocommerce_cart_calculate_fees fires on every calculate_totals()
+            // and the wrong-currency quote is a cached SUCCESS, so an unlatched
+            // report would log again on each of these.
+            WC_Twoinc_Payment_Terms::apply_cart_fee($cart);
+            WC_Twoinc_Payment_Terms::apply_cart_fee($cart);
+            TinyAssert::same(1, count($GLOBALS['__twoinc_test_logs']), 'still one line after three recalculations');
         });
     }
 

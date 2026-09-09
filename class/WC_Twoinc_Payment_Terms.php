@@ -69,6 +69,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         private static $fx_failure_logged = false;
 
+        /** Terms already reported as unquotable this request (ABN-539). */
+        private static $unquoted_logged = [];
+
         /** @var array<string,bool> Keyed by value, so a second distinct bad method still speaks. */
         private static $surcharge_type_failure_logged = [];
 
@@ -590,17 +593,20 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
         /**
          * Report a configured surcharge that could not be quoted (ABN-539).
-         * Error, not warning, and the same reasoning as
-         * log_surcharge_fx_failure(): the merchant loses that revenue on the
-         * order and nothing else on any surface says so, which leaves it
-         * discoverable only by reconciling orders against expected fees.
-         * Once per term per request, via fetch_term_fee()'s own memo.
+         * Error level for log_surcharge_fx_failure()'s reason: the merchant
+         * loses that revenue and nothing else on any surface says so.
+         *
+         * Latched per term per request. The cart-fee hook fires on every
+         * calculate_totals() and a wrong-currency quote is a cached SUCCESS, so
+         * without the latch that call site logs on every recalculation for the
+         * whole quote TTL.
          */
         private static function log_unquoted_surcharge(int $days, string $cause): void
         {
-            if (!function_exists('wc_get_logger')) {
+            if (isset(self::$unquoted_logged[$days]) || !function_exists('wc_get_logger')) {
                 return;
             }
+            self::$unquoted_logged[$days] = true;
             wc_get_logger()->error(
                 "Surcharge for the {$days}-day payment term could not be quoted: {$cause}. No surcharge is charged on this order.",
                 ['source' => 'twoinc-payment-gateway']
@@ -648,9 +654,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * Quote the buyer's fee share for one term via the pricing endpoint.
          * A failed or malformed HTTP quote is fail-soft — returns null, the
          * chip renders without a fee label — but never silent: the failure is
-         * logged at error level naming the term and the cause (ABN-539),
-         * because a configured surcharge missing from an order is otherwise
-         * discoverable only by reconciling fees afterwards. An unquotable
+         * logged once per term per request naming the cause (ABN-539). An
+         * unquotable
          * currency pair is a fail-CLOSED condition handled upstream by the
          * availability gate (TWO-25269), which withholds the payment method
          * outright.
@@ -1096,6 +1101,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         {
             self::$fee_cache = [];
             self::$fx_failure_logged = false;
+            self::$unquoted_logged = [];
             self::$surcharge_type_failure_logged = [];
         }
     }
