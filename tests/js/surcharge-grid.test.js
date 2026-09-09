@@ -109,3 +109,26 @@ describe("surcharge grid live row rebuild", () => {
     expect(name).toBe(harness.FIELD_PREFIX + "surcharge_grid[30][limit]");
   });
 });
+
+describe("grid rows follow the merchant's offered terms", () => {
+  function rowDays($) {
+    return $(".twoinc-surcharge-grid tbody tr")
+      .map(function () {
+        return Number($(this).attr("data-days"));
+      })
+      .get();
+  }
+
+  test.each([
+    [[14, 30, 45, 60, 90], [30, 45], "an offered custom day gets its own row"],
+    [[14, 30, 60, 90], [30], "a custom day the account does not offer gets no row"],
+    [[], [45], "an unresolved offered set refuses nothing, so the custom day keeps its row"]
+  ])("merchantTerms=%s -> rows=%s (%s)", async (merchantTerms, expected) => {
+    const { $ } = await harness.loadAdmin({
+      checked: [30],
+      customDays: "45",
+      merchantTerms: merchantTerms
+    });
+    expect(rowDays($)).toEqual(expected);
+  });
+});

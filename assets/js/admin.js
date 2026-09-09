@@ -291,7 +291,13 @@ jQuery(function ($) {
         });
     }
 
-    // Offered set: ticked checkboxes ∪ custom day (feeds the default dropdown).
+    // An unresolved offered set is unknown, so it narrows nothing (ABN-521).
+    function merchantOffers(n) {
+      const merchant = (twoinc_admin.merchant_available_terms || []).map(Number);
+      return merchant.length === 0 || merchant.indexOf(n) !== -1;
+    }
+
+    // Offered set: ticked checkboxes plus an offered custom day (feeds the default dropdown).
     function offeredTerms() {
       const terms = [];
       $checkboxes.filter(":checked").each(function () {
@@ -299,7 +305,7 @@ jQuery(function ($) {
         if (n > 0) terms.push(n);
       });
       const c = customDay();
-      if (c > 0) terms.push(c);
+      if (c > 0 && merchantOffers(c)) terms.push(c);
       return uniqueSorted(terms);
     }
 
@@ -421,9 +427,7 @@ jQuery(function ($) {
 
     function gridTerms() {
       // Mirror the PHP render (WC_Twoinc_Payment_Terms::get_available_terms):
-      // ticked presets ∩ merchant-offered, then UNION the custom day — a
-      // custom term is offered at checkout even when it sits outside the
-      // backend's preset list, so its surcharge row must stay editable.
+      // ticked presets and the custom day, both narrowed to the merchant-offered set.
       const merchant = (twoinc_admin.merchant_available_terms || []).map(Number);
       const ticked = [];
       $checkboxes.filter(":checked").each(function () {
@@ -431,7 +435,7 @@ jQuery(function ($) {
         if (n > 0 && merchant.indexOf(n) !== -1) ticked.push(n);
       });
       const c = customDay();
-      if (c > 0) ticked.push(c);
+      if (c > 0 && merchantOffers(c)) ticked.push(c);
       return uniqueSorted(ticked);
     }
 

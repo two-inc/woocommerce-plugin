@@ -282,6 +282,11 @@ The merchant record refreshes on an event, never on expiry
   the save discards, and the message says the stored key was kept.
 - The payment-terms type setting is rendered only for a merchant already set to end
   of month (TWO-25656); a merchant not on it is not offered it.
+- **A stored custom term day the account does not offer never reaches a buyer**
+  (ABN-521) — the effective set is the configured terms narrowed to the offered
+  list, the custom day included, and an unresolved list is unknown rather than
+  empty so it narrows nothing. Refusing such a day at save time is deferred
+  pending ABN-522.
 
 Key Conventions
 

@@ -1264,7 +1264,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Option list for the "Default Payment Term" select: exactly the terms
-         * the merchant currently offers (ticked checkboxes ∪ custom day), not
+         * the merchant currently offers (ticked checkboxes plus a custom day), not
          * every brand preset. Mirrors Magento's AvailablePaymentTerms source
          * model, so the dropdown reflects the saved selection on render (admin
          * JS keeps it in sync live before save).
@@ -2218,8 +2218,8 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Validate the optional custom payment term: a non-negative whole number
-         * of days, or blank. Mirrors Magento's payment_terms_duration_days
-         * (validate-digits validate-zero-or-greater).
+         * of days, or blank. Save-time refusal of a day the account does not offer
+         * is deferred pending ABN-522; the runtime read enforces it (ABN-521).
          */
         public function validate_payment_terms_custom_days_field($key, $value)
         {
