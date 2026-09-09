@@ -783,9 +783,8 @@ if (!class_exists('WC_Twoinc')) {
          * have to explain it and for the withhold log line (ABN-513). `state` is
          * one of 'resolved', 'fetch_failed' (`reason`/`code` name the failure),
          * 'none_offered' (a successful read of an account offering nothing),
-         * 'not_reported' (a successful read carrying no term list at all — the
-         * account is then withheld indefinitely), 'never_fetched',
-         * 'not_configured'.
+         * 'not_reported' (a successful read carrying no term list at all),
+         * 'never_fetched', 'not_configured'.
          *
          * @return array{state: string, reason: string|null, code: int|null, checked_on: int, count: int}
          */
@@ -2818,14 +2817,9 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Whether a verification category is a DEFINITIVE rejection of the
-         * stored key — Two said no, or there is no key to say no to. The ONE
-         * definition of that set; nothing else re-lists the categories.
-         *
-         * ABN-533: every other category says something about the service, not
-         * the key, and withholding for those took the gateway off
-         * correctly-configured checkouts within one API_KEY_VERIFICATION_TTL
-         * of any upstream incident.
+         * Whether a category is a DEFINITIVE rejection of the stored key — Two
+         * said no, or there is no key to say no to. The ONE definition of that
+         * set; nothing else re-lists the categories (ABN-533).
          *
          * @param string $status one of categorize_verification_result()'s categories.
          *

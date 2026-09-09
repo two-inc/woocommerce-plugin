@@ -306,7 +306,7 @@ msgstr ""
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php
 #, php-format
-msgid "The %s payment method is hidden from checkout until a payment term is available."
+msgid "The %s payment method stays available; buyers are offered no payment term to choose from until one can be read."
 msgstr ""
 
 #. translators: %s is a date and time in the site's own format
