@@ -1,5 +1,5 @@
 /**
- * #486 — which field `getCompanyName()` reads.
+ * Which field `getCompanyName()` reads (woocommerce-plugin PR #486).
  *
  * `#billing_company` is the single source, in every capture mode: it is what
  * WooCommerce posts, and every path that can create a capture writes it
@@ -34,7 +34,7 @@ const SOLE_TRADER_CONFIG = {
   }
 };
 
-describe("getCompanyName reads the posted field (#486)", () => {
+describe("getCompanyName reads the posted field", () => {
   let ctx;
   let $;
 

@@ -215,7 +215,8 @@ let twoincCompanyCapture = {
 
   /**
    * Which of the three company-capture UIs is the buyer's ACTIVE input surface
-   * (#486): `'search'` (the registry search panel, the default),
+   * (woocommerce-plugin PR #486): `'search'` (the registry search panel,
+   * the default),
    * `'manual'` (the plain native `#billing_company`, reached only through
    * `enterManualCompanyEntry`) or `'sole_trader'` (the adopted/enrolled sole
    * trader, whose name the picker renders as its own selection — TWO-40).
@@ -2114,7 +2115,7 @@ let twoincDomHelper = {
    * this fired. That grouping's own visual cue (an h3 heading) was commented
    * out back in 2021 and never replaced with CSS, so nothing distinguishes
    * the wrapper today — it was pure reorder with no remaining display
-   * purpose. Phone/email now stay in their native WC position (#33).
+   * purpose. Phone/email now stay in their native WC position.
    */
   positionFields: function () {
     setTimeout(function () {
@@ -4446,7 +4447,7 @@ function createSoleTraderController(companySearch) {
         "&autofillData=" +
         encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(prefill)))));
       // PDEV-4669: same live, registry-vetted country as `prefill` above —
-      // not tokens.country, which is mint-time and now stale (TWO-40 #548).
+      // not tokens.country, which is mint-time and now stale (TWO-40).
       const country = prefill.billing_address.country_code;
       if (country) url += "&country=" + encodeURIComponent(country);
       // Wired through unconditionally when asked for, with no branching on what
@@ -4825,7 +4826,8 @@ class Twoinc {
     // open.
     $body.on("click", "#billing_company, #company_id", function () {
       // Only where the click has no other meaning: the readonly lock an
-      // adoption applies. Ungated (PR #502) it cleared the capture and
+      // adoption applies. Ungated (woocommerce-plugin PR #502) it cleared
+      // the capture and
       // destroyed an adopted sole trader on any click into either field.
       if (!twoincSoleTrader.soleTraderAdopted || !jQuery(this).prop("readonly")) return;
       twoincSoleTrader.reopenSearch();

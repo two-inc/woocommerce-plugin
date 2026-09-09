@@ -1279,7 +1279,7 @@ if (!class_exists('WC_Twoinc')) {
          *
          * - `enable_sole_trader` (TWO-25163): sole trader checkout is gated
          *   on the registry's country answer alone, never a merchant toggle.
-         * - `company_search_location` (TWO-25326, PR #436): folded into
+         * - `company_search_location` (TWO-25326): folded into
          *   `enable_company_search`.
          * - `enable_company_search_for_others` (TWO-25326):
          *   folded into the same checkbox — see

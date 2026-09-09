@@ -175,9 +175,9 @@ describe("API key verification — categorized failure display", () => {
     expect(text).not.toMatch(/\bTwo\b/);
   });
 
-  // TWO-25498 punch-list #3: verification must not wait out the full 1s
-  // debounce when the merchant tabs away — only page load and the debounced
-  // keystroke were wired up before this; blur is the third trigger.
+  // TWO-25498: blur is a verification trigger in its own right, alongside
+  // page load and the debounced keystroke, so tabbing away does not wait out
+  // the full 1s debounce.
   describe("blur fires verification immediately, without waiting for the debounce", () => {
     test("blur calls verify synchronously; typing alone does not", async () => {
       const ajax = jest.fn(function (settings) {

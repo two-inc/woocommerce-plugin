@@ -25,7 +25,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // client-side priority from THIS locale default array on every
             // checkout load and re-sorts the DOM, independent of the
             // woocommerce_checkout_fields chain above — without this mirror
-            // move_country_field()'s fix is silently undone client-side (#33).
+            // move_country_field()'s fix is silently undone client-side.
             add_filter('woocommerce_get_country_locale_default', [$this, 'sync_locale_country_priority']);
 
             // Brand overlays add/modify checkout fields after the base set
@@ -84,7 +84,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          * Shared clamp so a company-name priority never pushes country/
          * optionals out of their intended band. move_country_field(),
          * update_company_fields() and sync_locale_country_priority() must
-         * all agree on this number or the three drift apart (#33).
+         * all agree on this number or the three drift apart.
          *
          * @return int
          */
@@ -119,8 +119,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // WC core's hardcoded 'company' default — never customized by a
             // brand overlay (brands only hook woocommerce_checkout_fields),
             // so it can drift from billing_company's real priority above.
-            // No brand currently touches it (#33), so this is a documented
-            // latent gap, not an active bug.
+            // No brand currently touches it, so this is a documented latent
+            // gap, not an active bug.
             $company_priority = self::clamp_company_priority($fields['company']['priority'] ?? 30);
             $fields['country']['priority'] = $company_priority - 1;
 
@@ -142,7 +142,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // Clamped below the optional-fields baseline (200, below) so the
             // company rows can never invert above invoice_email/PO/
             // project/department if a future brand overlay ever pushes
-            // billing_company's own priority unusually high (#33).
+            // billing_company's own priority unusually high.
             $company_name_priority = self::clamp_company_priority($fields['billing']['billing_company']['priority'] ?? 30);
 
             // WC core deletes its own company field entirely on stores where
@@ -248,7 +248,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             //
             // These sit below every native address/contact field priority
             // rather than riding on company's, so they land at the bottom
-            // of the form regardless of company search/name state (#33).
+            // of the form regardless of company search/name state.
             $optional_field_priority = 200;
 
             if ($this->wc_twoinc->get_option('add_field_invoice_email') === 'yes') {

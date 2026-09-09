@@ -119,7 +119,7 @@ if (!class_exists('WC_Twoinc_Brand')) {
          * upstream on an in-flight order) still resolves. The nonce action
          * itself (`confirm_<order_id>`) didn't change, only this param name —
          * drop the fallback once no order confirmed before that deploy is still
-         * in flight (PR #519).
+         * in flight (woocommerce-plugin PR #519).
          *
          * @return string|null
          */

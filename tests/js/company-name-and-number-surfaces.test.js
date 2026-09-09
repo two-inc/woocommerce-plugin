@@ -1,5 +1,6 @@
 /**
- * #486 — the two company surfaces the buyer actually sees.
+ * The two company surfaces the buyer actually sees
+ * (woocommerce-plugin PR #486).
  *
  * NAME: always on screen, as exactly one of two elements — the search control
  * (`#billing_company_display_field`) or WooCommerce's native
@@ -41,7 +42,7 @@ const SOLE_TRADER_CONFIG = {
   }
 };
 
-describe("the company name and number surfaces (#486)", () => {
+describe("the company name and number surfaces", () => {
   let ctx;
   let $;
 
@@ -163,10 +164,9 @@ describe("the company name and number surfaces (#486)", () => {
     ])(
       "$description shows a name element whichever payment method is selected",
       ({ mode, country }) => {
-        // The regression guard for the carve-outs #486 removed: a buyer Two
-        // rejects, or one who simply chooses another method, kept the company
-        // they captured on screen or they did not, depending on a flag that had
-        // nothing to do with either question.
+        // A buyer Two rejects, and one who simply chooses another method,
+        // both keep the company they captured on screen: no flag unrelated to
+        // either question may decide it.
         load(country);
         ctx.capture.mode = mode;
         $('input[name="payment_method"]').prop("checked", false);

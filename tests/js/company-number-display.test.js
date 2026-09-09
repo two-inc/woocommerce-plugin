@@ -365,10 +365,9 @@ describe("TWO:-prefixed organisation numbers", () => {
       $ = ctx.$;
       util = ctx.util;
       harness.buildCheckoutForm();
-      // Two selected: the label's own visibility no longer depends on it
-      // (#486), but the intent tile's rendering still does, and leaving the
-      // radio unchecked would let a suppression assertion pass for the wrong
-      // reason.
+      // Two selected: the label's own visibility does not depend on it, but
+      // the intent tile's rendering does, and leaving the radio unchecked
+      // would let a suppression assertion pass for the wrong reason.
       $("form[name='checkout']").append(
         '<input type="radio" name="payment_method" value="' + GATEWAY_ID + '" checked />'
       );
