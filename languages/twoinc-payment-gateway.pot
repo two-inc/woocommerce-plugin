@@ -1541,10 +1541,6 @@ msgid "the API key was rejected. Check \"%s API key\" and \"Environment\"."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "the buyer surcharge cannot be priced in the store currency. Check \"Surcharge method\"."
-msgstr ""
-
-#: class/WC_Twoinc.php
 #, php-format
 msgid "no buyer countries are currently enabled for your account. Contact %s to have them enabled."
 msgstr ""
@@ -1578,4 +1574,13 @@ msgstr ""
 #: class/WC_Twoinc.php
 #, php-format
 msgid "Check the \"%s API key\" and \"Environment\" settings."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers billed in %s"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
 msgstr ""

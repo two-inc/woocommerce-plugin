@@ -810,7 +810,7 @@ if (!class_exists('WC_Twoinc')) {
                 'reason' => $recorded_failure ? (string) $error['status'] : null,
                 'code' => $recorded_failure && isset($error['code']) ? $error['code'] : null,
                 'checked_on' => $checked_on,
-                'attempted_on' => (int) get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on')),
+                'attempted_on' => 0,
                 'count' => count($terms),
                 // Age half is refresh_merchant_record_caches()'s own freshness
                 // test, negated; the recorded failure is an additional reason,
@@ -1025,8 +1025,11 @@ if (!class_exists('WC_Twoinc')) {
                     ];
                 }
             }
-            if ($reason === null && WC_Twoinc_Payment_Terms::surcharge_currency_unquotable($this)) {
-                $reason = __('the buyer surcharge cannot be priced in the store currency. Check "Surcharge method".', 'twoinc-payment-gateway');
+            // The FX arm of surcharge_currency_unquotable() cannot fire in
+            // wp-admin, where the checkout currency IS the store currency, so
+            // the only reachable cause here is an unrecognised saved method.
+            if ($reason === null && WC_Twoinc_Payment_Terms::surcharge_settings_or_null($this) === null) {
+                $reason = __('the saved surcharge method is not recognised. Check "Surcharge method".', 'twoinc-payment-gateway');
             }
             if ($reason === null && $this->get_supported_buyer_countries() === []) {
                 $reason = sprintf(
@@ -1036,9 +1039,7 @@ if (!class_exists('WC_Twoinc')) {
                 );
             }
             if ($reason === null) {
-                // Withholds today; the "Payment terms" row above carries the
-                // cause. Goes away with the ruling that offers the tile with an
-                // empty term set.
+                // Withholds today; the "Payment terms" row above carries the cause.
                 $terms = $this->get_merchant_terms_state();
                 if (in_array($terms['state'], ['none_offered', 'not_reported'], true)) {
                     $reason = __('your account offers no payment term. See "Payment terms" above.', 'twoinc-payment-gateway');
@@ -1065,27 +1066,73 @@ if (!class_exists('WC_Twoinc')) {
         private function checkout_offered_value(): string
         {
             $shown = __('Shown at checkout', 'twoinc-payment-gateway');
-            $floors = array_values(array_filter([
+            $clauses = [];
+            $countries = self::billing_country_constraint();
+            if ($countries !== '') {
+                $clauses[] = $countries;
+            }
+            $floors = self::binding_minimum_floors([
                 $this->get_platform_minimum_order(),
                 $this->get_merchant_minimum_order(),
-            ]));
-            if (!$floors) {
+            ]);
+            if ($floors) {
+                $clauses[] = count($floors) === 1
+                    ? sprintf(
+                        /* translators: %s is an amount with its currency, e.g. "250.00 EUR (excluding tax)" */
+                        __('hidden for baskets below %s', 'twoinc-payment-gateway'),
+                        self::describe_minimum_floor($floors[0])
+                    )
+                    : sprintf(
+                        /* translators: %1$s and %2$s are amounts with their currencies */
+                        __('hidden for baskets below %1$s or %2$s', 'twoinc-payment-gateway'),
+                        self::describe_minimum_floor($floors[0]),
+                        self::describe_minimum_floor($floors[1])
+                    );
+            }
+            if (!$clauses) {
                 return $shown;
             }
-            if (count($floors) === 1) {
-                return $shown . ' — ' . sprintf(
-                    /* translators: %s is an amount with its currency, e.g. "250.00 EUR (excluding tax)" */
-                    __('hidden for baskets below %s', 'twoinc-payment-gateway'),
-                    self::describe_minimum_floor($floors[0])
-                );
+
+            return $shown . ' — ' . implode('; ', $clauses);
+        }
+
+        /**
+         * The brand's own billing-country allowlist, as a clause to append to
+         * the "shown at checkout" row, or '' when it restricts nothing.
+         */
+        private static function billing_country_constraint(): string
+        {
+            $gate = WC_Twoinc_Brand::get('availability_gate');
+            if (!is_array($gate) || empty($gate['billing_countries']) || !is_array($gate['billing_countries'])) {
+                return '';
             }
 
-            return $shown . ' — ' . sprintf(
-                /* translators: %1$s and %2$s are amounts with their currencies */
-                __('hidden for baskets below %1$s or %2$s', 'twoinc-payment-gateway'),
-                self::describe_minimum_floor($floors[0]),
-                self::describe_minimum_floor($floors[1])
+            return sprintf(
+                /* translators: %s is a comma-separated list of ISO country codes */
+                __('offered only to buyers billed in %s', 'twoinc-payment-gateway'),
+                implode(', ', $gate['billing_countries'])
             );
+        }
+
+        /**
+         * Two floors in the same currency on the same basis are one floor —
+         * only the higher binds. Different currencies cannot be reduced
+         * without a rate.
+         *
+         * @param array<int, array|null> $candidates
+         * @return array<int, array{amount: float, currency: string, basis: string}>
+         */
+        private static function binding_minimum_floors(array $candidates): array
+        {
+            $binding = [];
+            foreach (array_filter($candidates) as $floor) {
+                $key = $floor['currency'] . '|' . $floor['basis'];
+                if (!isset($binding[$key]) || (float) $floor['amount'] > (float) $binding[$key]['amount']) {
+                    $binding[$key] = $floor;
+                }
+            }
+
+            return array_values($binding);
         }
 
         /** @param array{amount: float, currency: string, basis: string} $floor */
@@ -3225,7 +3272,6 @@ if (!class_exists('WC_Twoinc')) {
         /** @var array<string, true> */
         private static $withhold_reasons_logged = [];
 
-        /** Clears the per-request withholding-log guard. */
         public static function reset_withhold_log_guard(): void
         {
             self::$withhold_reasons_logged = [];
@@ -4396,8 +4442,10 @@ if (!class_exists('WC_Twoinc')) {
             // silently charged no surcharge with nobody told (TWO-25269).
             if (WC_Twoinc_Payment_Terms::surcharge_currency_unquotable($this)) {
                 unset($available_gateways[$this->id]);
+                // Both arms of the gate log their own cause but neither says
+                // the method was withheld.
                 $this->log_withheld_from_checkout(sprintf(
-                    'the buyer surcharge cannot be priced in the store currency %s',
+                    'the buyer surcharge cannot be priced in checkout currency %s',
                     get_woocommerce_currency()
                 ));
                 return $available_gateways;
@@ -4475,7 +4523,6 @@ if (!class_exists('WC_Twoinc')) {
                 return $value >= $minimum['amount'];
             };
 
-            // ABN-518.
             $refused_by = null;
             if ($platform_minimum && $basket_is_judgeable && !$meets_minimum($platform_minimum)) {
                 $refused_by = 'basket below the minimum order value set for your account';

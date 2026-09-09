@@ -1519,17 +1519,6 @@ msgid "Not shown at checkout"
 msgstr "Vises ikke i kassen"
 
 #: class/WC_Twoinc.php
-msgid "Cannot be checked — the API key could not be verified just now."
-msgstr "Kan ikke kontrolleres — API-nøkkelen kunne ikke verifiseres akkurat nå."
-
-#: class/WC_Twoinc.php
-msgid "Shown at checkout"
-msgstr "Vises i kassen"
-#: class/WC_Twoinc.php
-msgid "the payment method is disabled. Check \"Turn on/off\"."
-msgstr "betalingsmåten er deaktivert. Kontroller \"Slå av/på\"."
-
-#: class/WC_Twoinc.php
 #, php-format
 msgid "no API key is saved. Check \"%s API key\"."
 msgstr "ingen API-nøkkel er lagret. Kontroller \"%s API-nøkkel\"."
@@ -1540,17 +1529,9 @@ msgid "the API key was rejected. Check \"%s API key\" and \"Environment\"."
 msgstr "API-nøkkelen ble avvist. Kontroller \"%s API-nøkkel\" og \"Miljø\"."
 
 #: class/WC_Twoinc.php
-msgid "the buyer surcharge cannot be priced in the store currency. Check \"Surcharge method\"."
-msgstr "kjøpertillegget kan ikke prises i butikkvalutaen. Kontroller \"Tilleggsmetode\"."
-
-#: class/WC_Twoinc.php
 #, php-format
 msgid "no buyer countries are currently enabled for your account. Contact %s to have them enabled."
 msgstr "ingen kjøperland er aktivert for kontoen din for øyeblikket. Kontakt %s for å få dem aktivert."
-
-#: class/WC_Twoinc.php
-msgid "your account offers no payment term. See \"Payment terms\" above."
-msgstr "kontoen din tilbyr ingen betalingsbetingelse. Se \"Betalingsbetingelser\" ovenfor."
 
 #: class/WC_Twoinc.php
 msgid "Cannot be checked — your payment terms could not be read just now."
@@ -1578,3 +1559,24 @@ msgstr "inklusiv mva."
 #, php-format
 msgid "Check the \"%s API key\" and \"Environment\" settings."
 msgstr "Kontroller innstillingene \"%s API-nøkkel\" og \"Miljø\"."
+
+#: class/WC_Twoinc.php
+msgid "the payment method is disabled. Check \"Turn on/off\"."
+msgstr "betalingsmåten er deaktivert. Kontroller \"Skru på/av\"."
+
+#: class/WC_Twoinc.php
+msgid "your account offers no payment term. See \"Payment terms\" above."
+msgstr "kontoen din tilbyr ingen betalingsbetingelse. Se \"Betalingsvilkår\" ovenfor."
+
+#: class/WC_Twoinc.php
+msgid "Cannot be checked — the API key could not be verified just now."
+msgstr "Kan ikke kontrolleres — API-nøkkelen kunne ikke verifiseres akkurat nå."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers billed in %s"
+msgstr "tilbys bare kjøpere som faktureres i %s"
+
+#: class/WC_Twoinc.php
+msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
+msgstr "den lagrede tilleggsstrategien gjenkjennes ikke. Kontroller \"Tilleggsstrategi\"."

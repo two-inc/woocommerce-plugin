@@ -94,17 +94,6 @@ msgid "Not shown at checkout"
 msgstr "No se muestra en la caja"
 
 #: class/WC_Twoinc.php
-msgid "Cannot be checked — the API key could not be verified just now."
-msgstr "No se puede comprobar: la clave API no se ha podido verificar en este momento."
-
-#: class/WC_Twoinc.php
-msgid "Shown at checkout"
-msgstr "Se muestra en la caja"
-#: class/WC_Twoinc.php
-msgid "the payment method is disabled. Check \"Turn on/off\"."
-msgstr "el método de pago está desactivado. Compruebe \"Activar/desactivar\"."
-
-#: class/WC_Twoinc.php
 #, php-format
 msgid "no API key is saved. Check \"%s API key\"."
 msgstr "no hay ninguna clave API guardada. Compruebe \"Clave API de %s\"."
@@ -115,17 +104,9 @@ msgid "the API key was rejected. Check \"%s API key\" and \"Environment\"."
 msgstr "la clave API fue rechazada. Compruebe \"Clave API de %s\" y \"Entorno\"."
 
 #: class/WC_Twoinc.php
-msgid "the buyer surcharge cannot be priced in the store currency. Check \"Surcharge method\"."
-msgstr "el recargo al comprador no puede calcularse en la moneda de la tienda. Compruebe \"Método de recargo\"."
-
-#: class/WC_Twoinc.php
 #, php-format
 msgid "no buyer countries are currently enabled for your account. Contact %s to have them enabled."
 msgstr "actualmente no hay ningún país de comprador activado para su cuenta. Póngase en contacto con %s para activarlos."
-
-#: class/WC_Twoinc.php
-msgid "your account offers no payment term. See \"Payment terms\" above."
-msgstr "su cuenta no ofrece ningún plazo de pago. Consulte \"Plazos de pago\" más arriba."
 
 #: class/WC_Twoinc.php
 msgid "Cannot be checked — your payment terms could not be read just now."
@@ -153,3 +134,24 @@ msgstr "con impuestos"
 #, php-format
 msgid "Check the \"%s API key\" and \"Environment\" settings."
 msgstr "Compruebe los ajustes \"Clave API de %s\" y \"Entorno\"."
+
+#: class/WC_Twoinc.php
+msgid "the payment method is disabled. Check \"Turn on/off\"."
+msgstr "el método de pago está desactivado. Compruebe \"Turn on/off\"."
+
+#: class/WC_Twoinc.php
+msgid "your account offers no payment term. See \"Payment terms\" above."
+msgstr "su cuenta no ofrece ningún plazo de pago. Consulte \"Payment terms\" más arriba."
+
+#: class/WC_Twoinc.php
+msgid "Cannot be checked — the API key could not be verified just now."
+msgstr "No se puede comprobar: la clave API no se ha podido verificar en este momento."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers billed in %s"
+msgstr "se ofrece solo a compradores facturados en %s"
+
+#: class/WC_Twoinc.php
+msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
+msgstr "el método de recargo guardado no se reconoce. Compruebe \"Surcharge method\"."

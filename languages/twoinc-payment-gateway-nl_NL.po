@@ -1518,17 +1518,6 @@ msgid "Not shown at checkout"
 msgstr "Niet zichtbaar in de checkout"
 
 #: class/WC_Twoinc.php
-msgid "Cannot be checked — the API key could not be verified just now."
-msgstr "Kan nu niet worden gecontroleerd — de API-sleutel kon niet worden geverifieerd."
-
-#: class/WC_Twoinc.php
-msgid "Shown at checkout"
-msgstr "Zichtbaar in de checkout"
-#: class/WC_Twoinc.php
-msgid "the payment method is disabled. Check \"Turn on/off\"."
-msgstr "de betaalmethode is uitgeschakeld. Controleer \"Aan/uitzetten\"."
-
-#: class/WC_Twoinc.php
 #, php-format
 msgid "no API key is saved. Check \"%s API key\"."
 msgstr "er is geen API-sleutel opgeslagen. Controleer \"%s API-sleutel\"."
@@ -1539,17 +1528,9 @@ msgid "the API key was rejected. Check \"%s API key\" and \"Environment\"."
 msgstr "de API-sleutel is geweigerd. Controleer \"%s API-sleutel\" en \"Omgeving\"."
 
 #: class/WC_Twoinc.php
-msgid "the buyer surcharge cannot be priced in the store currency. Check \"Surcharge method\"."
-msgstr "de toeslag voor de koper kan niet in de winkelvaluta worden berekend. Controleer \"Toeslagmethode\"."
-
-#: class/WC_Twoinc.php
 #, php-format
 msgid "no buyer countries are currently enabled for your account. Contact %s to have them enabled."
 msgstr "er zijn momenteel geen landen van de koper geactiveerd voor uw account. Neem contact op met %s om ze te laten activeren."
-
-#: class/WC_Twoinc.php
-msgid "your account offers no payment term. See \"Payment terms\" above."
-msgstr "uw account biedt geen betaaltermijn aan. Zie \"Betaaltermijnen\" hierboven."
 
 #: class/WC_Twoinc.php
 msgid "Cannot be checked — your payment terms could not be read just now."
@@ -1577,3 +1558,24 @@ msgstr "inclusief btw"
 #, php-format
 msgid "Check the \"%s API key\" and \"Environment\" settings."
 msgstr "Controleer de instellingen \"%s API-sleutel\" en \"Omgeving\"."
+
+#: class/WC_Twoinc.php
+msgid "the payment method is disabled. Check \"Turn on/off\"."
+msgstr "de betaalmethode is uitgeschakeld. Controleer \"Aan/uitzetten\"."
+
+#: class/WC_Twoinc.php
+msgid "your account offers no payment term. See \"Payment terms\" above."
+msgstr "uw account biedt geen betaaltermijn aan. Zie \"Betalingstermijnen\" hierboven."
+
+#: class/WC_Twoinc.php
+msgid "Cannot be checked — the API key could not be verified just now."
+msgstr "Kan niet worden gecontroleerd — de API-sleutel kon op dit moment niet worden geverifieerd."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers billed in %s"
+msgstr "alleen aangeboden aan kopers die worden gefactureerd in %s"
+
+#: class/WC_Twoinc.php
+msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
+msgstr "de opgeslagen toeslagmethode wordt niet herkend. Controleer \"Toeslagmethode\"."

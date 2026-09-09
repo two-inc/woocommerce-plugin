@@ -1519,17 +1519,6 @@ msgid "Not shown at checkout"
 msgstr "Visas inte i kassan"
 
 #: class/WC_Twoinc.php
-msgid "Cannot be checked — the API key could not be verified just now."
-msgstr "Kan inte kontrolleras — API-nyckeln kunde inte verifieras just nu."
-
-#: class/WC_Twoinc.php
-msgid "Shown at checkout"
-msgstr "Visas i kassan"
-#: class/WC_Twoinc.php
-msgid "the payment method is disabled. Check \"Turn on/off\"."
-msgstr "betalningsmetoden är avstängd. Kontrollera \"Slå på/av\"."
-
-#: class/WC_Twoinc.php
 #, php-format
 msgid "no API key is saved. Check \"%s API key\"."
 msgstr "ingen API-nyckel är sparad. Kontrollera \"%s API-nyckel\"."
@@ -1540,17 +1529,9 @@ msgid "the API key was rejected. Check \"%s API key\" and \"Environment\"."
 msgstr "API-nyckeln avvisades. Kontrollera \"%s API-nyckel\" och \"Miljö\"."
 
 #: class/WC_Twoinc.php
-msgid "the buyer surcharge cannot be priced in the store currency. Check \"Surcharge method\"."
-msgstr "köpartillägget kan inte prissättas i butikens valuta. Kontrollera \"Tilläggsmetod\"."
-
-#: class/WC_Twoinc.php
 #, php-format
 msgid "no buyer countries are currently enabled for your account. Contact %s to have them enabled."
 msgstr "inga köparländer är för närvarande aktiverade för ditt konto. Kontakta %s för att aktivera dem."
-
-#: class/WC_Twoinc.php
-msgid "your account offers no payment term. See \"Payment terms\" above."
-msgstr "ditt konto erbjuder inga betalningsvillkor. Se \"Betalningsvillkor\" ovan."
 
 #: class/WC_Twoinc.php
 msgid "Cannot be checked — your payment terms could not be read just now."
@@ -1578,3 +1559,24 @@ msgstr "inklusive skatt"
 #, php-format
 msgid "Check the \"%s API key\" and \"Environment\" settings."
 msgstr "Kontrollera inställningarna \"%s API-nyckel\" och \"Miljö\"."
+
+#: class/WC_Twoinc.php
+msgid "the payment method is disabled. Check \"Turn on/off\"."
+msgstr "betalningsmetoden är avstängd. Kontrollera \"Slå på / av\"."
+
+#: class/WC_Twoinc.php
+msgid "your account offers no payment term. See \"Payment terms\" above."
+msgstr "ditt konto erbjuder inga betalningsvillkor. Se \"Betalningsvillkor\" ovan."
+
+#: class/WC_Twoinc.php
+msgid "Cannot be checked — the API key could not be verified just now."
+msgstr "Kan inte kontrolleras — API-nyckeln kunde inte verifieras just nu."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers billed in %s"
+msgstr "erbjuds endast köpare som faktureras i %s"
+
+#: class/WC_Twoinc.php
+msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
+msgstr "den sparade tilläggsstrategin känns inte igen. Kontrollera \"Tilläggsstrategi\"."

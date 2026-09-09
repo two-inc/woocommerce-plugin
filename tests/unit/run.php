@@ -364,6 +364,7 @@ final class BrandConfigSpec
             'testEveryWithholdingBranchNamesItsReasonInTheLog',
             'testTheGateLogNamesWhichConditionRefused',
             'testTheHealthChecklistNamesWhyTheMethodIsAbsent',
+            'testTheHealthChecklistNamesTheBrandBillingCountryGate',
             'testTheTermsNoticeCarriesTheLastAttemptAndTheFieldsToCheck',
         ];
         foreach ($tests as $test) {
@@ -486,7 +487,7 @@ final class BrandConfigSpec
         );
         $logged = implode("\n", array_column($GLOBALS['__twoinc_test_logs'], 'message'));
         TinyAssert::true(
-            strpos($logged, 'surcharge cannot be priced in the store currency') !== false,
+            strpos($logged, 'surcharge cannot be priced in checkout currency') !== false,
             "an unpriceable surcharge names itself: logged [$logged]"
         );
     }
@@ -687,8 +688,8 @@ final class BrandConfigSpec
                 'Cannot be checked — the API key could not be verified just now.',
                 'a transient verdict must not be reported as the method being withheld (ABN-533)'],
             ['yes', ['surcharge_type' => 'not-a-method'], 200, null, null, null, 'resolved',
-                'the buyer surcharge cannot be priced',
-                'an unrecognised stored surcharge method names itself'],
+                'the saved surcharge method is not recognised. Check "Surcharge method".',
+                'an unrecognised stored surcharge method names its own admin field'],
             ['yes', [], 200, [], null, null, 'resolved',
                 'no buyer countries are currently enabled for your account',
                 'an empty allowlist hides the method for every buyer, which no local field explains'],
@@ -710,12 +711,16 @@ final class BrandConfigSpec
             ['yes', [], 200, null, $eur250, $gbp1000, 'resolved',
                 '250.00 EUR (excluding tax) or 1000.00 GBP (including tax)',
                 'two floors in different currencies cannot be reduced to one, so both are named'],
+            ['yes', [], 200, null, $eur250, ['amount' => 500.0, 'currency' => 'EUR', 'basis' => 'net'], 'resolved',
+                'hidden for baskets below 500.00 EUR (excluding tax)',
+                'same currency and basis is one floor - naming both would state a bar that never binds'],
         ];
 
-        foreach ($cases as [
-            $enabled, $options, $verify_code, $allowlist, $minimum, $merchant_minimum, $terms_state,
-            $fragment, $description,
-        ]) {
+        foreach ($cases as $case) {
+            list(
+                $enabled, $options, $verify_code, $allowlist, $minimum, $merchant_minimum, $terms_state,
+                $fragment, $description
+            ) = $case;
             $GLOBALS['__twoinc_test_transients'] = [];
             $gateway = $make_gateway(
                 $options,
@@ -734,11 +739,71 @@ final class BrandConfigSpec
                 $description . ': the row must be rendered'
             );
             TinyAssert::true(
-                strpos($html, htmlspecialchars($fragment, ENT_QUOTES)) !== false
-                    || strpos($html, $fragment) !== false,
+                strpos($html, htmlspecialchars($fragment, ENT_QUOTES)) !== false,
                 $description . ": rendered [$html]"
             );
         }
+    }
+
+    /**
+     * ABN-518. A brand overlay that restricts billing countries withholds the
+     * method for every other buyer, and no local setting says so.
+     */
+    private static function testTheHealthChecklistNamesTheBrandBillingCountryGate(): void
+    {
+        self::useTestbrand();
+        $gateway = new class () extends WC_Twoinc {
+            public $enabled = 'yes';
+
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'api_key' ? 'key' : ($empty_value ?? '');
+            }
+
+            public function get_supported_buyer_countries()
+            {
+                return null;
+            }
+
+            public function get_platform_minimum_order()
+            {
+                return null;
+            }
+
+            public function get_merchant_minimum_order()
+            {
+                return null;
+            }
+
+            public function get_merchant_terms_state(): array
+            {
+                return [
+                    'state' => 'resolved',
+                    'reason' => null,
+                    'code' => null,
+                    'checked_on' => 0,
+                    'attempted_on' => 0,
+                    'count' => 1,
+                ];
+            }
+
+            public function get_api_key_verification_status()
+            {
+                return ['status' => 'ok', 'code' => 200, 'body' => []];
+            }
+        };
+
+        $html = $gateway->generate_two_health_checklist_html('health_checklist', ['title' => 'Install health']);
+
+        TinyAssert::true(
+            strpos($html, 'offered only to buyers billed in NL') !== false,
+            "the brand allowlist must be named as a constraint: rendered [$html]"
+        );
     }
 
     /**
