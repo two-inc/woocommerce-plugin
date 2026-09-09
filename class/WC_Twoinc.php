@@ -883,13 +883,17 @@ if (!class_exists('WC_Twoinc')) {
             ];
             // ABN-515: a cause with no time and no field to check leaves the
             // merchant with nothing to do next.
-            $sentences[] = $state['attempted_on'] > 0
-                ? sprintf(
+            if ($state['attempted_on'] > 0) {
+                $sentences[] = sprintf(
                     /* translators: %s is a date and time in the site's own format */
                     __('The last attempt was on %s.', 'twoinc-payment-gateway'),
                     self::format_merchant_record_timestamp($state['attempted_on'])
-                )
-                : __('No attempt has been made yet.', 'twoinc-payment-gateway');
+                );
+            } elseif ($state['checked_on'] === 0) {
+                // Only when nothing has ever been read: an install upgraded
+                // before the attempt stamp existed has a read to report above.
+                $sentences[] = __('No attempt has been made yet.', 'twoinc-payment-gateway');
+            }
             // Only where the read itself failed: a successful read of an
             // account offering nothing is not a credentials problem.
             if (in_array($state['state'], ['fetch_failed', 'never_fetched', 'not_configured'], true)) {
@@ -898,6 +902,9 @@ if (!class_exists('WC_Twoinc')) {
                     __('Check the "%s API key" and "Environment" settings.', 'twoinc-payment-gateway'),
                     $product_name
                 );
+            }
+            // Nothing to retry without a key saved.
+            if (in_array($state['state'], ['fetch_failed', 'never_fetched'], true)) {
                 $sentences[] = __('The plugin retries by itself; "Refresh merchant profile" under Diagnostics retries now.', 'twoinc-payment-gateway');
             }
 
@@ -1009,7 +1016,7 @@ if (!class_exists('WC_Twoinc')) {
             }
             if ($reason === null) {
                 $status = $this->get_api_key_verification_status();
-                if ($status['status'] === 'invalid_key') {
+                if (self::is_definitive_key_failure($status['status'])) {
                     $reason = sprintf(
                         /* translators: %s is the brand product name (e.g. "Two") */
                         __('the API key was rejected. Check "%s API key" and "Environment".', 'twoinc-payment-gateway'),
@@ -3241,9 +3248,13 @@ if (!class_exists('WC_Twoinc')) {
         public function is_available()
         {
             if (!parent::is_available()) {
-                // Logged even though it is a deliberate setting: this is the
-                // branch a merchant hunting an absent method reaches first.
-                $this->log_withheld_from_checkout(sprintf('"Turn on/off" is "%s"', (string) $this->enabled));
+                // Debug, not info: a deliberate setting is not a fault, but it
+                // is the branch a merchant hunting an absent method hits first.
+                $this->log_withheld_from_checkout(
+                    sprintf('"Turn on/off" is "%s"', (string) $this->enabled),
+                    null,
+                    'debug'
+                );
                 return false;
             }
             $status = $this->get_api_key_verification_status();
@@ -3277,14 +3288,14 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @param string|null $key groups reasons whose text varies per basket.
          */
-        public function log_withheld_from_checkout(string $reason, ?string $key = null): void
+        public function log_withheld_from_checkout(string $reason, ?string $key = null, string $level = 'info'): void
         {
             $guard = $key ?? $reason;
             if (isset(self::$withhold_reasons_logged[$guard]) || !function_exists('wc_get_logger')) {
                 return;
             }
             self::$withhold_reasons_logged[$guard] = true;
-            wc_get_logger()->info(
+            wc_get_logger()->{$level}(
                 sprintf('%s hidden from checkout: %s', $this->id, $reason),
                 ['source' => 'twoinc-payment-gateway']
             );

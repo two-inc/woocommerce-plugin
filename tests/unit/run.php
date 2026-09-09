@@ -366,6 +366,7 @@ final class BrandConfigSpec
             'testTheHealthChecklistNamesWhyTheMethodIsAbsent',
             'testTheHealthChecklistNamesTheBrandBillingCountryGate',
             'testTheTermsNoticeCarriesTheLastAttemptAndTheFieldsToCheck',
+            'testTheTermsNoticeDoesNotContradictItself',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -811,6 +812,57 @@ final class BrandConfigSpec
      * ABN-515. An unresolved term set left the merchant with a cause but no
      * time and no field to act on.
      */
+    /**
+     * ABN-515 review: an install upgraded before the attempt stamp existed has
+     * a successful read to report, so "no attempt" would contradict it, and a
+     * shop with no key saved has nothing to retry.
+     */
+    private static function testTheTermsNoticeDoesNotContradictItself(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public $options = ['api_key' => 'key'];
+
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function get_merchant_available_terms(): array
+            {
+                return [];
+            }
+        };
+
+        // A read succeeded once, but no attempt stamp was ever written.
+        $GLOBALS['__twoinc_test_options'] = [
+            WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on') => 1757000000,
+            WC_Twoinc_Brand::prefixed_name('merchant_available_terms') => '[]',
+        ];
+        $notice = $gateway->get_merchant_terms_notice();
+        TinyAssert::true(
+            strpos($notice, 'No attempt has been made yet.') === false,
+            'a successful read must not sit beside "no attempt": ' . $notice
+        );
+
+        // No key saved: the fields to check are named, but there is no retry.
+        $gateway->options = ['api_key' => ''];
+        $GLOBALS['__twoinc_test_options'] = [];
+        $notice = $gateway->get_merchant_terms_notice();
+        TinyAssert::true(
+            strpos($notice, 'API key" and "Environment" settings') !== false,
+            'an unconfigured shop is still told which fields to check: ' . $notice
+        );
+        TinyAssert::true(
+            strpos($notice, 'retries by itself') === false,
+            'there is nothing to retry without a key: ' . $notice
+        );
+    }
+
     private static function testTheTermsNoticeCarriesTheLastAttemptAndTheFieldsToCheck(): void
     {
         $gateway = new class () extends WC_Twoinc {
