@@ -96,7 +96,8 @@ Vendored assets
   in place here and identically to the other copy, re-run the JS suite, and paste
   the new digest into the edit-lock below in the same commit. Nothing links the
   copies: whoever changes one and stops has fixed one platform, and neither
-  reviewer sees the other half.
+  reviewer sees the other half. A change that serves one platform only stays in
+  that copy, and that is what the divergence above is made of.
 - `tests/js/company-search-panel-vendored.test.js` is an **edit-lock, not a parity
   check** (TWO-25503). `EDIT_LOCK_SHA256` is this copy's own digest, so the suite
   fails on any change to this file that did not move the digest with it — an
@@ -107,8 +108,8 @@ Vendored assets
   off the file so the digest is not moved by a reformat nobody asked for.
 - The module is framework-free with a UMD tail, a constraint the other copy shares:
   a Magento-side checkout loads it with no RequireJS, jQuery or Knockout, so a
-  framework dependency added to either copy has to be satisfied in a place that
-  cannot satisfy it.
+  framework dependency added to either copy lands in a place that cannot satisfy
+  it.
 - **The unsupported-country gate greys out SEARCH, never manual entry.** Manual
   entry hands the field over as a plain typeable input that never reaches the
   registry, so disabling it there blocks a mode that was never going to search and
