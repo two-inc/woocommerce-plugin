@@ -7,10 +7,10 @@
  * off the file, but neither is enforceable: a one-line local edit passes every
  * other check in this repo silently. The digest below is the enforcement.
  *
- * It locks the file against being edited in place, and that alone — it cannot
- * reach the upstream repo, so it says nothing about whether the two copies
- * still agree. Changing the panel means changing it upstream, re-copying the
- * whole file and pasting the new digest here.
+ * It locks the file against being edited in place, and that alone: nothing
+ * compares the two copies, and they have drifted. Re-copying the whole file
+ * from upstream and pasting the new digest here is the only thing that would
+ * close that gap.
  */
 
 "use strict";
