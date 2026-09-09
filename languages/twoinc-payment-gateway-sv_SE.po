@@ -1565,10 +1565,6 @@ msgid "the payment method is disabled. Check \"Turn on/off\"."
 msgstr "betalningsmetoden är avstängd. Kontrollera \"Slå på / av\"."
 
 #: class/WC_Twoinc.php
-msgid "your account offers no payment term. See \"Payment terms\" above."
-msgstr "ditt konto erbjuder inga betalningsvillkor. Se \"Betalningsvillkor\" ovan."
-
-#: class/WC_Twoinc.php
 msgid "Cannot be checked — the API key could not be verified just now."
 msgstr "Kan inte kontrolleras — API-nyckeln kunde inte verifieras just nu."
 

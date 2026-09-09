@@ -1546,10 +1546,6 @@ msgid "no buyer countries are currently enabled for your account. Contact %s to 
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "your account offers no payment term. See \"Payment terms\" above."
-msgstr ""
-
-#: class/WC_Twoinc.php
 msgid "Cannot be checked — your payment terms could not be read just now."
 msgstr ""
 

@@ -1564,10 +1564,6 @@ msgid "the payment method is disabled. Check \"Turn on/off\"."
 msgstr "de betaalmethode is uitgeschakeld. Controleer \"Aan/uitzetten\"."
 
 #: class/WC_Twoinc.php
-msgid "your account offers no payment term. See \"Payment terms\" above."
-msgstr "uw account biedt geen betaaltermijn aan. Zie \"Betalingstermijnen\" hierboven."
-
-#: class/WC_Twoinc.php
 msgid "Cannot be checked — the API key could not be verified just now."
 msgstr "Kan niet worden gecontroleerd — de API-sleutel kon op dit moment niet worden geverifieerd."
 

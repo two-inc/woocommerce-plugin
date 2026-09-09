@@ -1016,8 +1016,8 @@ if (!class_exists('WC_Twoinc')) {
                         WC_Twoinc_Brand::get('product_name')
                     );
                 } elseif ($status['status'] !== 'ok') {
-                    // ABN-533 will stop transient verdicts withholding at all, so
-                    // this row must not report one as the method being hidden.
+                    // ABN-533: only invalid_key and not_configured withhold, so a
+                    // transient verdict is never reported as the method being hidden.
                     return [
                         'label' => $label,
                         'value' => __('Cannot be checked — the API key could not be verified just now.', 'twoinc-payment-gateway'),
@@ -1038,18 +1038,16 @@ if (!class_exists('WC_Twoinc')) {
                     WC_Twoinc_Brand::get('provider_full_name')
                 );
             }
-            if ($reason === null) {
-                // Withholds today; the "Payment terms" row above carries the cause.
-                $terms = $this->get_merchant_terms_state();
-                if (in_array($terms['state'], ['none_offered', 'not_reported'], true)) {
-                    $reason = __('your account offers no payment term. See "Payment terms" above.', 'twoinc-payment-gateway');
-                } elseif ($terms['state'] !== 'resolved') {
-                    return [
-                        'label' => $label,
-                        'value' => __('Cannot be checked — your payment terms could not be read just now.', 'twoinc-payment-gateway'),
-                        'ok'    => false,
-                    ];
-                }
+            // An unresolved term set is not a reason: ABN-533's companion
+            // ruling offers the tile with an empty term set. The row declines
+            // to assert either way while the read has not landed; the
+            // "Payment terms" row above carries the cause.
+            if ($reason === null && $this->get_merchant_terms_state()['state'] !== 'resolved') {
+                return [
+                    'label' => $label,
+                    'value' => __('Cannot be checked — your payment terms could not be read just now.', 'twoinc-payment-gateway'),
+                    'ok'    => false,
+                ];
             }
             if ($reason !== null) {
                 return ['label' => $label, 'value' => $not_shown . ' — ' . $reason, 'ok' => false];

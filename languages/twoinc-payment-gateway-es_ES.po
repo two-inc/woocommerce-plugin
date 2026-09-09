@@ -140,10 +140,6 @@ msgid "the payment method is disabled. Check \"Turn on/off\"."
 msgstr "el método de pago está desactivado. Compruebe \"Turn on/off\"."
 
 #: class/WC_Twoinc.php
-msgid "your account offers no payment term. See \"Payment terms\" above."
-msgstr "su cuenta no ofrece ningún plazo de pago. Consulte \"Payment terms\" más arriba."
-
-#: class/WC_Twoinc.php
 msgid "Cannot be checked — the API key could not be verified just now."
 msgstr "No se puede comprobar: la clave API no se ha podido verificar en este momento."
 
