@@ -2793,7 +2793,7 @@ if (!class_exists('WC_Twoinc')) {
             if (isset($response['body'])) {
                 $body = json_decode($response['body'], true);
                 $code = $response['response']['code'];
-                if ($code == 200 && isset($body['id']) && (string) $body['id'] !== '' && !$api_key) {
+                if ($code == 200 && isset($body['id']) && is_scalar($body['id']) && (string) $body['id'] !== '' && !$api_key) {
                     // Only persist when verifying the saved API key. verify_api_key
                     // returns {id, short_name}; cache both for the settings display.
                     if ((string) $this->get_option('merchant_id') !== (string) $body['id']) {
@@ -2851,7 +2851,7 @@ if (!class_exists('WC_Twoinc')) {
                 // An empty id is no record either: reported as 'ok' it left the
                 // settings screen re-verifying on every load, never resolving
                 // an identity (ABN-537).
-                if (!isset($result['body']['id']) || (string) $result['body']['id'] === '') {
+                if (!isset($result['body']['id']) || !is_scalar($result['body']['id']) || (string) $result['body']['id'] === '') {
                     return ['status' => 'error', 'code' => $code];
                 }
                 return ['status' => 'ok', 'code' => $code];

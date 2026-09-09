@@ -10500,10 +10500,6 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-537. wp_remote_request()'s 30s default stalled the settings page for
-     * half a minute against an unreachable API.
-     */
-    /**
      * ABN-537. An empty id passes isset(), so a 200 carrying one read as 'ok'
      * with nothing to resolve — and the settings screen, which re-verifies
      * precisely while the identity is unresolved, then called on every load
@@ -10517,6 +10513,7 @@ final class BrandConfigSpec
             // Non-empty but falsy in PHP: a truthiness test here would re-verify forever.
             [['id' => 0], 'ok', '0', 'a merchant id of zero'],
             [[], 'error', '', 'no id field at all'],
+            [['id' => ['nested']], 'error', '', 'an id that is not a scalar at all'],
         ];
 
         foreach ($cases as $case) {
@@ -10551,6 +10548,10 @@ final class BrandConfigSpec
         unset($_GET['tab'], $_GET['section']);
     }
 
+    /**
+     * ABN-537. wp_remote_request()'s 30s default stalled the settings page for
+     * half a minute against an unreachable API.
+     */
     private static function testSettingsScreenVerificationTimeoutIsBoundedForAPageRender(): void
     {
         self::onGatewaySettingsScreen(WC_Twoinc_Brand::get('gateway_id'));
