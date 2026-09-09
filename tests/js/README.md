@@ -241,7 +241,7 @@ fragment on every payment-method, coupon, shipping or quantity change (TWO-25503
 - switching away from Two and back leaves the field on screen holding its value — the
   two-click path that reproduced an empty tile deterministically.
 
-`company-name-never-neither.test.js` — Doug's "never neither" invariant (TWO-25503). A
+`company-name-never-neither.test.js` — the "never neither" invariant (TWO-25503). A
 company-name surface is visible in all twelve cells of {address_area, payment_tile} ×
 {capture, no capture} × {Two selected, other method, none selected}. A buyer with nowhere to
 see or enter the company name has reached staging twice. The narrowing half is pinned too:

@@ -9,7 +9,7 @@
  *   So "the primary form" is never the question; "which form plays the
  *   invoice role" is.
  *
- *   Independence (Doug 2026-09-01) — the billing and shipping address forms
+ *   Independence (2026-09-01) — the billing and shipping address forms
  *   never write to each other. The ONE thing that reads both is
  *   `resolveOrderCompany()`, choosing which captured company the order intent
  *   carries. Every other cross-form effect is a bug, and each test here is a
@@ -121,7 +121,7 @@ describe("TWO-40 — one address-role resolver", () => {
   });
 });
 
-describe("the two address forms are independent (Doug 2026-09-01)", () => {
+describe("the two address forms are independent", () => {
   let ctx;
   let $;
   let ajax;

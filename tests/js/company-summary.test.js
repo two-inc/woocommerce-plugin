@@ -163,7 +163,7 @@ describe("read-only captured-company summary", () => {
     });
 
     test("the name does NOT render anywhere in the address area (TWO-25326)", () => {
-      // Doug's finding, live 2026-08-02: the address area showed the company
+      // Found live 2026-08-02: the address area showed the company
       // name twice — once in the company-name control the buyer picked it in,
       // and again in this block underneath. TWO-25326 allows the company-name
       // field and the number label below it, and nothing else.
@@ -293,7 +293,7 @@ describe("read-only captured-company summary", () => {
   });
 
   describe("number rendered below the name, right-aligned, not sharing its line", () => {
-    // Doug's canonical cross-platform ruling: the number gets its own row below
+    // The canonical cross-platform rule: the number gets its own row below
     // the name, right-aligned to the input's edge, so however long the name
     // runs the two never compete for the same horizontal space.
     test("the number is a block of its own, not inline with the name", () => {
@@ -538,7 +538,7 @@ describe("read-only captured-company summary", () => {
     });
 
     test("stays shown when the buyer is paying by another method", () => {
-      // Inverted from "hidden" (Doug, 2026-08-19). The label's two conditions
+      // Inverted from "hidden" (2026-08-19). The label's two conditions
       // are the capture mode and whether the number is internally minted —
       // neither is the payment method. It is now the ONLY surface the captured
       // number reaches the buyer through (`#company_id_field` is permanently

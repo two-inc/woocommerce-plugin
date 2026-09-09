@@ -1,5 +1,5 @@
 /**
- * TWO-25503, Doug's "never neither" invariant.
+ * TWO-25503, the "never neither" invariant.
  *
  * A company-name surface is visible in all twelve cells of
  * {address_area, payment_tile} x {capture, no capture} x

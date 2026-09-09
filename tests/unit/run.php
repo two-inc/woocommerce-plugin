@@ -612,7 +612,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * #33 — Doug's desired checkout field order: name -> country -> company
+     * #33 — The desired checkout field order: name -> country -> company
      * -> native address fields -> phone/email -> every optional field at the
      * bottom. The optional fields must land after phone/email (WC's native
      * priorities 100/110) regardless of company's own priority, so they
@@ -694,14 +694,14 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326 (Doug's ruling). The ONE company-search control must
+     * TWO-25326. The ONE company-search control must
      * always be registered by update_company_fields() — the checkbox this
      * ticket is about ("Enable company search in address entry") only ever
      * decides WHERE it renders (address area vs payment tile, via
      * `company_search_location` — see derive_company_search_location() and
      * twoincDomHelper.syncCompanySearchTileLocation() in twoinc.js), never
      * whether it exists. A gate here that skips registration when the
-     * checkbox is unchecked is exactly the bug this ruling closes: the
+     * checkbox is unchecked is exactly the bug TWO-25326 closes: the
      * payment-tile relocation JS then has nothing to move, and the buyer
      * sees no working search anywhere on the page. Checked in both
      * directions so a regression that reintroduces the gate in either
@@ -746,7 +746,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * Doug, 2026-08-19 (#486). WooCommerce core DELETES its own company field
+     * #486, 2026-08-19. WooCommerce core DELETES its own company field
      * — `unset($fields['company'])` in
      * WC_Countries::get_default_address_fields() — when
      * `woocommerce_checkout_company_field` reads 'hidden', which is also that
@@ -2994,7 +2994,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * Doug's ruling: an API-key or environment save drops the cached record
+     * An API-key or environment save drops the cached record
      * AND refetches it in the same request, so the admin never looks at the
      * previous identity's commercial values.
      */
@@ -3094,7 +3094,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * Doug's ruling: the record is refreshed nightly at midnight site time,
+     * The record is refreshed nightly at midnight site time,
      * which is what lands a commercial change within a day without putting a
      * fetch on any checkout render.
      */
@@ -3277,7 +3277,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * Doug's ruling: the Diagnostics "Refresh merchant profile" button
+     * The Diagnostics "Refresh merchant profile" button
      * refetches on demand, replaces the cache on success, and keeps
      * last-known-good while reporting the failure.
      */
@@ -7823,7 +7823,7 @@ final class BrandConfigSpec
 
     private static function testFxFreshTableMissingCurrencyDoesNotRefetch(): void
     {
-        // The bug three reviewers converged on: a currency missing from a
+        // The bug: a currency missing from a
         // table that is ALREADY FRESH must not trigger a re-fetch. The
         // endpoint always returns its complete table, so "fresh but
         // missing DKK" already conclusively means DKK is unsupported —
@@ -9188,7 +9188,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326, Doug's ruling: the standalone "Enable company name search
+     * TWO-25326: the standalone "Enable company name search
      * for other payment options" setting is removed outright — whether
      * company search shows for OTHER payment methods now follows the same
      * "Enable company search in address entry" checkbox directly, with no

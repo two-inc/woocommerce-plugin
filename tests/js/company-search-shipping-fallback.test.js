@@ -3,10 +3,10 @@
  * delivery/shipping role, and the billing-first/shipping-fallback rule for
  * which role's captured company reaches the order intent / order creation.
  *
- * The rule, Doug's own words: "where billing address is primary, use it
+ * The rule: where billing address is primary, use it
  * first and fall back to shipping only if no company number is available
  * from the billing address (either if the user just didn't provide a
- * company at all, or if they entered manually)." — manual-entry STATUS is
+ * company at all, or if they entered manually) — manual-entry STATUS is
  * irrelevant to the decision; only whether a number was actually captured.
  */
 

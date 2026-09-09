@@ -215,7 +215,7 @@ let twoincCompanyCapture = {
 
   /**
    * Which of the three company-capture UIs is the buyer's ACTIVE input surface
-   * (#486, Doug): `'search'` (the registry search panel, the default),
+   * (#486): `'search'` (the registry search panel, the default),
    * `'manual'` (the plain native `#billing_company`, reached only through
    * `enterManualCompanyEntry`) or `'sole_trader'` (the adopted/enrolled sole
    * trader, whose name the picker renders as its own selection — TWO-40).
@@ -647,7 +647,7 @@ let twoincCompanyCapture = {
     Twoinc.getInstance().getApproval();
 
     // The retyped role's own surfaces — its address provenance and its own
-    // number label (Doug 2026-09-01).
+    // number label.
     Twoinc.getInstance().addressStateFor(role).registryApplied = false;
 
     // `#company_id` visibility depends on the value just cleared
@@ -1722,7 +1722,7 @@ class TwoCompanySearch {
       { role: this.role }
     );
 
-    // This role's own address form, never the other's (Doug 2026-09-01).
+    // This role's own address form, never the other's.
     // `clearAddress()`, not a blank `setAddress()` payload: the latter leaves
     // line 2 untouched by design (TWO-40), which would strand the
     // outgoing company's registry-written line 2 on the form.
@@ -1985,7 +1985,7 @@ let twoincSelectWooHelper = new TwoCompanySearch({
 
 /**
  * The SECOND `TwoCompanySearch` instance, on the delivery/shipping role
- * (TWO-40, Doug 2026-08-31): billing's own second-address-panel counterpart,
+ * (TWO-40): billing's own second-address-panel counterpart,
  * same class, own DOM ids/classes so it owns its own nodes rather than
  * reusing the billing instance's. No `tileFieldSelector` — shipping company
  * capture has no payment-tile relocation concept, the search control's only
@@ -2211,15 +2211,15 @@ let twoincDomHelper = {
       twoincDomHelper.isTwoincVisible() && twoincDomHelper.isTwoincSelected();
 
     // The company NAME is always on screen, as exactly one of two elements —
-    // this search control or WooCommerce's native `#billing_company` (Doug,
-    // 2026-08-19). Never neither: a buyer with nowhere to see or enter the
-    // company name is the regression this replaces (an unsupported country
+    // this search control or WooCommerce's native `#billing_company`. Never
+    // neither: a buyer with nowhere to see or enter the company name is the
+    // regression this replaces (an unsupported country
     // hid the search control and left a bare "Company ID" box behind, with no
     // name capture anywhere). Never both in the same place either — the one
     // exception is `company_search_location === "payment_tile"` below, where
     // the two are not competing for the same position: the search control has
     // been relocated into the payment tile, so the native field is what the
-    // address area still needs (Doug 2026-08-04, live-verified).
+    // address area still needs (live-verified).
     //
     // The search control is the visible surface for BOTH capture modes that
     // render a name into it — an ordinary registry pick and an adopted sole
@@ -3439,7 +3439,7 @@ function createSoleTraderController(companySearch) {
      * and make a subsequent genuine flight invisible.
      *
      * Depth reaching zero IS "the flow is complete" in the sense the spinner and
-     * the dropdown close are gated on (Doug 2026-08-20): the popup's own watcher
+     * the dropdown close are gated on: the popup's own watcher
      * holds a flight until the window is gone, and the ACCEPTED handler holds a
      * second one across `fetchCurrentBuyer` until `setCompany()` has written the
      * company name and number. Nothing else has to be joined up for it —
@@ -3510,7 +3510,7 @@ function createSoleTraderController(companySearch) {
      * widget, so the search row takes the slot whenever it is the visible
      * surface — a button appended inside a hidden field never renders.
      *
-     * Inside the row's wrapper rather than after the row (TWO-25503, Doug):
+     * Inside the row's wrapper rather than after the row (TWO-25503):
      * as a sibling it stacked against the row's own bottom margin and needed a
      * hardcoded negative margin to look right, which over-pulled it onto the
      * field itself. Inside, it sits where `#search_company_btn` already does.
@@ -4584,7 +4584,7 @@ class Twoinc {
     this.isInitialized = false;
     this.isTwoincApproved = null;
     // Registry-address state per address ROLE, never shared between them
-    // (Doug 2026-09-01): the two address forms are independent, so a capture
+    // — the two address forms are independent, so a capture
     // on one must not supersede the other's in-flight lookup nor decide
     // whether the other's address is the plugin's to clear. See
     // `addressStateFor()`.
@@ -4713,9 +4713,9 @@ class Twoinc {
     $body.on("updated_checkout", Twoinc.getInstance().onUpdatedCheckout);
 
     // A payment-method switch must re-DECIDE company-field visibility, not
-    // just relocate whatever is already there (TWO-25326 bugfix, Doug
-    // live-verified: the search control never appeared in the payment tile
-    // at all). `onUpdatedCheckout()` below only calls
+    // just relocate whatever is already there (TWO-25326 bugfix, live-verified:
+    // the search control never appeared in the payment tile at all).
+    // `onUpdatedCheckout()` below only calls
     // `syncCompanySearchTileLocation()` — it never revisits which field
     // `toggleBusinessFields()` decided to show, so a buyer who starts on a
     // DIFFERENT gateway (the ordinary case: WooCommerce checks the first
@@ -4818,8 +4818,8 @@ class Twoinc {
       soleTrader.reopenSearch();
     });
 
-    // Click-to-reopen out of an adopted sole trader (TWO-40, live-reported by
-    // Doug) — see `reopenSearch()`'s own comment. A plain delegated binding is
+    // Click-to-reopen out of an adopted sole trader (TWO-40, reported live)
+    // — see `reopenSearch()`'s own comment. A plain delegated binding is
     // fine here, unlike `searchCompanyBtnId`'s: these are static inputs
     // present from page load, not a button built and rebuilt on every dropdown
     // open.
@@ -4901,9 +4901,9 @@ class Twoinc {
     // exactly one writer for the tracker.
     twoincSelectWooHelper.countryDidChange(twoincSelectWooHelper.currentCountry());
 
-    // The delivery control's tracker needs the same seed as billing's above
-    // (Doug 2026-09-01): unseeded, its first `previous` is null, so
-    // `countryDidChange` reads the buyer's FIRST shipping-country change as
+    // The delivery control's tracker needs the same seed as billing's above:
+    // unseeded, its first `previous` is null, so `countryDidChange` reads the
+    // buyer's FIRST shipping-country change as
     // "no previous country to have moved away from" and swallows it — leaving
     // a shipping company captured under a country the buyer has left.
     twoincSelectWooHelperShipping.countryDidChange(twoincSelectWooHelperShipping.currentCountry());
