@@ -2930,6 +2930,46 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         }
       );
 
+      // A host that morphs its markup over the live DOM replaces the popover and keeps
+      // the field, so a rule reading a stored popover node reads a detached one.
+      test.each([
+        ["own chip", true, 0, "the launching role's own re-rendered chip is still its own: the popup it launched stays"],
+        ["own chip", false, 0, "and still its own when the re-render took the wrap too, leaving the field where it is"],
+        ["outside control", true, 1, "and the rule still fires for everything else: an outside control closes it"]
+      ])(
+        "after a re-render, focus on the %s (wrap kept=%s) leaves the billing popup closes=%s — %s",
+        (which, keepWrap, closes) => {
+          openWidgetWithChips();
+          const win = launchFromChips();
+          const wrap = ctx.helper.modeChipsNode()[0].closest(".two-company-field-wrap");
+          expect(wrap).not.toBeNull();
+          const field = wrap.querySelector("#billing_company_display");
+          expect(field).not.toBeNull();
+          const host = keepWrap ? wrap : wrap.parentElement;
+          if (keepWrap) {
+            wrap.querySelector(".two-company-dropdown").remove();
+          } else {
+            wrap.parentElement.insertBefore(field, wrap);
+            wrap.remove();
+          }
+          const popover = document.createElement("div");
+          popover.className = "two-company-dropdown";
+          popover.innerHTML =
+            '<button class="two-company-mode-chip" data-two-chip="sole_trader">Sole trader</button>';
+          host.insertBefore(popover, field.nextSibling);
+
+          focusControl(
+            which === "own chip"
+              ? popover.querySelector('[data-two-chip="sole_trader"]')
+              : outsideControl()
+          );
+          jest.runOnlyPendingTimers();
+
+          expect(win.close).toHaveBeenCalledTimes(closes);
+          jest.useRealTimers();
+        }
+      );
+
       /** The delivery controller's own listener settles the delivery popup by the same rule. */
       test.each([
         ["sole_trader", 0, 0, "the delivery Sole trader chip leaves it alone"],

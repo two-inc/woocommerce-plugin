@@ -3944,13 +3944,14 @@ function createSoleTraderController(companySearch) {
       active.blur();
     },
 
-    /** @returns {Element|null} this role's own field wrap — field, popover and affordances — never a sibling role's (TWO-25554) */
+    /** @returns {Element|null} this role's own controls — field, popover and affordances — never a sibling role's (TWO-25554) */
     ownControlNode: function () {
-      return (
-        jQuery(companySearch.companyFieldSelector()).closest(
-          "." + companySearch.fieldWrapClass
-        )[0] || null
-      );
+      const field = jQuery(companySearch.companyFieldSelector())[0];
+      if (!field) return null;
+      // The field's parent when the wrap is gone: a morph re-render deletes the wrap and keeps
+      // the field, and without it this role's re-rendered Sole trader chip reads as another
+      // role's, inverting the rule on it (TWO-25658).
+      return field.closest("." + companySearch.fieldWrapClass) || field.parentElement || null;
     },
 
     /** TWO-25658: (1) this role's Sole trader chip changes nothing; (2) anything else closes the popup, and ANOTHER role's Sole trader chip gets one of its own; (3) anything outside the popover closes that too. */
