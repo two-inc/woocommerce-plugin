@@ -332,6 +332,15 @@ The merchant record refreshes on an event, never on expiry
   is what stops an unreachable API blocking the whole administration area; the
   cached verdict is read before a call is spent, and the call is capped well under
   wp_remote_request()'s own 30-second default.
+- **Figures served from cache are never presented as current** (ABN-538). The
+  recorded refresh failure is read before a term-set status resolves, so a set
+  standing over failed refreshes carries the cause with it, and the age of the last
+  successful read decides whether the install health summary paints it as healthy —
+  the age half of that judgement being the refresh policy's own freshness test,
+  negated, with the recorded failure an additional reason that clock cannot see. The
+  summary names which of the two it is, because figures read minutes ago whose
+  refresh then failed are not out of date. Withholding is unaffected: a cached set
+  still resolves and the method is still offered.
 - **The admin save stays possible whatever the verification says** (ABN-495). An
   unreachable API judges nothing about the key, and refusing the save locks the
   merchant out of storing the key that would fix the outage; the verdict is reported

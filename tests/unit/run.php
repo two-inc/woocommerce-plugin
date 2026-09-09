@@ -82,6 +82,9 @@ final class BrandConfigSpec
             'testPaymentTermsResolveBackendIntersectAdminSubset',
             'testMerchantAvailableTermsFetchNormalisesCachesAndServesStale',
             'testUnresolvedTermSetNamesItsRealCause',
+            'testStaleMerchantFiguresAreNeverPresentedAsCurrent',
+            'testTheNoKeyStateStillNamesTheRealStalenessCause',
+            'testHealthSummaryIsGreenOnlyWhileTheFiguresAreCurrent',
             'testMerchantAvailableTermsInvalidatedOnMerchantIdChange',
             'testDeactivationNeverClearsSettings',
             'testUninstallCleanupClearsSettingsAndTermCache',
@@ -2443,6 +2446,204 @@ final class BrandConfigSpec
      * state names the real cause and the copy blames the API key only where the API
      * rejected it (ABN-513).
      */
+    /**
+     * Gateway with a resolved term list already cached, so the state under test
+     * is "figures on screen" rather than "figures being fetched". No response is
+     * queued: a refresh attempt that reached the wire would be a test bug.
+     */
+    private static function cachedTermsGateway(): WC_Twoinc
+    {
+        return new class () extends WC_Twoinc {
+            public $options = ['api_key' => 'key', 'merchant_id' => 'mid'];
+
+            public function __construct()
+            {
+            }
+
+            public function get_merchant_id()
+            {
+                return $this->options['merchant_id'] ?? 'mid';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function update_option($key, $value = '')
+            {
+                $this->options[$key] = $value;
+                return true;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                throw new RuntimeException('no fetch should be attempted with fresh clocks');
+            }
+        };
+    }
+
+    /**
+     * Seed a resolved term list read $age_seconds ago, with $error on record (or
+     * none). The attempt clock is set to now so the read path does not try to
+     * refresh while the test is judging what it displays.
+     */
+    private static function seedMerchantFigures(int $age_seconds, ?array $error): void
+    {
+        $now = time();
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_available_terms')] = json_encode([30, 60]);
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on')] = $now - $age_seconds;
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on')] = $now;
+        if ($error === null) {
+            unset($GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_last_error')]);
+        } else {
+            $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_last_error')] = $error;
+        }
+        WC_Twoinc::reset_merchant_record_memo();
+    }
+
+    /**
+     * ABN-538. The state resolved before the recorded failure was ever read, so
+     * figures served from cache while refreshes kept failing were indistinguishable
+     * from figures read a moment ago.
+     */
+    private static function testStaleMerchantFiguresAreNeverPresentedAsCurrent(): void
+    {
+        $ttl = WC_Twoinc::MERCHANT_RECORD_TTL;
+        $failure = ['status' => 'unreachable', 'code' => null, 'at' => time()];
+        $cases = [
+            [60, null, false, null, 'read a minute ago with nothing on record'],
+            [$ttl + 60, ['status' => 'invalid_key', 'code' => 401, 'at' => time()], true, 'invalid_key', 'old and refusing to refresh with a rejected key'],
+            [$ttl - 60, null, false, null, 'read inside the refresh window'],
+            [$ttl + 60, null, true, null, 'read longer ago than the refresh window'],
+            [60, $failure, true, 'unreachable', 'read a minute ago but the newest refresh failed'],
+            [$ttl + 60, $failure, true, 'unreachable', 'old and still failing to refresh'],
+        ];
+
+        foreach ($cases as $case) {
+            list($age, $error, $expected_stale, $expected_reason, $description) = $case;
+            self::seedMerchantFigures($age, $error);
+            $state = self::cachedTermsGateway()->get_merchant_terms_state();
+
+            TinyAssert::same('resolved', $state['state'], "state for figures $description");
+            TinyAssert::same(2, $state['count'], "term count for figures $description");
+            TinyAssert::same($expected_stale, $state['stale'], "staleness of figures $description");
+            TinyAssert::same($expected_reason, $state['reason'], "recorded cause beside figures $description");
+        }
+    }
+
+    /**
+     * Whether the health summary painted one labelled row in its OK green
+     * (#2a7f2a) rather than its warning red — read off the rendered row so a
+     * changed `ok` flag that never reaches the screen cannot pass.
+     */
+    private static function healthRowIsGreen(string $html, string $label): bool
+    {
+        if (preg_match('/<strong>' . preg_quote($label, '/') . ':<\\/strong>\\s*<span style="color:([^;"]+)/', $html, $m) !== 1) {
+            throw new RuntimeException("health summary has no row labelled '$label'");
+        }
+
+        return trim($m[1]) === '#2a7f2a';
+    }
+
+    /**
+     * ABN-538. `reason` is nulled once no API key is stored, to leave the
+     * withhold log line's shape alone — so a display branching on it would
+     * claim recent figures are out of date when the real cause is a failed
+     * refresh.
+     */
+    private static function testTheNoKeyStateStillNamesTheRealStalenessCause(): void
+    {
+        self::seedMerchantFigures(60, ['status' => 'unreachable', 'code' => null, 'at' => time()]);
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_available_terms')] = json_encode([]);
+        WC_Twoinc::reset_merchant_record_memo();
+
+        $keyless = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+            }
+
+            public function get_merchant_id()
+            {
+                return 'mid';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $empty_value ?? '';
+            }
+        };
+        $state = $keyless->get_merchant_terms_state();
+
+        TinyAssert::same('not_configured', $state['state']);
+        TinyAssert::same(null, $state['reason'], 'the gate-facing cause stays null with no key stored');
+        TinyAssert::same(true, $state['refresh_failed'], 'but the display can still see the failure');
+        TinyAssert::same(
+            false,
+            strpos(self::describeAge($state), 'out of date') !== false,
+            'so recent figures are not called out of date'
+        );
+        TinyAssert::true(
+            strpos(self::describeAge($state), 'failed') !== false,
+            'and the failure is named instead'
+        );
+    }
+
+    /** The age row's rendered text for one state. */
+    private static function describeAge(array $state): string
+    {
+        $method = new ReflectionMethod(WC_Twoinc::class, 'describe_merchant_record_age');
+        $method->setAccessible(true);
+
+        return (string) $method->invoke(null, $state);
+    }
+
+    /**
+     * ABN-538. The install health summary marked the figures green on any check
+     * timestamp above zero, so a merchant looking at values fetched days earlier
+     * during an outage that was still going on saw them as current and healthy.
+     */
+    private static function testHealthSummaryIsGreenOnlyWhileTheFiguresAreCurrent(): void
+    {
+        $ttl = WC_Twoinc::MERCHANT_RECORD_TTL;
+        $failure = ['status' => 'unreachable', 'code' => null, 'at' => time()];
+        // Which of the two wordings is expected, or '' for a green row. Figures
+        // read minutes ago whose refresh then failed are NOT out of date: the
+        // attempt to replace them did not land, which is a different sentence.
+        $cases = [
+            [60, null, '', '', 'figures read a minute ago'],
+            [$ttl + 86400, null, 'these figures are out of date', 'out of date', 'figures read a day past the refresh window'],
+            [60, $failure, 'last attempt to refresh these figures failed', 'last refresh failed', 'recent figures whose newest refresh failed'],
+            [$ttl + 86400, $failure, 'last attempt to refresh these figures failed', 'last refresh failed', 'old figures still failing to refresh'],
+        ];
+
+        foreach ($cases as $case) {
+            list($age, $error, $age_wording, $terms_wording, $description) = $case;
+            $green = $age_wording === '';
+            self::seedMerchantFigures($age, $error);
+            $html = self::cachedTermsGateway()->generate_two_health_checklist_html('two_health_checklist', ['title' => 'Health']);
+
+            TinyAssert::same($green, self::healthRowIsGreen($html, 'Merchant profile last read'), "the age row colour for $description");
+            TinyAssert::same($green, self::healthRowIsGreen($html, 'Payment terms'), "the terms row colour for $description");
+            if ($green) {
+                TinyAssert::same(false, strpos($html, 'out of date') !== false, "no warning wording for $description");
+                TinyAssert::same(false, strpos($html, 'refresh failed') !== false, "no failure wording for $description");
+                continue;
+            }
+            TinyAssert::true(strpos($html, $age_wording) !== false, "the age row says '$age_wording' for $description");
+            TinyAssert::true(strpos($html, $terms_wording) !== false, "the terms row says '$terms_wording' for $description");
+            TinyAssert::true(
+                strpos($html, 'Refresh merchant profile') !== false,
+                "the warning names what to do for $description"
+            );
+            // The two causes must not be conflated in either direction.
+            $other = $age_wording === 'these figures are out of date'
+                ? 'last attempt to refresh these figures failed'
+                : 'these figures are out of date';
+            TinyAssert::same(false, strpos($html, $other) !== false, "the other cause is not claimed for $description");
+        }
+    }
+
     private static function testUnresolvedTermSetNamesItsRealCause(): void
     {
         $gateway = new class () extends WC_Twoinc {
@@ -2551,12 +2752,15 @@ final class BrandConfigSpec
         TinyAssert::true($gateway->get_merchant_terms_state()['checked_on'] > 0, 'a resolved set still reports when it was read');
         TinyAssert::same(null, $GLOBALS['__twoinc_test_options'][$error_option] ?? null, 'a success clears the recorded cause');
 
-        // Last-known-good outranks a failed refresh: nothing is wrong for the merchant to be told.
+        // Last-known-good outranks a failed refresh (ABN-538).
         unset($GLOBALS['__twoinc_test_options'][$stamp], $GLOBALS['__twoinc_test_options'][$attempted]);
         WC_Twoinc::reset_merchant_record_memo();
         $gateway->responses = [new WP_Error('http_request_failed', 'down')];
-        TinyAssert::same('resolved', $gateway->get_merchant_terms_state()['state'], 'a failed refresh over a cached list stays resolved');
+        $served = $gateway->get_merchant_terms_state();
+        TinyAssert::same('resolved', $served['state'], 'a failed refresh over a cached list stays resolved');
         TinyAssert::same('', $gateway->get_merchant_terms_notice(), 'a served cached list needs no explanation');
+        TinyAssert::same(true, $served['stale'], 'a resolved set standing over a failed refresh is not current');
+        TinyAssert::same('unreachable', $served['reason'], 'and it says what the failed refresh hit');
 
         // The one state where pointing at the API key is correct.
         $cold();

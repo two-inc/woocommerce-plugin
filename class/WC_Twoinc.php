@@ -786,34 +786,50 @@ if (!class_exists('WC_Twoinc')) {
          * 'not_reported' (a successful read carrying no term list at all),
          * 'never_fetched', 'not_configured'.
          *
-         * @return array{state: string, reason: string|null, code: int|null, checked_on: int, count: int}
+         * `reason`/`code` carry the recorded failure whatever the state, so a
+         * set served from cache while refreshes keep failing can say why it is
+         * stale rather than reading as current (ABN-538). `stale` is true when
+         * a failure is on record, or the figures are older than the refresh
+         * window they should have been replaced within.
+         *
+         * @return array{state: string, reason: string|null, code: int|null, checked_on: int, count: int, stale: bool, refresh_failed: bool}
          */
         public function get_merchant_terms_state(): array
         {
             $terms = $this->get_merchant_available_terms();
             $checked_on = (int) get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on'));
+            // A successful refresh deletes this row and moves the clock above,
+            // so its presence beside a resolved set means the figures on screen
+            // are the last known good and the newest attempt failed.
+            $error = get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_last_error'));
+            $recorded_failure = is_array($error) && isset($error['status']);
             $state = [
                 'state' => 'resolved',
-                'reason' => null,
-                'code' => null,
+                'reason' => $recorded_failure ? (string) $error['status'] : null,
+                'code' => $recorded_failure && isset($error['code']) ? $error['code'] : null,
                 'checked_on' => $checked_on,
                 'count' => count($terms),
+                // Age half is refresh_merchant_record_caches()'s own freshness
+                // test, negated; the recorded failure is an additional reason,
+                // and one that clock cannot see.
+                'stale' => $recorded_failure || !($checked_on + self::MERCHANT_RECORD_TTL > time()),
+                // Separate from `reason`, which not_configured nulls to keep the
+                // withhold log line's shape: the display still has to say which
+                // of the two staleness causes it is looking at.
+                'refresh_failed' => $recorded_failure,
             ];
 
-            // The recorded cause is read only where it can be reported, so a
-            // resolved set — every checkout render — pays no query for it.
             if ($state['count'] > 0) {
                 return $state;
             }
-            $error = get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_last_error'));
             if (!$this->get_option('api_key')) {
                 $state['state'] = 'not_configured';
+                $state['reason'] = null;
+                $state['code'] = null;
                 return $state;
             }
-            if (is_array($error) && isset($error['status'])) {
+            if ($recorded_failure) {
                 $state['state'] = 'fetch_failed';
-                $state['reason'] = (string) $error['status'];
-                $state['code'] = isset($error['code']) ? $error['code'] : null;
                 return $state;
             }
             if ($checked_on > 0) {
@@ -901,6 +917,38 @@ if (!class_exists('WC_Twoinc')) {
             return sprintf(__('Your payment terms could not be read: the answer from %s could not be understood.', 'twoinc-payment-gateway'), $product_name);
         }
 
+        /**
+         * When the figures were read, and why they cannot be trusted as current
+         * (ABN-538). A recorded failure is reported as the failure it is even
+         * when the read itself is minutes old — the figures are not out of
+         * date in that case, the attempt to replace them simply did not land.
+         *
+         * @param array{checked_on: int, stale: bool, refresh_failed: bool} $state
+         */
+        private static function describe_merchant_record_age(array $state): string
+        {
+            if ($state['checked_on'] <= 0) {
+                return __('Never', 'twoinc-payment-gateway');
+            }
+            $read_on = self::format_merchant_record_timestamp($state['checked_on']);
+            if (!$state['stale']) {
+                return $read_on;
+            }
+            if ($state['refresh_failed']) {
+                return sprintf(
+                    /* translators: %s is a date and time in the site's own format */
+                    __('%s — the last attempt to refresh these figures failed; use "Refresh merchant profile" under Diagnostics to retry', 'twoinc-payment-gateway'),
+                    $read_on
+                );
+            }
+
+            return sprintf(
+                /* translators: %s is a date and time in the site's own format */
+                __('%s — these figures are out of date; use "Refresh merchant profile" under Diagnostics', 'twoinc-payment-gateway'),
+                $read_on
+            );
+        }
+
         /** Site timezone, in the site's own date and time format. */
         private static function format_merchant_record_timestamp(int $timestamp): string
         {
@@ -914,8 +962,16 @@ if (!class_exists('WC_Twoinc')) {
         {
             switch ($state['state']) {
                 case 'resolved':
-                    /* translators: %d is a count of payment terms */
-                    return sprintf(__('Resolved (%d available)', 'twoinc-payment-gateway'), (int) $state['count']);
+                    if (!$state['stale']) {
+                        /* translators: %d is a count of payment terms */
+                        return sprintf(__('Resolved (%d available)', 'twoinc-payment-gateway'), (int) $state['count']);
+                    }
+
+                    return $state['refresh_failed']
+                        /* translators: %d is a count of payment terms */
+                        ? sprintf(__('Resolved (%d available), last refresh failed', 'twoinc-payment-gateway'), (int) $state['count'])
+                        /* translators: %d is a count of payment terms */
+                        : sprintf(__('Resolved (%d available), out of date', 'twoinc-payment-gateway'), (int) $state['count']);
                 case 'not_configured':
                     return __('No API key saved', 'twoinc-payment-gateway');
                 case 'none_offered':
@@ -5874,14 +5930,12 @@ if (!class_exists('WC_Twoinc')) {
                 [
                     'label' => __('Payment terms', 'twoinc-payment-gateway'),
                     'value' => self::summarise_merchant_terms_state($terms),
-                    'ok'    => $terms['state'] === 'resolved',
+                    'ok'    => $terms['state'] === 'resolved' && !$terms['stale'],
                 ],
                 [
                     'label' => __('Merchant profile last read', 'twoinc-payment-gateway'),
-                    'value' => $terms['checked_on'] > 0
-                        ? self::format_merchant_record_timestamp($terms['checked_on'])
-                        : __('Never', 'twoinc-payment-gateway'),
-                    'ok'    => $terms['checked_on'] > 0,
+                    'value' => self::describe_merchant_record_age($terms),
+                    'ok'    => $terms['checked_on'] > 0 && !$terms['stale'],
                 ],
             ];
 
