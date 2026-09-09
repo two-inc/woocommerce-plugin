@@ -91,16 +91,18 @@ Vendored assets
   invisible to the upstream reviewer and silently forks the control.
 - **A change to shared panel behaviour is therefore TWO edits**, and nothing links
   the copies: whoever changes one and stops has fixed one platform, and neither
-  reviewer sees the other half. The two copies have DRIFTED — this one lags — and
-  re-copying the whole file is the only thing that brings them back into step.
+  reviewer sees the other half. **Nothing compares the two copies**, so re-copying
+  the whole file is the only thing that puts them back in step, and a panel change
+  made in one repo and nowhere else has landed on one platform.
 - `tests/js/company-search-panel-vendored.test.js` is an **edit-lock, not a parity
-  check** (TWO-25503). `EDIT_LOCK_SHA256` is this file's OWN digest, so the suite
-  catches an in-place edit here and says nothing whatever about whether the two
-  copies agree — it cannot reach the Magento repo at all. The digest moves only on
-  a deliberate re-copy from upstream.
-- The module is framework-free with a UMD tail and stays that way: the Hyvä
-  checkout loads it with no RequireJS, jQuery or Knockout, so a dependency on
-  this plugin's own jQuery would break it there.
+  check** (TWO-25503). `EDIT_LOCK_SHA256` is the vendored panel's own digest, so
+  the suite catches an in-place edit here and says nothing whatever about whether
+  the two copies agree — it cannot reach the Magento repo at all. The digest moves
+  only on a deliberate re-copy from upstream.
+- The module is framework-free with a UMD tail, a constraint inherited from the
+  copy it is taken from: a Magento-side checkout loads that copy with no
+  RequireJS, jQuery or Knockout, and a framework dependency added here would be
+  re-copied back into a place that cannot satisfy it.
 - **The unsupported-country gate greys out SEARCH, never manual entry.** Manual
   entry hands the field over as a plain typeable input that never reaches the
   registry, so disabling it there blocks a mode that was never going to search and
@@ -126,7 +128,7 @@ Keyboard behaviour is not verifiable in jsdom
   keyboard behaviour itself is verified in a real browser. A passing jsdom Tab test
   is never evidence that a trap is absent.
 
-Three more traps in the same suites:
+Three more traps in the JS suites:
 
 - **A real chip click fires no `focusin`.** The chip's `mousedown` handler calls
   `preventDefault()`, which suppresses the native focus, so a rule written only
@@ -148,8 +150,9 @@ A popup window is in no tab listing
 
 What focus landing on the checkout does to an open signup popup
 
-Every `focusin` on the checkout is classified once, whether a popup is up or not,
-and these are the three rules (TWO-25658):
+Once the sole-trader tokens are minted, every `focusin` on the checkout is
+classified once — whether a popup is up or not — and these are the three rules
+(TWO-25658):
 
 - **The role's own Sole trader chip is inert.** Arrival moves the popup neither way
   — only an activation raises it, and the browser delivers Enter and Space on a
@@ -164,19 +167,20 @@ A window or application switch lands on no control at all and settles nothing.
 Launchers are not exempt from rule two — a launch blurs whatever holds focus first,
 so a window return re-fires focus on nothing.
 
-A fourth rule (TWO-25658): **a DIFFERENT role's Sole trader chip gets a popup of
-its own**, raised through that chip's own click handler so a launch stays spelled
-out in one place. Reaching that chip by FOCUS does not raise it here — the popup
-closes and nothing replaces it; activating the chip does, each role holding its own
-sole-trader controller.
+**Reaching another role's Sole trader chip by FOCUS raises nothing** — the
+exemption is gated on the chip being inside this role's own control, so another
+role's chip closes the popup like any other target. Only activating that chip
+launches a popup, through its own click handler, each role holding its own
+sole-trader controller (TWO-25658).
 
 The custom request-header table
 
 - The Diagnostics header table sends any number of named headers on calls to the Two
-  API, each with its own "also send from browser" tick. Every rule the save enforces
-  — reserved names, matched case-insensitively, and printable-ASCII values — is
-  re-applied on the READ path, because a stored value can arrive from a hand-edited
-  row or an import that no form validated.
+  API, each with its own "also send from browser" tick. Every rule the save
+  enforces — a non-empty name in the RFC 7230 token set, no reserved name matched
+  case-insensitively, no duplicate name, a non-blank value, printable-ASCII values
+  — is re-applied on the READ path, because a stored value can arrive from a
+  hand-edited row or an import that no form validated.
 - **The header table gets no data patch or migration, deliberately.** The
   single-value setting it replaces never reached a production release on any
   platform, so no merchant ever had one configured; do not add one on the
@@ -187,7 +191,7 @@ The custom request-header table
   it and no field help states it.
 - A refusal names the rule, never who sets the header — the reason has to be true of
   every reserved name, not of the one example that prompted the question.
-- **The printable-ASCII value pattern carries `/D`** (or is anchored `\z`). A bare
+- **The printable-ASCII value pattern carries `/D`.** A bare
   `$` also matches immediately before a trailing newline, which is precisely the
   byte the rule exists to refuse, and a header value ending in one is a
   response-splitting sink.
