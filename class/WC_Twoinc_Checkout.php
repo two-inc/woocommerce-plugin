@@ -511,6 +511,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // of its own to a checkout render.
             $status = $this->wc_twoinc->get_api_key_verification_status();
             if (WC_Twoinc::is_definitive_key_failure($status['status'])) {
+                $this->wc_twoinc->log_withheld_from_checkout(
+                    sprintf('checkout bootstrap withheld: API key verification status "%s"', $status['status'])
+                );
                 return;
             }
 

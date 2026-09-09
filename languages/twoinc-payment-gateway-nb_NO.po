@@ -1500,3 +1500,93 @@ msgstr "Eldre innstilling. Denne tilbyr et egendefinert vilkår på %s dager fra
 #, php-format
 msgid "Legacy setting. This offers a custom term of %s days after the end of the month. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
 msgstr "Eldre innstilling. Denne tilbyr et egendefinert vilkår på %s dager etter månedens slutt. Den støttes ikke lenger og kan ikke redigeres. Velg Fjern for å trekke den tilbake, eller bruk betalingsvilkårene ovenfor for å endre hva du tilbyr."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "The last attempt was on %s."
+msgstr "Siste forsøk var %s."
+
+#: class/WC_Twoinc.php
+msgid "No attempt has been made yet."
+msgstr "Det er ikke gjort noe forsøk ennå."
+
+#: class/WC_Twoinc.php
+msgid "Payment method at checkout"
+msgstr "Betalingsmåte i kassen"
+
+#: class/WC_Twoinc.php
+msgid "Not shown at checkout"
+msgstr "Vises ikke i kassen"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "no API key is saved. Check \"%s API key\"."
+msgstr "ingen API-nøkkel er lagret. Kontroller \"%s API-nøkkel\"."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the API key was rejected. Check \"%s API key\" and \"Environment\"."
+msgstr "API-nøkkelen ble avvist. Kontroller \"%s API-nøkkel\" og \"Miljø\"."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "no buyer countries are currently enabled for your account. Contact %s to have them enabled."
+msgstr "ingen kjøperland er aktivert for kontoen din for øyeblikket. Kontakt %s for å få dem aktivert."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %s"
+msgstr "skjult for handlekorger under %s"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %1$s or %2$s"
+msgstr "skjult for handlekorger under %1$s eller %2$s"
+
+#: class/WC_Twoinc.php
+msgid "excluding tax"
+msgstr "eksklusiv mva."
+
+#: class/WC_Twoinc.php
+msgid "including tax"
+msgstr "inklusiv mva."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Check the \"%s API key\" and \"Environment\" settings."
+msgstr "Kontroller innstillingene \"%s API-nøkkel\" og \"Miljø\"."
+
+#: class/WC_Twoinc.php
+msgid "the payment method is disabled. Check \"Turn on/off\"."
+msgstr "betalingsmåten er deaktivert. Kontroller \"Skru på/av\"."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers billed in %s"
+msgstr "tilbys bare kjøpere som faktureres i %s"
+
+#: class/WC_Twoinc.php
+msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
+msgstr "den lagrede tilleggsstrategien gjenkjennes ikke. Kontroller \"Tilleggsstrategi\"."
+
+#: class/WC_Twoinc.php
+msgid "Shown at checkout"
+msgstr "Vises i kassen"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers in %s"
+msgstr "tilbys bare kjøpere i %s"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the buyer countries on your account could not be read. Contact %s."
+msgstr "kjøperlandene på kontoen din kunne ikke leses. Kontakt %s."
+
+#: class/WC_Twoinc.php
+msgid "minimum order value not known until your profile refreshes"
+msgstr "minste ordreverdi er ikke kjent før profilen din oppdateres"
+
+#: class/WC_Twoinc.php
+msgid "hidden for baskets in a currency the buyer surcharge cannot be priced in"
+msgstr "skjult for handlekorger i en valuta kjøpertillegget ikke kan prises i"

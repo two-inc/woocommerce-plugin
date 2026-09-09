@@ -1499,3 +1499,93 @@ msgstr "Verouderde instelling. Dit biedt een aangepaste termijn van %s dagen van
 #, php-format
 msgid "Legacy setting. This offers a custom term of %s days after the end of the month. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
 msgstr "Verouderde instelling. Dit biedt een aangepaste termijn van %s dagen na het einde van de maand. Deze wordt niet langer ondersteund en kan niet worden gewijzigd. Kies Verwijderen om deze in te trekken, of gebruik de betalingstermijnen hierboven om te wijzigen wat u aanbiedt."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "The last attempt was on %s."
+msgstr "De laatste poging was op %s."
+
+#: class/WC_Twoinc.php
+msgid "No attempt has been made yet."
+msgstr "Er is nog geen poging gedaan."
+
+#: class/WC_Twoinc.php
+msgid "Payment method at checkout"
+msgstr "Betaalmethode in de checkout"
+
+#: class/WC_Twoinc.php
+msgid "Not shown at checkout"
+msgstr "Niet zichtbaar in de checkout"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "no API key is saved. Check \"%s API key\"."
+msgstr "er is geen API-sleutel opgeslagen. Controleer \"%s API-sleutel\"."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the API key was rejected. Check \"%s API key\" and \"Environment\"."
+msgstr "de API-sleutel is geweigerd. Controleer \"%s API-sleutel\" en \"Omgeving\"."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "no buyer countries are currently enabled for your account. Contact %s to have them enabled."
+msgstr "er zijn momenteel geen landen van de koper geactiveerd voor uw account. Neem contact op met %s om ze te laten activeren."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %s"
+msgstr "verborgen voor winkelwagens onder %s"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %1$s or %2$s"
+msgstr "verborgen voor winkelwagens onder %1$s of %2$s"
+
+#: class/WC_Twoinc.php
+msgid "excluding tax"
+msgstr "exclusief btw"
+
+#: class/WC_Twoinc.php
+msgid "including tax"
+msgstr "inclusief btw"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Check the \"%s API key\" and \"Environment\" settings."
+msgstr "Controleer de instellingen \"%s API-sleutel\" en \"Omgeving\"."
+
+#: class/WC_Twoinc.php
+msgid "the payment method is disabled. Check \"Turn on/off\"."
+msgstr "de betaalmethode is uitgeschakeld. Controleer \"Aan/uitzetten\"."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers billed in %s"
+msgstr "alleen aangeboden aan kopers die worden gefactureerd in %s"
+
+#: class/WC_Twoinc.php
+msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
+msgstr "de opgeslagen toeslagmethode wordt niet herkend. Controleer \"Toeslagmethode\"."
+
+#: class/WC_Twoinc.php
+msgid "Shown at checkout"
+msgstr "Zichtbaar in de checkout"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers in %s"
+msgstr "alleen aangeboden aan kopers in %s"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the buyer countries on your account could not be read. Contact %s."
+msgstr "de landen van de koper op uw account konden niet worden gelezen. Neem contact op met %s."
+
+#: class/WC_Twoinc.php
+msgid "minimum order value not known until your profile refreshes"
+msgstr "minimumbestelwaarde nog niet bekend totdat uw profiel is vernieuwd"
+
+#: class/WC_Twoinc.php
+msgid "hidden for baskets in a currency the buyer surcharge cannot be priced in"
+msgstr "verborgen voor winkelwagens in een valuta waarin de toeslag voor de koper niet kan worden berekend"

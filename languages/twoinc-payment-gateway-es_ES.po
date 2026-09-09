@@ -75,3 +75,93 @@ msgstr "Seleccione su empresa antes de pagar con %s."
 #, php-format
 msgid "Unrecognised surcharge method: %1$s. Choose one of: %2$s."
 msgstr "Método de recargo no reconocido: %1$s. Elija uno de: %2$s."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "The last attempt was on %s."
+msgstr "El último intento fue el %s."
+
+#: class/WC_Twoinc.php
+msgid "No attempt has been made yet."
+msgstr "Todavía no se ha realizado ningún intento."
+
+#: class/WC_Twoinc.php
+msgid "Payment method at checkout"
+msgstr "Método de pago en la caja"
+
+#: class/WC_Twoinc.php
+msgid "Not shown at checkout"
+msgstr "No se muestra en la caja"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "no API key is saved. Check \"%s API key\"."
+msgstr "no hay ninguna clave API guardada. Compruebe \"Clave API de %s\"."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the API key was rejected. Check \"%s API key\" and \"Environment\"."
+msgstr "la clave API fue rechazada. Compruebe \"Clave API de %s\" y \"Entorno\"."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "no buyer countries are currently enabled for your account. Contact %s to have them enabled."
+msgstr "actualmente no hay ningún país de comprador activado para su cuenta. Póngase en contacto con %s para activarlos."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %s"
+msgstr "oculto para cestas por debajo de %s"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %1$s or %2$s"
+msgstr "oculto para cestas por debajo de %1$s o %2$s"
+
+#: class/WC_Twoinc.php
+msgid "excluding tax"
+msgstr "sin impuestos"
+
+#: class/WC_Twoinc.php
+msgid "including tax"
+msgstr "con impuestos"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Check the \"%s API key\" and \"Environment\" settings."
+msgstr "Compruebe los ajustes \"Clave API de %s\" y \"Entorno\"."
+
+#: class/WC_Twoinc.php
+msgid "the payment method is disabled. Check \"Turn on/off\"."
+msgstr "el método de pago está desactivado. Compruebe \"Turn on/off\"."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers billed in %s"
+msgstr "se ofrece solo a compradores facturados en %s"
+
+#: class/WC_Twoinc.php
+msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
+msgstr "el método de recargo guardado no se reconoce. Compruebe \"Surcharge method\"."
+
+#: class/WC_Twoinc.php
+msgid "Shown at checkout"
+msgstr "Se muestra en la caja"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers in %s"
+msgstr "se ofrece solo a compradores en %s"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the buyer countries on your account could not be read. Contact %s."
+msgstr "los países del comprador de su cuenta no se han podido leer. Póngase en contacto con %s."
+
+#: class/WC_Twoinc.php
+msgid "minimum order value not known until your profile refreshes"
+msgstr "el valor mínimo del pedido no se conoce hasta que su perfil se actualice"
+
+#: class/WC_Twoinc.php
+msgid "hidden for baskets in a currency the buyer surcharge cannot be priced in"
+msgstr "oculto para cestas en una moneda en la que el recargo al comprador no puede calcularse"

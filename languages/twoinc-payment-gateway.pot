@@ -1501,3 +1501,93 @@ msgstr ""
 #, php-format
 msgid "Legacy setting. This offers a custom term of %s days after the end of the month. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
 msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "The last attempt was on %s."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "No attempt has been made yet."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Payment method at checkout"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Not shown at checkout"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Shown at checkout"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "the payment method is disabled. Check \"Turn on/off\"."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "no API key is saved. Check \"%s API key\"."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the API key was rejected. Check \"%s API key\" and \"Environment\"."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "no buyer countries are currently enabled for your account. Contact %s to have them enabled."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %s"
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %1$s or %2$s"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "excluding tax"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "including tax"
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Check the \"%s API key\" and \"Environment\" settings."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers billed in %s"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers in %s"
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the buyer countries on your account could not be read. Contact %s."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "minimum order value not known until your profile refreshes"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "hidden for baskets in a currency the buyer surcharge cannot be priced in"
+msgstr ""
