@@ -508,8 +508,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // bootstrap and the address-block company-search widget are
             // both gated behind its presence, so withholding it here stops
             // company search from rendering there (TWO-25326 follow-up,
-            // ABN-495). The same two cached conditions is_available()
-            // judges, so this costs no live HTTP call per checkout render.
+            // ABN-495). The same two conditions is_available() judges, and
+            // neither adds a fetch of its own to a checkout render.
             $status = $this->wc_twoinc->get_api_key_verification_status();
             if ($status['status'] !== 'ok' || !$this->wc_twoinc->has_offerable_payment_terms()) {
                 return;
