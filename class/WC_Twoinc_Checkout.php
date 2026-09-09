@@ -41,8 +41,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             add_action('woocommerce_pay_order_before_submit', [$this, 'order_pay_page_customize'], 24);
 
-            // The shipping instance's own sole-trader signup note (Doug
-            // 2026-08-31 §2) — the one piece of its markup WC's own field-loop
+            // The shipping instance's own sole-trader signup note (TWO-40) —
+            // the one piece of its markup WC's own field-loop
             // doesn't render for free the way it does the registered fields
             // above: the billing equivalent lives inside the payment-tile
             // description (WC_Twoinc::get_gateway_description()), which has no
@@ -170,7 +170,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 ];
             }
 
-            // Always registered (TWO-25326 §7.1) — this is the ONE
+            // Always registered (TWO-25326) — this is the ONE
             // company-search control; get_enable_company_search() only ever
             // decides WHERE it renders (address area vs payment tile), never
             // whether it exists. Gating registration on the checkbox left the
@@ -204,14 +204,13 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             ];
 
             // The shipping/delivery role's own COMPLETE company-search
-            // instance (Doug 2026-08-31 §2) — same three-field shape as
-            // billing's above (search-anchor, name carrier, number carrier),
-            // registered unconditionally: `TwoCompanySearch`'s shipping
-            // instance mounts against `#shipping_company_display` regardless
-            // of whether the "ship to a different address?" form is
-            // currently shown, the same way the billing control is always
-            // registered regardless of the admin's company-search-location
-            // setting.
+            // instance (TWO-40) — same three-field shape as billing's above
+            // (search-anchor, name carrier, number carrier), registered
+            // unconditionally: `TwoCompanySearch`'s shipping instance mounts
+            // against `#shipping_company_display` regardless of whether the
+            // "ship to a different address?" form is currently shown, the same
+            // way the billing control is always registered regardless of the
+            // admin's company-search-location setting.
             if (!isset($fields['shipping']['shipping_company'])) {
                 $fields['shipping']['shipping_company'] = [
                     'label' => __('Company name', 'twoinc-payment-gateway'),
@@ -344,7 +343,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
         /**
          * Where the ONE company-search control renders in the checkout DOM
-         * (TWO-25326 §7.1). Pulled out as a pure function so it can be
+         * (TWO-25326). Pulled out as a pure function so it can be
          * unit-tested in isolation from prepare_twoinc_object().
          *
          * The SAME `enable_company_search` checkbox drives both whether the
@@ -398,7 +397,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 // Query params make_request() attaches server-side, for the
                 // one browser-direct call (fetchCurrentBuyer) that has none.
                 'api_client_params' => WC_Twoinc::get_api_client_params(),
-                // Always 'yes' at load (TWO-25326 §7.1): the search control
+                // Always 'yes' at load (TWO-25326): the search control
                 // is never "off", only relocated. `window.twoinc.enable_company_search`
                 // is a RUNTIME flag in twoinc.js, toggled to "no" only when
                 // the search widget stops being the active input method —
@@ -473,7 +472,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                         'sole_trader' => __('Sole trader', 'twoinc-payment-gateway'),
                         'popup_prompt' => __('Click here to login or sign up as a sole trader.', 'twoinc-payment-gateway'),
                         // One link covers both "pick a different existing
-                        // registration" and "register a new one" (TWO-40 §7):
+                        // registration" and "register a new one" (TWO-40):
                         // that choice is made inside the hosted signup's own
                         // UI once the popup is open, so the copy here must
                         // not commit to either.

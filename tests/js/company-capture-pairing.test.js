@@ -1,5 +1,5 @@
 /**
- * TWO-40 §5. The company write-back state machine: one write path, a pairing
+ * TWO-40. The company write-back state machine: one write path, a pairing
  * tag, a provenance marker, and the retype guard that drops a stale
  * organisation number.
  *
@@ -55,7 +55,7 @@ function buildForm() {
   ].join("\n");
 }
 
-describe("TWO-40 §5 — captured-company write path", () => {
+describe("TWO-40 — captured-company write path", () => {
   let ctx;
   let $;
   let capture;
@@ -156,7 +156,7 @@ describe("TWO-40 §5 — captured-company write path", () => {
     });
 
     test("a TWO:-prefixed identifier takes the same path as any other number", () => {
-      // §3: exactly one special case for these, and it is display only. No
+      // Exactly one special case for these, and it is display only. No
       // branch in storage, pairing or validation.
       capture.write("Sole Trader Co", "TWO:ST12345");
 
@@ -322,7 +322,7 @@ describe("TWO-40 §5 — captured-company write path", () => {
 
     test("the number field's own visibility is re-decided after a wipe", () => {
       // `#company_id_field` is shown or hidden on the strength of the value it
-      // holds (TWO-25326 §12), and this is the function that changes it.
+      // holds (TWO-25326), and this is the function that changes it.
       capture.write("Sole Trader Co", "TWO:ST12345");
       const toggled = jest.spyOn(ctx.dom, "toggleBusinessFields");
 
@@ -358,7 +358,7 @@ describe("TWO-40 §5 — captured-company write path", () => {
 
   describe("sole-trader adoption", () => {
     test("writes the buyer's address even though address lookup is switched OFF", () => {
-      // §5: the write-back must NOT be gated on the switch that gates an
+      // The write-back must NOT be gated on the switch that gates an
       // ordinary search pick's address write. That switch is legitimately off
       // in configurations that have nothing to do with sole-trader signup.
       expect(ctx.twoinc.enable_address_lookup).toBe("no");
@@ -407,7 +407,7 @@ describe("TWO-40 §5 — captured-company write path", () => {
     });
 
     test("a plugin-written name is dropped by a country change, a typed one is not", () => {
-      // The provenance marker's production consumer (TWO-40 §5): a sole trader's
+      // The provenance marker's production consumer (TWO-40): a sole trader's
       // name is plugin-written, whatever the capture-mode flag reads.
       capture.write("Sole Trader Co", "TWO:ST12345");
       ctx.helper.clearSelectedCompany();

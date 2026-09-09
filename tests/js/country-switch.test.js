@@ -77,7 +77,7 @@ describe("billing country switch", () => {
   // Puts a captured company in every field that holds one, the way a pick from
   // the search results does.
   function captureCompany(name, id, country) {
-    // Through the ONE capture write path (TWO-40 §5), not by poking the two
+    // Through the ONE capture write path (TWO-40), not by poking the two
     // inputs: that is what a real pick, a sole-trader adoption and a user-meta
     // restore all do, and it is what leaves the pairing tag and the provenance
     // marker behind. Written raw here, the pair would be indistinguishable
@@ -92,7 +92,7 @@ describe("billing country switch", () => {
   }
 
   // The buyer typing a company into the plain fallback fields by hand, with no
-  // plugin write behind it. Distinct from `captureCompany` since TWO-40 §5: the
+  // plugin write behind it. Distinct from `captureCompany` since TWO-40: the
   // two differ by PROVENANCE, and the country-change clear treats them
   // differently on purpose — it drops what the plugin wrote and keeps what the
   // buyer typed.
@@ -538,7 +538,7 @@ describe("billing country switch", () => {
       // being sought for the dropped pair. It does NOT prove the method becomes
       // unusable: nothing deselects the gateway radio, so an already-approved
       // buyer keeps a selected Two over an emptied company until the next
-      // intent pass. Deselecting is §6's deferred half, on its own ticket.
+      // intent pass. Deselecting is the deferred half, on its own ticket.
       ctx.twoinc.enable_order_intent = "yes";
       addAddressFields();
       initializeCheckout();
@@ -797,7 +797,7 @@ describe("billing country switch", () => {
     });
 
     test("does NOT clear a company name with no organisation number", () => {
-      // Not a capture (TWO-25326 §6), and nothing about a bare name is
+      // Not a capture (TWO-25326), and nothing about a bare name is
       // invalidated by a country change — the buyer typed it, and manual entry
       // deliberately keeps it. Clearing here would delete their own input on a
       // re-render they never asked for.
@@ -925,7 +925,7 @@ describe("billing country switch", () => {
     test("clears in manual entry as well as in search mode", () => {
       // `clearSelectedCompany` keeps a hand-typed `#billing_company` — the
       // buyer's own input — while still blanking `#company_id`. What decides
-      // the leg is PROVENANCE, not the capture mode (TWO-40 §5).
+      // the leg is PROVENANCE, not the capture mode (TWO-40).
       ctx.capture.mode = "manual";
       addAddressFields();
       initializeCheckout();

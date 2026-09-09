@@ -1,5 +1,5 @@
 /**
- * TWO-25326 §12. Internally minted organisation numbers are never displayed.
+ * TWO-25326. Internally minted organisation numbers are never displayed.
  *
  * Sole-trader enrollment mints an identifier of the form `TWO:…` for a buyer
  * with no registry number of their own. It is a protocol value the backend
@@ -307,7 +307,7 @@ describe("TWO:-prefixed organisation numbers", () => {
 
       ctx.dom.togglePaySubtitleDesc("intent-approved");
 
-      // The §12 case the brackets rule exists for: not "Example Ltd ()", and
+      // The case the brackets rule exists for: not "Example Ltd ()", and
       // not the served fallback sentence either — the company is still known,
       // so it is still named.
       expect($box.text()).toBe("Order approved for Example Ltd.");
@@ -353,7 +353,7 @@ describe("TWO:-prefixed organisation numbers", () => {
 
   describe("the minted number never reaches the buyer", () => {
     /**
-     * §12's guarantee pinned from both ends: the minted number stays on the
+     * The guarantee pinned from both ends: the minted number stays on the
      * submitted input, and no surface renders it.
      */
     function loadMintedNumberFixture() {
@@ -374,10 +374,10 @@ describe("TWO:-prefixed organisation numbers", () => {
       );
     }
 
-    // The whole reason §12 existed: on a country with no registry, an enrolled
-    // sole trader's `TWO:…` used to sit in a visible text box. It cannot any
-    // more, whatever it holds — the input is hidden in every state — so the
-    // guarantee to pin is that hiding it did not cost the value.
+    // The whole reason this rule exists: on a country with no registry, an
+    // enrolled sole trader's `TWO:…` used to sit in a visible text box. It
+    // cannot any more, whatever it holds — the input is hidden in every state
+    // — so the guarantee to pin is that hiding it did not cost the value.
     test.each([
       ["11111111", "a registry number"],
       ["", "nothing captured yet"],

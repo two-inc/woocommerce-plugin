@@ -68,7 +68,7 @@ describe("read-only captured-company summary", () => {
     );
 
     // The payment tile, minimally: the captured company renders inside the
-    // intent-approved notice's own sentence (TWO-25326 §7.2/§7.3), outside the
+    // intent-approved notice's own sentence (TWO-25326), outside the
     // billing wrapper the address-area assertions are scoped to. Bare token and
     // a marker fallback, since what is asserted is WHICH string is on screen,
     // never a production sentence's wording.
@@ -151,7 +151,7 @@ describe("read-only captured-company summary", () => {
 
       // Picking a company invalidates the intent that was approved for the
       // PREVIOUS one, so the pick itself takes the notice back off screen —
-      // and its embedded company text with it (TWO-25326 §7.2/§7.3, ruling 2026-08-03). That is the
+      // and its embedded company text with it (TWO-25326). That is the
       // behaviour, not a harness quirk; re-approve to get back to the state
       // this test is about, which is what the notice renders once shown.
       approveIntent();
@@ -162,11 +162,11 @@ describe("read-only captured-company summary", () => {
       expect(tileText()).toBe("ACME Widgets Ltd (12345678)");
     });
 
-    test("the name does NOT render anywhere in the address area (TWO-25326 §7)", () => {
+    test("the name does NOT render anywhere in the address area (TWO-25326)", () => {
       // Doug's finding, live 2026-08-02: the address area showed the company
       // name twice — once in the company-name control the buyer picked it in,
-      // and again in this block underneath. §7 allows the company-name field
-      // and the number label below it, and nothing else.
+      // and again in this block underneath. TWO-25326 allows the company-name
+      // field and the number label below it, and nothing else.
       pickCompany("ACME Widgets Ltd", "12345678");
 
       expect(summary().find(".twoinc-company-summary-name").length).toBe(0);
@@ -215,7 +215,7 @@ describe("read-only captured-company summary", () => {
       expect($("#company_id").val()).toBe("12345678");
     });
 
-    test("self-heals its position after WooCommerce core's own field resort (#30.x.9, found by live post-merge verification)", () => {
+    test("self-heals its position after WooCommerce core's own field resort (found by live post-merge verification)", () => {
       // Core's address-i18n.js re-sorts every `.form-row` in the billing
       // wrapper on EVERY checkout load, not only on a country change. This
       // summary is a plain <div>, so it never takes part and a position set
@@ -248,7 +248,7 @@ describe("read-only captured-company summary", () => {
       );
     });
 
-    test("does not physically move the node when it is already correctly positioned (round 1 review — Han)", () => {
+    test("does not physically move the node when it is already correctly positioned", () => {
       // Detaching and re-inserting an already-correct node collapses a text
       // selection inside the summary — selecting the org number to copy it is
       // the only interaction this display affords. Spied on `insertAfter`
@@ -282,7 +282,7 @@ describe("read-only captured-company summary", () => {
       approveIntent();
 
       // No number means no number label at all — not an empty one taking up a
-      // row under the field (TWO-25326 §5).
+      // row under the field (TWO-25326).
       expect(isShown()).toBe(false);
       expect(renderedNumber()).toBe("");
 
@@ -292,7 +292,7 @@ describe("read-only captured-company summary", () => {
     });
   });
 
-  describe("number rendered below the name, right-aligned, not sharing its line (#30.x.9)", () => {
+  describe("number rendered below the name, right-aligned, not sharing its line", () => {
     // Doug's canonical cross-platform ruling: the number gets its own row below
     // the name, right-aligned to the input's edge, so however long the name
     // runs the two never compete for the same horizontal space.
@@ -306,7 +306,7 @@ describe("read-only captured-company summary", () => {
       expect(idStyle.textAlign).toBe("end");
     });
 
-    test("the summary box carries WooCommerce core's own form-row padding, so the id lines up with the input's real edge (round 2 review — Vader)", () => {
+    test("the summary box carries WooCommerce core's own form-row padding, so the id lines up with the input's real edge", () => {
       // Computed style, not a source regex: the `[^}]*` capture used elsewhere
       // in this file terminates early on the `}` inside this rule's own CSS
       // comment, so a regex passes whatever the rule declares.
@@ -329,17 +329,17 @@ describe("read-only captured-company summary", () => {
     });
 
     test("neither the name nor the id can overflow past the row on a single unbroken token", () => {
-      // Round 1 review (Vader): the block-row fix stops the NUMBER competing
-      // with the name for space, but does nothing on its own for a single
-      // unbroken token — routine in DE/NL/NO registry names — which would
-      // otherwise overflow the row horizontally instead of wrapping.
+      // The block-row fix stops the NUMBER competing with the name for
+      // space, but does nothing on its own for a single unbroken token —
+      // routine in DE/NL/NO registry names — which would otherwise
+      // overflow the row horizontally instead of wrapping.
       const idBody = /\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(stylesheetSource());
       expect(idBody).not.toBeNull();
       expect(idBody[1]).toMatch(/overflow-wrap:\s*anywhere/);
 
-      // The name rule is gone with the name span (TWO-25326 §7); the same
+      // The name rule is gone with the name span (TWO-25326); the same
       // protection now has to be on the intent-message boxes, which carry the
-      // company text directly (§7.2/§7.3) and are narrower than the address
+      // company text directly and are narrower than the address
       // column, so they need it more.
       expect(stylesheetSource()).not.toMatch(/\.twoinc-company-summary-name\s*\{/);
       const tileBody =
@@ -354,13 +354,13 @@ describe("read-only captured-company summary", () => {
     });
   });
 
-  describe("pay-for-order page: number stays aligned with the name, not the full-width row (#30.x.9)", () => {
-    // Round 1 review (Han): that page lays the company fields out as
-    // flex-wrap items and gives the summary `flex-basis: 100%` — a
-    // full-page-width row, unlike the checkout page where the summary is
-    // only as wide as the (narrower) field above it. Right-aligning the id
-    // against that full width would detach it from the actual input, which
-    // sits centred between the two. Assert the override lands.
+  describe("pay-for-order page: number stays aligned with the name, not the full-width row", () => {
+    // That page lays the company fields out as flex-wrap items and gives
+    // the summary `flex-basis: 100%` — a full-page-width row, unlike the
+    // checkout page where the summary is only as wide as the (narrower)
+    // field above it. Right-aligning the id against that full width would
+    // detach it from the actual input, which sits centred between the two.
+    // Assert the override lands.
     test("the id's alignment is overridden back to the leading edge on .custom-checkout", () => {
       const m = /\.custom-checkout\s+\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(
         stylesheetSource()
@@ -369,7 +369,7 @@ describe("read-only captured-company summary", () => {
       expect(m[1]).toMatch(/text-align:\s*start/);
     });
 
-    test("the override actually wins the cascade, not just exists in source (round 2 review — Han)", () => {
+    test("the override actually wins the cascade, not just exists in source", () => {
       // Specificity settles the ordering, so what is guarded here is the
       // override rule silently ceasing to apply at all — a typo'd selector,
       // which a source-only regex cannot catch.
@@ -411,8 +411,8 @@ describe("read-only captured-company summary", () => {
       expect(tileText()).toBe("Sole Proprietor Bakery");
       // enterManualCompanyEntry clears #company_id: the buyer has said the
       // registry company is not theirs, so its number must not survive.
-      // §5 goes further — manual entry shows no number label at all, so the
-      // block is hidden outright rather than rendered empty.
+      // Manual entry shows no number label at all, so the block is hidden
+      // outright rather than rendered empty.
       expect(isShown()).toBe(false);
       expect(renderedNumber()).toBe("");
       expect($("#company_id").val()).toBe("");
@@ -429,11 +429,11 @@ describe("read-only captured-company summary", () => {
       expect($("#billing_company").val()).toBe(renderedName());
     });
 
-    test("hides #company_id_field — manual entry is name-only, no id (#30.x.13)", () => {
+    test("hides #company_id_field — manual entry is name-only, no id", () => {
       // Settled cross-platform three-mode company-capture model: search gets
       // name+id, sole-trader gets name+synthetic id, manual entry gets name
       // ONLY — a visible `#company_id` in manual entry invites an id validated
-      // against nothing (#30.x.13, live-reported).
+      // against nothing (live-reported).
       pickCompany("ACME Widgets Ltd", "12345678");
       helper.enterManualCompanyEntry();
       typeCompanyName("Sole Proprietor Bakery");
@@ -442,14 +442,14 @@ describe("read-only captured-company summary", () => {
       expect($("#company_id").prop("required")).toBe(false);
     });
 
-    test("stays name-only after a round trip through sole-trader mode (#30.x.13, round 1 review — Vader)", () => {
-      // Real dead end found live by Vader's review: sole-trader mode is
-      // reachable WHILE in manual entry — the mode chip is not hidden there.
-      // setMode snapshots and restores the capture mode around
-      // the trip, so a buyer who was in manual entry lands back on `manual`
-      // rather than `search` — without that restore toggleBusinessFields would
-      // show + REQUIRE #company_id_field with no working search widget behind
-      // it (enableCompanySearch early-returns) and no way back to name-only.
+    test("stays name-only after a round trip through sole-trader mode", () => {
+      // Real dead end, live-confirmed: sole-trader mode is reachable WHILE in
+      // manual entry — the mode chip is not hidden there. setMode snapshots
+      // and restores the capture mode around the trip, so a buyer who was in
+      // manual entry lands back on `manual` rather than `search` — without
+      // that restore toggleBusinessFields would show + REQUIRE
+      // #company_id_field with no working search widget behind it
+      // (enableCompanySearch early-returns) and no way back to name-only.
       pickCompany("ACME Widgets Ltd", "12345678");
       helper.enterManualCompanyEntry();
       typeCompanyName("Sole Proprietor Bakery");
@@ -471,7 +471,7 @@ describe("read-only captured-company summary", () => {
       expect(renderedNumber()).toBe("99887766");
 
       // The tile only carries the company once an intent check has actually
-      // run (§7.2/§7.3) — setCompany() alone does not trigger one.
+      // run — setCompany() alone does not trigger one.
       approveIntent();
       expect(tileText()).toBe("Jo Bloggs Trading (99887766)");
       expect($("#billing_company").val()).toBe("Jo Bloggs Trading");
@@ -489,7 +489,7 @@ describe("read-only captured-company summary", () => {
 
       // Same for the tile: the company now renders as plain text inside the
       // intent-approved notice, which is itself a <div> with no controls in
-      // it (TWO-25326 §7.2/§7.3).
+      // it (TWO-25326).
       expect(intentNotice().find("input, select, textarea, [contenteditable]").length).toBe(0);
       expect(intentNotice().prop("tagName")).toBe("DIV");
     });
@@ -664,12 +664,12 @@ describe("read-only captured-company summary", () => {
   /**
    * The captured company renders INSIDE the intent-message sentences
    * themselves — the approved notice and the declined ("not available") box
-   * both carry it (TWO-25326 §7.2/§7.3) — so "shown" and "carries the
-   * company" collapse into one question per box. What is worth asserting:
-   * which template each box substitutes from, that they do not
-   * cross-contaminate, and that the no-company fallback still works.
+   * both carry it (TWO-25326) — so "shown" and "carries the company" collapse
+   * into one question per box. What is worth asserting: which template each
+   * box substitutes from, that they do not cross-contaminate, and that the
+   * no-company fallback still works.
    */
-  describe("intent-message boxes carry the captured company (TWO-25326 §7.2/§7.3, 2026-08-03)", () => {
+  describe("intent-message boxes carry the captured company (TWO-25326)", () => {
     // Capture a company without leaving the intent notice on screen.
     function captureCompanyOnly() {
       const ajax = harness.stubAjax($);

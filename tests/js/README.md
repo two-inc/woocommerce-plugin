@@ -218,8 +218,8 @@ the module-level `twoincSelectWooHelper`, so a second construction was silently 
 these are what stop that returning. The fixture carries `#shipping_*` company rows the plugin
 does not register server-side, because WooCommerce ships one control, on the primary role.
 
-`company-search-tile-location.test.js` — the `company_search_location` setting (TWO-25326
-§7.1). Under `payment_tile` the tile shows exactly one company-name field, `#billing_company`
+`company-search-tile-location.test.js` — the `company_search_location` setting (TWO-25326).
+Under `payment_tile` the tile shows exactly one company-name field, `#billing_company`
 and `#company_id` stay in the address form, the slot is hidden in manual entry, the tile field
 is a live bound panel after the real bootstrap, and the read-only summary renders beside it.
 Under `address_area` the tile stays hidden and empty. With no gateway on the page the sync is
@@ -267,7 +267,7 @@ call before advancing and 2 after.
 
 `company-summary.test.js` — the read-only captured-company summary (TWO-25288):
 
-- the two halves render in two different places (TWO-25326 §7). The address area gets the
+- the two halves render in two different places (TWO-25326). The address area gets the
   organisation **number** only, as a right-aligned block under the company-name field; the
   **name** renders in the payment tile as `<name> (<number>)`. Both are asserted for all three
   capture modes, and the address-area block is asserted to contain no company name at all.
@@ -293,7 +293,7 @@ call before advancing and 2 after.
   not resurrect the picked company, and what is displayed is what `#billing_company` holds.
 - the user-meta restore path, which passes both values explicitly because
   `loadUserMetaInputs` writes `#company_id` _after_ it renders.
-- the intent-message boxes carry the captured company (TWO-25326 §7.2/§7.3): approved and
+- the intent-message boxes carry the captured company (TWO-25326): approved and
   declined boxes each on their own template, the phone-number box never substituted,
   re-substituted from live inputs on every toggle rather than a stale snapshot, a bare name
   where there is no organisation number, and the served no-company sentences as the fallback.
@@ -396,7 +396,7 @@ of invariants that two separately-correct changes disagree about (#486):
   asserted. It is _not_ the same as the payment method becoming unselectable: nothing in the
   file deselects the gateway radio and `isTwoincApproved` is written but never read, so a buyer
   already approved keeps a selected Two method over an emptied company until the next intent
-  pass. Enforcing TWO-25326 §6 by deselecting is not in this suite.
+  pass. Enforcing TWO-25326 by deselecting is not in this suite.
 - **the capture country is pinned when the company is captured** (TWO-25333), at all three
   capture sites: the panel's select handler, a manually typed organisation number, and the
   sole-trader setter — which does _not_ re-pin on the clearing call `setMode("business")` makes
@@ -460,7 +460,7 @@ verdict disappears (TWO-25326):
   to a live read. `readCapturedCompany()` reads the inputs, which WooCommerce empties for an
   instant while replacing the billing fields, so a request issued in that window snapshots `""`
   — and by paint time the buyer may have moved to another company.
-- **the verdict names the company the request was ABOUT** (TWO-25326 §7.3). Snapshotted at
+- **the verdict names the company the request was ABOUT** (TWO-25326). Snapshotted at
   request time, not re-read at paint time: supersession only begins when the next request is
   issued, up to a second after the buyer changes company. The live read stays as the fallback
   for callers that are re-rendering rather than reporting, and both directions of the

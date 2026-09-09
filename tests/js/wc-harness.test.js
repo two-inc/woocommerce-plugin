@@ -1,11 +1,11 @@
 /**
  * The harness's own contract, for the parts of it that tests rely on as evidence.
  *
- * `stubAjax()`'s abort bookkeeping earned a test of its own in review round 6: the
- * `settled` guard behind `abortedWhilePending` could be deleted without failing
- * anything, because no production path calls `abort()` on an already-settled request
- * — so the distinction it exists to draw was unreachable from the suites that depend
- * on it. Asserted directly instead.
+ * `stubAjax()`'s abort bookkeeping earned a test of its own: the `settled` guard
+ * behind `abortedWhilePending` could be deleted without failing anything, because no
+ * production path calls `abort()` on an already-settled request — so the distinction
+ * it exists to draw was unreachable from the suites that depend on it. Asserted
+ * directly instead.
  */
 
 "use strict";

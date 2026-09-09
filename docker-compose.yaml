@@ -52,7 +52,7 @@ services:
       # serves checkout requests, not a WP option, so it lives here rather
       # than only on the wpcli container.
       TWOINC_DEV_API_HOST: "${TWO_API_BASE_URL:-}"
-      # Sibling overrides for the other two service hosts (TWO-40 §9), each
+      # Sibling overrides for the other two service hosts (TWO-40), each
       # independent and each falling back on its own when unset.
       #
       # TWO_CHECKOUT_BASE_URL is the one the BROWSER loads — the hosted

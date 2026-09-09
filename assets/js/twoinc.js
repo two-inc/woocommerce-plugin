@@ -23,7 +23,7 @@ let twoincUtilHelper = {
 
   /**
    * Prefix marking an organisation number as internally minted by sole-trader
-   * enrollment rather than issued by a company registry (TWO-25326 §12) — a
+   * enrollment rather than issued by a company registry (TWO-25326) — a
    * protocol value, not something a buyer's own authorities would recognise,
    * so it must never be shown to them. Matched as a literal, case-sensitive
    * prefix only the backend mints; a real number merely containing these
@@ -33,7 +33,7 @@ let twoincUtilHelper = {
 
   /**
    * Whether an organisation number is internally minted and must not be shown
-   * (TWO-25326 §12). Empty is NOT synthetic — "no number yet" is a different
+   * (TWO-25326). Empty is NOT synthetic — "no number yet" is a different
    * state from "must not be shown".
    */
   isSyntheticCompanyNumber: function (value) {
@@ -43,7 +43,7 @@ let twoincUtilHelper = {
   },
 
   /**
-   * Organisation number for DISPLAY only (TWO-25326 §12): "" for a synthetic
+   * Organisation number for DISPLAY only (TWO-25326): "" for a synthetic
    * identifier, so any "is there a number" truthiness check doubles as
    * suppression. The raw value still goes to `#company_id`, instance state
    * and the order-intent payload — only rendering to a human is filtered.
@@ -55,7 +55,7 @@ let twoincUtilHelper = {
 
   /**
    * Compose "<label> (<number>)", number filtered through formatCompanyNumber
-   * (TWO-25326 §12). When the number resolves to nothing, the label is
+   * (TWO-25326). When the number resolves to nothing, the label is
    * returned bare rather than with empty parens.
    *
    * `label` is passed through untouched (not blank-collapsed): callers
@@ -67,7 +67,7 @@ let twoincUtilHelper = {
     return label && number ? label + " (" + number + ")" : label;
   },
 
-  /** composeCompanyLabel for a plain-text company name (TWO-25326 §12). */
+  /** composeCompanyLabel for a plain-text company name (TWO-25326). */
   formatCompanyLabel: function (name, value) {
     return twoincUtilHelper.composeCompanyLabel(twoincUtilHelper.blankToEmpty(name), value);
   },
@@ -108,7 +108,7 @@ let twoincUtilHelper = {
 
 /**
  * Which checkout address plays which ROLE — invoice/billing vs
- * delivery/shipping, never "primary/secondary" (TWO-40 §1). WooCommerce is
+ * delivery/shipping, never "primary/secondary" (TWO-40). WooCommerce is
  * billing-first (`#billing_*` is both the always-shown form and the invoice
  * role); PrestaShop/Magento/Hyvä are shipping-first, so "the primary form"
  * ports wrong in both directions while a ROLE ports cleanly.
@@ -168,7 +168,7 @@ let twoincAddressRoles = {
 /**
  * The ONE write path for a captured company, and the guard that keeps a stale
  * organisation number from outliving the name it was captured with
- * (TWO-40 §5).
+ * (TWO-40).
  *
  * This state machine was the single most repeated bug source on the platform
  * this ports from — write-backs, mirror writes and sole-trader adoption each
@@ -218,8 +218,7 @@ let twoincCompanyCapture = {
    * (#486, Doug): `'search'` (the registry search panel, the default),
    * `'manual'` (the plain native `#billing_company`, reached only through
    * `enterManualCompanyEntry`) or `'sole_trader'` (the adopted/enrolled sole
-   * trader, whose name the picker renders as its own selection — TWO-40 §7
-   * direction (a)).
+   * trader, whose name the picker renders as its own selection — TWO-40).
    *
    * This replaces the runtime mutation of `window.twoinc.enable_company_search`
    * that used to stand in for it. That was an overload of the merchant's admin
@@ -361,7 +360,7 @@ let twoincCompanyCapture = {
 
     // `buyer.company` on the order intent is billing (invoice) first,
     // shipping (delivery) only as a fallback when billing has captured no
-    // company number at all (Doug 2026-08-31 §2).
+    // company number at all (TWO-40).
     const instance = Twoinc.getInstance();
     if (role === twoincAddressRoles.invoice()) {
       // RAW `companyName`/`companyId` onto the record, exactly as before this
@@ -383,7 +382,7 @@ let twoincCompanyCapture = {
     ) {
       // The fallback role's own write reaches the order intent only while
       // billing has nothing AND the shipping form is genuinely part of this
-      // order (§2) — same RAW-onto-record, country-pinned-only-on-capture
+      // order (TWO-40) — same RAW-onto-record, country-pinned-only-on-capture
       // shape as the invoice branch above. Not gated on `hasCapture(delivery)`
       // itself: a CLEARING write (no number) must still blank
       // `customerCompany` when shipping was the source a moment ago.
@@ -398,7 +397,7 @@ let twoincCompanyCapture = {
   /**
    * Is the delivery/shipping role currently the source `customerCompany`
    * should read from — billing has captured nothing, AND the shipping form
-   * is genuinely part of this order (Doug 2026-08-31 §2)?
+   * is genuinely part of this order (TWO-40)?
    *
    * Not merely present in the DOM (WooCommerce keeps shipping fields there
    * permanently) but in play (the "ship to a different address?" checkbox,
@@ -651,8 +650,8 @@ let twoincCompanyCapture = {
     // number label (Doug 2026-09-01).
     Twoinc.getInstance().addressStateFor(role).registryApplied = false;
 
-    // `#company_id` visibility depends on the value just cleared (TWO-25326
-    // §12); the verdict on screen was about the company just uncaptured.
+    // `#company_id` visibility depends on the value just cleared
+    // (TWO-25326); the verdict on screen was about the company just uncaptured.
     twoincDomHelper.clearIntentVerdicts();
     twoincDomHelper.toggleBusinessFields();
     twoincCompanyCapture.controllerFor(role).renderCompanySummary();
@@ -842,7 +841,7 @@ class TwoCompanySearch {
     return window.twoinc.company_search_location === "address_area";
   }
 
-  /** Label of the "Enter manually" mode chip (TWO-40 §0). */
+  /** Label of the "Enter manually" mode chip (TWO-40). */
   enterManuallyText() {
     return (
       (window.twoinc && window.twoinc.text && window.twoinc.text.enter_manually) || "Enter manually"
@@ -1011,7 +1010,7 @@ class TwoCompanySearch {
       items.push({
         id: item.name,
         text: item.name,
-        // TWO-25326 §12: `identifier` stays raw on `company_id` — that is what
+        // TWO-25326: `identifier` stays raw on `company_id` — that is what
         // gets posted — while what the buyer READS goes through the shared
         // composer, which drops an internally minted number along with the
         // brackets that would otherwise be left empty around it. `highlight` is
@@ -1383,7 +1382,7 @@ class TwoCompanySearch {
       this.soleTrader.leaveSoleTraderMode();
     }
 
-    // The single write path (TWO-40 §5): posted fields, instance record,
+    // The single write path (TWO-40): posted fields, instance record,
     // pairing tag and provenance in one call.
     twoincCompanyCapture.write(item.id, item.company_id, {
       country: this.currentCountry(),
@@ -1611,7 +1610,7 @@ class TwoCompanySearch {
 
   /**
    * Render the company-search control into the payment tile, or leave it in the
-   * address form, per `window.twoinc.company_search_location` (TWO-25326 §7.1).
+   * address form, per `window.twoinc.company_search_location` (TWO-25326).
    *
    * REBUILT into the tile, never moved there: WooCommerce replaces the whole
    * `.woocommerce-checkout-payment` fragment on every payment-method, coupon,
@@ -1711,7 +1710,7 @@ class TwoCompanySearch {
     this.setDisplayName("");
     this.attach();
 
-    // Gated on PROVENANCE (TWO-40 §5), not capture mode: in manual entry the
+    // Gated on PROVENANCE (TWO-40), not capture mode: in manual entry the
     // capture name field is the buyer's own typed input, and this runs on every
     // country change, so clearing unconditionally would wipe a name typed for
     // reasons of their own.
@@ -1726,16 +1725,15 @@ class TwoCompanySearch {
 
     // This role's own address form, never the other's (Doug 2026-09-01).
     // `clearAddress()`, not a blank `setAddress()` payload: the latter leaves
-    // line 2 untouched by design (TWO-40 §2.6), which would strand the
+    // line 2 untouched by design (TWO-40), which would strand the
     // outgoing company's registry-written line 2 on the form.
     if (window.twoinc.enable_address_lookup === "yes") {
       Twoinc.getInstance().clearAddress(this.role);
     }
     Twoinc.getInstance().addressStateFor(this.role).registryApplied = false;
-    // Not a blind `{}` (Doug 2026-08-31 §2): `write()` above already
-    // recomputed this, but a shipping fallback may be the reason it isn't
-    // empty — clearing billing's own capture doesn't mean nothing is
-    // captured any more.
+    // Not a blind `{}` (TWO-40): `write()` above already recomputed this, but
+    // a shipping fallback may be the reason it isn't empty — clearing
+    // billing's own capture doesn't mean nothing is captured any more.
     twoincCompanyCapture.syncOrderCompany();
 
     // Clearing a capture changes the visible company-name surface exactly as
@@ -1763,7 +1761,7 @@ class TwoCompanySearch {
 
   /**
    * The read-only company-number label, built hidden on first use (TWO-25288;
-   * scope narrowed TWO-25326 §7).
+   * scope narrowed TWO-25326).
    *
    * ONE <span> and no <input>: the captured number is a value the buyer is
    * shown, not a field they fill in.
@@ -1815,7 +1813,7 @@ class TwoCompanySearch {
         ? this.readCapturedCompany()
         : { company_name: companyName, organization_number: companyId };
 
-    // Display-normalised (TWO-25326 §12): an internally minted number reads
+    // Display-normalised (TWO-25326): an internally minted number reads
     // back as "" here, so a sole trader's captured company shows no number
     // label. The raw value stays on `#company_id`, which is what gets posted.
     const number = twoincUtilHelper.formatCompanyNumber(data.organization_number);
@@ -1911,7 +1909,7 @@ class TwoCompanySearch {
       Twoinc.getInstance().clearAddress(this.role);
       addressState.registryApplied = false;
     }
-    // Billing-first, shipping-fallback (Doug 2026-08-31 §2): manual entry on
+    // Billing-first, shipping-fallback (TWO-40): manual entry on
     // EITHER role drops that role's own number, which can change what the
     // order intent resolves to regardless of which role owns it.
     twoincCompanyCapture.syncOrderCompany();
@@ -1943,7 +1941,7 @@ class TwoCompanySearch {
 
     twoincCompanyCapture.nameField(this.role).val("");
     twoincCompanyCapture.numberField(this.role).val("");
-    // Billing-first, shipping-fallback (Doug 2026-08-31 §2) — see
+    // Billing-first, shipping-fallback (TWO-40) — see
     // `enterManualCompanyEntry`'s own comment.
     twoincCompanyCapture.syncOrderCompany();
 
@@ -2227,7 +2225,7 @@ let twoincDomHelper = {
     //
     // The search control is the visible surface for BOTH capture modes that
     // render a name into it — an ordinary registry pick and an adopted sole
-    // trader (TWO-40 §7 direction (a): `lockCapturedFields()` seeds the widget
+    // trader (TWO-40: `lockCapturedFields()` seeds the widget
     // with the adopted company as its own selection, the same way PrestaShop's
     // `adoptSoleTraderBuyer()` never swaps its own search field away). Only
     // manual entry takes it away, handing the name over to the native field,
@@ -2296,10 +2294,10 @@ let twoincDomHelper = {
 
     twoincDomHelper.syncCompanyFieldWrappers();
 
-    // Relocate the company-search control (TWO-25326 §7.1) before
+    // Relocate the company-search control (TWO-25326) before
     // renderCompanySummary() below: the summary's anchor is relative to
-    // whichever field is currently its neighbour, and this call may just
-    // have moved that field's wrapper into the tile.
+    // whichever field is currently its neighbour, and this call may just have
+    // moved that field's wrapper into the tile.
     twoincSelectWooHelper.syncCompanySearchTileLocation();
 
     twoincSelectWooHelper.renderCompanySummary();
@@ -2360,11 +2358,11 @@ let twoincDomHelper = {
   },
   /**
    * The captured company as the intent-message sentences want it
-   * (TWO-25326 §7.3): "<name> (<number>)", or bare <name> when there's no
+   * (TWO-25326): "<name> (<number>)", or bare <name> when there's no
    * number. Never "<name> ()" — an absent number is genuinely absent.
    */
   getCompanyLabelText: function (name, number) {
-    // TWO-25326 §12: bracket composition and synthetic-number suppression
+    // TWO-25326: bracket composition and synthetic-number suppression
     // both live in twoincUtilHelper — the search dropdown needs the same
     // rule with a different escaping contract, and the two must not drift.
     return twoincUtilHelper.formatCompanyLabel(name, number);
@@ -2466,8 +2464,8 @@ let twoincDomHelper = {
         // The notice ships the no-company sentence as its text and the
         // company variant as a template on data-company-template. Substitute
         // always from the template, so a later company change re-renders and
-        // an emptied company falls back to the served sentence. TWO-25326
-        // §7.3: the token stands for the whole "<name> (<number>)" chunk.
+        // an emptied company falls back to the served sentence. TWO-25326: the
+        // token stands for the whole "<name> (<number>)" chunk.
         let intentBox = jQuery(".twoinc-pay-box.twoinc-intent-approved");
         if (intentBox.data("twoincDefaultText") === undefined) {
           intentBox.data("twoincDefaultText", intentBox.text());
@@ -2484,12 +2482,12 @@ let twoincDomHelper = {
           twoincDomHelper.setPayBoxText(
             intentBox,
             companyTemplate.replace("{company}", function () {
-              // Function replacer (Vader, round 1 review): a string replacer
-              // honours special patterns like `$&`/`$$` inside the SECOND
-              // argument, so a company literally named "Acme $& Corp" or
-              // "50% Ltd $$" would come out mangled with a plain-string
-              // replace. A function replacer passes companyText through
-              // literally, no matter what it contains.
+              // Function replacer: a string replacer honours special
+              // patterns like `$&`/`$$` inside the SECOND argument, so a
+              // company literally named "Acme $& Corp" or "50% Ltd $$"
+              // would come out mangled with a plain-string replace. A
+              // function replacer passes companyText through literally,
+              // no matter what it contains.
               return companyText;
             })
           );
@@ -2497,14 +2495,14 @@ let twoincDomHelper = {
           twoincDomHelper.setPayBoxText(intentBox, intentBox.data("twoincDefaultText"));
         }
       } else if (action === "errored") {
-        // TWO-25326 §7.3: the "not available" box carries the same
+        // TWO-25326: the "not available" box carries the same
         // data-company-template/token mechanism as the approved notice
         // above, but ONLY on `.twoinc-err-payment-default` — the phone-number
         // box is a fixed, unrelated message and never gets one.
         let $errBox = jQuery(".twoinc-pay-box" + errSelector);
         // Unhidden first, for the announcement reason given in the approved
-        // branch above (review round 2). The phone-number box has no text to
-        // rewrite, so for it this is simply the reveal.
+        // branch above. The phone-number box has no text to rewrite, so for
+        // it this is simply the reveal.
         $errBox.removeClass("hidden");
         if (errSelector === ".twoinc-err-payment-default") {
           if ($errBox.data("twoincDefaultText") === undefined) {
@@ -2532,7 +2530,7 @@ let twoincDomHelper = {
   getCompanyData: function () {
     return {
       company_name: twoincSelectWooHelper.getCompanyName(),
-      // Through the one country resolver (TWO-40 §1). Read raw here, this
+      // Through the one country resolver (TWO-40). Read raw here, this
       // deferred re-read un-cased a `country_prefix` the picker had pinned
       // upper-cased, so the same capture had two spellings depending on which
       // writer got there last.
@@ -2776,7 +2774,7 @@ let twoincDomHelper = {
   },
   /**
    * Re-capture a company the page arrived already holding, through the one
-   * capture write path (TWO-40 §5), so the restored pair carries its
+   * capture write path (TWO-40), so the restored pair carries its
    * pairing tag — written raw the pair would have none, and the retype
    * guard would read that as "number no longer belongs to this name" and
    * wipe a perfectly good restored capture on the buyer's first keystroke.
@@ -2835,7 +2833,7 @@ let twoincDomHelper = {
     }
 
     // Re-evaluate the company fields: the write above changes what
-    // `#company_id`'s visibility depends on (TWO-25326 §12). Kept here
+    // `#company_id`'s visibility depends on (TWO-25326). Kept here
     // rather than at the initialize() call site so the re-toggle can't be
     // separated from the write by a later reordering.
     twoincDomHelper.toggleBusinessFields();
@@ -2982,13 +2980,12 @@ let twoincTermChips = {
       $chip.append(jQuery("<span>", { class: "twoinc-term-chip__days", text: daysLabel }));
 
       if (!twoincTermChips.feesLoaded) {
-        // Fee quote in flight: show animated loading dots instead of a
-        // blank chip. Never render the configured rate — only the real
-        // quoted amount once it arrives.
-        // twoinc-dots carries the shared dot-pulse styling; the BEM class stays
-        // as the chip-scoped hook. Appearance is unchanged. It used to be
-        // shared with the order-intent loader, which paints the spinner GIF
-        // now — this is its only consumer (review round 8).
+        // Fee quote in flight: show animated loading dots instead of a blank
+        // chip. Never render the configured rate — only the real quoted amount
+        // once it arrives. twoinc-dots carries the shared dot-pulse styling;
+        // the BEM class stays as the chip-scoped hook. Appearance is unchanged.
+        // It used to be shared with the order-intent loader, which paints the
+        // spinner GIF now — this is its only consumer.
         const $loading = jQuery("<span>", {
           class: "twoinc-term-chip__loading twoinc-dots",
           "aria-hidden": "true"
@@ -3103,7 +3100,7 @@ function createSoleTraderController(companySearch) {
     /** @type {Element|null} the control a launch took focus from, given it back once the popup settles */
     refocusOnSettle: null,
     /**
-     * How many sole-trader round trips are outstanding (TWO-40 §7).
+     * How many sole-trader round trips are outstanding (TWO-40).
      *
      * A COUNT, not a boolean: a re-signup can be launched while an earlier
      * popup's own close poll is still running, so two flights overlap. A
@@ -3111,9 +3108,9 @@ function createSoleTraderController(companySearch) {
      * second running invisibly.
      *
      * Wired to the real async duration — every terminal branch of the call graph
-     * settles its own flight — never to a fixed timeout. Adversarial review of
-     * this exact feature upstream found stuck-forever spinners on two separate
-     * abandon/retry paths, so every `cb(...)` below is a settle point.
+     * settles its own flight — never to a fixed timeout. This exact feature
+     * upstream had stuck-forever spinners on two separate abandon/retry paths,
+     * so every `cb(...)` below is a settle point.
      *
      * Held by `watchPopupClose()` for as long as the signup popup itself is
      * open, and by the ACCEPTED handler across its own buyer lookup.
@@ -3121,7 +3118,7 @@ function createSoleTraderController(companySearch) {
     flightDepth: 0,
 
     /**
-     * Re-entrancy guard on the signup popup (TWO-40 §7): without it a double
+     * Re-entrancy guard on the signup popup (TWO-40): without it a double
      * click opens a second popup over the first. Released when the popup
      * call returns, not when the popup closes — holding it until signup
      * finishes would strand the buyer if they closed the window by hand.
@@ -3130,7 +3127,7 @@ function createSoleTraderController(companySearch) {
 
     /**
      * True once `setCompany()` has actually adopted a company while in
-     * sole-trader mode this time through (TWO-40 §7). Reset by every
+     * sole-trader mode this time through (TWO-40). Reset by every
      * `setMode()` call. `watchPopupClose()`'s "did the buyer abandon this
      * popup with nothing captured" check reads this instead of `#company_id`'s
      * raw value, since that field can already hold an unrelated id from an
@@ -3140,7 +3137,7 @@ function createSoleTraderController(companySearch) {
 
     /**
      * How many "select a different sole trader" re-signups are outstanding
-     * (TWO-40 §7). `soleTraderAdopted` is a one-way latch set by the first
+     * (TWO-40). `soleTraderAdopted` is a one-way latch set by the first
      * adoption and never cleared except by `setMode()`, which a re-signup
      * never calls — so without this count, `isDeciding()` would read the
      * stale `true` as "already settled" during a re-signup's own flight,
@@ -3156,7 +3153,7 @@ function createSoleTraderController(companySearch) {
 
     /**
      * True while the ACCEPTED-postMessage handler's own `fetchCurrentBuyer()`
-     * is in flight (TWO-40 §7). Popup-close detection is a poll with no
+     * is in flight (TWO-40). Popup-close detection is a poll with no
      * cooperation from the popup, so the buyer can close the window the
      * instant "ACCEPTED" is posted, well before this fetch resolves and
      * writes `#company_id` — without this flag `watchPopupClose()`'s poll
@@ -3188,7 +3185,7 @@ function createSoleTraderController(companySearch) {
      */
     closeDropdownOnSettle: false,
 
-    /** DOM id of the "select a different sole trader" link (TWO-40 §7). */
+    /** DOM id of the "select a different sole trader" link (TWO-40). */
 
     config: function () {
       return (window.twoinc && window.twoinc.sole_trader) || {};
@@ -3402,7 +3399,7 @@ function createSoleTraderController(companySearch) {
     },
 
     /**
-     * A sole-trader round trip has started (TWO-40 §7). The busy state is
+     * A sole-trader round trip has started (TWO-40). The busy state is
      * shown over the company-NAME field — the same in-field spinner an
      * ordinary company search uses — rather than in the query row it hides,
      * so it's visible for the link-click entry point too, which never has a
@@ -3456,7 +3453,7 @@ function createSoleTraderController(companySearch) {
 
     /**
      * The "select a different sole trader" link, built hidden on first use
-     * (TWO-40 §7). Same visual slot and shape as the "search for company"
+     * (TWO-40). Same visual slot and shape as the "search for company"
      * link manual entry already offers. One link covers both "pick a
      * different existing registration" and "register a new one" — that
      * choice happens inside the hosted signup's own UI.
@@ -3498,7 +3495,7 @@ function createSoleTraderController(companySearch) {
      * The slot the "select a different sole trader" link hangs in: the input
      * wrapper INSIDE whichever company-name field is the visible one.
      *
-     * TWO-40 §7 makes an adopted sole trader show through the live search
+     * TWO-40 makes an adopted sole trader show through the live search
      * widget, so the search row takes the slot whenever it is the visible
      * surface — a button appended inside a hidden field never renders.
      *
@@ -3539,7 +3536,7 @@ function createSoleTraderController(companySearch) {
 
     /**
      * Show the "select a different sole trader" link only where it means
-     * something: sole-trader mode (TWO-40 §7). Gated on mode + tokens only,
+     * something: sole-trader mode (TWO-40). Gated on mode + tokens only,
      * no `#company_id`-content check — that field is permanently hidden in
      * every mode, so there's no reason to lean on its DOM value here.
      */
@@ -3596,12 +3593,11 @@ function createSoleTraderController(companySearch) {
 
     /**
      * Is a sole-trader round trip or a signup popup currently outstanding
-     * (TWO-40 §7)? The guard every other way to leave/interrupt
-     * sole-trader mode checks before acting: the widget/chips deliberately
-     * survive this window, so paths once unreachable while
-     * `mode === "sole_trader"` (Business chip, reopenSearch(), an ordinary
-     * pick) are reachable now, and acting on them mid-wait races the flow's
-     * own resolution.
+     * (TWO-40)? The guard every other way to leave/interrupt sole-trader mode
+     * checks before acting: the widget/chips deliberately survive this window,
+     * so paths once unreachable while `mode === "sole_trader"` (Business chip,
+     * reopenSearch(), an ordinary pick) are reachable now, and acting on them
+     * mid-wait races the flow's own resolution.
      */
     isBusy: function () {
       return controller.flightDepth > 0 || controller.activePopupWatchers.length > 0;
@@ -3676,7 +3672,7 @@ function createSoleTraderController(companySearch) {
     /**
      * The state/DOM bookkeeping every real exit from sole-trader mode needs,
      * regardless of what happens to the search widget on the way out
-     * (TWO-40 §7): `setMode`'s own business branch tears the widget down, but
+     * (TWO-40): `setMode`'s own business branch tears the widget down, but
      * a pick made directly off the still-live widget must not also go
      * through that teardown, since it would blank the pick before `write()`
      * ever runs. Split out so both paths share identical "leaving" semantics.
@@ -3703,7 +3699,7 @@ function createSoleTraderController(companySearch) {
     /**
      * Give up on everything the sole-trader flow still has outstanding, as
      * one operation: the popup windows and the records tracking them
-     * (TWO-40 §14). Called only from `leaveSoleTraderMode()`.
+     * (TWO-40). Called only from `leaveSoleTraderMode()`.
      *
      * Closing comes before dropping the records, since the records hold the
      * only handles there are — closing after would leave the window on
@@ -3728,7 +3724,7 @@ function createSoleTraderController(companySearch) {
      *
      * The adopted name is painted into the company-name field the same way a
      * registry pick is, so an adopted sole trader reads as a company that was
-     * searched and picked (TWO-40 §7 direction (a)).
+     * searched and picked (TWO-40).
      */
     lockCapturedFields: function (companyId, companyName) {
       // An adoption can land with no panel bound — manual entry releases the
@@ -3745,7 +3741,7 @@ function createSoleTraderController(companySearch) {
     },
 
     /**
-     * Click-to-reopen (TWO-40 §7): once a sole trader is adopted, the
+     * Click-to-reopen (TWO-40): once a sole trader is adopted, the
      * captured fields readonly-lock and the query row is suppressed, leaving
      * no way back to an ordinary company search except the "select a
      * different sole trader" link, which only leads back into the same
@@ -3776,7 +3772,7 @@ function createSoleTraderController(companySearch) {
 
     /**
      * Open the hosted signup popup, falling back to the visible link if the
-     * browser blocks the window. Re-entrancy-guarded (TWO-40 §7): a second
+     * browser blocks the window. Re-entrancy-guarded (TWO-40): a second
      * activation while one is already opening is dropped, and an activation
      * while an already-open popup's outcome is undecided raises that popup
      * instead of opening a second one.
@@ -3832,7 +3828,7 @@ function createSoleTraderController(companySearch) {
     /**
      * Keep the search dropdown's spinner up for as long as the signup popup
      * is open, and settle it the moment the buyer closes the window
-     * (TWO-40 §7). `window.closed` polling is the only signal a same-origin
+     * (TWO-40). `window.closed` polling is the only signal a same-origin
      * opener has for "the popup went away", with no cooperation from the
      * popup and no event for it. If nothing was adopted by close time, hand
      * the checkout back to an ordinary company search.
@@ -3864,7 +3860,7 @@ function createSoleTraderController(companySearch) {
      * Everything one popup's window going away settles. Called by that
      * popup's own poll above, and — only on the mode-chip abandon path —
      * synchronously by `abandonPopupsForChipClick()`. Factored out so the
-     * settle keeps one owner (TWO-40 §14) for `flightDepth`,
+     * settle keeps one owner (TWO-40) for `flightDepth`,
      * `soleTraderReconfirmingCount` and `closeDropdownOnSettle`.
      *
      * @param {Object} watcher the record whose window has gone
@@ -4012,7 +4008,7 @@ function createSoleTraderController(companySearch) {
      * dropdown close happen exactly as for a popup closed by hand:
      * `watchPopupClose`'s poll sees `.closed` within its next 300ms tick and
      * runs its own terminal branch, keeping one owner for the settle
-     * (TWO-40 §14).
+     * (TWO-40).
      *
      * Decided popups are left alone: a popup whose ACCEPTED resolved to no
      * buyer is decided yet still on screen, and the buyer's retry inside it
@@ -4153,7 +4149,7 @@ function createSoleTraderController(companySearch) {
     /**
      * Adopt an enrolled sole trader's company onto the checkout.
      *
-     * Goes through the ONE capture write path (TWO-40 §5), which owns the posted
+     * Goes through the ONE capture write path (TWO-40), which owns the posted
      * fields, the instance record, the pairing tag and the provenance markers.
      * A `TWO:`-prefixed identifier takes exactly the same path as any registry
      * number — no branch here, none downstream. The only place it is treated
@@ -4162,13 +4158,13 @@ function createSoleTraderController(companySearch) {
      * @param {string} companyId
      * @param {string} companyName
      * @param {Object} [buyer] the autofill buyer, when one was resolved; its
-     *   address and phone number are written too (§2.6, §5)
+     *   address and phone number are written too (TWO-40)
      * @returns {void}
      */
     setCompany: function (companyId, companyName, buyer) {
       if (companyId && controller.mode === "sole_trader") {
         // The moment there is actually a sole trader captured — not just a
-        // mode switch (TWO-40 §7) — is the moment there is nothing left to
+        // mode switch (TWO-40) — is the moment there is nothing left to
         // search for. Locking here, not on every switch into sole-trader
         // mode, is what lets the dropdown+spinner survive the autofill/popup
         // round trip.
@@ -4185,7 +4181,7 @@ function createSoleTraderController(companySearch) {
       }
       const instance = Twoinc.getInstance();
       // The buyer's address, written regardless of the merchant's
-      // address-lookup switch (TWO-40 §5): that switch legitimately gates an
+      // address-lookup switch (TWO-40): that switch legitimately gates an
       // ordinary company-search pick's address write in configurations that
       // have nothing to do with sole-trader signup, but a buyer who just
       // enrolled must still have their address land. Explicit bypass rather
@@ -4201,7 +4197,7 @@ function createSoleTraderController(companySearch) {
         jQuery(twoincAddressRoles.field(companySearch.role, "phone")).val(buyer.phone_number);
       }
       // Re-evaluate which company fields are shown, after the write above
-      // (TWO-25326 §12): `#company_id`'s visibility depends on the value it
+      // (TWO-25326): `#company_id`'s visibility depends on the value it
       // now holds. Every route into sole-trader capture toggles the fields
       // before the autofill lands, so without this the minted `TWO:…`
       // identifier lands in a field made visible on the strength of being
@@ -4290,9 +4286,8 @@ function createSoleTraderController(companySearch) {
      * same tolerance `fetchTokens` itself already has for its callers.
      *
      * Deliberately does NOT also call `beginFlight()`/`settleFlight()` itself
-     * (round-1 review, rejected): holding the flag for a background round trip
-     * nobody asked for would only over-block the Business chip,
-     * `reopenSearch()` and click-to-reopen.
+     * — holding the flag for a background round trip nobody asked for would
+     * only over-block the Business chip, `reopenSearch()` and click-to-reopen.
      *
      * @returns {void}
      */
@@ -4386,7 +4381,7 @@ function createSoleTraderController(companySearch) {
     },
 
     /**
-     * Open the hosted sole-trader signup in a real popup window (TWO-40 §7).
+     * Open the hosted sole-trader signup in a real popup window (TWO-40).
      *
      * `window.open()`, not an iframe-in-overlay: the signup/OTP flow depends
      * on a third party that only works in a real popup window. An
@@ -4498,7 +4493,7 @@ function createSoleTraderController(companySearch) {
           // captured.
           controller.signupConfirming = true;
           controller.fetchCurrentBuyer(function (buyer) {
-            // Authenticated path (TWO-40 §8): the server has just told this
+            // Authenticated path (TWO-40): the server has just told this
             // browser who the buyer is, so the email they authenticated with
             // is the answer, full stop. Re-checking it against the
             // checkout's own contact field is a confirmed bug: a buyer who
@@ -4617,8 +4612,7 @@ class Twoinc {
       // painting a verdict. Held here rather than in a local, so that
       // abandonOrderIntentCheck() can cancel it: it used to be unreachable, and
       // an orphan copy of it would paint a verdict onto a tile that had already
-      // been reset — after Place Order, on a checkout mid-submit (review round
-      // 2).
+      // been reset — after Place Order, on a checkout mid-submit.
       renderInterval: null,
       // Backoff after a 429: `updated_checkout` re-arms a check per keystroke,
       // so one refusal otherwise becomes a request per second all window.
@@ -4680,10 +4674,9 @@ class Twoinc {
       twoincDomHelper.isTwoincVisible() ||
       // Admin's address-area preference, not the buyer-driven capture mode —
       // see the comment on the equivalent check in toggleBusinessFields
-      // (TWO-25326 §7.1). No longer ANDed with
-      // a separate "for other payment methods" toggle (removed, TWO-25326 —
-      // that setting is now just this same checkbox, so the AND collapsed
-      // to a no-op).
+      // (TWO-25326). No longer ANDed with a separate "for other payment
+      // methods" toggle (removed, TWO-25326 — that setting is now just this
+      // same checkbox, so the AND collapsed to a no-op).
       window.twoinc.company_search_location === "address_area"
     ) {
       // Toggle the business fields
@@ -4751,12 +4744,11 @@ class Twoinc {
     // Handle the representative inputs blur event
     $body.on("blur", "#company_id, #billing_company_display", self.onCompanyManualInputBlur);
 
-    // Handle the company inputs change event
-    // Wrapped, not passed by reference (review round 5). Bound directly, jQuery
-    // hands the handler its Event object as the `action` argument — which happened
-    // to degenerate to the blanket hide, because no action name matches an Event,
-    // so it did the right thing by accident and would break the moment
-    // togglePaySubtitleDesc grew a truthy-action branch.
+    // Handle the company inputs change event Wrapped, not passed by reference.
+    // Bound directly, jQuery hands the handler its Event object as the `action`
+    // argument — which happened to degenerate to the blanket hide, because no
+    // action name matches an Event, so it did the right thing by accident and
+    // would break the moment togglePaySubtitleDesc grew a truthy-action branch.
     $body.on("change", "#billing_company", function () {
       if (!twoincCompanyCapture.isNameField(this)) return;
       Twoinc.getInstance().customerCompany.company_name = twoincSelectWooHelper.getCompanyName();
@@ -4766,7 +4758,7 @@ class Twoinc {
       twoincDomHelper.clearIntentVerdicts();
     });
 
-    // Retype guard (TWO-40 §5): a company name the buyer edits away from the
+    // Retype guard (TWO-40): a company name the buyer edits away from the
     // organisation number it was captured under takes that number with it.
     // Bound on `input` as well as `change` so the stale number is gone before
     // the buyer can reach Place Order without ever blurring the field.
@@ -4790,9 +4782,9 @@ class Twoinc {
     // at the END of this function, not here — see the comment there.
     $body.on("change", "#billing_country", self.onCountryInputChange);
 
-    // Shipping's own retype guard / country-change / click-to-reopen (Doug
-    // 2026-08-31 §2, complete instance parity) — same three bindings as
-    // billing's above, scoped to the delivery role and its own controller.
+    // Shipping's own retype guard / country-change / click-to-reopen (TWO-40,
+    // complete instance parity) — same three bindings as billing's above,
+    // scoped to the delivery role and its own controller.
     $body
       .off(
         "input.twoincShippingCompanyPairing change.twoincShippingCompanyPairing",
@@ -4815,11 +4807,11 @@ class Twoinc {
       soleTrader.reopenSearch();
     });
 
-    // Click-to-reopen out of an adopted sole trader (TWO-40 §7 correction,
-    // live-reported by Doug) — see `reopenSearch()`'s own comment. A plain
-    // delegated binding is fine here, unlike `searchCompanyBtnId`'s: these
-    // are static inputs present from page load, not a button built and
-    // rebuilt on every dropdown open.
+    // Click-to-reopen out of an adopted sole trader (TWO-40, live-reported by
+    // Doug) — see `reopenSearch()`'s own comment. A plain delegated binding is
+    // fine here, unlike `searchCompanyBtnId`'s: these are static inputs
+    // present from page load, not a button built and rebuilt on every dropdown
+    // open.
     $body.on("click", "#billing_company, #company_id", function () {
       // Only where the click has no other meaning: the readonly lock an
       // adoption applies. Ungated (PR #502) it cleared the capture and
@@ -4865,7 +4857,7 @@ class Twoinc {
     twoincDomHelper.insertCustomCss();
 
     // Both of these re-toggle the company fields themselves, at the point they
-    // write `#company_id` (TWO-25326 §12) — the toggle earlier in this function
+    // write `#company_id` (TWO-25326) — the toggle earlier in this function
     // ran before either of them, against an empty input.
     twoincDomHelper.loadUserMetaInputs();
     if (loadSavedInputs) {
@@ -5379,10 +5371,10 @@ class Twoinc {
       if (isFailure && response.status >= 400) {
         // @TODO: use the error code returned by the API
         //
-        // Two fixes here, both found in review round 1 and both about this
-        // function throwing before it reaches the render below — which is the
-        // ONLY thing that takes the loading state down, so a throw here now
-        // leaves "Checking availability" on screen for the rest of the page.
+        // Two fixes here, both about this function throwing before it reaches
+        // the render below — which is the ONLY thing that takes the loading
+        // state down, so a throw here now leaves "Checking availability" on
+        // screen for the rest of the page.
         //
         // 1. `responseJSON` is undefined for any failure that did not carry a
         //    JSON body — a proxy 502 with an HTML error page, a parse error —
@@ -5581,7 +5573,7 @@ class Twoinc {
   /**
    * Write an address that arrived in an external payload onto ONE role's
    * address form — the role of the control that captured the company it
-   * belongs to, never a fixed one (TWO-40 §2.6).
+   * belongs to, never a fixed one (TWO-40).
    *
    * ONE routing table for every such payload — the registry address behind a
    * company-search pick and the sole-trader autofill buyer alike. Sole trader
@@ -5635,7 +5627,7 @@ class Twoinc {
 
   /**
    * Best-effort write of a registry `region` onto a role's address form
-   * (TWO-40 §2.6).
+   * (TWO-40).
    *
    * Text→id matching against a state select is inherently lossy — the registry
    * and WooCommerce's own state lists are two independent vocabularies — so it
@@ -5700,7 +5692,7 @@ class Twoinc {
 
   /**
    * Blank the address fields a captured company's registry address wrote
-   * (TWO-40 §2.6).
+   * (TWO-40).
    *
    * Split out from `setAddress()`, which now means "write what this payload
    * carries" and therefore deliberately leaves line 2 alone when the payload
@@ -5831,7 +5823,7 @@ class Twoinc {
     // same reasoning as `syncOrderCompany()` below.
     twoincSelectWooHelper.syncCompanySearchAvailability();
 
-    // TWO-25326 §7.1: called directly here, not only via
+    // TWO-25326: called directly here, not only via
     // `toggleBusinessFields()`. `updated_checkout` fires on every
     // WooCommerce checkout AJAX refresh (shipping-method change, coupon
     // apply, quantity change), not only the payment-method/country
@@ -5849,13 +5841,12 @@ class Twoinc {
     twoincSelectWooHelperShipping.syncCompanySearchAvailability();
 
     // Re-resolve on EVERY `updated_checkout`, not only a real country change
-    // (Doug 2026-08-31 §2, corner case (d)): this is also what fires when
-    // "ship to a different address?" is toggled in either direction, and
-    // `syncOrderCompany()`'s own `deliveryIsOrderCompanySource()` check is what
-    // drops a shipping-sourced fallback the moment that box is unchecked
-    // (the DOM capture itself is left alone, the same way the address mirror
-    // leaves shipping field values in place — only which pair the order
-    // intent SEES changes).
+    // (TWO-40): this is also what fires when "ship to a different address?" is
+    // toggled in either direction, and `syncOrderCompany()`'s own
+    // `deliveryIsOrderCompanySource()` check is what drops a shipping-sourced
+    // fallback the moment that box is unchecked (the DOM capture itself is
+    // left alone, the same way the address mirror leaves shipping field values
+    // in place — only which pair the order intent SEES changes).
     twoincCompanyCapture.syncOrderCompany();
     Twoinc.getInstance().getApproval();
   }
@@ -6018,8 +6009,8 @@ class Twoinc {
   }
 
   /**
-   * Handle the shipping country input change (Doug 2026-08-31 §2) — the
-   * delivery-role counterpart of `onCountryInputChange`/`syncBillingCountry`.
+   * Handle the shipping country input change (TWO-40) — the delivery-role
+   * counterpart of `onCountryInputChange`/`syncBillingCountry`.
    *
    * Never writes `customerCompany` directly: unlike billing, shipping's
    * capture only reaches the order intent through `resolveOrderCompany()`'s
@@ -6081,7 +6072,7 @@ class Twoinc {
    *
    * Not grounds to clear:
    *   - No organisation number on `customerCompany` (a name with no id is
-   *     not a capture, TWO-25326 §6).
+   *     not a capture, TWO-25326).
    *
    *     Known residual gap: `customerCompany` is populated from the DOM
    *     on a timer, so `#company_id` can hold a real capture while this
@@ -6111,7 +6102,7 @@ class Twoinc {
   clearCompanyIfCountryStale(country) {
     const company = this.customerCompany || {};
     if (!company.organization_number) return;
-    // `customerCompany` can now be a SHIPPING fallback (Doug 2026-08-31 §2,
+    // `customerCompany` can now be a SHIPPING fallback (TWO-40,
     // `syncOrderCompany()`) — this guard's whole comparison is against
     // billing's own DOM (`#company_id`, the primary-role name field), which
     // says nothing about a shipping-sourced pair. Only act when billing is
@@ -6252,7 +6243,7 @@ jQuery(function () {
         if (
           // Admin's address-area preference, not the buyer-driven capture
           // mode — see the comment on the equivalent check in
-          // toggleBusinessFields (TWO-25326 §7.1).
+          // toggleBusinessFields (TWO-25326).
           window.twoinc.company_search_location === "address_area"
         ) {
           Twoinc.getInstance().initialize(true);

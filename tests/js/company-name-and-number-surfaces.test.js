@@ -108,7 +108,7 @@ describe("the company name and number surfaces (#486)", () => {
   describe("the company NAME is always exactly one of the two elements", () => {
     // The whole matrix in one table: three capture modes crossed with billing
     // country. `search` and `sole_trader` both render the name through the
-    // picker (TWO-40 §7 direction (a) seeds the adopted sole trader into it as
+    // picker (TWO-40 seeds the adopted sole trader into it as
     // its own selection); only manual entry hands the name to the native
     // field. Country is not a factor (TWO-25232).
     test.each([
@@ -202,7 +202,7 @@ describe("the company name and number surfaces (#486)", () => {
     // Two independent mechanisms, so `shown` and `text` are tabled separately:
     // the capture mode decides whether the label is DISPLAYED, and
     // `formatCompanyNumber()` decides whether the number reaches the DOM as
-    // text at all (it returns "" for an internally minted one, TWO-25326 §12).
+    // text at all (it returns "" for an internally minted one, TWO-25326).
     // A minted number therefore fails on both counts, which is what stops a
     // `TWO:…` string sitting in the markup of a hidden node waiting for a
     // future mode switch to reveal it.
@@ -219,7 +219,7 @@ describe("the company name and number surfaces (#486)", () => {
         value: SYNTHETIC,
         shown: false,
         text: "",
-        description: "search mode, internally minted number — TWO-25326 §12 forbids showing it"
+        description: "search mode, internally minted number — TWO-25326 forbids showing it"
       },
       {
         mode: "search",

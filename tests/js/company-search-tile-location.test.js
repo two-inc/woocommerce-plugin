@@ -1,5 +1,5 @@
 /**
- * TWO-25326 §7.1 / TWO-25503. `window.twoinc.company_search_location` decides
+ * TWO-25326 / TWO-25503. `window.twoinc.company_search_location` decides
  * WHERE the one company-capture control renders: the address area, or a row
  * this plugin builds inside Two's payment tile.
  *
@@ -16,7 +16,7 @@ const harness = require("./wc-harness");
 
 const GATEWAY_ID = "woocommerce-gateway-tillit";
 
-describe("company-search tile location (TWO-25326 §7.1)", () => {
+describe("company-search tile location (TWO-25326)", () => {
   let ctx;
   let $;
   let dom;
@@ -131,14 +131,14 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
     });
 
     /**
-     * Bugs found by Doug + adversarial review (Vader), live-verified
-     * 2026-08-04: neither WooCommerce's OWN native `#billing_company_field`
-     * NOR `#company_id_field` are part of this plugin's control, and neither
-     * may end up in the tile. `#billing_company_field` is the plain,
-     * unenhanced fallback the buyer types into when manual entry or
-     * sole-trader mode takes over. `#company_id_field` is a plain hidden input
-     * with no visible home to move to — a bare, unlabelled, REQUIRED "Company
-     * ID" box floating in the payment tile is checkout-blocking confusion.
+     * Live-verified 2026-08-04: neither WooCommerce's OWN native
+     * `#billing_company_field` NOR `#company_id_field` are part of this
+     * plugin's control, and neither may end up in the tile.
+     * `#billing_company_field` is the plain, unenhanced fallback the buyer
+     * types into when manual entry or sole-trader mode takes over.
+     * `#company_id_field` is a plain hidden input with no visible home to move
+     * to — a bare, unlabelled, REQUIRED "Company ID" box floating in the
+     * payment tile is checkout-blocking confusion.
      */
     test("never puts #billing_company_field or #company_id_field in the tile — both stay in the address form, editable", () => {
       helper.syncCompanySearchTileLocation();

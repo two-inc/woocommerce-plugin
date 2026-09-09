@@ -1,13 +1,13 @@
 /**
- * TWO-40 §1 + §2.6. Address ROLES, the independence of the two address forms,
+ * TWO-40. Address ROLES, the independence of the two address forms,
  * and the field-routing table for an address that arrived in an external
  * payload.
  *
- *   §1 — country/company must be resolved ONE way and that answer reused. On
- *   WooCommerce the invoice role is `#billing_*` and it is also the
- *   always-shown form, which is the opposite of PrestaShop/Magento/Hyvä. So
- *   "the primary form" is never the question; "which form plays the invoice
- *   role" is.
+ *   One resolver — country/company must be resolved ONE way and that answer
+ *   reused. On WooCommerce the invoice role is `#billing_*` and it is also
+ *   the always-shown form, which is the opposite of PrestaShop/Magento/Hyvä.
+ *   So "the primary form" is never the question; "which form plays the
+ *   invoice role" is.
  *
  *   Independence (Doug 2026-09-01) — the billing and shipping address forms
  *   never write to each other. The ONE thing that reads both is
@@ -69,7 +69,7 @@ function buildAddressForm(options) {
   ].join("\n");
 }
 
-describe("TWO-40 §1 — one address-role resolver", () => {
+describe("TWO-40 — one address-role resolver", () => {
   let ctx;
   let $;
 
@@ -229,7 +229,7 @@ describe("the two address forms are independent (Doug 2026-09-01)", () => {
   });
 });
 
-describe("TWO-40 §2.6 — field routing for an externally supplied address", () => {
+describe("TWO-40 — field routing for an externally supplied address", () => {
   let ctx;
   let $;
 

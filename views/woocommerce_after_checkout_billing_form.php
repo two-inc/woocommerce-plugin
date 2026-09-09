@@ -22,7 +22,7 @@
      * way into manual entry and no way back out.
      *
      * The chip is a real <button>, a sibling of the results list rather than
-     * a row inside it (TWO-40 §0), so it stays reachable without scrolling
+     * a row inside it (TWO-40), so it stays reachable without scrolling
      * past however many results came back.
      */
     ?>

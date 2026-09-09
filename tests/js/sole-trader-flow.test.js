@@ -1,18 +1,18 @@
 /**
- * TWO-40 §7 + §8. The sole-trader flow's UX affordances and its identity-trust
+ * TWO-40. The sole-trader flow's UX affordances and its identity-trust
  * boundary.
  *
- *   §7 — an in-flight state wired to the REAL duration of the round trip (a
- *   count, not a boolean, not a timeout), re-entrancy guards so neither one
- *   gesture nor a later click while a popup is undecided can stack a second
- *   signup popup, a "select a different sole trader" link in the same slot
- *   as the existing "search for company" one, and a popup that
+ *   UX affordances — an in-flight state wired to the REAL duration of the
+ *   round trip (a count, not a boolean, not a timeout), re-entrancy guards so
+ *   neither one gesture nor a later click while a popup is undecided can
+ *   stack a second signup popup, a "select a different sole trader" link in
+ *   the same slot as the existing "search for company" one, and a popup that
  *   is wide enough for the hosted flow's own layout.
  *
- *   §8 — the passive, pre-authentication email match is correct only before
- *   the server has said who the buyer is. Reusing it on the post-OTP callback
- *   is a confirmed bug: the buyer completes signup, the stale check disagrees
- *   with the server, and the same popup reopens forever.
+ *   Identity trust — the passive, pre-authentication email match is correct
+ *   only before the server has said who the buyer is. Reusing it on the
+ *   post-OTP callback is a confirmed bug: the buyer completes signup, the
+ *   stale check disagrees with the server, and the same popup reopens forever.
  */
 
 "use strict";
@@ -62,7 +62,7 @@ const SOLE_TRADER_CONFIG = {
   }
 };
 
-describe("TWO-40 §7/§8 — sole-trader flow", () => {
+describe("TWO-40 — sole-trader flow", () => {
   let ctx;
   let $;
   let soleTrader;
@@ -186,7 +186,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     };
   }
 
-  describe("§7 — in-flight state", () => {
+  describe("in-flight state", () => {
     test("goes up on the first flight and stays up until the last settles", () => {
       // A COUNT, not a boolean: a re-signup can overlap an earlier popup's
       // own close poll.
@@ -301,7 +301,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
   });
 
-  describe("§7 — signup popup", () => {
+  describe("signup popup", () => {
     test("opens 700x805 — narrower clips the hosted flow's own layout", () => {
       soleTrader.launchSignup();
 
@@ -397,7 +397,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
   });
 
-  describe("§7 — popup stacking across sequential activations", () => {
+  describe("popup stacking across sequential activations", () => {
     test.each([[""], ["buyer@example.test"]])(
       "two sequential chip clicks open one popup, not two stacked — email %p",
       (email) => {
@@ -658,13 +658,12 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * Round-3 review regressions (by Claude). Letting a fresh popup open over
-     * a hand-closed record's stale poll window — the round-2 fix above — put
-     * TWO undecided records in the list at once, which the ACCEPTED handler's
-     * forward `find(!decided)` then resolved to the STALE one in preference to
-     * the live popup that actually sent the message.
+     * Letting a fresh popup open over a hand-closed record's stale poll window
+     * put TWO undecided records in the list at once, which the ACCEPTED
+     * handler's forward `find(!decided)` then resolved to the STALE one in
+     * preference to the live popup that actually sent the message.
      */
-    describe("round-3 review regressions — ACCEPTED pairs with the popup that sent it", () => {
+    describe("ACCEPTED pairs with the popup that sent it", () => {
       // Opens a popup through `act`, returning the window handle it got.
       function openTracked(act) {
         const win = { closed: false };
@@ -903,7 +902,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
   });
 
-  describe("§7 — select a different sole trader", () => {
+  describe("select a different sole trader", () => {
     test("lands in the same slot as the search-for-company link", () => {
       const $btn = soleTrader.getDifferentSoleTraderBtnNode();
 
@@ -911,7 +910,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       expect($btn.text()).toBe("Select a different sole trader");
     });
 
-    test("sits after the company-search field in document order, never inside its dropdown or chip group (TWO-40 §0)", () => {
+    test("sits after the company-search field in document order, never inside its dropdown or chip group (TWO-40)", () => {
       // Ground-truth PrestaShop finding this ports: the button is a
       // following SIBLING of the search dropdown, appended as the LAST
       // child of the outer field wrapper — never a descendant of the
@@ -1150,7 +1149,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
         test("a DOM-restored ORDINARY registry number is captured, not adopted", () => {
           // Captured all the same: the pairing tag is what stops the retype
-          // guard wiping a perfectly good restored number (TWO-40 §5), and a
+          // guard wiping a perfectly good restored number (TWO-40), and a
           // guest had no path to one before. The sole-trader state is what a
           // registry number must NOT acquire.
           $("#billing_company").val("ACME Widgets Ltd");
@@ -1237,7 +1236,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
   });
 
-  describe("§8 — identity trust levels", () => {
+  describe("identity trust levels", () => {
     // Delivers a hosted-signup postMessage the way the popup does.
     function postFromSignup(data) {
       window.dispatchEvent(
@@ -2005,7 +2004,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
   });
 
-  describe("TWO-40 §7 correction — live-reported by Doug", () => {
+  describe("TWO-40 — live-reported by Doug", () => {
     describe("a chip click resolves to the popup or a populated company, never a note", () => {
       /**
        * The note is the browser-blocked-popup fallback ONLY — never an outcome
@@ -3472,7 +3471,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
        * The same exception from an already-adopted state, where the chip's
        * other meaning is a deliberate re-signup ("select a different sole
        * trader"). An outstanding popup still wins: launching a second one over
-       * it is what TWO-40 §14 spent four rounds removing.
+       * it is what TWO-40 spent four rounds removing.
        */
       test("the Sole trader chip raises an outstanding re-signup rather than launching another", () => {
         harness.openCompanyPanel($, ctx.helper);
@@ -3574,7 +3573,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       /**
-       * TWO-40 §7 direction (a): adoption leaves the same panel instance alive,
+       * TWO-40: adoption leaves the same panel instance alive,
        * closed behind the locked native fields, for as long as the buyer stays
        * adopted.
        */
@@ -3676,7 +3675,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.mode).toBe("sole_trader");
       });
 
-      describe("TWO-40 §7 direction (a) — an adopted sole trader displays through the live widget", () => {
+      describe("TWO-40 — an adopted sole trader displays through the live widget", () => {
         beforeEach(() => {
           // `toggleBusinessFields()`'s isTwoincSelected branch — where the
           // widget-vs-native-field decision actually lives — reads a real
@@ -3933,7 +3932,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
     });
 
-    describe("round-1 review regressions (Han/Vader/Leia) — races the dropdown-survives fix opened up", () => {
+    describe("races opened up by the dropdown-survives fix", () => {
       test("the Business chip is honoured before ACCEPTED, and its result cannot stomp the switch", () => {
         const flight = armUndecidedSignup();
         harness.openCompanyPanel($, ctx.helper);
@@ -4080,7 +4079,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
     });
 
-    describe("round-2 review regressions (Han/Vader) — isBusy() wired onto only 2 of the revert paths", () => {
+    describe("isBusy() gates hide()'s mode revert", () => {
       test("hide() does not revert mode while a signup popup is still open", () => {
         soleTrader.setMode("sole_trader");
         const win = { closed: false };
@@ -4120,7 +4119,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
     });
 
-    describe("round-3 review regressions (Han/Vader) — concurrent flights, isDeciding() vs isBusy(), country change", () => {
+    describe("concurrent flights, isDeciding() vs isBusy(), country change", () => {
       /**
        * Prime `countryDidChange`'s own tracker to the current GB before a
        * test switches the country — it returns false (no change) on its
@@ -4200,7 +4199,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       test("a country change still clears an ordinary company search pick as before", () => {
         // Through the real write path, not a raw `.val()` — `clearSelectedCompany()`
-        // gates the name clear on provenance (TWO-40 §5), and a raw `.val()`
+        // gates the name clear on provenance (TWO-40), and a raw `.val()`
         // carries no provenance marker at all.
         primeCountry();
         ctx.capture.write("Existing Co", "556677-1234");
@@ -4215,7 +4214,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
     });
 
-    describe("round-4 review regressions (Han/Vader) — a re-signup's own decision, not just the first one", () => {
+    describe("a re-signup's own decision, not just the first one", () => {
       beforeEach(() => {
         $("form[name='checkout']").after('<div id="order_review"></div>');
         ctx.Twoinc.getInstance().initialize(false);
@@ -4304,13 +4303,13 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
     });
 
-    describe("round-5/6 review regressions (Han/Vader) — soleTraderReconfirmingCount robustness", () => {
+    describe("soleTraderReconfirmingCount robustness", () => {
       beforeEach(() => {
         $("form[name='checkout']").after('<div id="order_review"></div>');
         ctx.Twoinc.getInstance().initialize(false);
       });
 
-      test("a second re-signup click while one is already outstanding is refused (round-6 structural hardening), not stacked as a second popup", () => {
+      test("a second re-signup click while one is already outstanding is refused, not stacked as a second popup", () => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "First Trader");
         jest.useFakeTimers();
@@ -4354,7 +4353,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         jest.useRealTimers();
       });
 
-      test("editing the email while a re-signup popup is open does not reset its count out from under it (round-6, Han/Vader)", () => {
+      test("editing the email while a re-signup popup is open does not reset its count out from under it", () => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "First Trader");
         soleTrader.availabilityByCountry = { GB: true };
@@ -4397,7 +4396,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
   });
 
-  describe("TWO-40 §7 direction (a) — Doug's live-tested regressions on the widget-selection PR", () => {
+  describe("TWO-40 — Doug's live-tested regressions on the widget-selection PR", () => {
     beforeEach(() => {
       $("form[name='checkout']").after('<div id="order_review"></div>');
       ctx.Twoinc.getInstance().initialize(false);
@@ -4407,11 +4406,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     describe("bug 1/item 4.3 — re-clicking the Sole Trader chip once already adopted", () => {
-      // Doug's explicit override (item 4.3): an earlier round made this a
-      // no-op on the theory that the "select a different sole trader" link
-      // was the one deliberate re-signup entry point once adopted. Doug has
-      // now ruled that wrong — re-clicking the chip must act exactly like
-      // that link, not do nothing.
+      // Doug's explicit override (item 4.3): re-clicking the chip must act
+      // exactly like the "select a different sole trader" link, not do
+      // nothing.
       test("opens a re-signup popup for an adoption that came through the hosted flow", () => {
         $("#billing_email").val("buyer@example.test");
         soleTrader.onModeChipClick("sole_trader");
@@ -4496,10 +4493,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       test("still switches to manual entry via a REAL click on the REAL chip inside the reopened panel", () => {
         // The test above calls `activateManualEntry()` directly. This one
         // drives the same scenario through the actual panel the adopted sole
-        // trader is rendered through (TWO-40 §7 direction (a)) — attached,
-        // reopened, and clicked for real — so a regression that only shows up
-        // once the panel is genuinely live cannot hide behind a call that
-        // skips it.
+        // trader is rendered through (TWO-40) — attached, reopened, and
+        // clicked for real — so a regression that only shows up once the panel
+        // is genuinely live cannot hide behind a call that skips it.
         $("#billing_email").val("buyer@example.test");
         soleTrader.onModeChipClick("sole_trader");
 
@@ -4595,7 +4591,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
   });
 
   /**
-   * TWO-40 §14 — leaving sole-trader mode takes the popup with it, rather
+   * TWO-40 — leaving sole-trader mode takes the popup with it, rather
    * than dropping the record and orphaning a live window (ported from the two
    * PrestaShop bugs of this shape).
    *
@@ -4603,7 +4599,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
    * exactly the adopted state: the outcome is settled, so a buyer action to
    * LEAVE is deliberately allowed through (see that predicate's own comment).
    */
-  describe("TWO-40 §14 — leaving sole-trader mode abandons the whole flow at once", () => {
+  describe("TWO-40 — leaving sole-trader mode abandons the whole flow at once", () => {
     beforeEach(() => {
       // The click-to-reopen binding is delegated from `Twoinc#initialize()`,
       // the real checkout-page wiring — same as the bug-3 block above.
@@ -4750,8 +4746,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       [
         // Exercises the actual `window.addEventListener("pagehide", ...)`
         // wiring — a test that only calls `stopTokenRefresh()` directly
-        // would still pass even if that wiring were deleted (round-1
-        // review — Leia; collapsed round-2 review — Leia).
+        // would still pass even if that wiring were deleted.
         "a real pagehide dispatch",
         () => window.dispatchEvent(new Event("pagehide"))
       ]
@@ -4768,7 +4763,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       // The page is frozen, not destroyed — real browsers pause and resume
       // the interval across the freeze on their own. Tearing it down here
       // would leave a buyer restored from bfcache with a dead refresh loop
-      // for the rest of that checkout (round-1 review — Vader).
+      // for the rest of that checkout.
       realMint();
       const persisted = new Event("pagehide");
       Object.defineProperty(persisted, "persisted", { value: true });

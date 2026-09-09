@@ -1020,7 +1020,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Developer env var backing each service host (TWO-40 §9). Three
+         * Developer env var backing each service host (TWO-40). Three
          * independent overrides:
          *
          *   - 'api'      the checkout/merchant API
@@ -1039,7 +1039,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         ];
 
         /**
-         * A developer's override for one service host, or '' (TWO-40 §9).
+         * A developer's override for one service host, or '' (TWO-40).
          *
          * Gated so a production instance can never honour one even if the
          * variable leaks into its process environment: the shop must BOTH
@@ -1068,7 +1068,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * Brand's merchant-portal signup URL, host swapped for a developer
-         * override when one applies (TWO-40 §9); only the origin is
+         * override when one applies (TWO-40); only the origin is
          * replaced, so a brand overlay's own signup path is kept.
          *
          * @param WC_Payment_Gateway $gateway

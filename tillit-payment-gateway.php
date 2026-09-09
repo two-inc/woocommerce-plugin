@@ -346,9 +346,9 @@ function twoinc_ajax_verify_api_key()
     // Get the Two instance and verify the API key. cache_verification_result()
     // both categorizes the outcome AND warms the checkout-side cache
     // (get_api_key_verification_status()) — this is the freshest live check
-    // this key has had, so a merchant who just fixed it here shouldn't have
-    // to wait out the checkout cache's TTL to see it take effect (TWO-25326
-    // follow-up, review round 1).
+    // this key has had, so a merchant who just fixed it here shouldn't have to
+    // wait out the checkout cache's TTL to see it take effect (TWO-25326
+    // follow-up).
     $twoinc_instance = WC_Twoinc::get_instance();
     $result = $twoinc_instance->verify_api_key($api_key);
     $category = $twoinc_instance->cache_verification_result($api_key, $result);

@@ -366,7 +366,7 @@ final class BrandConfigSpec
         unset($GLOBALS['__twoinc_test_store_currency']);
         unset($GLOBALS['__twoinc_test_base_country']);
         unset($GLOBALS['test_home_url']);
-        // Developer host overrides (TWO-40 §9). Real process env vars, so a
+        // Developer host overrides (TWO-40). Real process env vars, so a
         // test that sets one and then fails an assertion before its own
         // cleanup would leak it into every test after it.
         foreach (WC_Twoinc_Helper::DEV_HOST_ENV_VARS as $var) {
@@ -646,15 +646,14 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326 §7.1, correction 2026-08-04 round 3 (Doug's ruling). The ONE
-     * company-search control must always be registered by
-     * update_company_fields() — the checkbox this ticket is about
-     * ("Enable company search in address entry") only ever decides WHERE it
-     * renders (address area vs payment tile, via `company_search_location`
-     * — see derive_company_search_location() and
+     * TWO-25326 (Doug's ruling). The ONE company-search control must
+     * always be registered by update_company_fields() — the checkbox this
+     * ticket is about ("Enable company search in address entry") only ever
+     * decides WHERE it renders (address area vs payment tile, via
+     * `company_search_location` — see derive_company_search_location() and
      * twoincDomHelper.syncCompanySearchTileLocation() in twoinc.js), never
      * whether it exists. A gate here that skips registration when the
-     * checkbox is unchecked is exactly the bug this correction closes: the
+     * checkbox is unchecked is exactly the bug this ruling closes: the
      * payment-tile relocation JS then has nothing to move, and the buyer
      * sees no working search anywhere on the page. Checked in both
      * directions so a regression that reintroduces the gate in either
@@ -804,11 +803,11 @@ final class BrandConfigSpec
     }
 
     /**
-     * #33 review (Vader) — if a future brand overlay ever pushes
-     * billing_company's own priority unusually high, company/company_id/
-     * country must not invert above the fixed optional-fields baseline
-     * (200). Both move_country_field() and update_company_fields() clamp
-     * their read of company's priority at 190 to guarantee this.
+     * If a future brand overlay ever pushes billing_company's own
+     * priority unusually high, company/company_id/ country must not
+     * invert above the fixed optional-fields baseline (200). Both
+     * move_country_field() and update_company_fields() clamp their read
+     * of company's priority at 190 to guarantee this.
      */
     private static function testCompanyPriorityClampPreventsInversionAboveOptionals(): void
     {
@@ -897,10 +896,10 @@ final class BrandConfigSpec
         $clamped = $checkout->sync_locale_country_priority(['company' => ['priority' => 1000]]);
         TinyAssert::true($clamped['country']['priority'] < 200, 'locale-default country priority must stay below the optional baseline even if company priority is huge');
 
-        // Review finding (Vader) — if 'country' is ever absent from the
-        // locale-default array, this must be a no-op, not an auto-vivified
-        // ['priority' => X] entry with no type/label/class that would then
-        // be treated as the field's real definition downstream.
+        // If 'country' is ever absent from the locale-default array, this
+        // must be a no-op, not an auto-vivified ['priority' => X] entry
+        // with no type/label/class that would then be treated as the
+        // field's real definition downstream.
         $no_country = $checkout->sync_locale_country_priority(['company' => ['priority' => 30]]);
         TinyAssert::true(!isset($no_country['country']), 'must not fabricate a country entry when WC did not provide one');
     }
@@ -3618,10 +3617,10 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25289 round 3. Two defects in one flow, both invisible from a
-     * validator called in isolation, so this test drives the REAL
-     * WooCommerce save loop (process_admin_options) and the REAL settings
-     * render (admin_options).
+     * TWO-25289. Two defects in one flow, both invisible from a validator
+     * called in isolation, so this test drives the REAL WooCommerce save
+     * loop (process_admin_options) and the REAL settings render
+     * (admin_options).
      *
      * 1. The refusal was SILENT. WooCommerce records a throwing validator's
      *    message with WC_Settings_API::add_error and nothing in core prints
@@ -6072,7 +6071,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-40 §3. An internally-minted `TWO:`-prefixed identifier travels the
+     * TWO-40. An internally-minted `TWO:`-prefixed identifier travels the
      * same single write/pairing/validation/submission path as any registry
      * number — the ONE special case is display.
      *
@@ -6113,7 +6112,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-40 §4/§6. The organisation number is captured once, at checkout, on
+     * TWO-40. The organisation number is captured once, at checkout, on
      * the invoice-role address, and stored on the order — and no later
      * edit-time path can overwrite it with an empty value, because no
      * edit-time path sends it at all.
@@ -6145,7 +6144,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-40 §9. Three service hosts, three INDEPENDENT developer overrides,
+     * TWO-40. Three service hosts, three INDEPENDENT developer overrides,
      * every one of them refused on anything that could be a production shop.
      *
      * The checkout-page override matters on its own rather than riding on the
@@ -6332,11 +6331,10 @@ final class BrandConfigSpec
     }
 
     /**
-     * Adversarial-review finding (TWO-25386): 'cancelled' and 'refunded'
-     * have their own dedicated dispatch with different Two API semantics —
-     * they must never be selectable as a fulfilment trigger, or a merchant
-     * could configure "Cancelled" and have Two told a cancelled order was
-     * fulfilled.
+     * TWO-25386: 'cancelled' and 'refunded' have their own dedicated
+     * dispatch with different Two API semantics — they must never be
+     * selectable as a fulfilment trigger, or a merchant could configure
+     * "Cancelled" and have Two told a cancelled order was fulfilled.
      */
     private static function testFulfilmentTriggerExcludesCancelledAndRefundedFromOptionsAndStoredValue(): void
     {
@@ -7002,9 +7000,9 @@ final class BrandConfigSpec
 
     private static function testNegativeDiscountGuardNoFalsePositiveFromEarlyRounding(): void
     {
-        // (c) Rounding-order regression (the PrestaShop TWO-24741 round-1
-        // finding): a native-precision difference that only goes negative
-        // if the operands are rounded early must NOT false-positive.
+        // (c) Rounding-order regression (the PrestaShop TWO-24741 finding): a
+        // native-precision difference that only goes negative if the operands
+        // are rounded early must NOT false-positive.
         //
         // 25.024 - 25.026 = -0.002 at native precision, which rounds to
         // zero at the payload boundary. Rounding the operands first gives
@@ -8010,10 +8008,10 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25289 round 3. Round 2 added an is_numeric gate to the cap READ
-     * path, which turned a comma-formatted stored cap into an absent one —
-     * and absent means UNCAPPED, so the failure direction was an overcharge
-     * where the pre-TWO-25289 code capped correctly.
+     * TWO-25289. An is_numeric gate on the cap READ path would turn a
+     * comma-formatted stored cap into an absent one — and absent means
+     * UNCAPPED, so the failure direction would be an overcharge where the
+     * pre-TWO-25289 code capped correctly.
      *
      * A comma decimal is the plugin's own accepted spelling: the save path
      * and the merchant-minimum validator both normalise it before they
@@ -8306,8 +8304,8 @@ final class BrandConfigSpec
      * concatenated string, so ordering is a silent, easy regression.
      *
      * The sole-trader MODE chips themselves are not part of this box at all
-     * (TWO-40 §0 correction) — they render inside the company-search
-     * dropdown. `twoinc-sole-trader-note-slot` here only ever holds the
+     * (TWO-40) — they render inside the company-search dropdown.
+     * `twoinc-sole-trader-note-slot` here only ever holds the
      * signup-prompt note and in-flight error.
      */
     private static function testPaymentBoxOrdersTaglineChipsThenSoleTrader(): void
@@ -8332,9 +8330,8 @@ final class BrandConfigSpec
 
     /**
      * The company-search-tile-location slot renders between the sole-trader
-     * note slot and the intent message (TWO-25326 §7.1, ruling 2026-08-03,
-     * superseding the standalone company-tile-label this ticket originally
-     * shipped in PR #431).
+     * note slot and the intent message (TWO-25326), superseding the standalone
+     * company-tile-label this ticket originally shipped in PR #431.
      *
      * Position is asserted, not just presence: the requirement names the
      * sole-trader note slot and the intent message as its two anchors, and
@@ -8369,8 +8366,8 @@ final class BrandConfigSpec
             'the tile slot must ship empty and hidden'
         );
 
-        // §7.2/§7.3: the standalone tile label PR #431 shipped is gone
-        // outright, not just replaced in this position.
+        // The standalone tile label PR #431 shipped is gone outright, not
+        // just replaced in this position.
         TinyAssert::true(
             strpos($html, 'twoinc-company-tile-label') === false,
             'the superseded standalone company tile label must not be emitted'
@@ -8378,16 +8375,15 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326 §7.1, correction 2026-08-04. The short-lived standalone
-     * `company_search_location` admin setting from PR #436 is gone; the
-     * SAME location decision is now derived from the pre-existing
-     * `enable_company_search` checkbox by
+     * TWO-25326. The short-lived standalone `company_search_location` admin
+     * setting from PR #436 is gone; the SAME location decision is now derived
+     * from the pre-existing `enable_company_search` checkbox by
      * WC_Twoinc_Checkout::derive_company_search_location(). Flip both
-     * directions directly against that pure function — no gateway, no
-     * WP/WC stubs needed — so a mutation that inverts or drops the branch
-     * fails here rather than only in the JS suite (which drives
-     * `window.twoinc.company_search_location` directly and so cannot see
-     * this PHP-side derivation at all).
+     * directions directly against that pure function — no gateway, no WP/WC
+     * stubs needed — so a mutation that inverts or drops the branch fails here
+     * rather than only in the JS suite (which drives
+     * `window.twoinc.company_search_location` directly and so cannot see this
+     * PHP-side derivation at all).
      */
     private static function testCompanySearchLocationDerivedFromEnableCompanySearchBothDirections(): void
     {
@@ -8425,13 +8421,12 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326 §7.1, correction 2026-08-04 (adversarial review finding,
-     * Yoda). `company_search_location` (PR #436) lived for less than a day
-     * before this correction deleted the admin field and its getter — any
-     * merchant who touched it during that window has the key sitting inert
-     * in their settings row. `drop_removed_settings()` (same mechanism as
-     * `enable_sole_trader`, TWO-25163) must clean it up on an upgraded
-     * install, mirroring `testSoleTraderHasNoMerchantToggleSetting` above.
+     * TWO-25326. `company_search_location` (PR #436) lived for less than a day
+     * before TWO-25326 deleted the admin field and its getter — any merchant
+     * who touched it during that window has the key sitting inert in their settings
+     * row. `drop_removed_settings()` (same mechanism as `enable_sole_trader`,
+     * TWO-25163) must clean it up on an upgraded install, mirroring
+     * `testSoleTraderHasNoMerchantToggleSetting` above.
      */
     private static function testCompanySearchLocationSettingDroppedFromUpgradedInstalls(): void
     {
@@ -8493,10 +8488,10 @@ final class BrandConfigSpec
 
     /**
      * The declined ("not available") box carries the same company-token
-     * mechanism as the approved notice (TWO-25326 §7.3, ruling 2026-08-03):
-     * %1$s is the brand product name, resolved here; %2$s is the buyer's
-     * captured company, left as the {company} token for twoinc.js to
-     * substitute, since only the browser knows it.
+     * mechanism as the approved notice (TWO-25326): %1$s is the brand product
+     * name, resolved here; %2$s is the buyer's captured company, left as the
+     * {company} token for twoinc.js to substitute, since only the browser
+     * knows it.
      */
     private static function testDeclinedBoxCarriesCompanyTemplate(): void
     {
@@ -8909,9 +8904,9 @@ final class BrandConfigSpec
     {
         $html = self::gateway()->build_payment_description();
         // Asserted as ONE composed string rather than three independent
-        // substring checks (review round 1): separate checks pass however the
-        // nodes are ordered or nested, and "spinner, then sentence, both direct
-        // children of the announced region" is the thing being pinned.
+        // substring checks: separate checks pass however the nodes are ordered
+        // or nested, and "spinner, then sentence, both direct children of the
+        // announced region" is the thing being pinned.
         TinyAssert::true(
             strpos(
                 $html,
@@ -8935,8 +8930,8 @@ final class BrandConfigSpec
         // verdict colours, the loader's layout — is asserted in
         // tests/js/intent-loading-state.test.js against jsdom's real cascade.
         // Raw-text greps over the CSS were tried here first and were wrong three
-        // ways (review round 1): blind to a commented-out declaration, blind to a
-        // later overriding rule, and blind to an at-rule-wrapped copy.
+        // ways: blind to a commented-out declaration, blind to a later overriding
+        // rule, and blind to an at-rule-wrapped copy.
         //
         // The asset's existence still belongs here, though: it is a file in the
         // release tree, not a computed style, and a background-image URL pointing
@@ -8968,12 +8963,12 @@ final class BrandConfigSpec
      * all three (TWO-25326, 2026-08-04).
      *
      * The colour and border that make them read as verdicts rather than as tile
-     * copy live in the stylesheet, and are asserted against jsdom's real
-     * cascade in tests/js/intent-loading-state.test.js. What is markup, and so
-     * belongs here: the PrestaShop box grew a marketing heading above its
-     * sentence, that heading is dropped in the same pass, and this platform must
-     * not grow one. Round 1 checked only the phone-number box, which is the one
-     * box a heading would never have been added to.
+     * copy live in the stylesheet, and are asserted against jsdom's real cascade
+     * in tests/js/intent-loading-state.test.js. What is markup, and so belongs
+     * here: the PrestaShop box grew a marketing heading above its sentence, that
+     * heading is dropped in the same pass, and this platform must not grow one.
+     * All three boxes are checked, not only the phone-number box, which is the
+     * one box a heading would never have been added to.
      */
     private static function testIntentVerdictBoxesHoldABareSentence(): void
     {
@@ -8989,9 +8984,9 @@ final class BrandConfigSpec
             TinyAssert::same(
                 1,
                 preg_match(
-                    // `[^<]+`, not `[^<]*`: an EMPTY box passed the star form
-                    // (review round 2), and a verdict box with no sentence in it
-                    // is exactly as broken as one with a heading above it.
+                    // `[^<]+`, not `[^<]*`: an EMPTY box passed the star form,
+                    // and a verdict box with no sentence in it is exactly as
+                    // broken as one with a heading above it.
                     '#<div class="twoinc-pay-box ' . preg_quote($class, '#') . ' hidden"[^>]*>[^<]+</div>#',
                     $html
                 ),
@@ -9001,7 +8996,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * Every verdict box is announced (review round 1).
+     * Every verdict box is announced.
      *
      * The loader carried role="status" and the three boxes carried nothing, so a
      * screen-reader buyer heard that a check had started and never heard how it
@@ -9075,18 +9070,17 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326 §7.1-§7.3, ruling 2026-08-03: the standalone company-tile
-     * label this section originally tested (PR #431) is gone outright, on
-     * every brand, notice switch or not — it is superseded, not conditional.
-     * The company-search tile slot that replaces its POSITION is unrelated to
-     * the notice switch entirely: it exists to let the location SETTING
-     * (§7.1) move the search control into the tile, which has nothing to do
-     * with whether the approved-intent reassurance copy is on. It must
-     * therefore render on BOTH a brand that suppresses the notice and one
-     * that does not.
+     * TWO-25326: the standalone company-tile label PR #431 originally tested
+     * is gone outright, on every brand, notice switch or not — it is
+     * superseded, not conditional. The company-search tile slot that replaces
+     * its POSITION is unrelated to the notice switch entirely: it exists to
+     * let the location SETTING move the search control into the tile, which
+     * has nothing to do with whether the approved-intent reassurance copy is
+     * on. It must therefore render on BOTH a brand that suppresses the notice
+     * and one that does not.
      *
      * The declined ("not available") box is the one still worth pinning
-     * against the switch here (TWO-25224's rule, extended by §7.3's new
+     * against the switch here (TWO-25224's rule, extended by TWO-25326's new
      * company template): it is NOT gated on 'intent_approved_notice_enabled'
      * (it has its own independent switch, tested separately), so its
      * data-company-template must survive even on a brand that suppresses
@@ -9703,11 +9697,11 @@ final class BrandConfigSpec
     }
 
     /**
-     * Review round 1 (Vader): a truthy, non-WP_Error response that lacks a
-     * 'body' key at all must not fall through to the same null
-     * verify_api_key() returns for "not configured" — that would tell an
-     * admin to "enter an API key" when one is already configured and a
-     * response WAS received, just an unexpected/malformed one.
+     * A truthy, non-WP_Error response that lacks a 'body' key at all
+     * must not fall through to the same null verify_api_key() returns
+     * for "not configured" — that would tell an admin to "enter an API
+     * key" when one is already configured and a response WAS received,
+     * just an unexpected/malformed one.
      */
     private static function testVerifyApiKeyMalformedResponseNotMiscategorizedAsNotConfigured(): void
     {
@@ -9731,7 +9725,7 @@ final class BrandConfigSpec
             public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
             {
                 // Truthy, not a WP_Error, but no 'body' key — the
-                // malformed/unexpected shape probed in review round 1.
+                // malformed/unexpected shape under test.
                 return ['response' => ['code' => 503]];
             }
         };
@@ -9743,12 +9737,11 @@ final class BrandConfigSpec
     }
 
     /**
-     * Review round 1 (Han): the settings page's own live re-check
-     * (verify_api_key_action() / the AJAX handler, via
-     * cache_verification_result()) must feed the SAME cache
-     * get_api_key_verification_status() reads, so a merchant who just
-     * fixed their key doesn't wait out API_KEY_VERIFICATION_TTL for
-     * checkout to notice.
+     * The settings page's own live re-check (verify_api_key_action()
+     * / the AJAX handler, via cache_verification_result()) must feed
+     * the SAME cache get_api_key_verification_status() reads, so a
+     * merchant who just fixed their key doesn't wait out
+     * API_KEY_VERIFICATION_TTL for checkout to notice.
      */
     private static function testAdminLiveVerificationWarmsCheckoutCache(): void
     {
@@ -9796,11 +9789,10 @@ final class BrandConfigSpec
     }
 
     /**
-     * Review round 1 (Yoda): a cache-miss check evaluated inline in a
-     * customer-facing request (is_available(), inject_cart_details()) must
-     * use a short, explicit timeout — not verify_api_key()'s 30s
-     * admin-page default, which would block that page render for up to
-     * 30s while Two is unreachable.
+     * A cache-miss check evaluated inline in a customer-facing request
+     * (is_available(), inject_cart_details()) must use a short, explicit
+     * timeout — not verify_api_key()'s 30s admin-page default, which would
+     * block that page render for up to 30s while Two is unreachable.
      */
     private static function testCachedStatusMissTimeoutIsShortNotAdminDefault(): void
     {
@@ -10145,8 +10137,8 @@ final class BrandConfigSpec
             'the .pot is missing the loader sentence — regenerate it'
         );
 
-        // Every locale the plugin ships, discovered rather than listed (review
-        // round 1): a hardcoded list silently exempts a catalogue added later.
+        // Every locale the plugin ships, discovered rather than listed: a
+        // hardcoded list silently exempts a catalogue added later.
         $expected = [
             'nb_NO' => 'Sjekker tilgjengelighet',
             'nl_NL' => 'Beschikbaarheid controleren',
@@ -10165,32 +10157,32 @@ final class BrandConfigSpec
                 "locale $locale has no expected loader translation in this test — add one"
             );
 
-            // PAIRING, not two independent searches (review round 1). Searching
-            // the catalogue for the msgid and for the translation separately
-            // passes when the translation is attached to some OTHER msgid, and
-            // that shop then renders the wrong sentence. Read the msgstr that
-            // actually follows this msgid.
+            // PAIRING, not two independent searches. Searching the catalogue
+            // for the msgid and for the translation separately passes when the
+            // translation is attached to some OTHER msgid, and that shop then
+            // renders the wrong sentence. Read the msgstr that actually
+            // follows this msgid.
             TinyAssert::same(
                 $expected[$locale],
                 self::poTranslation((string) file_get_contents($po), $msgid),
                 "the $locale catalogue does not pair the loader sentence with its translation"
             );
 
-            // No assertion on the compiled .mo here (review round 2). The obvious
-            // one — two independent strpos over the binary — has exactly the
-            // non-pairing flaw the .po check above was fixed for: it passes with
-            // this msgid's own msgstr empty and the expected text belonging to a
-            // different entry. .github/scripts/check-catalogues.sh already decodes
-            // every .mo with msgunfmt and diffs it against its .po, so "the .po is
-            // right" plus that gate IS "the .mo is right" — and that is a real
-            // gate rather than a substring search over binary.
+            // No assertion on the compiled .mo here. The obvious one — two
+            // independent strpos over the binary — has exactly the non-pairing
+            // flaw the .po check above was fixed for: it passes with this msgid's
+            // own msgstr empty and the expected text belonging to a different
+            // entry. .github/scripts/check-catalogues.sh already decodes every .mo
+            // with msgunfmt and diffs it against its .po, so "the .po is right"
+            // plus that gate IS "the .mo is right" — and that is a real gate
+            // rather than a substring search over binary.
         }
 
-        // Prove the DISCOVERY, not just the loop body (review round 8). The glob
-        // exists so a catalogue added later cannot be silently exempted — but nothing
-        // asserted which locales it actually found, so narrowing it to a single
-        // hardcoded filename passed identically, which is the exact failure the glob
-        // was introduced to prevent.
+        // Prove the DISCOVERY, not just the loop body. The glob exists so a catalogue
+        // added later cannot be silently exempted — but nothing asserted which
+        // locales it actually found, so narrowing it to a single hardcoded filename
+        // passed identically, which is the exact failure the glob was introduced to
+        // prevent.
         sort($visited);
         $wanted = array_keys($expected);
         sort($wanted);
@@ -10314,7 +10306,7 @@ final class BrandConfigSpec
     /**
      * Direct cases for poTranslation(), which every safety property in its docblock
      * needed and none had: all eight mutations of that parser survived the suite
-     * (review round 6, found by mutation, not by reading).
+     * (found by mutation, not by reading).
      *
      * The live catalogues cannot exercise any of this — they contain no fuzzy entry,
      * no msgctxt, no plural and no CRLF — which is exactly why the parser's own
@@ -10368,8 +10360,8 @@ final class BrandConfigSpec
         // CRLF, so a Windows checkout parses identically rather than mysteriously
         // returning ''. TWO entries separated by a blank line, deliberately: with one
         // entry the ENTRY splitter never has to match a blank line at all, and
-        // narrowing it from `\R` to `\n` survived a single-entry fixture (review
-        // round 6, found by mutation).
+        // narrowing it from `\R` to `\n` survived a single-entry fixture (found by
+        // mutation).
         $other = "#: class/WC_Twoinc.php\nmsgid \"Something else\"\nmsgstr \"Noe annet\"\n";
         TinyAssert::same(
             'Sjekker',
@@ -12343,10 +12335,10 @@ final class BrandConfigSpec
         // Split into entries on blank lines and read each one's fields, rather
         // than pattern-matching a msgid/msgstr pair out of the whole file.
         //
-        // Round 2 tried the regex and it could not be made safe: every attempt to
-        // require that the line above the msgid is not a `msgctxt` was defeated by
-        // the newline-matching alternative sliding forward one line. A `msgctxt`
-        // entry sharing this msgid MUST NOT be matched — gettext treats it as a
+        // The regex approach cannot be made safe: every attempt to require that
+        // the line above the msgid is not a `msgctxt` was defeated by the
+        // newline-matching alternative sliding forward one line. A `msgctxt` entry
+        // sharing this msgid MUST NOT be matched — gettext treats it as a
         // different message and __() with no context resolves the context-less
         // entry, so the bad case is the context-less one sitting at `msgstr ""`
         // while the contextual one carries the translation: a shop rendering
@@ -12364,13 +12356,13 @@ final class BrandConfigSpec
             $fields = [];
             $fuzzy = false;
             foreach (preg_split('/\R/', $entry) as $line) {
-                // A fuzzy entry is NOT a translation (review round 4). msgfmt
-                // excludes it from the .mo by default, so the shop renders English
-                // while a naive read of the .po says translated — the identical
-                // failure shape as the msgctxt case above. And check-catalogues.sh
-                // cannot catch it: msgfmt drops fuzzy entries from BOTH sides of
-                // its diff, so that gate stays green. Latent today (no fuzzy
-                // entries in languages/), which is exactly when to close it.
+                // A fuzzy entry is NOT a translation. msgfmt excludes it from the
+                // .mo by default, so the shop renders English while a naive read
+                // of the .po says translated — the identical failure shape as the
+                // msgctxt case above. And check-catalogues.sh cannot catch it:
+                // msgfmt drops fuzzy entries from BOTH sides of its diff, so that
+                // gate stays green. Latent today (no fuzzy entries in languages/),
+                // which is exactly when to close it.
                 if (preg_match('/^#,[[:blank:]]*(.*)$/', $line, $flags) === 1) {
                     $fuzzy = $fuzzy || in_array('fuzzy', preg_split('/[[:blank:]]*,[[:blank:]]*/', $flags[1]), true);
                 }

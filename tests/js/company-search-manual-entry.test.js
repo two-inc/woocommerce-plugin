@@ -136,7 +136,7 @@ describe("company-search manual-entry affordance", () => {
     expect(btn().length).toBe(1);
   });
 
-  describe("visibility: present whenever the panel is open (TWO-25326 §2)", () => {
+  describe("visibility: present whenever the panel is open (TWO-25326)", () => {
     test("present as soon as the panel opens, before the buyer has typed anything", () => {
       openPanel();
 
@@ -217,7 +217,7 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
-  describe("where the chip lives (#30.x.1, #30.x.2, TWO-40 §0)", () => {
+  describe("where the chip lives (TWO-40)", () => {
     test("it is OUTSIDE the results host, in the panel's own chip group", () => {
       openPanel();
 
@@ -355,7 +355,7 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
-  describe("the chips inherit visibility from the panel alone (TWO-40 §0)", () => {
+  describe("the chips inherit visibility from the panel alone (TWO-40)", () => {
     /**
      * Ground-truth PrestaShop finding this ports: every chip's own `style`
      * attribute is empty in every observed state — there is exactly ONE
@@ -486,7 +486,7 @@ describe("company-search manual-entry affordance", () => {
 
   describe("nothing in the panel is a tab stop while it is closed", () => {
     test("the closed panel carries `hidden`, which takes its whole subtree out", () => {
-      // The #30.x.4 keyboard trap, now answered by the DOM rather than by a
+      // The keyboard trap, now answered by the DOM rather than by a
       // key handler: `[hidden]` removes the query field, the rows and the
       // chips from the tab order in one attribute.
       openPanel();
@@ -500,7 +500,7 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
-  describe("CSS overrides survive a host theme's own styling (#30.x.5, round 3)", () => {
+  describe("CSS overrides survive a host theme's own styling", () => {
     /**
      * jsdom's cascade does not resolve `!important` + specificity across two
      * separate sheets, so a rendered-style assertion here would be vacuous
@@ -558,7 +558,7 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
-  describe("placement below the visible field, not overlapping it (#30.x.5.3 round 3; reworked #30.x.9)", () => {
+  describe("placement below the visible field, not overlapping it", () => {
     test("#search_company_btn is appended into .woocommerce-input-wrapper, not #billing_company_field directly", () => {
       // WooCommerce core's own wrapper is around just the <input>, no label
       // inside it, so a button appended as its last child lands in normal flow
@@ -576,8 +576,8 @@ describe("company-search manual-entry affordance", () => {
       expect($searchBtn.closest("#billing_company_field").length).toBe(1);
     });
 
-    test("the button sits in normal flow below the input, not absolutely positioned over it (#30.x.9)", () => {
-      // Doug's ruling (#30.x.9): normal block flow below the field,
+    test("the button sits in normal flow below the input, not absolutely positioned over it", () => {
+      // Doug's ruling: normal block flow below the field,
       // right-aligned — never absolutely positioned over the input.
       harness.injectStylesheet();
 
@@ -600,7 +600,7 @@ describe("company-search manual-entry affordance", () => {
       expect(btnStyle.textAlign).toBe("end");
     });
 
-    test("the wrapper is blockified explicitly, not left to whatever the host theme declares (round 1 review)", () => {
+    test("the wrapper is blockified explicitly, not left to whatever the host theme declares", () => {
       // `.woocommerce-input-wrapper` is a <span> — inline by default — and a
       // theme declaring it `display: flex` would put the button back on the
       // input's own line, re-creating the overlap this removes.
@@ -612,7 +612,7 @@ describe("company-search manual-entry affordance", () => {
       expect(m[1]).toMatch(/position:\s*relative/);
     });
 
-    test("#search_company_btn declares its below-the-field gap explicitly (round 1 review — Vader)", () => {
+    test("#search_company_btn declares its below-the-field gap explicitly", () => {
       // Mutation-caught gap: a mutation deleting `margin-top` passed the full
       // suite while `display`/`position`/`text-align` were asserted.
       const m = /^#search_company_btn,?\s*(?:#\S+\s*)*\{([^}]*)\}/m.exec(
@@ -622,7 +622,7 @@ describe("company-search manual-entry affordance", () => {
       expect(m[1]).toMatch(/margin-top:\s*4px/);
     });
 
-    test("#search_company_btn keeps width: 100% paired with box-sizing: border-box (round 2 review — Vader)", () => {
+    test("#search_company_btn keeps width: 100% paired with box-sizing: border-box", () => {
       // A <button> is a form control: at `width: auto` it shrink-wraps its own
       // label regardless of `display: block`, which makes `text-align: end` a
       // no-op. `box-sizing: border-box` is what stops the pair overflowing, so
@@ -651,7 +651,7 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
-  describe("mouse-button semantics (#30.x.3)", () => {
+  describe("mouse-button semantics", () => {
     test("a plain click activates it", () => {
       jest.useFakeTimers();
       openPanel();
@@ -707,8 +707,8 @@ describe("company-search manual-entry affordance", () => {
     });
 
     test("the panel is closed and the field handed back, not left live behind manual entry", () => {
-      // #30.x.13: a control left live over a field the buyer has moved on from
-      // makes Tab unresponsive page-wide.
+      // A control left live over a field the buyer has moved on from makes
+      // Tab unresponsive page-wide.
       openPanel();
       expect($("#billing_company_display").attr("role")).toBe("combobox");
 
@@ -945,13 +945,13 @@ describe("company-search manual-entry affordance", () => {
       const $back = helper.getSearchCompanyBtnNode();
 
       expect($back[0].style.display).toBe("none");
-      // In place, not floating: inside .woocommerce-input-wrapper (round 3,
-      // #30.x.5.3), so it renders immediately below the visible input box.
+      // In place, not floating: inside .woocommerce-input-wrapper,
+      // so it renders immediately below the visible input box.
       expect($back.parent().hasClass("woocommerce-input-wrapper")).toBe(true);
       expect($back.closest("#billing_company_field").length).toBe(1);
     });
 
-    test("a real click activates the way back out even detached from the document (#30.x.13)", () => {
+    test("a real click activates the way back out even detached from the document", () => {
       // Detached, so only a handler bound on the element itself can fire — a
       // delegated one has nothing left to bubble through.
       openPanel();
@@ -1000,7 +1000,7 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
-  describe("focus visibility and Enter/Space activation on the way back out (#30.x.7, round 4)", () => {
+  describe("focus visibility and Enter/Space activation on the way back out", () => {
     function stylesheetSource() {
       return fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8");
     }
@@ -1022,9 +1022,9 @@ describe("company-search manual-entry affordance", () => {
       expect(m[1]).toMatch(/border-color:\s*#808080\s*!important/);
     });
 
-    test("#search_company_btn declares explicit, tight padding (round 5)", () => {
-      // The round-5 border sits flush against the box, so the box has to be
-      // sized close to the text rather than left on the browser's own default
+    test("#search_company_btn declares explicit, tight padding", () => {
+      // The border sits flush against the box, so the box has to be sized
+      // close to the text rather than left on the browser's own default
       // button padding.
       const m = /^#search_company_btn,?\s*(?:#\S+\s*)*\{([^}]*)\}/m.exec(stylesheetSource());
       expect(m).not.toBeNull();
@@ -1219,7 +1219,7 @@ describe("company-search manual-entry affordance", () => {
       expect(ctx.capture.mode).toBe("manual");
 
       // The search button is torn down only once a sole trader is actually
-      // adopted — see `setCompany`'s own comment (TWO-40 §7 correction).
+      // adopted — see `setCompany`'s own comment (TWO-40).
       ctx.soleTrader.setMode("sole_trader");
       ctx.soleTrader.setCompany("TWO:ST1", "A Sole Trader");
       expect($("#" + helper.searchCompanyBtnId)[0].style.display).toBe("none");
@@ -1230,11 +1230,11 @@ describe("company-search manual-entry affordance", () => {
       expect($("#" + helper.searchCompanyBtnId)[0].style.display).not.toBe("none");
     });
 
-    test("adopting a sole trader with the panel open closes it, but leaves it bound (TWO-40 §7 direction (a))", () => {
+    test("adopting a sole trader with the panel open closes it, but leaves it bound (TWO-40)", () => {
       // A buyer can reach sole-trader mode with the panel still OPEN, via the
-      // chip. Adoption must close it, but must NOT tear it down — direction (a)
-      // keeps it bound so an adopted sole trader looks like a registered
-      // company that was searched and picked.
+      // chip. Adoption must close it, but must NOT tear it down: it stays
+      // bound so an adopted sole trader looks like a registered company that
+      // was searched and picked.
       openPanel();
       expect(helper.companySearchDropdownIsOpen()).toBe(true);
 
@@ -1247,7 +1247,7 @@ describe("company-search manual-entry affordance", () => {
       expect($("#billing_company_display").val()).toBe("A Sole Trader");
     });
 
-    test("a deferred manual-entry activation that lands AFTER an async sole-trader switch does not stomp it (#30.x.13)", () => {
+    test("a deferred manual-entry activation that lands AFTER an async sole-trader switch does not stomp it", () => {
       // The signup's ACCEPTED handler reaches `setMode("sole_trader")`
       // independently, and can land inside the tick this activation defers.
       jest.useFakeTimers();
