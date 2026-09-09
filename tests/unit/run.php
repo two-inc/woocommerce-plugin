@@ -9222,7 +9222,7 @@ final class BrandConfigSpec
             [static function () use ($gateway) {
                 WC_Twoinc_Payment_Terms::surcharge_quote_failed($gateway);
             }, 'the availability gate'],
-            [static function () use ($gateway) {
+            [static function () {
                 WC_Twoinc_Payment_Terms::apply_cart_fee(new StubFeeCart());
             }, 'the charging path'],
         ];
