@@ -256,9 +256,9 @@ describe("API key verification — categorized failure display", () => {
 
         expect($("#twoinc-merchant-info").css("display")).toBe("none");
         expect($("#api-key-invalid").css("display")).not.toBe("none");
-        expect($("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")).toBe(
-          false
-        );
+        expect(
+          $("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")
+        ).toBe(false);
       }
     );
 
@@ -278,9 +278,9 @@ describe("API key verification — categorized failure display", () => {
         expect($("#api-key-verification-icon").css("display")).toBe("none");
         // Shown, but toned down: a check that did not complete is not a rejection.
         expect($("#twoinc-merchant-invalid-notice").css("display")).not.toBe("none");
-        expect($("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")).toBe(
-          true
-        );
+        expect(
+          $("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")
+        ).toBe(true);
       }
     );
 
@@ -300,9 +300,9 @@ describe("API key verification — categorized failure display", () => {
       expect($("#twoinc-merchant-info").css("display")).not.toBe("none");
       expect($("#twoinc-merchant-id").text()).toBe(RENDERED_MERCHANT_ID);
       expect($("#api-key-invalid").css("display")).toBe("none");
-      expect($("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")).toBe(
-        true
-      );
+      expect(
+        $("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")
+      ).toBe(true);
     });
 
     test("an inconclusive verdict after a green tick leaves the tick standing", async () => {
@@ -328,9 +328,9 @@ describe("API key verification — categorized failure display", () => {
 
       expect($("#api-key-valid").css("display")).not.toBe("none");
       expect($("#api-key-invalid").css("display")).toBe("none");
-      expect($("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")).toBe(
-        true
-      );
+      expect(
+        $("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")
+      ).toBe(true);
     });
 
     test("a key the API then rejects clears the unconfirmed tone", async () => {
@@ -350,16 +350,16 @@ describe("API key verification — categorized failure display", () => {
         }
       });
 
-      expect($("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")).toBe(
-        true
-      );
+      expect(
+        $("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")
+      ).toBe(true);
       $("#woocommerce_" + GATEWAY_ID + "_api_key").trigger("blur");
 
       expect($("#twoinc-merchant-info").css("display")).toBe("none");
       expect($("#api-key-invalid").css("display")).not.toBe("none");
-      expect($("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")).toBe(
-        false
-      );
+      expect(
+        $("#twoinc-merchant-invalid-notice").hasClass("twoinc-merchant-notice--unconfirmed")
+      ).toBe(false);
     });
   });
 
