@@ -242,7 +242,7 @@ describe("company search hints", () => {
     });
 
     test("is the query field's own watermark, and states a fixed number", () => {
-      // Doug 2026-08-20, live: two hints for one rule, the second sitting
+      // Found live 2026-08-20: two hints for one rule, the second sitting
       // directly beneath the field the first is in. The panel folds them into
       // one surface — the wording is ON the query input, and the results host
       // carries nothing at all until the buyer types.

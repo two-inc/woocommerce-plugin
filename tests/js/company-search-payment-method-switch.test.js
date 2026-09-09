@@ -6,7 +6,7 @@
  * not just relocate whatever `toggleBusinessFields()` already decided at
  * page load.
  *
- * Original live bug (Doug, 2026-08-04): with "Enable Company Search In
+ * Original live bug (2026-08-04): with "Enable Company Search In
  * Address Entry" unchecked (`company_search_location: 'payment_tile'`), the
  * search control never appeared in the payment tile at all. Root cause:
  * `onUpdatedCheckout()` calls `syncCompanySearchTileLocation()` directly on
@@ -15,7 +15,7 @@
  * different one — WooCommerce checks the first available gateway by
  * default, so this is the ordinary case, not an edge one.
  *
- * #486 correction (Doug, 2026-08-19): `toggleBusinessFields()` itself used
+ * #486 correction (2026-08-19): `toggleBusinessFields()` itself used
  * to gate `#billing_company_display_field`'s own visibility on
  * `isTwoincSelected` — a leftover from the removed
  * `enable_company_search_for_others` admin setting (TWO-25326). That made a

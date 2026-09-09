@@ -114,10 +114,9 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
     /**
      * The INVERSION of what #486 pinned here. That test asserted the buyer's
      * hand-typed company name being overwritten, and the picker re-attached
-     * over it, by a background email-driven autofill match — the behaviour
-     * Doug's 2026-08-21 architectural ruling removes: a company may only ever
-     * be filled in by the buyer's own interaction with the company field, so
-     * nothing an email change starts may touch what they typed.
+     * over it, by a background email-driven autofill match. A company may
+     * only ever be filled in by the buyer's own interaction with the company
+     * field, so nothing an email change starts may touch what they typed.
      */
     test("is NEVER adopted by an email change alone — a hand-typed name survives it", () => {
       // Through the REAL checkout wiring — `initialize()` is where an

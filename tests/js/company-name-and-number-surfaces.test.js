@@ -1,5 +1,5 @@
 /**
- * #486 — the two company surfaces the buyer actually sees (Doug, 2026-08-19).
+ * #486 — the two company surfaces the buyer actually sees.
  *
  * NAME: always on screen, as exactly one of two elements — the search control
  * (`#billing_company_display_field`) or WooCommerce's native
@@ -181,7 +181,7 @@ describe("the company name and number surfaces (#486)", () => {
     );
 
     test("the tile row and the native field share the page when the control lives in the tile", () => {
-      // The ONE documented exception to "exactly one" (Doug 2026-08-04,
+      // The ONE documented exception to "exactly one" (2026-08-04,
       // live-verified): unchecking "Enable company search in address entry"
       // RELOCATES the search control into the payment tile rather than turning
       // it off, so the two are no longer competing for the same position and

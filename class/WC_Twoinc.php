@@ -1060,11 +1060,11 @@ if (!class_exists('WC_Twoinc')) {
          *   on the registry's country answer alone, never a merchant toggle.
          * - `company_search_location` (TWO-25326, PR #436): folded into
          *   `enable_company_search`.
-         * - `enable_company_search_for_others` (TWO-25326, Doug's ruling):
+         * - `enable_company_search_for_others` (TWO-25326):
          *   folded into the same checkbox — see
          *   `WC_Twoinc_Checkout::prepare_twoinc_object()` and
          *   `twoincDomHelper.toggleBusinessFields()` in twoinc.js.
-         * - `test_checkout_host` (TWO-25386, Doug's ruling): removed outright
+         * - `test_checkout_host` (TWO-25386): removed outright
          *   — see get_effective_environment_mode().
          * - `firewall_token` / `firewall_token_browser`: replaced
          *   by the `custom_headers` table. Nothing is carried across — the
@@ -1326,7 +1326,7 @@ if (!class_exists('WC_Twoinc')) {
             if (!is_string($template) || trim($template) === '') {
                 // TWO-25326 literal wording drops "subject to additional
                 // checks" from this variant; it stays in the no-company
-                // fallback below, which the ruling doesn't cover.
+                // fallback below, which that wording change doesn't cover.
                 /* translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side — reorderable, do not assume %1$s precedes %2$s in every locale */
                 $template = __('This order by %2$s is likely to be accepted by %1$s', 'twoinc-payment-gateway');
             }

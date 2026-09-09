@@ -140,8 +140,8 @@ describe("company-search manual-entry affordance", () => {
     test("present as soon as the panel opens, before the buyer has typed anything", () => {
       openPanel();
 
-      // The whole point of the requirement: Doug rejected a route into manual
-      // entry that makes the buyer type a query they already know will fail.
+      // The whole point of the requirement: no route into manual entry
+      // that makes the buyer type a query they already know will fail.
       expect(queryInput().val()).toBe("");
       expect(btn().length).toBe(1);
       expect(btn().hasClass("two-hidden")).toBe(false);
@@ -304,7 +304,7 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
-  describe("one panel per field, never a stale second one (TWO-40, live-reported by Doug)", () => {
+  describe("one panel per field, never a stale second one (TWO-40)", () => {
     test("a field replaced while the panel is open leaves no stale panel behind", () => {
       // WooCommerce's checkout AJAX can discard the field the control is
       // attached to via a plain `replaceWith()` while the panel is open.
@@ -525,9 +525,9 @@ describe("company-search manual-entry affordance", () => {
     test.each([["#search_company_btn"], [".two-company-mode-chip"]])(
       "%s declares text-transform: none !important",
       (selector) => {
-        // A real Astra selector list Doug found via devtools includes the bare
-        // `button` element selector with `!important`, which a non-!important
-        // override cannot beat regardless of specificity.
+        // A real Astra selector list includes the bare `button` element
+        // selector with `!important`, which a non-!important override cannot
+        // beat regardless of specificity.
         expect(ruleBodyFor(stylesheetSource(), selector)).toMatch(
           /text-transform:\s*none\s*!important/
         );
@@ -535,7 +535,7 @@ describe("company-search manual-entry affordance", () => {
     );
 
     /**
-     * All three mode chips hover IDENTICALLY (TWO-40, live-reported by Doug:
+     * All three mode chips hover IDENTICALLY (TWO-40:
      * "Registered Organization" and "Sole Trader" adopt the store's brand
      * colour on hover, while "Enter manually" instead got a red border but a
      * grey fill). A chip-specific hover fill is what made one of them the chip
@@ -577,7 +577,7 @@ describe("company-search manual-entry affordance", () => {
     });
 
     test("the button sits in normal flow below the input, not absolutely positioned over it", () => {
-      // Doug's ruling: normal block flow below the field,
+      // Normal block flow below the field,
       // right-aligned — never absolutely positioned over the input.
       harness.injectStylesheet();
 
@@ -781,7 +781,7 @@ describe("company-search manual-entry affordance", () => {
 
     /**
      * The buyer must never end up with manual entry not entered and no way to
-     * retry (TWO-40, live-reported by Doug).
+     * retry (TWO-40).
      *
      * The two states are handled differently on purpose: an ALREADY-SETTLED
      * sole-trader mode is one the buyer may explicitly leave (so the click

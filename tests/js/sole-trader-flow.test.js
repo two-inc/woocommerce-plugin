@@ -222,8 +222,8 @@ describe("TWO-40 — sole-trader flow", () => {
 
     /**
      * The spinner belongs over the field this flow is FILLING IN, not in the
-     * query row it hides (Doug 2026-08-20). The query row is suppressed for
-     * the whole of sole-trader mode now, so a spinner painted in there is a
+     * query row it hides. The query row is suppressed for the whole of
+     * sole-trader mode now, so a spinner painted in there is a
      * spinner painted nowhere.
      */
     test("shows the spinner over the company-NAME field, not in the dropdown's query row", () => {
@@ -415,15 +415,15 @@ describe("TWO-40 — sole-trader flow", () => {
     );
 
     /**
-     * Doug, live: the "select a different sole trader" link "takes focus but
-     * opens nothing". The popup that would answer the activation was already
-     * on screen, and a refusal that does nothing at all leaves a buyer who
-     * cannot see it with a dead control.
+     * Symptom (ABN-526): the link took focus but opened nothing. The popup
+     * that would answer the activation was already on screen, and a refusal
+     * that does nothing at all leaves a buyer who cannot see it with a dead
+     * control.
      */
     test.each([
       {
         // Off the live node the mode switch put on the page, not the
-        // build-on-demand accessor: reachability is half of what Doug reported.
+        // build-on-demand accessor: reachability is half of what was reported.
         activate: () => $("#select_different_sole_trader_btn").trigger("click"),
         description: "the select-a-different-sole-trader link"
       },
@@ -447,7 +447,7 @@ describe("TWO-40 — sole-trader flow", () => {
       window.open = jest.fn(() => win);
       jest.useFakeTimers();
       soleTrader.setMode("sole_trader");
-      // The state the link is on screen in, and the one Doug reported it dead
+      // The state the link is on screen in, and the one it was reported dead
       // from (ABN-526).
       soleTrader.soleTraderAdopted = true;
       soleTrader.syncDifferentSoleTraderLink();
@@ -981,8 +981,8 @@ describe("TWO-40 — sole-trader flow", () => {
     });
 
     test("stays out of the gate's reach: an adopted link ignores #company_id's value", () => {
-      // Doug's ruling on PR #486: the gate does not probe that field, which
-      // can still hold an identifier from an earlier, unrelated capture.
+      // The gate does not probe that field, which can still hold an
+      // identifier from an earlier, unrelated capture.
       soleTrader.mode = "sole_trader";
       soleTrader.soleTraderAdopted = true;
       $("#company_id").val("");
@@ -1038,7 +1038,7 @@ describe("TWO-40 — sole-trader flow", () => {
       expect(opened[0].url).not.toContain("autoselect");
     });
 
-    describe("item 3 — the link's slot beside the search field (live-reported by Doug)", () => {
+    describe("item 3 — the link's slot beside the search field", () => {
       // TWO-25503: placed after the field ROW, the link stacked against that
       // row's own bottom margin and needed a hardcoded negative margin to
       // close the gap — which over-pulled it onto the field itself.
@@ -1126,7 +1126,7 @@ describe("TWO-40 — sole-trader flow", () => {
       });
     });
 
-    describe("item 2 — a sole trader restored by loadUserMetaInputs (live-reported by Doug)", () => {
+    describe("item 2 — a sole trader restored by loadUserMetaInputs", () => {
       // A restored pair's mode comes from the record the previous page left,
       // never from the number's shape: `TWO:` is minted for registered
       // companies in some countries too, so the shape cannot tell them apart.
@@ -1193,8 +1193,8 @@ describe("TWO-40 — sole-trader flow", () => {
       // The user-meta echo exists only for a signed-in WordPress user, so for a
       // GUEST — whose company reaches the DOM by WooCommerce's own rendered
       // value or by loadStorageInputs() — the restore above was skipped whole,
-      // its own DOM fallback included. Live-confirmed by Doug: both echo
-      // properties `undefined` on a checkout whose `#company_id` already held a
+      // its own DOM fallback included. Live-confirmed: both echo properties
+      // `undefined` on a checkout whose `#company_id` already held a
       // restored `TWO:…` id.
       describe("no user-meta echo — the guest / session-restore case", () => {
         beforeEach(() => {
@@ -2071,7 +2071,7 @@ describe("TWO-40 — sole-trader flow", () => {
     });
   });
 
-  describe("TWO-40 — live-reported by Doug", () => {
+  describe("TWO-40 — regressions found live", () => {
     describe("a chip click resolves to the popup or a populated company, never a note", () => {
       /**
        * The note is the browser-blocked-popup fallback ONLY — never an outcome
@@ -2231,8 +2231,8 @@ describe("TWO-40 — sole-trader flow", () => {
 
       /**
        * "Flow complete" is the WRITE, not the popup closing and not the response
-       * landing (Doug 2026-08-20): the hosted flow closes its own window the
-       * instant it posts ACCEPTED, long before `fetchCurrentBuyer` resolves.
+       * landing: the hosted flow closes its own window the instant it posts
+       * ACCEPTED, long before `fetchCurrentBuyer` resolves.
        */
       test("the spinner outlives the popup close, coming down only once the company is written", () => {
         harness.openCompanyPanel($, ctx.helper);
@@ -2362,7 +2362,7 @@ describe("TWO-40 — sole-trader flow", () => {
     });
 
     /**
-     * Doug 2026-08-20, live: the buyer clicks back onto the checkout page
+     * Live: the buyer clicks back onto the checkout page
      * without finishing the hosted signup. The popup stayed up, the dropdown
      * stayed open and the spinner kept animating over a flow they had walked
      * away from.
@@ -3526,10 +3526,10 @@ describe("TWO-40 — sole-trader flow", () => {
       });
 
       /**
-       * Item 6.1, Doug's spec revision: the Sole trader chip is the ONE
-       * exception to the abandon. Re-clicking the chip that launched the popup
-       * asks for that popup back, so it is raised rather than closed and the
-       * flow it is halfway through survives.
+       * Item 6.1: the Sole trader chip is the ONE exception to the abandon.
+       * Re-clicking the chip that launched the popup asks for that popup back,
+       * so it is raised rather than closed and the flow it is halfway through
+       * survives.
        */
       test("the Sole trader chip keeps the popup and raises it instead", () => {
         const win = launchFromChips();
@@ -3827,10 +3827,9 @@ describe("TWO-40 — sole-trader flow", () => {
 
         describe("item 4.2 / item 2.1 — the panel's own free-text query is suppressed for the whole of sole-trader mode", () => {
           /**
-           * Item 2.1, live-reported by Doug: "the field should not be
-           * VISIBLE. I did not tell you it was editable, I told you it was
-           * visible." Readonly alone reads as a search box that has stopped
-           * working.
+           * Item 2.1, live-reported: the field must not be VISIBLE, not
+           * merely non-editable. Readonly alone reads as a search box that
+           * has stopped working.
            */
           test("the whole query row is hidden, not merely readonly", () => {
             harness.injectStylesheet();
@@ -3895,8 +3894,7 @@ describe("TWO-40 — sole-trader flow", () => {
 
           /**
            * `setMode("business")` re-attaches a fresh, CLOSED widget, so an
-           * un-hidden query row is worth nothing without the panel around it
-           * (Doug 2026-08-20, live).
+           * un-hidden query row is worth nothing without the panel around it.
            */
           test("clicking Registered company leaves the dropdown open with focus in the query field", () => {
             harness.openCompanyPanel($, ctx.helper);
@@ -3953,7 +3951,7 @@ describe("TWO-40 — sole-trader flow", () => {
 
           /**
            * The flight spinner paints over the company-NAME field, so a flight
-           * gives no reason to hand this row back (Doug 2026-08-20).
+           * gives no reason to hand this row back.
            */
           test("a re-signup flight from an adopted state leaves the row hidden throughout", () => {
             soleTrader.setMode("sole_trader");
@@ -3971,8 +3969,7 @@ describe("TWO-40 — sole-trader flow", () => {
 
           /**
            * The chip LIVES in the open dropdown, so a hide that only the next
-           * open re-syncs leaves the buyer looking at a dead search box
-           * (Doug 2026-08-20).
+           * open re-syncs leaves the buyer looking at a dead search box.
            */
           test("clicking the Sole trader chip hides the row immediately, with no reopen", () => {
             harness.injectStylesheet();
@@ -4477,7 +4474,7 @@ describe("TWO-40 — sole-trader flow", () => {
     });
   });
 
-  describe("TWO-40 — Doug's live-tested regressions on the widget-selection PR", () => {
+  describe("TWO-40 — live-tested regressions on the widget-selection PR", () => {
     beforeEach(() => {
       $("form[name='checkout']").after('<div id="order_review"></div>');
       ctx.Twoinc.getInstance().initialize(false);
@@ -4487,9 +4484,8 @@ describe("TWO-40 — sole-trader flow", () => {
     });
 
     describe("bug 1/item 4.3 — re-clicking the Sole Trader chip once already adopted", () => {
-      // Doug's explicit override (item 4.3): re-clicking the chip must act
-      // exactly like the "select a different sole trader" link, not do
-      // nothing.
+      // Item 4.3: re-clicking the chip must act exactly like the "select a
+      // different sole trader" link, not do nothing.
       test("opens a re-signup popup for an adoption that came through the hosted flow", () => {
         $("#billing_email").val("buyer@example.test");
         soleTrader.onModeChipClick("sole_trader");
@@ -4625,7 +4621,7 @@ describe("TWO-40 — sole-trader flow", () => {
         expect($btn.css("display")).not.toBe("none");
       });
 
-      test("reads the adoption latch, never #company_id (Doug's ruling)", () => {
+      test("reads the adoption latch, never #company_id", () => {
         // No `setCompany()` call, so `#company_id` stays empty while the
         // adoption latch is true — the split that proves which of the two the
         // gate is reading.
@@ -4649,12 +4645,11 @@ describe("TWO-40 — sole-trader flow", () => {
       });
 
       test("follows the capture into the tile, never the native field left in the address area", () => {
-        // TWO-25503, Doug: an adopted sole trader "prepopulates the sole trader
-        // name into the company name field in the address area and renders the
-        // 'Select a different sole trader' control underneath; it should do
-        // neither of these things in the address area." This reverses the
-        // 2026-08-04 placement, which put the link in the native field's slot
-        // whenever tile mode left that field visible.
+        // TWO-25503: an adopted sole trader must not prepopulate the sole
+        // trader name into the company name field in the address area, nor
+        // render the 'Select a different sole trader' control underneath it
+        // there. This reverses the 2026-08-04 placement, which put the link in
+        // the native field's slot whenever tile mode left that field visible.
         ctx.twoinc.company_search_location = "payment_tile";
         $("form[name='checkout']").append('<div class="twoinc-company-search-tile-slot"></div>');
         ctx.helper.syncCompanySearchTileLocation();
@@ -4857,7 +4852,7 @@ describe("TWO-40 — sole-trader flow", () => {
   });
 
   /**
-   * Doug, live: a registered company restored after a reload showed the
+   * Live: a registered company restored after a reload showed the
    * "select a different sole trader" link beneath it. The 3-second form
    * snapshot recorded the CHIP the buyer had switched to against a pair that
    * chip had not captured — mode from one source, entity from another.
@@ -4896,7 +4891,7 @@ describe("TWO-40 — sole-trader flow", () => {
   });
 
   /**
-   * Item 4, live-reported by Doug: WooCommerce's chips sized to their own
+   * Item 4, live-reported: WooCommerce's chips sized to their own
    * content, leaving visible slack to the right of the row, where
    * PrestaShop's fill it. Asserted against the stylesheet source rather than
    * a rendered box: jsdom does no flex layout, so a computed-width assertion

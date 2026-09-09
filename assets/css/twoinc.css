@@ -268,7 +268,7 @@
  * `display: block` + `text-align: end` (TWO-25326): this used to sit on the
  * SAME line as the name, `margin-left: 8px` away from it. A long company name
  * pushed the number right up against — and on a narrow viewport, past — the
- * edge of the summary's own box, which is exactly what Doug found live:
+ * edge of the summary's own box, which is exactly what happened live:
  * picking a result left no number visibly on screen. Giving the number its
  * own row, right-aligned to the input's right edge (the summary div carries
  * the same horizontal padding as the field above it — see `.twoinc-company-
@@ -307,8 +307,8 @@
 }
 
 /*
- * Registered-org mode's gap above the summary (live-reported by Doug on the
- * widget-selection PR): `#billing_company_display_field` carries its own 15px
+ * Registered-org mode's gap above the summary, reported live on the
+ * widget-selection PR: `#billing_company_display_field` carries its own 15px
  * `padding-bottom`, which with the number label directly below is space
  * between the input and its own number.
  *
@@ -329,10 +329,10 @@
  * is what the summary lands after; `#billing_company_display_field` covers
  * the checkout page, where there is no such wrapper.
  *
- * `#billing_company_field` needs the identical cancellation (Doug,
- * 2026-08-19): it carries the same 15px `padding-bottom` (above), and it is
- * the anchor `getCompanySummaryNode()` picks whenever the search control is
- * the hidden one of the two company-name elements.
+ * `#billing_company_field` needs the identical cancellation: it carries the
+ * same 15px `padding-bottom` (above), and it is the anchor
+ * `getCompanySummaryNode()` picks whenever the search control is the hidden
+ * one of the two company-name elements.
  */
 #billing_company_display_field + .twoinc-company-summary,
 #billing_company_field + .twoinc-company-summary,
@@ -545,7 +545,7 @@
 }
 /*
  * The same spinner, over the company-NAME field, for the sole-trader flow
- * (Doug 2026-08-20 — see syncSoleTraderSpinner). Reuses .twoinc-search-spinner
+ * (2026-08-20 — see syncSoleTraderSpinner). Reuses .twoinc-search-spinner
  * above for the asset and the 16px box; only the positioning context and the
  * horizontal inset are per-host.
  *

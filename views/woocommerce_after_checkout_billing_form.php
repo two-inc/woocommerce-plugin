@@ -7,7 +7,7 @@
         /*
          * No phone/email targets here deliberately: positionFields() in
          * twoinc.js used to pull them up alongside these, but that produced
-         * a visible ~1s field reorder Doug did not want (#33). Phone/email
+         * a visible ~1s field reorder (#33). Phone/email
          * stay in their native WC position after town/city.
          */
         ?>

@@ -210,7 +210,7 @@ describe("company-search tile location (TWO-25326)", () => {
     });
 
     /**
-     * Bug found live by Doug 2026-08-04: the read-only company-number summary
+     * Bug found live 2026-08-04: the read-only company-number summary
      * anchored itself against `#company_id_field`, which never leaves the
      * address area — so in tile placement it rendered nowhere anyone had put
      * it deliberately. It follows `companyNameSurface()` now.
@@ -227,7 +227,7 @@ describe("company-search tile location (TWO-25326)", () => {
     });
 
     /**
-     * Bug found live by Doug 2026-08-04: tile placement was silently removing
+     * Bug found live 2026-08-04: tile placement was silently removing
      * WooCommerce's OWN native `#billing_company_field` from the address area
      * entirely, leaving nothing there. The two are independent concerns —
      * where this plugin's control renders is `company_search_location`'s job,
