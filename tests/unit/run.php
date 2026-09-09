@@ -6418,7 +6418,7 @@ final class BrandConfigSpec
             [['30', '60'], null, 0, '90', '', 'a default no longer offered is stored empty, never repointed'],
             [['14', '30', '90'], null, 90, '60', '', "not even the merchant's own default term is synthesised here"],
             [['60'], '45', 0, '45', '45', 'the custom day joins the offered set and can become the default'],
-            [['60'], '45', 0, '', '', 'the empty Automatic option is stored as posted'],
+            [['60'], '45', 0, '', '', 'an empty post is not an offered term either'],
             [['60'], '45', 0, '14', '', 'an unofferable posted default is stored empty'],
         ];
 
@@ -7802,8 +7802,8 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-548: the legacy row and the freshness stamp go together and go once,
-     * so the next read refetches and a live value written afterwards stands.
+     * ABN-548: the legacy row goes once, and the record's freshness stamp
+     * stays, because the admin's terms-state notice reads that.
      */
     private static function testFabricatedDueInDaysRowIsDroppedOnce(): void
     {
@@ -7817,7 +7817,7 @@ final class BrandConfigSpec
 
         $method->invoke(self::gateway());
         TinyAssert::same(false, array_key_exists($due, $GLOBALS['__twoinc_test_options']), 'the legacy row is dropped');
-        TinyAssert::same(false, array_key_exists($stamp, $GLOBALS['__twoinc_test_options']), 'the freshness stamp goes with it');
+        TinyAssert::true(array_key_exists($stamp, $GLOBALS['__twoinc_test_options']), 'the freshness stamp stays');
 
         // A value stored after the drop is the merchant's own and survives.
         $GLOBALS['__twoinc_test_options'][$due] = 21;

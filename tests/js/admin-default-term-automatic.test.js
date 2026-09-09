@@ -22,6 +22,20 @@ function selection($) {
 }
 
 describe("the rebuilt Default Payment Term dropdown", () => {
+  test("labels the empty option with the localised string, not English", async () => {
+    const { $ } = await harness.loadAdmin({
+      checked: [14, 30],
+      terms: [7, 14, 30, 60],
+      merchantTerms: [7, 14, 30, 60]
+    });
+
+    expect(
+      $("#" + harness.FIELD_PREFIX + "default_payment_term option")
+        .first()
+        .text()
+    ).toBe("Any term");
+  });
+
   test.each([
     [[14, 30], ["", "14", "30"], "the empty option leads the ticked terms"],
     [[7, 14], ["", "7", "14"], "the same with no 30 ticked"],

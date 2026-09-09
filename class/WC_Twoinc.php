@@ -1367,8 +1367,11 @@ if (!class_exists('WC_Twoinc')) {
          * Retire the `merchant_due_in_days` row written under the rule that
          * stored 14 for a merchant with no default term (ABN-548) — it is
          * indistinguishable from a real 14, and a shop whose record cannot
-         * resolve never overwrites it. The freshness stamp goes with it so the
-         * next read refetches rather than serving nothing for a day.
+         * resolve never overwrites it. Its absence reads as no default term
+         * until the next refresh restores it, which the resolver handles;
+         * the record's own freshness stamp stays, because the admin's
+         * terms-state notice reads that and would report a set it holds as
+         * never fetched.
          *
          * @return void
          */
@@ -1379,9 +1382,8 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
             delete_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'));
-            delete_option(WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on'));
-            // Last, so a failure between the deletes retries rather than
-            // leaving the fabricated row behind for good.
+            // Last, so a failure before it retries rather than leaving the
+            // fabricated row behind for good.
             update_option($marker, 'yes', false);
         }
 

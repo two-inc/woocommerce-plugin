@@ -396,15 +396,19 @@ The merchant record refreshes on an event, never on expiry
   the preference.
 - **Nothing but the admin puts a day count in `default_payment_term`.** The
   field's first option is Automatic, an empty value; the save validator stores
-  empty for any posted default the offered set does not carry, and the admin
-  JS that rebuilds the select as terms are ticked re-creates that option and
-  keeps only a selection still offered. That
-  select posts on every save, so a synthesised day count is stored, becomes the
-  resolver's first step and makes every later step unreachable. The merchant's
-  own default term is 0 in its option row when the record carries none; the row
-  written under the rule that stored 14 there is dropped once on upgrade, since
-  a shop whose record never resolves would otherwise keep reading it as a real
-  term.
+  empty for any posted default the offered set does not carry, except on an
+  unresolved backend list, where it keeps whatever was stored rather than
+  reading a degraded set as a merchant decision. The admin JS that rebuilds the
+  select as terms are ticked re-creates that option and keeps only a selection
+  still offered. Anything that synthesises a day count there instead is stored
+  by the next save, becomes the resolver's first step, and makes every later
+  step unreachable on that shop.
+- **The merchant's own default term is 0 in its option row when the record
+  carries none**, and the row written under the rule that stored 14 there is
+  dropped once on upgrade — a shop whose record never resolves would otherwise
+  keep reading a fabricated 14 as a real term. The record's freshness stamp is
+  deliberately left alone: the admin's terms-state notice reads it, and
+  dropping it reports a term set the shop holds as never fetched.
 
 Key Conventions
 
