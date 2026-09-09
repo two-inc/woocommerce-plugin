@@ -27,6 +27,7 @@ final class BrandConfigSpec
     {
         $tests = [
             'testBrandLoaderReturnsTwoDefaults',
+            'testCheckoutTitleRendersConfiguredValueVerbatim',
             'testGatewayIdAndMetaIdentityUnchanged',
             'testConstantsMatchBrandConfig',
             'testBrandFileFilterMergesOverDefaults',
@@ -463,6 +464,36 @@ final class BrandConfigSpec
         );
     }
 
+    /**
+     * ABN-529. The payment method title is the merchant's configured Title
+     * verbatim: no term length appended and no placeholder substitution, which
+     * is what the Magento, Magento Hyva and PrestaShop tiles do.
+     */
+    private static function testCheckoutTitleRendersConfiguredValueVerbatim(): void
+    {
+        $cases = [
+            ['Business invoice', 'Business invoice', 'the configured title is rendered verbatim, with no term length appended'],
+            ['Business invoice - 30 days', 'Business invoice - 30 days', 'a merchant who wants a day count in the title keeps it'],
+            ['Business invoice - %s days', 'Business invoice - %s days', 'a placeholder is literal text, not a substitution site'],
+            ['5% on invoice', '5% on invoice', 'a literal percent survives'],
+            ['Faktura & "kredit" <30 dagar>', 'Faktura & "kredit" <30 dagar>', 'quotes, ampersands and angle brackets reach core unaltered'],
+            ['   ', 'Two', 'a whitespace-only title falls back to the brand product name'],
+            ['', 'Two', 'an empty title falls back to the brand product name'],
+            [null, 'Business invoice', 'a shop that never saved the setting gets the shipped default, which carries no placeholder'],
+        ];
+
+        foreach ($cases as [$stored, $expected, $description]) {
+            $gateway = self::save_gateway(true);
+            $gateway->init_form_fields();
+            $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()] = $stored === null
+                ? []
+                : ['title' => $stored];
+            $gateway->init_settings();
+
+            TinyAssert::same($expected, $gateway->get_pay_title(), $description);
+        }
+    }
+
     private static function testBrandLoaderReturnsTwoDefaults(): void
     {
         TinyAssert::same('two', WC_Twoinc_Brand::get('code'));
@@ -470,7 +501,7 @@ final class BrandConfigSpec
         TinyAssert::same('Two', WC_Twoinc_Brand::get('provider'));
         TinyAssert::same('https://portal.two.inc/auth/merchant/signup', WC_Twoinc_Brand::get('sign_up_url'));
         TinyAssert::same(WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg', WC_Twoinc_Brand::get('logo_url'));
-        TinyAssert::same('Business invoice - %s days', WC_Twoinc_Brand::get('title_default'));
+        TinyAssert::same('Business invoice', WC_Twoinc_Brand::get('title_default'));
         // Two ships no checkout tagline; an overlay supplies its FAQ URL.
         TinyAssert::same(null, WC_Twoinc_Brand::get('checkout_subtitle_faq_url'));
         TinyAssert::same('integration@two.inc', WC_Twoinc_Brand::get('production_key_contact_email'));

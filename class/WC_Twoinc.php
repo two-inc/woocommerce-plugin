@@ -94,10 +94,7 @@ if (!class_exists('WC_Twoinc')) {
             $this->drop_renamed_option_rows();
             $this->migrate_se_tax_subtotals();
 
-            $this->title = sprintf(
-                __($this->get_option('title'), 'twoinc-payment-gateway'),
-                strval($this->get_merchant_due_in_days())
-            );
+            $this->title = $this->get_pay_title();
             /**
              * Filter the checkout payment-box description so a brand
              * overlay can replace the copy wholesale (a brand overlay
@@ -169,8 +166,6 @@ if (!class_exists('WC_Twoinc')) {
 
                 add_action('woocommerce_admin_order_item_headers', [$this, 'after_order_item_update'], 10, 1);
                 add_action('wp_after_insert_post', [$this, 'after_order_update'], 10, 4);
-            } else {
-                add_action('woocommerce_checkout_update_order_review', [$this, 'change_twoinc_payment_title']);
             }
 
             // Each merchant-configured fulfilment trigger status gets its own
@@ -2697,26 +2692,17 @@ if (!class_exists('WC_Twoinc')) {
             return sprintf('<div class="abt-twoinc">%s</div>', $this->get_abt_twoinc_html());
         }
 
-        public function get_pay_html_title()
+        /**
+         * The configured Title verbatim - no term suffix, no placeholder
+         * substitution - or the brand product name when it is blank (ABN-529).
+         */
+        public function get_pay_title()
         {
-            return sprintf(
-                '<span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span>',
-                sprintf(
-                    __($this->get_option('title'), 'twoinc-payment-gateway'),
-                    '<span class="due-in-days">' . strval($this->get_merchant_due_in_days()) . '</span>'
-                ),
-                __('Pay on invoice with agreed terms', 'twoinc-payment-gateway')
-            );
-        }
+            $configured = trim((string) $this->get_option('title'));
 
-        public function change_twoinc_payment_title()
-        {
-            add_filter('woocommerce_gateway_title', function ($title, $payment_id) {
-                if ($payment_id === $this->id) {
-                    $title = $this->get_pay_html_title();
-                }
-                return $title;
-            }, 10, 2);
+            return $configured === ''
+                ? WC_Twoinc_Brand::get('product_name')
+                : __($configured, 'twoinc-payment-gateway');
         }
 
         /**

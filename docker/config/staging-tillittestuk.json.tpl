@@ -1,6 +1,6 @@
 {
   "enabled": "yes",
-  "title": "Business invoice %s days",
+  "title": "Business invoice",
   "subtitle": "Receive the invoice via PDF and email",
   "checkout_env": "PROD",
   "test_checkout_host": "https://api.staging.two.inc",

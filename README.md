@@ -114,7 +114,7 @@ echo WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging.json >> .env
 cat > docker/config/staging.json <<EOF
 {
   "enabled": "yes",
-  "title": "Business invoice %s days",
+  "title": "Business invoice",
   "subtitle": "Receive the invoice via PDF and email",
   "checkout_env": "staging",
   "clear_options_on_uninstall": "no",
