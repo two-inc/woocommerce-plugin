@@ -185,17 +185,23 @@ TWO-40, TWO-25503):
 - the affordance needs no template markup on the page, which is what makes it work on the
   pay-for-order surface.
 
-`company-search-focus-trap.test.js` — the buyer's own navigation wins, satisfied
-structurally:
+`company-search-tab-stop.test.js` — the state the browser derives tab order from, which is
+all jsdom can see. The Tab traversal itself is covered by no automated test in this repo
+(ABN-499):
 
+- an open popover leaves the field with `tabindex="-1"`, and every route out — the panel's
+  own close, Escape, a mousedown outside, focus settling outside, teardown, a host re-render
+  — restores the field's PRIOR value, which on every platform is no attribute at all. A
+  tabindex a theme set is given back exactly.
 - the control is one contiguous run in reading order — field, query, results, chips — with
-  nothing outside the field's wrapper, so Tab needs no handling. A Tab keydown is left
-  undefaulted and does not close the panel.
-- tabbing away from an open panel keeps focus where the buyer put it, through 5s of timers,
-  and a results re-render does not pull it back (with a positive control that rows actually
-  rendered).
-- Escape closes the panel and hands focus back to the field, and the field's own focus opener
-  does not reopen what Escape just closed.
+  nothing outside the field's wrapper, and a closed panel carries `hidden`.
+- focus the buyer moved out of the control is not taken back, through 5s of timers or by a
+  results re-render (with a positive control that rows actually rendered). Escape closes the
+  panel and hands focus back to the field, and the field's own focus opener does not reopen
+  it.
+- focus assertions target `#billing_company_display`. The real `#billing_company` row is
+  hidden whenever company search is on, so a buyer can never put focus there and jsdom
+  focusing it anyway proves nothing.
 
 `company-search-container-orphan.test.js` — exactly one panel, anchored to the field the
 buyer can see (TWO-25469):
