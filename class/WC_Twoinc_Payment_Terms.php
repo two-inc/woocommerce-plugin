@@ -39,10 +39,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         public const KNOWN_SURCHARGE_TYPES = ['none', 'percentage', 'fixed', 'fixed_and_percentage'];
 
         /**
-         * Ceiling (seconds) for every buyer surcharge quote, whichever caller
-         * asks for it. One value, because a gate that gave up sooner than the
-         * path that charges withheld a payment method the charge would have
-         * priced (ABN-546). The other plugins use the same ceiling.
+         * Ceiling (seconds) for every buyer surcharge quote: a gate giving up
+         * sooner than the path that charges withholds a method the charge
+         * would have priced (ABN-546).
          */
         public const SURCHARGE_PRICING_TIMEOUT = 30;
 
