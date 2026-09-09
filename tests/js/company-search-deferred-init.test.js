@@ -197,7 +197,7 @@ describe("deferred company-search initialisation", () => {
   test("the deferred pass early-returns outside search capture mode", () => {
     // Manual entry must stay untouched by the retry — no control may appear on
     // the timer. Gated on the capture mode, never on `enable_company_search`,
-    // which only relocates the control (#486).
+    // which only relocates the control.
     ctx.capture.mode = "manual";
 
     const enableCalls = witnessEnableCalls(ctx.Twoinc);

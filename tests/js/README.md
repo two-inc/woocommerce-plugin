@@ -249,7 +249,8 @@ with a capture and Two selected under tile placement, the address area shows nei
 the tile is the surface, while `#billing_company`/`#company_id` still serialise.
 
 `company-search-payment-method-agnostic.test.js` — the search-vs-plain decision is the
-buyer's capture mode alone (#486). Pinned with no payment-method radio checked at all, which
+buyer's capture mode alone (woocommerce-plugin PR #486). Pinned with no payment-method radio
+checked at all, which
 is the same effective state as Two being unavailable: a buyer mid-search is not knocked into
 the plain field when Two stops being selectable.
 
@@ -304,7 +305,7 @@ call before advancing and 2 after.
   re-substituted from live inputs on every toggle rather than a stale snapshot, a bare name
   where there is no organisation number, and the served no-company sentences as the fallback.
 
-`company-name-and-number-surfaces.test.js` — the two surfaces the buyer sees (#486):
+`company-name-and-number-surfaces.test.js` — the two surfaces the buyer sees:
 
 - **the company NAME is always on screen, as exactly one of two elements** — the search
   control or WooCommerce's native `#billing_company` — across all three capture modes, in
@@ -323,7 +324,7 @@ call before advancing and 2 after.
 
 `company-capture-mode-composition.test.js` — the states only a **sequence** of capture-mode
 changes reaches. Every single transition is covered by a file above; what is not is the pair
-of invariants that two separately-correct changes disagree about (#486):
+of invariants that two separately-correct changes disagree about:
 
 - **the visible company-name surface must be one that can actually render a name.** A sole
   trader adopted while the buyer sits in manual entry is rendered through a LIVE panel, is put

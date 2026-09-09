@@ -1038,7 +1038,7 @@ describe("TWO-40 — sole-trader flow", () => {
       expect(opened[0].url).not.toContain("autoselect");
     });
 
-    describe("item 3 — the link's slot beside the search field", () => {
+    describe("the link's slot beside the search field", () => {
       // TWO-25503: placed after the field ROW, the link stacked against that
       // row's own bottom margin and needed a hardcoded negative margin to
       // close the gap — which over-pulled it onto the field itself.
@@ -1126,7 +1126,7 @@ describe("TWO-40 — sole-trader flow", () => {
       });
     });
 
-    describe("item 2 — a sole trader restored by loadUserMetaInputs", () => {
+    describe("a sole trader restored by loadUserMetaInputs", () => {
       // A restored pair's mode comes from the record the previous page left,
       // never from the number's shape: `TWO:` is minted for registered
       // companies in some countries too, so the shape cannot tell them apart.
@@ -2191,7 +2191,7 @@ describe("TWO-40 — sole-trader flow", () => {
       });
     });
 
-    describe("bug 2 — the search dropdown stays visible with a spinner until the popup closes", () => {
+    describe("the search dropdown stays visible with a spinner until the popup closes", () => {
       test("dropdown survives the mode switch, with nothing adopted yet", () => {
         harness.openCompanyPanel($, ctx.helper);
         const panel = ctx.helper.panel;
@@ -3526,7 +3526,7 @@ describe("TWO-40 — sole-trader flow", () => {
       });
 
       /**
-       * Item 6.1: the Sole trader chip is the ONE exception to the abandon.
+       * The Sole trader chip is the ONE exception to the abandon.
        * Re-clicking the chip that launched the popup asks for that popup back,
        * so it is raised rather than closed and the flow it is halfway through
        * survives.
@@ -3578,9 +3578,9 @@ describe("TWO-40 — sole-trader flow", () => {
       });
 
       /**
-       * Item 6.2, the Registered company half: the popup closes AND the chip
-       * does its own ordinary job on top of that. Both effects, because the
-       * chip's drain deliberately leaves the mode and the dropdown to the chip.
+       * The Registered company chip closes the popup AND does its own
+       * ordinary job on top of that, because the chip's drain deliberately
+       * leaves the mode and the dropdown to the chip.
        */
       test("the Registered company chip closes the popup AND shows and focuses the query field", () => {
         const win = launchFromChips();
@@ -3598,9 +3598,9 @@ describe("TWO-40 — sole-trader flow", () => {
       });
 
       /**
-       * Item 6.2, the Enter manually half. Its own ordinary behaviour, whole:
-       * the dropdown goes, the capture mode becomes manual, and focus lands in
-       * the now-editable native company field.
+       * The Enter manually chip's own ordinary behaviour, whole: the
+       * dropdown goes, the capture mode becomes manual, and focus lands in the
+       * now-editable native company field.
        */
       test("the Enter manually chip closes the popup AND switches to manual entry", () => {
         const win = launchFromChips();
@@ -3632,7 +3632,7 @@ describe("TWO-40 — sole-trader flow", () => {
       });
     });
 
-    describe("bug 3 — clicking a captured sole-trader field reopens search", () => {
+    describe("clicking a captured sole-trader field reopens search", () => {
       beforeEach(() => {
         // The click-to-reopen binding is delegated from `Twoinc#initialize()`
         // (real checkout-page wiring), not from the helper directly — same
@@ -3710,8 +3710,9 @@ describe("TWO-40 — sole-trader flow", () => {
 
       /**
        * The readonly lock is what makes a click into these fields mean
-       * "reopen". Ungated (PR #502) the same click destroyed a perfectly good
-       * capture on a field the buyer was allowed to be typing in.
+       * "reopen". Ungated (woocommerce-plugin PR #502) the same click
+       * destroyed a perfectly good capture on a field the buyer was allowed
+       * to be typing in.
        */
       test("clicking a NON-readonly captured field neither clears the capture nor leaves sole-trader mode", () => {
         soleTrader.setMode("sole_trader");
@@ -3825,11 +3826,10 @@ describe("TWO-40 — sole-trader flow", () => {
           expect($("#billing_company").val()).toBe("");
         });
 
-        describe("item 4.2 / item 2.1 — the panel's own free-text query is suppressed for the whole of sole-trader mode", () => {
+        describe("the panel's own free-text query is suppressed for the whole of sole-trader mode", () => {
           /**
-           * Item 2.1, live-reported: the field must not be VISIBLE, not
-           * merely non-editable. Readonly alone reads as a search box that
-           * has stopped working.
+           * The field must be hidden, not merely non-editable: readonly
+           * alone reads as a search box that has stopped working.
            */
           test("the whole query row is hidden, not merely readonly", () => {
             harness.injectStylesheet();
@@ -4483,9 +4483,9 @@ describe("TWO-40 — sole-trader flow", () => {
       ).appendTo("form[name='checkout']");
     });
 
-    describe("bug 1/item 4.3 — re-clicking the Sole Trader chip once already adopted", () => {
-      // Item 4.3: re-clicking the chip must act exactly like the "select a
-      // different sole trader" link, not do nothing.
+    describe("re-clicking the Sole Trader chip once already adopted", () => {
+      // Re-clicking the chip must act exactly like the "select a different
+      // sole trader" link, not do nothing.
       test("opens a re-signup popup for an adoption that came through the hosted flow", () => {
         $("#billing_email").val("buyer@example.test");
         soleTrader.onModeChipClick("sole_trader");
@@ -4531,7 +4531,7 @@ describe("TWO-40 — sole-trader flow", () => {
       });
     });
 
-    describe("bug 2 — Enter manually while adopted, with a leftover popup-close poll still ticking", () => {
+    describe("Enter manually while adopted, with a leftover popup-close poll still ticking", () => {
       test("still switches to manual entry rather than leaving the search widget showing", () => {
         // Adopted through the hosted signup, whose popup-close poll only
         // notices the window closed on its own 300ms cadence — it is still
@@ -4608,7 +4608,7 @@ describe("TWO-40 — sole-trader flow", () => {
       });
     });
 
-    describe("bug 3 — the 'select a different sole trader' link once adoption shows through the search widget", () => {
+    describe("the 'select a different sole trader' link once adoption shows through the search widget", () => {
       test("is not stranded inside a field toggleBusinessFields just hid", () => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
@@ -4891,13 +4891,12 @@ describe("TWO-40 — sole-trader flow", () => {
   });
 
   /**
-   * Item 4, live-reported: WooCommerce's chips sized to their own
-   * content, leaving visible slack to the right of the row, where
-   * PrestaShop's fill it. Asserted against the stylesheet source rather than
-   * a rendered box: jsdom does no flex layout, so a computed-width assertion
-   * here would be vacuous rather than wrong.
+   * Each chip declares a half-row flex basis so the row fills its full
+   * width, leaving no slack to the right. Asserted against the stylesheet
+   * source rather than a rendered box: jsdom does no flex layout, so a
+   * computed-width assertion here would be vacuous rather than wrong.
    */
-  describe("item 4 — the chip row fills its full width", () => {
+  describe("the chip row fills its full width", () => {
     test("each chip declares a half-row flex basis, so two share a row and a third grows to fill its own", () => {
       const rule = /^\.two-company-mode-chip\s*\{([^}]*)\}/m.exec(stylesheetSource());
 

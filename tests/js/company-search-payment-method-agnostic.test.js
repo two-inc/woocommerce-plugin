@@ -1,5 +1,5 @@
 /**
- * #486, live bug (2026-08-19): changing the checkout email to one that
+ * woocommerce-plugin PR #486: changing the checkout email to one that
  * resolves to a different business makes Two reject the order ("Two is not
  * available for this order by <other business>"). `toggleBusinessFields()`
  * used to gate `#billing_company_display_field`'s own visibility on
@@ -22,7 +22,7 @@
 
 const harness = require("./wc-harness");
 
-describe("company-field visibility is payment-method-agnostic (#486)", () => {
+describe("company-field visibility is payment-method-agnostic", () => {
   let ctx;
   let $;
 

@@ -1,10 +1,11 @@
 /**
- * #486 — the states only a SEQUENCE of capture-mode changes reaches.
+ * The states only a SEQUENCE of capture-mode changes reaches
+ * (woocommerce-plugin PR #486).
  *
  * Every individual transition in this file is covered elsewhere
  * (company-name-source, sole-trader-flow, company-name-and-number-surfaces).
  * What is only reachable by composing them is the pair of defects below, each
- * one an invariant that two separately-correct rounds disagree about:
+ * one an invariant that two separately-correct changes disagree about:
  *
  *  1. `toggleBusinessFields()` makes the SEARCH control the visible
  *     company-name surface for sole-trader mode — but manual entry RELEASES
@@ -44,7 +45,7 @@ const MATCHED_BUYER = {
   company_name: "A Sole Trader"
 };
 
-describe("capture modes composed, not taken one at a time (#486)", () => {
+describe("capture modes composed, not taken one at a time", () => {
   let ctx;
   let $;
 
@@ -112,11 +113,9 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
     });
 
     /**
-     * The INVERSION of what #486 pinned here. That test asserted the buyer's
-     * hand-typed company name being overwritten, and the picker re-attached
-     * over it, by a background email-driven autofill match. A company may
-     * only ever be filled in by the buyer's own interaction with the company
-     * field, so nothing an email change starts may touch what they typed.
+     * A company may only ever be filled in by the buyer's own interaction
+     * with the company field, so nothing an email change starts may touch
+     * what they typed.
      */
     test("is NEVER adopted by an email change alone — a hand-typed name survives it", () => {
       // Through the REAL checkout wiring — `initialize()` is where an

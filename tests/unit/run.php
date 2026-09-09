@@ -1256,7 +1256,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * #33 — The desired checkout field order: name -> country -> company
+     * The desired checkout field order: name -> country -> company
      * -> native address fields -> phone/email -> every optional field at the
      * bottom. The optional fields must land after phone/email (WC's native
      * priorities 100/110) regardless of company's own priority, so they
@@ -1317,7 +1317,7 @@ final class BrandConfigSpec
         // the two are set independently (update_company_fields() derives
         // company_display's priority from billing_company's, but nothing
         // enforces they stay linked at every call site), so a regression
-        // that only re-inverts one of them must still fail this test (#33).
+        // that only re-inverts one of them must still fail this test.
         TinyAssert::true($p('billing_last_name') < $p('billing_country'), 'country must be after last name');
         TinyAssert::true($p('billing_country') < $p('billing_company'), 'country must be before native billing_company');
         TinyAssert::true($p('billing_country') < $p('billing_company_display'), 'country must be before billing_company_display');
@@ -1390,7 +1390,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * #486, 2026-08-19. WooCommerce core DELETES its own company field
+     * woocommerce-plugin PR #486. WooCommerce core DELETES its own company field
      * — `unset($fields['company'])` in
      * WC_Countries::get_default_address_fields() — when
      * `woocommerce_checkout_company_field` reads 'hidden', which is also that
@@ -1424,7 +1424,7 @@ final class BrandConfigSpec
         // update_company_fields at 23. That order is load-bearing here —
         // move_country_field runs while billing_company is still absent and has
         // only its own `?? 30` fallback to position country against, and this
-        // registration has to land at the priority that fallback assumed (#33).
+        // registration has to land at the priority that fallback assumed.
         $checkout = new WC_Twoinc_Checkout($gateway);
         $fields = $checkout->move_country_field(['billing' => []]);
         $fields = $checkout->update_company_fields($fields);
@@ -1448,7 +1448,7 @@ final class BrandConfigSpec
             !in_array('hidden', $fields['billing']['billing_company']['class'], true),
             'billing_company must not start hidden'
         );
-        // Country still lands above it (#33), which is what move_country_field's
+        // Country still lands above it, which is what move_country_field's
         // own `?? 30` fallback and this registration's shared
         // $company_name_priority are for.
         TinyAssert::true(
@@ -1538,7 +1538,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * #33 (live-staging regression, 2026-07-31) — WooCommerce's own
+     * WooCommerce's own
      * address-i18n.js re-derives #billing_country_field's client-side
      * priority from WC_Countries::get_country_locale()'s 'default' entry on
      * EVERY checkout load (not only when the buyer changes country), then
@@ -3492,7 +3492,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25498 punch-list: settings must survive deactivation regardless of
+     * TWO-25498: settings must survive deactivation regardless of
      * the "Clear settings on uninstall" toggle — only uninstall (a separate,
      * static entry point; see the next test) may wipe them, matching
      * magento-plugin/prestashop-plugin. Deactivation only stops the
@@ -9556,8 +9556,8 @@ final class BrandConfigSpec
     /**
      * The surcharge/FX rounding notices above are diagnostic detail, not
      * failures, so — unlike the error/warning channel — they are gated by
-     * "Enable debug logging" (TWO-25498 punch-list #11: the toggle's scope
-     * broadens beyond API request/response bodies to this diagnostic path).
+     * "Enable debug logging" (TWO-25498: the toggle's scope reaches this
+     * diagnostic path, not only API request/response bodies).
      */
     private static function testSurchargeFxDiagnosticLogsGatedByDebugLogging(): void
     {
@@ -9595,7 +9595,7 @@ final class BrandConfigSpec
 
     private static function testBuyerFeeShareAbsentCapChargesUncappedPercentage(): void
     {
-        // THE regression pin for TWO-25269 item 4: "no cap defined" is a
+        // THE regression pin for TWO-25269: "no cap defined" is a
         // completely legitimate configuration and must keep charging a
         // non-zero surcharge, uncapped, with the method offered. Absence is
         // not the same as a cap of 0: absence means uncapped, 0 clamps the
@@ -9942,7 +9942,8 @@ final class BrandConfigSpec
     /**
      * The company-search-tile-location slot renders between the sole-trader
      * note slot and the intent message (TWO-25326), superseding the standalone
-     * company-tile-label this ticket originally shipped in PR #431.
+     * company-tile-label this ticket originally shipped in
+     * woocommerce-plugin PR #431.
      *
      * Position is asserted, not just presence: the requirement names the
      * sole-trader note slot and the intent message as its two anchors, and
@@ -9977,8 +9978,8 @@ final class BrandConfigSpec
             'the tile slot must ship empty and hidden'
         );
 
-        // The standalone tile label PR #431 shipped is gone outright, not
-        // just replaced in this position.
+        // The standalone tile label woocommerce-plugin PR #431 shipped is
+        // gone outright, not just replaced in this position.
         TinyAssert::true(
             strpos($html, 'twoinc-company-tile-label') === false,
             'the superseded standalone company tile label must not be emitted'
@@ -9987,7 +9988,8 @@ final class BrandConfigSpec
 
     /**
      * TWO-25326. The short-lived standalone `company_search_location` admin
-     * setting from PR #436 is gone; the SAME location decision is now derived
+     * setting from woocommerce-plugin PR #436 is gone; the SAME location
+     * decision is now derived
      * from the pre-existing `enable_company_search` checkbox by
      * WC_Twoinc_Checkout::derive_company_search_location(). Flip both
      * directions directly against that pure function — no gateway, no WP/WC
@@ -10018,9 +10020,9 @@ final class BrandConfigSpec
      * legacy `enable_company_name` option keys unset) or '' (WooCommerce's
      * WC_Settings_API::get_option empty-string convention) — neither is
      * "yes", so both must land on the safe side: relocated into the payment
-     * tile, never silently missing from the checkout entirely (#33-style
+     * tile, never silently missing from the checkout entirely — the
      * regression the fallback in get_enable_company_search() exists to
-     * prevent).
+     * prevent.
      */
     private static function testCompanySearchLocationFallsBackToPaymentTileOnNullOrEmpty(): void
     {
@@ -10032,8 +10034,8 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326. `company_search_location` (PR #436) lived for less than a day
-     * before TWO-25326 deleted the admin field and its getter — any merchant
+     * `company_search_location` lived for less than a day before TWO-25326
+     * deleted the admin field and its getter — any merchant
      * who touched it during that window has the key sitting inert in their settings
      * row. `drop_removed_settings()` (same mechanism as `enable_sole_trader`,
      * TWO-25163) must clean it up on an upgraded install, mirroring
@@ -10681,7 +10683,8 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326: the standalone company-tile label PR #431 originally tested
+     * TWO-25326: the standalone company-tile label woocommerce-plugin
+     * PR #431 originally tested
      * is gone outright, on every brand, notice switch or not — it is
      * superseded, not conditional. The company-search tile slot that replaces
      * its POSITION is unrelated to the notice switch entirely: it exists to

@@ -171,7 +171,7 @@ describe("billing country switch", () => {
       // the handler puts it back.
       initializeCheckout();
       // The field this configuration resolves to visible: search-widget
-      // visibility follows the buyer's own capture mode alone now (#486), not
+      // visibility follows the buyer's own capture mode alone, not
       // which payment method is selected and not an admin setting — nothing
       // here has entered manual entry, so the search field is the one shown,
       // regardless of the gateway radio's state.

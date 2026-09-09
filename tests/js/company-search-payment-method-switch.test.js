@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * TWO-25326 / #486: switching payment method TO the Two gateway, from a
+ * TWO-25326: switching payment method TO the Two gateway, from a
  * different gateway checked by default, must re-decide field visibility —
  * not just relocate whatever `toggleBusinessFields()` already decided at
  * page load.
@@ -15,8 +15,8 @@
  * different one — WooCommerce checks the first available gateway by
  * default, so this is the ordinary case, not an edge one.
  *
- * #486 correction (2026-08-19): `toggleBusinessFields()` itself used
- * to gate `#billing_company_display_field`'s own visibility on
+ * A second, separate defect on the same code path: `toggleBusinessFields()`
+ * itself used to gate `#billing_company_display_field`'s own visibility on
  * `isTwoincSelected` — a leftover from the removed
  * `enable_company_search_for_others` admin setting (TWO-25326). That made a
  * buyer Two itself rejects (e.g. an email resolving to a different
@@ -153,7 +153,7 @@ function loadPluginSourceWithBootstrap() {
   indirectEval(src);
 }
 
-describe("payment-method switch onto the Two gateway (TWO-25326 / #486)", () => {
+describe("payment-method switch onto the Two gateway (TWO-25326)", () => {
   test("the search control is already in the payment tile before any switch, and switching TO Two reveals the Two-only fields", async () => {
     buildCheckoutForm();
     installJQuery();
@@ -181,9 +181,9 @@ describe("payment-method switch onto the Two gateway (TWO-25326 / #486)", () => 
 
     const $ = global.window.jQuery;
 
-    // #486: the control's own visibility no longer depends on which gateway is
+    // The control's own visibility does not depend on which gateway is
     // selected, so bootstrap already builds it in the payment tile with the
-    // OTHER gateway checked — the fix under test.
+    // OTHER gateway checked.
     expect($("#twoinc_tile_company_row").closest(".twoinc-company-search-tile-slot").length).toBe(
       1
     );
