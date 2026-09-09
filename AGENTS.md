@@ -91,8 +91,8 @@ Vendored assets
   invisible to the upstream reviewer and silently forks the control.
 - **A change to shared panel behaviour is therefore TWO edits**, and nothing links
   the copies: whoever changes one and stops has fixed one platform, and neither
-  reviewer sees the other half. This copy lags the Magento one, and re-copying is
-  the only thing that brings it back into step.
+  reviewer sees the other half. The two copies have DRIFTED — this one lags — and
+  re-copying the whole file is the only thing that brings them back into step.
 - `tests/js/company-search-panel-vendored.test.js` is an **edit-lock, not a parity
   check** (TWO-25503). `EDIT_LOCK_SHA256` is this file's OWN digest, so the suite
   catches an in-place edit here and says nothing whatever about whether the two
@@ -106,10 +106,14 @@ Vendored assets
   registry, so disabling it there blocks a mode that was never going to search and
   leaves a buyer in an uncovered country with no way to name their company at all.
 - **The company field opens the panel on FOCUS**, through the same `open()` a
-  mousedown runs. The PrestaShop module deliberately does the opposite — there only
-  a click or a keypress opens it and focus alone is inert. Those two behaviours are
-  the current state of the two platforms; do not assume parity between them, and do
-  not harmonise one to the other without a product ruling.
+  mousedown runs, leaving the caret in the panel's query field — the same state a
+  click leaves it in, and the same on every platform that carries this control.
+- **The open panel takes the field's tab stop** — `tabindex="-1"` while it is up,
+  and on close the field's PRIOR value restored exactly, which is removal because
+  nothing sets one: the field is a tab stop by being a native `<input>`
+  (TWO-25503). Without it the focus opener is a keyboard trap: the opener puts the
+  caret in the query field, Shift+Tab returns to the field, and the opener pushes
+  focus forward again, so the buyer cannot get back past the control (WCAG 2.1.2).
 
 Keyboard behaviour is not verifiable in jsdom
 
@@ -121,6 +125,15 @@ Keyboard behaviour is not verifiable in jsdom
   one contiguous run in document order, a closed panel carries `hidden` — and the
   keyboard behaviour itself is verified in a real browser. A passing jsdom Tab test
   is never evidence that a trap is absent.
+- **A real chip click fires no `focusin`.** The chip's `mousedown` handler calls
+  `preventDefault()`, which suppresses the native focus, so a rule written only
+  against `focusin` never sees a pointer buyer at all.
+- **jsdom's `getElementById` answers with the first-REGISTERED node, not the
+  tree-first one**, so a fixture carrying a duplicate id silently resolves to the
+  wrong element.
+- **A mutation proves NEW coverage only when re-run against the base ref.** One the
+  existing suite already catches proves the suite is sensitive, not that the case
+  added covers anything.
 
 A popup window is in no tab listing
 
@@ -147,6 +160,11 @@ once, and these are the three rules (TWO-25658):
 A window or application switch lands on no control at all and settles nothing.
 Launchers are not exempt from rule two — a launch blurs whatever holds focus first,
 so a window return re-fires focus on nothing.
+
+The ruling adds a fourth: **a DIFFERENT role's Sole trader chip gets a popup of its
+own**, raised through that chip's own click handler so a launch stays spelled out in
+one place. This checkout does not do that: a chip outside the popup's own role
+closes it and raises nothing.
 
 The custom request-header table
 
@@ -223,9 +241,16 @@ The merchant record refreshes on an event, never on expiry
   repopulates it, bounded to one attempt per 60 seconds while the API is failing.
 - **A failed fetch keeps last-known-good and advances no clock**, so it can neither
   overwrite a concurrent success nor blank a cached restriction to "unrestricted".
-- An input that pricing cannot resolve fails CLOSED — the availability gate
-  withdraws Two rather than let an order be priced with the fee silently absent, and
-  a judgement that does not depend on a basket is made in admin too.
+- An input that pricing cannot resolve fails CLOSED for the BUYER — the availability
+  gate withdraws Two rather than let an order be priced with the fee silently
+  absent, and a 200 carrying no merchant record counts as unresolved: a proxy, a
+  captive portal or a maintenance page answers 200 too, and there is no identity to
+  offer the method under.
+- **The admin save stays possible whatever the verification says** (ABN-495). An
+  unreachable API judges nothing about the key, and refusing the save locks the
+  merchant out of storing the key that would fix the outage; the verdict is reported
+  beside the save instead. A key Two rejected (401/403) is the one submitted value
+  the save discards, and the message says the stored key was kept.
 - The payment-terms type setting is rendered only for a merchant already set to end
   of month (TWO-25656); a merchant not on it is not offered it.
 
