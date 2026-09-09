@@ -265,6 +265,10 @@ The merchant record refreshes on an event, never on expiry
   absent, and a 200 carrying no merchant record counts as unresolved: a proxy, a
   captive portal or a maintenance page answers 200 too, and there is no identity to
   offer the method under.
+- **An unresolved offerable term set withdraws Two from checkout too** (ABN-495) — a
+  verified key proves the shop's identity, not that the account can sell. Empty
+  whether the fetch never succeeded or the account offers nothing; the gate reads the
+  same cached list every other consumer does, so it adds no fetch of its own.
 - **The admin save stays possible whatever the verification says** (ABN-495). An
   unreachable API judges nothing about the key, and refusing the save locks the
   merchant out of storing the key that would fix the outage; the verdict is reported
