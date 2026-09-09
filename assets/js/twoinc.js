@@ -3534,13 +3534,13 @@ function createSoleTraderController(companySearch) {
     },
 
     /**
-     * Show the "select a different sole trader" link only where it means
-     * something: sole-trader mode (TWO-40). Gated on mode + tokens only,
-     * no `#company_id`-content check — that field is permanently hidden in
-     * every mode, so there's no reason to lean on its DOM value here.
+     * Only once there is a sole trader to replace (ABN-526), read off the
+     * adoption latch — never `#company_id`, which can still hold an earlier
+     * capture's identifier.
      */
     syncDifferentSoleTraderLink: function () {
-      const show = controller.mode === "sole_trader" && !!controller.tokens;
+      const show =
+        controller.mode === "sole_trader" && controller.soleTraderAdopted && !!controller.tokens;
       // Built lazily, only when about to be shown: this runs on every mode
       // switch, and building it eagerly would insert a hidden button into
       // the address form of every merchant who never sees this feature.
