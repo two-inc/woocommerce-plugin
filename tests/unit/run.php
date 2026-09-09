@@ -2422,7 +2422,7 @@ final class BrandConfigSpec
 
             public function get_merchant_id()
             {
-                return 'mid';
+                return $this->options['merchant_id'] ?? 'mid';
             }
 
             public function get_option($key, $empty_value = null)
@@ -2529,6 +2529,17 @@ final class BrandConfigSpec
         $bare->options = [];
         TinyAssert::same('not_configured', $bare->get_merchant_terms_state()['state']);
         TinyAssert::true(strpos($bare->get_merchant_terms_notice(), 'No API key is saved') !== false);
+
+        // A saved key whose identity never resolved is not "no key saved".
+        $cold();
+        $unidentified = clone $gateway;
+        $unidentified->options = ['api_key' => 'key', 'merchant_id' => ''];
+        TinyAssert::same('never_fetched', $unidentified->get_merchant_terms_state()['state']);
+        TinyAssert::same(
+            false,
+            strpos($unidentified->get_merchant_terms_notice(), 'No API key is saved') !== false,
+            'a saved key must not be reported as missing'
+        );
     }
 
     private static function testMerchantAvailableTermsInvalidatedOnMerchantIdChange(): void

@@ -807,7 +807,6 @@ if (!class_exists('WC_Twoinc')) {
         {
             $terms = $this->get_merchant_available_terms();
             $checked_on = (int) get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on'));
-            $error = get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_last_error'));
             $state = [
                 'state' => 'resolved',
                 'reason' => null,
@@ -816,10 +815,13 @@ if (!class_exists('WC_Twoinc')) {
                 'count' => count($terms),
             ];
 
+            // The recorded cause is read only where it can be reported, so a
+            // resolved set — every checkout render — pays no query for it.
             if ($state['count'] > 0) {
                 return $state;
             }
-            if (!$this->get_option('api_key') || !$this->get_merchant_id()) {
+            $error = get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_last_error'));
+            if (!$this->get_option('api_key')) {
                 $state['state'] = 'not_configured';
                 return $state;
             }
@@ -2866,8 +2868,8 @@ if (!class_exists('WC_Twoinc')) {
                 $this->log_withheld_from_checkout(sprintf(
                     'merchant offerable payment terms unresolved: %s%s%s',
                     $terms['state'],
-                    $terms['reason'] ? " ({$terms['reason']})" : '',
-                    $terms['code'] ? " (HTTP {$terms['code']})" : ''
+                    $terms['reason'] ? ", {$terms['reason']}" : '',
+                    $terms['code'] ? ", HTTP {$terms['code']}" : ''
                 ));
                 return false;
             }
