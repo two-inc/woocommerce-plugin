@@ -291,8 +291,7 @@ jQuery(function ($) {
         });
     }
 
-    // A term the merchant's account offers. An unresolved set is unknown, so it
-    // narrows nothing (ABN-521).
+    // An unresolved offered set is unknown, so it narrows nothing (ABN-521).
     function merchantOffers(n) {
       const merchant = (twoinc_admin.merchant_available_terms || []).map(Number);
       return merchant.length === 0 || merchant.indexOf(n) !== -1;
