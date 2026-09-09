@@ -105,42 +105,42 @@ describe("company-search tab stop", () => {
     expect(displayField().getAttribute("tabindex")).toBe("-1");
   });
 
-  test.each([
-    { prior: null, restored: null, description: "no tabindex, which is what a platform ships" },
-    { prior: "7", restored: "7", description: "a tabindex the theme set, given back exactly" }
-  ])("closing restores the field's prior tab stop — $description", ({ prior, restored, description }) => {
-    helper.attach();
-    if (prior !== null) displayField().setAttribute("tabindex", prior);
+  const CLOSE_ROUTES = [
+    { close: () => helper.closeCompanySearchDropdown(), route: "the panel's own close" },
+    { close: () => pressEscape(), route: "Escape, which also hands focus back to the field" },
+    { close: () => clickOutside(), route: "a mousedown outside the panel" },
+    { close: () => focusSettlesOutside(), route: "focus settling outside the control" },
+    { close: () => helper.panel.destroy(), route: "teardown while still open" }
+  ];
 
-    helper.openCompanySearchDropdown();
-    expect(displayField().getAttribute("tabindex")).toBe("-1");
+  const PRIOR_TAB_STOPS = [
+    { prior: null, description: "no tabindex, which is what every platform ships" },
+    { prior: "7", description: "a tabindex the theme set" }
+  ];
 
-    helper.closeCompanySearchDropdown();
+  test.each(
+    PRIOR_TAB_STOPS.flatMap((state) =>
+      CLOSE_ROUTES.map((exit) =>
+        Object.assign({}, state, exit, { description: state.description + ", via " + exit.route })
+      )
+    )
+  )(
+    "closing gives the field back its prior tab stop — $description",
+    ({ prior, close, description }) => {
+      helper.attach();
+      if (prior !== null) displayField().setAttribute("tabindex", prior);
 
-    expect({ description: description, tabindex: displayField().getAttribute("tabindex") }).toEqual(
-      { description: description, tabindex: restored }
-    );
-  });
+      helper.openCompanySearchDropdown();
+      expect(displayField().getAttribute("tabindex")).toBe("-1");
 
-  test.each([
-    { close: () => helper.closeCompanySearchDropdown(), description: "the panel's own close" },
-    { close: pressEscape, description: "Escape, which also hands focus back to the field" },
-    { close: clickOutside, description: "a mousedown outside the panel" },
-    { close: focusSettlesOutside, description: "focus settling outside the control" },
-    { close: () => helper.panel.destroy(), description: "teardown while still open" }
-  ])("the tab stop comes back on every route out — $description", ({ close, description }) => {
-    helper.attach();
-    expect(displayField().hasAttribute("tabindex")).toBe(false);
+      close();
 
-    helper.openCompanySearchDropdown();
-    expect(displayField().getAttribute("tabindex")).toBe("-1");
-
-    close();
-
-    expect({ description: description, tabindex: displayField().getAttribute("tabindex") }).toEqual(
-      { description: description, tabindex: null }
-    );
-  });
+      expect({
+        description: description,
+        tabindex: displayField().getAttribute("tabindex")
+      }).toEqual({ description: description, tabindex: prior });
+    }
+  );
 
   test("a throwing host abort still leaves the field with its tab stop back", () => {
     helper.attach();
