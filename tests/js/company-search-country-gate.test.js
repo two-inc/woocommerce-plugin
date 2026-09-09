@@ -154,6 +154,23 @@ describe("company search country gate", () => {
     expect(visibleChipModes()).toEqual(["manual"]);
   });
 
+  test("typing in the field while the search is withdrawn queues no search", () => {
+    ctx.helper.syncCompanySearchAvailability();
+    supportedCountriesRequest().succeed({ supported_countries: ["US"] });
+    ajax.calls.length = 0;
+
+    const field = document.querySelector(ctx.helper.companyFieldSelector());
+    field.value = "Alp";
+    field.dispatchEvent(new window.Event("input", { bubbles: true }));
+
+    // The keystrokes stay where the buyer put them, nothing reaches the wire,
+    // and the panel is up with the manual-entry chip a click away.
+    expect(field.value).toBe("Alp");
+    expect(document.querySelector(".two-company-dropdown__query").value).toBe("");
+    expect(ajax.calls.length).toBe(0);
+    expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
+  });
+
   test("a pending fetch fails open: the field stays enabled and usable", () => {
     ctx.helper.syncCompanySearchAvailability();
     expect(supportedCountriesRequest()).toBeTruthy();

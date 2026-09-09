@@ -606,6 +606,11 @@
             const typed = field.value;
             if (!typed) return;
             self.open();
+            // With the search withdrawn there is no query row to move the
+            // keystrokes into and no search they could reach, so they stay
+            // where the buyer put them and the panel offers manual entry
+            // instead (ABN-525).
+            if (self._disabled) return;
             // The captured company's name is what this field shows; leaving
             // the buyer's keystrokes in it would overwrite that with a
             // half-typed query before they have picked anything.
