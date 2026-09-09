@@ -1015,14 +1015,6 @@ if (!class_exists('WC_Twoinc')) {
                         __('the API key was rejected. Check "%s API key" and "Environment".', 'twoinc-payment-gateway'),
                         WC_Twoinc_Brand::get('product_name')
                     );
-                } elseif ($status['status'] !== 'ok') {
-                    // ABN-533: only invalid_key and not_configured withhold, so a
-                    // transient verdict is never reported as the method being hidden.
-                    return [
-                        'label' => $label,
-                        'value' => __('Cannot be checked — the API key could not be verified just now.', 'twoinc-payment-gateway'),
-                        'ok'    => false,
-                    ];
                 }
             }
             // The FX arm of surcharge_currency_unquotable() cannot fire in
@@ -1037,17 +1029,6 @@ if (!class_exists('WC_Twoinc')) {
                     __('no buyer countries are currently enabled for your account. Contact %s to have them enabled.', 'twoinc-payment-gateway'),
                     WC_Twoinc_Brand::get('provider_full_name')
                 );
-            }
-            // An unresolved term set is not a reason: ABN-533's companion
-            // ruling offers the tile with an empty term set. The row declines
-            // to assert either way while the read has not landed; the
-            // "Payment terms" row above carries the cause.
-            if ($reason === null && $this->get_merchant_terms_state()['state'] !== 'resolved') {
-                return [
-                    'label' => $label,
-                    'value' => __('Cannot be checked — your payment terms could not be read just now.', 'twoinc-payment-gateway'),
-                    'ok'    => false,
-                ];
             }
             if ($reason !== null) {
                 return ['label' => $label, 'value' => $not_shown . ' — ' . $reason, 'ok' => false];

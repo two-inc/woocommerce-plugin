@@ -1534,10 +1534,6 @@ msgid "no buyer countries are currently enabled for your account. Contact %s to 
 msgstr "inga köparländer är för närvarande aktiverade för ditt konto. Kontakta %s för att aktivera dem."
 
 #: class/WC_Twoinc.php
-msgid "Cannot be checked — your payment terms could not be read just now."
-msgstr "Kan inte kontrolleras — dina betalningsvillkor kunde inte läsas just nu."
-
-#: class/WC_Twoinc.php
 #, php-format
 msgid "hidden for baskets below %s"
 msgstr "döljs för varukorgar under %s"
@@ -1563,10 +1559,6 @@ msgstr "Kontrollera inställningarna \"%s API-nyckel\" och \"Miljö\"."
 #: class/WC_Twoinc.php
 msgid "the payment method is disabled. Check \"Turn on/off\"."
 msgstr "betalningsmetoden är avstängd. Kontrollera \"Slå på / av\"."
-
-#: class/WC_Twoinc.php
-msgid "Cannot be checked — the API key could not be verified just now."
-msgstr "Kan inte kontrolleras — API-nyckeln kunde inte verifieras just nu."
 
 #: class/WC_Twoinc.php
 #, php-format

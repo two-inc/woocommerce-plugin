@@ -109,10 +109,6 @@ msgid "no buyer countries are currently enabled for your account. Contact %s to 
 msgstr "actualmente no hay ningún país de comprador activado para su cuenta. Póngase en contacto con %s para activarlos."
 
 #: class/WC_Twoinc.php
-msgid "Cannot be checked — your payment terms could not be read just now."
-msgstr "No se puede comprobar: sus plazos de pago no se han podido leer en este momento."
-
-#: class/WC_Twoinc.php
 #, php-format
 msgid "hidden for baskets below %s"
 msgstr "oculto para cestas por debajo de %s"
@@ -138,10 +134,6 @@ msgstr "Compruebe los ajustes \"Clave API de %s\" y \"Entorno\"."
 #: class/WC_Twoinc.php
 msgid "the payment method is disabled. Check \"Turn on/off\"."
 msgstr "el método de pago está desactivado. Compruebe \"Turn on/off\"."
-
-#: class/WC_Twoinc.php
-msgid "Cannot be checked — the API key could not be verified just now."
-msgstr "No se puede comprobar: la clave API no se ha podido verificar en este momento."
 
 #: class/WC_Twoinc.php
 #, php-format

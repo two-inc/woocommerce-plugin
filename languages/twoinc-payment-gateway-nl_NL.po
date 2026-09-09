@@ -1533,10 +1533,6 @@ msgid "no buyer countries are currently enabled for your account. Contact %s to 
 msgstr "er zijn momenteel geen landen van de koper geactiveerd voor uw account. Neem contact op met %s om ze te laten activeren."
 
 #: class/WC_Twoinc.php
-msgid "Cannot be checked — your payment terms could not be read just now."
-msgstr "Kan nu niet worden gecontroleerd — uw betaaltermijnen konden niet worden gelezen."
-
-#: class/WC_Twoinc.php
 #, php-format
 msgid "hidden for baskets below %s"
 msgstr "verborgen voor winkelwagens onder %s"
@@ -1562,10 +1558,6 @@ msgstr "Controleer de instellingen \"%s API-sleutel\" en \"Omgeving\"."
 #: class/WC_Twoinc.php
 msgid "the payment method is disabled. Check \"Turn on/off\"."
 msgstr "de betaalmethode is uitgeschakeld. Controleer \"Aan/uitzetten\"."
-
-#: class/WC_Twoinc.php
-msgid "Cannot be checked — the API key could not be verified just now."
-msgstr "Kan niet worden gecontroleerd — de API-sleutel kon op dit moment niet worden geverifieerd."
 
 #: class/WC_Twoinc.php
 #, php-format
