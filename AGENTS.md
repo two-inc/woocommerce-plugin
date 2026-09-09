@@ -167,11 +167,20 @@ A window or application switch lands on no control at all and settles nothing.
 Launchers are not exempt from rule two — a launch blurs whatever holds focus first,
 so a window return re-fires focus on nothing.
 
-**Reaching another role's Sole trader chip by FOCUS raises nothing** — the
-exemption is gated on the chip being inside this role's own control, so another
-role's chip closes the popup like any other target. Only activating that chip
-launches a popup, through its own click handler, each role holding its own
-sole-trader controller (TWO-25658).
+**Reaching another role's Sole trader chip by FOCUS closes this popup and launches
+one for that chip** — the exemption is gated on the chip being inside this role's own
+popover, so another role's chip is a target like any other, and the rule then activates
+it, its own click handler being the one place a launch is spelled out. Each role holds
+its own sole-trader controller (TWO-25658).
+
+**That "own popover" is resolved off the field on every event, never from a stored
+node.** The panel builds the popover as the field's SIBLING, and a host that morphs its
+server markup over the live DOM rebuilds the popover — and can delete the wrap the panel
+built — while keeping the field. Judged against a stored popover, or against one found
+by a descendant search under whatever container the field is left in, this role's own
+re-rendered chip reads as another role's and the rule inverts on it: returning to the
+very chip that launched the popup closes it, and on a two-role page a descendant search
+can answer with the other role's popover outright.
 
 The custom request-header table
 

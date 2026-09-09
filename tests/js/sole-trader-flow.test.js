@@ -114,6 +114,14 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     // a test that reaches a real successful mint starts it, and it would
     // otherwise keep firing against a stale module for the rest of the file.
     soleTrader.stopTokenRefresh();
+    // Left armed, the delivery role's own controller judges the rest of the file's focus against its stale popup, which under TWO-25658 relaunches a chip.
+    const shippingSoleTrader = ctx.shippingHelper && ctx.shippingHelper.soleTrader;
+    if (shippingSoleTrader) {
+      shippingSoleTrader.unbindPopupMessageListener();
+      shippingSoleTrader.unbindFocusinListener();
+      shippingSoleTrader.stopAllPopupWatchers();
+      shippingSoleTrader.stopTokenRefresh();
+    }
     harness.releasePanel(ctx.helper);
     // `initialize()` delegates from document.body, which survives the wipe
     // below along with the module instance that bound it — and a stale
@@ -2786,7 +2794,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       test("a focusin with this role's control gone closes the popup", () => {
         const win = launchFromChips();
 
-        soleTrader.ownControlNode().remove();
+        ctx.helper.modeChipsNode()[0].closest(".two-company-field-wrap").remove();
         focusControl(outsideControl());
         jest.runOnlyPendingTimers();
 
@@ -2898,23 +2906,84 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       /** The delivery role owns its own panel, chips and controller: its controls are outside billing's. */
       test.each([
-        ["sole_trader", "rule 1 exempts the delivery Sole trader chip for delivery only"],
-        ["registered", "a delivery chip is outside billing's popover"]
-      ])("focus on %s closes the billing popup and its popover — %s", (mode) => {
-        openWidgetWithChips();
-        // Before the launch: mounting focuses the delivery panel's own query field.
-        const chip = deliveryChip(mode);
-        const win = launchFromChips();
+        ["sole_trader", 1, "the delivery Sole trader chip gets a popup of its own (TWO-25658)"],
+        ["registered", 0, "a delivery chip is outside billing's popover"]
+      ])(
+        "focus on %s closes the billing popup and its popover, relaunches=%s — %s",
+        (mode, relaunches) => {
+          openWidgetWithChips();
+          // Before the launch: mounting focuses the delivery panel's own query field.
+          const chip = deliveryChip(mode);
+          const win = launchFromChips();
+          const relaunched = fakePopup();
+          window.open = jest.fn(() => relaunched);
 
-        focusControl(chip);
-        const panelOpenAtOnce = ctx.helper.companySearchDropdownIsOpen();
-        jest.runOnlyPendingTimers();
+          focusControl(chip);
+          const panelOpenAtOnce = ctx.helper.companySearchDropdownIsOpen();
+          jest.runOnlyPendingTimers();
 
-        expect(win.close).toHaveBeenCalledTimes(1);
-        expect(win.focus).not.toHaveBeenCalled();
-        expect(panelOpenAtOnce).toBe(false);
-        jest.useRealTimers();
-      });
+          expect(win.close).toHaveBeenCalledTimes(1);
+          expect(win.focus).not.toHaveBeenCalled();
+          expect(panelOpenAtOnce).toBe(false);
+          expect(window.open.mock.calls.length).toBe(relaunches);
+          jest.useRealTimers();
+        }
+      );
+
+      // A host that morphs its markup over the live DOM rebuilds the popover and keeps the
+      // field, and can take the wrap the panel built with it.
+      test.each([
+        [
+          "own chip",
+          true,
+          0,
+          "the launching role's own re-rendered chip is still its own: the popup it launched stays"
+        ],
+        [
+          "own chip",
+          false,
+          0,
+          "and still its own when the re-render took the wrap too, leaving the field where it is"
+        ],
+        [
+          "outside control",
+          true,
+          1,
+          "and the rule still fires for everything else: an outside control closes it"
+        ]
+      ])(
+        "after a re-render, focus on the %s (wrap kept=%s) leaves the billing popup closes=%s — %s",
+        (which, keepWrap, closes) => {
+          openWidgetWithChips();
+          const win = launchFromChips();
+          const wrap = ctx.helper.modeChipsNode()[0].closest(".two-company-field-wrap");
+          expect(wrap).not.toBeNull();
+          const field = wrap.querySelector("#billing_company_display");
+          expect(field).not.toBeNull();
+          const host = keepWrap ? wrap : wrap.parentElement;
+          if (keepWrap) {
+            wrap.querySelector(".two-company-dropdown").remove();
+          } else {
+            wrap.parentElement.insertBefore(field, wrap);
+            wrap.remove();
+          }
+          const popover = document.createElement("div");
+          popover.className = "two-company-dropdown";
+          popover.innerHTML =
+            '<button class="two-company-mode-chip" data-two-chip="sole_trader">Sole trader</button>';
+          host.insertBefore(popover, field.nextSibling);
+
+          focusControl(
+            which === "own chip"
+              ? popover.querySelector('[data-two-chip="sole_trader"]')
+              : outsideControl()
+          );
+          jest.runOnlyPendingTimers();
+
+          expect(win.close).toHaveBeenCalledTimes(closes);
+          jest.useRealTimers();
+        }
+      );
 
       /** The delivery controller's own listener settles the delivery popup by the same rule. */
       test.each([

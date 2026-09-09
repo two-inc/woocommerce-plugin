@@ -16,7 +16,7 @@ package-lock.json
 languages/*.php
 screenshots/
 videos/
-node_modules/
+node_modules
 volumes/
 .DS_Store
 *.zip
