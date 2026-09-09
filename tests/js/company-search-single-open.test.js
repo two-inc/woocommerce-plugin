@@ -92,21 +92,21 @@ function mouseDownOn(node) {
 }
 
 describe("single-open invariant", () => {
-  test.each([
-    ["invoice"],
-    ["delivery"]
-  ])("%s open first, so opening the other one closes it", (first) => {
-    // Given one popover open
-    const panels = setup();
-    const second = OTHER[first];
-    panels[first].open();
+  test.each([["invoice"], ["delivery"]])(
+    "%s open first, so opening the other one closes it",
+    (first) => {
+      // Given one popover open
+      const panels = setup();
+      const second = OTHER[first];
+      panels[first].open();
 
-    // When the other opens
-    panels[second].open();
+      // When the other opens
+      panels[second].open();
 
-    // Then only the second is up
-    expect([isOpen(first), isOpen(second)]).toEqual([false, true]);
-  });
+      // Then only the second is up
+      expect([isOpen(first), isOpen(second)]).toEqual([false, true]);
+    }
+  );
 
   test("re-opening the already-open popover leaves it open", () => {
     const panels = setup();
@@ -128,9 +128,30 @@ describe("single-open invariant", () => {
 describe("tab stop of the popover that closes", () => {
   test.each([
     ["at rest, neither field is a tab stop", function () {}, [null, null]],
-    ["invoice open, only that field holds it", function (p) { p.invoice.open(); }, ["-1", null]],
-    ["delivery taking over gives invoice its own back", function (p) { p.invoice.open(); p.delivery.open(); }, [null, "-1"]],
-    ["both closed again leaves no field at -1", function (p) { p.invoice.open(); p.delivery.open(); p.delivery.close(); }, [null, null]]
+    [
+      "invoice open, only that field holds it",
+      function (p) {
+        p.invoice.open();
+      },
+      ["-1", null]
+    ],
+    [
+      "delivery taking over gives invoice its own back",
+      function (p) {
+        p.invoice.open();
+        p.delivery.open();
+      },
+      [null, "-1"]
+    ],
+    [
+      "both closed again leaves no field at -1",
+      function (p) {
+        p.invoice.open();
+        p.delivery.open();
+        p.delivery.close();
+      },
+      [null, null]
+    ]
   ])("%s", (name, act, expected) => {
     const panels = setup();
     act(panels);
