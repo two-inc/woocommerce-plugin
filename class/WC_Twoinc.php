@@ -2695,19 +2695,59 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Using admin_enqueue_scripts passes the page name as the first
-         * argument, which prevents the merchant_id from being updated.
+         * Re-verify the stored key on the gateway's own settings screen.
+         *
+         * Hooked to admin_enqueue_scripts, which fires on EVERY wp-admin
+         * request, so the screen check is what keeps an unreachable API from
+         * blocking the whole of wp-admin rather than one settings page
+         * (ABN-537). The cached verdict is consulted first for the same
+         * reason: a settings page reloaded during an outage must not spend a
+         * fresh wire call each time.
+         *
+         * @param string $hook_suffix current admin page, from the hook.
          */
-        public function verify_api_key_action()
+        public function verify_api_key_action($hook_suffix = '')
         {
-            $result = $this->verify_api_key();
+            if (!$this->is_gateway_settings_screen((string) $hook_suffix)) {
+                return;
+            }
+
+            $api_key = (string) $this->get_option('api_key');
+            if ($api_key === '') {
+                return;
+            }
+
+            $cached = get_transient(self::verification_cache_key($api_key));
+            if (is_array($cached) && isset($cached['status'])) {
+                return;
+            }
+
             // This admin-page load is a fresh, live re-check of the STORED
             // key — strictly more current than whatever the checkout-side
             // cache (get_api_key_verification_status()) might be holding.
             // Feed it forward so a merchant who just fixed a broken key
             // doesn't have to wait out API_KEY_VERIFICATION_TTL for
             // checkout to notice (TWO-25326 follow-up).
-            $this->cache_verification_result($this->get_option('api_key'), $result);
+            $this->cache_verification_result(
+                $api_key,
+                $this->verify_api_key(null, self::ADMIN_API_KEY_VERIFICATION_TIMEOUT)
+            );
+        }
+
+        /**
+         * WooCommerce's settings page, Payments tab, this gateway's own
+         * section. Section case is normalised the way WooCommerce's own
+         * settings router normalises it.
+         */
+        private function is_gateway_settings_screen(string $hook_suffix): bool
+        {
+            if ($hook_suffix !== 'woocommerce_page_wc-settings') {
+                return false;
+            }
+            $tab = isset($_GET['tab']) ? strtolower((string) wp_unslash($_GET['tab'])) : '';
+            $section = isset($_GET['section']) ? strtolower((string) wp_unslash($_GET['section'])) : '';
+
+            return $tab === 'checkout' && $section === strtolower((string) $this->id);
         }
 
         /**
@@ -2853,6 +2893,15 @@ if (!class_exists('WC_Twoinc')) {
          * WC_Twoinc_FX::FETCH_TIMEOUT's reasoning for the same constraint.
          */
         const API_KEY_VERIFICATION_TIMEOUT = 5;
+
+        /**
+         * Timeout (seconds) for the settings-screen re-verification. Longer
+         * than the checkout-side cap because an admin can afford a
+         * slower-but-certain answer, but still bounded: it runs inline in a
+         * page render, which wp_remote_request()'s own 30s default would
+         * stall for half a minute against an unreachable API (ABN-537).
+         */
+        const ADMIN_API_KEY_VERIFICATION_TIMEOUT = 10;
 
         /**
          * Request-scoped memo so a single page load never reads the
