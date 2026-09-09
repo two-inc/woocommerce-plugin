@@ -4204,12 +4204,14 @@ if (!class_exists('WC_Twoinc')) {
          * (API-resolved, see get_platform_minimum_order()), the brand's
          * billing-country restriction (availability_gate in the brand
          * config), the merchant's buyer-country allowlist (TWO-40), the
-         * merchant's own minimum is unmet, or the configured surcharge
-         * cannot be quoted in the checkout currency at all (TWO-25269).
+         * merchant's own minimum is unmet, the configured surcharge
+         * cannot be quoted in the checkout currency at all (TWO-25269), or
+         * the pricing service could not price the term being charged
+         * (ABN-546).
          * The two country gates are independent and ANDed: neither reads
          * the other.
-         * The surcharge judgement applies in admin too; the basket-based
-         * judgements are front-end only. Minimums are inclusive (an
+         * The surcharge-currency judgement applies in admin too; the
+         * failed-quote and basket-based judgements are front-end only. Minimums are inclusive (an
          * exactly-minimum basket passes).
          *
          * @param array $available_gateways
@@ -4242,6 +4244,15 @@ if (!class_exists('WC_Twoinc')) {
             // and so applies in admin too — an admin-placed order must not
             // carry a silently absent fee (TWO-25503).
             if (is_admin()) {
+                return $available_gateways;
+            }
+
+            // A surcharge the pricing service could not price fails CLOSED
+            // like one no rate can express, but at CHECKOUT ONLY — never
+            // against the merchant's own admin (ABN-546). The quote's own
+            // error log already names the term and the cause.
+            if (WC_Twoinc_Payment_Terms::surcharge_quote_failed($this)) {
+                unset($available_gateways[$this->id]);
                 return $available_gateways;
             }
             $gate = WC_Twoinc_Brand::get('availability_gate');

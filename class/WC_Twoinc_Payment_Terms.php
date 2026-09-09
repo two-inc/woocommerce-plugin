@@ -69,8 +69,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         private static $fx_failure_logged = false;
 
-        /** Terms already reported as unquotable this request (ABN-539). */
-        private static $unquoted_logged = [];
+        /** Terms whose quote failed this request, keyed by term (ABN-539). */
+        private static $unquoted_terms = [];
 
         /** @var array<string,bool> Keyed by value, so a second distinct bad method still speaks. */
         private static $surcharge_type_failure_logged = [];
@@ -592,7 +592,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * Report a configured surcharge that could not be quoted (ABN-539).
+         * Record and report a configured surcharge that could not be
+         * quoted (ABN-539).
          * Error level for log_surcharge_fx_failure()'s reason: the merchant
          * loses that revenue and nothing else on any surface says so.
          *
@@ -601,16 +602,109 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * without the latch that call site logs on every recalculation for the
          * whole quote TTL.
          */
-        private static function log_unquoted_surcharge(int $days, string $cause): void
+        private static function record_unquoted_surcharge(int $days, string $cause): void
         {
-            if (isset(self::$unquoted_logged[$days]) || !function_exists('wc_get_logger')) {
+            if (isset(self::$unquoted_terms[$days])) {
                 return;
             }
-            self::$unquoted_logged[$days] = true;
+            // Before the logger check: the withholding decision reads this
+            // record and must not depend on the logger being loadable.
+            self::$unquoted_terms[$days] = true;
+            if (!function_exists('wc_get_logger')) {
+                return;
+            }
             wc_get_logger()->error(
                 "Surcharge for the {$days}-day payment term could not be quoted: {$cause}. No surcharge is charged on this order.",
                 ['source' => 'twoinc-payment-gateway']
             );
+        }
+
+        /**
+         * The term this request would be charged for: the posted selection
+         * (the hidden checkout field, which is the only signal on a
+         * sessionless submit) else the session's, resolved the same way
+         * get_order_payload_terms() resolves the term it puts on the order.
+         */
+        private static function resolve_charged_term($gateway): ?int
+        {
+            $terms = self::get_available_terms($gateway);
+            $posted = isset($_POST[self::SESSION_KEY]) ? (int) $_POST[self::SESSION_KEY] : 0;
+            return in_array($posted, $terms, true) ? $posted : self::get_selected_term($gateway);
+        }
+
+        /**
+         * Whether the merchant configured anything for this term that a
+         * quote could actually charge. A term that prices to nothing must
+         * not put the payment method behind a pricing call (ABN-546): on a
+         * single-term shop that is the whole storefront, over a fee of zero.
+         *
+         * A cap alone charges nothing — it bounds a percentage that is not
+         * there — and in fee-difference mode the default term is its own
+         * reference, so the difference is zero unless a fixed amount rides
+         * along with it.
+         */
+        private static function has_chargeable_surcharge($gateway, int $days): bool
+        {
+            $settings = self::get_surcharge_settings($gateway);
+            $components = self::surcharge_monetary_components($settings, $days);
+            if ($components['fixed'] !== null) {
+                return true;
+            }
+            if ($settings['differential'] && $days === self::get_default_term($gateway)) {
+                return false;
+            }
+            $row = isset($settings['grid'][$days]) && is_array($settings['grid'][$days]) ? $settings['grid'][$days] : [];
+            $percentage = in_array($settings['type'], ['percentage', 'fixed_and_percentage'], true) && isset($row['percentage'])
+                ? (float) $row['percentage']
+                : 0.0;
+            return $percentage > 0;
+        }
+
+        /**
+         * Whether the term this checkout would be charged for cannot be
+         * priced (ABN-546) — the fail-CLOSED condition the availability gate
+         * withholds the payment method on, alongside a surcharge currency
+         * no rate can express.
+         *
+         * Judged on the charged term alone, and only when that term has
+         * something to charge: withholding over another term's failure, or
+         * over a term whose surcharge is arithmetically zero, is the
+         * over-rejection surcharge_currency_unquotable() also avoids.
+         *
+         * Quotes rather than waiting for another call site to: on the first
+         * checkout render nothing has selected Two yet, so the cart-fee hook
+         * has not run, and reading only what it recorded would offer the
+         * method and then drop it mid-checkout. Confined to a checkout page
+         * carrying the basket the fee would be charged on — the cart page and
+         * the mini-cart render no payment method, and on the order-pay
+         * endpoint the session cart is not the basket being paid for (the
+         * fee that order carries is already a line on it).
+         */
+        public static function surcharge_quote_failed($gateway): bool
+        {
+            $charged = self::resolve_charged_term($gateway);
+            if ($charged === null) {
+                return false;
+            }
+            if (!self::has_chargeable_surcharge($gateway, $charged)) {
+                return false;
+            }
+            if (isset(self::$unquoted_terms[$charged])) {
+                return true;
+            }
+            if (!function_exists('is_checkout') || !is_checkout() || !function_exists('WC')) {
+                return false;
+            }
+            if (function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-pay')) {
+                return false;
+            }
+            $cart = WC()->cart ?? null;
+            if (!$cart || $cart->is_empty() || self::get_fee_basis($cart) <= 0) {
+                return false;
+            }
+            $customer = WC()->customer ?? null;
+            self::fetch_term_fee($gateway, $charged, self::get_fee_basis($cart), $customer ? $customer->get_billing_country() : '');
+            return isset(self::$unquoted_terms[$charged]);
         }
 
         /**
@@ -719,7 +813,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
             if (is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) < 200 || (int) wp_remote_retrieve_response_code($response) >= 300) {
                 $code = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
-                self::log_unquoted_surcharge(
+                self::record_unquoted_surcharge(
                     $days,
                     $code > 0 ? "the pricing service answered HTTP $code" : 'the pricing service could not be reached'
                 );
@@ -727,7 +821,19 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             }
             $body = json_decode($response['body'] ?? '', true);
             if (!is_array($body) || !isset($body['buyer_fee_share'])) {
-                self::log_unquoted_surcharge($days, 'the answer from the pricing service could not be read');
+                self::record_unquoted_surcharge($days, 'the answer from the pricing service could not be read');
+                return self::$fee_cache[$days] = null;
+            }
+            // Refused BEFORE the cache write: a quote in another currency
+            // cannot be charged, and caching it as a success left the
+            // failure re-reported and the method withheld for the whole
+            // TTL after the pricing service recovered (ABN-546).
+            $answer_currency = strtoupper(trim(strval($body['currency'] ?? '')));
+            if ($answer_currency !== '' && $answer_currency !== strtoupper($request['currency'])) {
+                self::record_unquoted_surcharge(
+                    $days,
+                    "it was quoted in $answer_currency while the basket is in " . strtoupper($request['currency'])
+                );
                 return self::$fee_cache[$days] = null;
             }
 
@@ -886,7 +992,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             }
 
             $selected = self::get_selected_term($gateway);
-            if ($selected === null) {
+            if ($selected === null || !self::has_chargeable_surcharge($gateway, $selected)) {
                 return;
             }
 
@@ -898,16 +1004,16 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             }
             // The fee enters the basket at the pricing endpoint's output
             // (any FX conversion happened on the request inputs, TWO-25104)
-            // — never re-converted store-side. A response echoing a
-            // different currency than the cart's would land as a raw
-            // number in the wrong money; skip it rather than mischarge.
-            // Normalised the same way the FX layer normalises currency
-            // codes (case/whitespace) so this guard can't be defeated by
-            // a harmlessly-differently-cased echo.
+            // — never re-converted store-side. Backstop only: fetch_term_fee
+            // refuses a mismatched answer before caching it, so this can fire
+            // only on a success already sitting in the transient store.
+            // Normalised the same way the FX layer normalises currency codes
+            // (case/whitespace) so it can't be defeated by a
+            // harmlessly-differently-cased echo.
             $fee_currency = strtoupper(trim((string) $fee['currency']));
             $cart_currency = strtoupper(get_woocommerce_currency());
             if ($fee_currency !== '' && $fee_currency !== $cart_currency) {
-                self::log_unquoted_surcharge($selected, "it was quoted in $fee_currency while the basket is in $cart_currency");
+                self::record_unquoted_surcharge($selected, "it was quoted in $fee_currency while the basket is in $cart_currency");
                 return;
             }
 
@@ -1105,7 +1211,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         {
             self::$fee_cache = [];
             self::$fx_failure_logged = false;
-            self::$unquoted_logged = [];
+            self::$unquoted_terms = [];
             self::$surcharge_type_failure_logged = [];
         }
     }
