@@ -292,7 +292,9 @@ prices an order under a configuration nobody chose, and nobody is told.
   default term in fee-difference mode — a term with no surcharge configured
   and an empty basket all withhold nothing and cost no pricing call. A failed
   quote is never cached, so recovery is the next request and every render
-  during an outage pays the quote's own timeout. The judgement runs on a checkout
+  during an outage pays the quote's own timeout. Gate and charge reach the wire
+  through the one quote helper on one ceiling, so the gate can never give up
+  sooner than the path that charges; the other plugins use the same ceiling. The judgement runs on a checkout
   page carrying the basket the fee applies to: the cart page renders no payment
   method, the order-pay endpoint's session cart is not the basket being paid
   for, an admin request is never judged on it, and the admin's own fee preview

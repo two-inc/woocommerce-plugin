@@ -39,6 +39,13 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         public const KNOWN_SURCHARGE_TYPES = ['none', 'percentage', 'fixed', 'fixed_and_percentage'];
 
         /**
+         * Ceiling (seconds) for every buyer surcharge quote: a gate giving up
+         * sooner than the path that charges withholds a method the charge
+         * would have priced (ABN-546).
+         */
+        public const SURCHARGE_PRICING_TIMEOUT = 30;
+
+        /**
          * Safety-net TTL for the cross-request term-fee cache (see
          * fetch_term_fee): the cache key already changes whenever the
          * cart/currency/country/term or the merchant's surcharge config
@@ -806,10 +813,14 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return self::$fee_cache[$days] = $cached;
             }
 
-            // This quote sits on the checkout render path and is fail-soft on
-            // transport errors, so cap it well under make_request's 30s
-            // default to avoid stalling checkout on a slow pricing call.
-            $response = $gateway->make_request('/v1/pricing/order/fee', $request, 'POST', array(), null, 10);
+            $response = $gateway->make_request(
+                '/v1/pricing/order/fee',
+                $request,
+                'POST',
+                array(),
+                null,
+                self::SURCHARGE_PRICING_TIMEOUT
+            );
 
             if (is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) < 200 || (int) wp_remote_retrieve_response_code($response) >= 300) {
                 $code = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);

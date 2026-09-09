@@ -219,6 +219,7 @@ final class BrandConfigSpec
             'testUnquotableSurchargeIsReportedNotSilentlyDropped',
             'testAResolvedZeroSurchargeIsNotReportedAsAFailure',
             'testWrongCurrencyQuoteSaysWhyTheSurchargeIsMissing',
+            'testSurchargePricingCeilingIsSharedByEveryPath',
             'testGateWithholdsMethodWhenTheChargedTermCouldNotBePriced',
             'testMerchantRatesRefuseAnUnrenderableAnswer',
             'testTermFeeChipsCarryNoStandInZero',
@@ -9173,6 +9174,93 @@ final class BrandConfigSpec
                 return array_shift($this->responses) ?? new WP_Error();
             }
         };
+    }
+
+    /**
+     * ABN-546. Gate and charge quote on the same ceiling, and neither leaves
+     * the timeout to the request helper's own default.
+     */
+    private static function testSurchargePricingCeilingIsSharedByEveryPath(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            /** @var array<int,mixed> */
+            public $timeouts = [];
+
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                $options = [
+                    'surcharge_type' => 'percentage',
+                    'payment_terms_days' => [30],
+                    'surcharge_grid' => [30 => ['percentage' => 2.0]],
+                ];
+                return $options[$key] ?? $empty_value ?? '';
+            }
+
+            public function get_merchant_available_terms(): array
+            {
+                return [30];
+            }
+
+            // Defaults to null where the real helper defaults to a number: a
+            // call site that passes nothing must be visible as nothing.
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = null)
+            {
+                if (strpos($endpoint, '/v1/pricing/order/fee') === false) {
+                    return new WP_Error();
+                }
+                $this->timeouts[] = $timeout;
+                return ['response' => ['code' => 200], 'body' => json_encode(['buyer_fee_share' => '2.00', 'currency' => 'EUR'])];
+            }
+        };
+
+        $cases = [
+            [static function () use ($gateway) {
+                WC_Twoinc_Payment_Terms::surcharge_quote_failed($gateway);
+            }, 'the availability gate'],
+            [static function () {
+                WC_Twoinc_Payment_Terms::apply_cart_fee(new StubFeeCart());
+            }, 'the charging path'],
+        ];
+
+        $helperDefault = (new ReflectionMethod(WC_Twoinc::class, 'make_request'))
+            ->getParameters()[5]
+            ->getDefaultValue();
+
+        self::withGatewayInstance($gateway, static function () use ($gateway, $cases, $helperDefault) {
+            $seen = [];
+            foreach ($cases as $case) {
+                list($invoke, $description) = $case;
+
+                WC_Twoinc_Payment_Terms::reset_fee_cache();
+                $GLOBALS['__twoinc_test_transients'] = [];
+                WC()->session = new StubSession();
+                WC()->session->set('chosen_payment_method', $gateway->id);
+                WC()->customer = new StubCustomer('NO');
+                WC()->cart = new StubFeeCart();
+                $gateway->timeouts = [];
+
+                $invoke();
+
+                TinyAssert::true(count($gateway->timeouts) > 0, 'nothing was priced at all: ' . $description);
+                foreach ($gateway->timeouts as $timeout) {
+                    TinyAssert::true(is_int($timeout), 'the pricing call must carry its own ceiling: ' . $description);
+                    TinyAssert::same(
+                        WC_Twoinc_Payment_Terms::SURCHARGE_PRICING_TIMEOUT,
+                        $timeout,
+                        'the ceiling must come from the one surcharge-pricing constant: ' . $description
+                    );
+                    $seen[] = $timeout;
+                }
+            }
+
+            TinyAssert::same(1, count(array_unique($seen)), 'gate and charge must price on one ceiling');
+            TinyAssert::true(is_int($helperDefault), 'the request helper still has a default to fall through to');
+        });
     }
 
     private static function testWrongCurrencyQuoteSaysWhyTheSurchargeIsMissing(): void
