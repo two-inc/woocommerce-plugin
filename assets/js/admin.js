@@ -276,8 +276,7 @@ jQuery(function ($) {
     const $defaultTerm = $("#" + prefix + "default_payment_term");
     const daysLabel = twoinc_admin.days_label || "%s days";
 
-    // Same rule as the server's one normalisation of the stored value: a run of digits over
-    // zero denotes a term, anything else denotes none.
+    // Same rule as WC_Twoinc_Stored_Term::days(), the server's one reading of the stored value.
     function customDay() {
       const raw = String($customDays.val() == null ? "" : $customDays.val()).trim();
       return /^\d+$/.test(raw) && Number(raw) > 0 ? Number(raw) : 0;

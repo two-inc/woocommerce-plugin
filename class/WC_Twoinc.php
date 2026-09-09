@@ -2451,10 +2451,13 @@ if (!class_exists('WC_Twoinc')) {
          */
         public static function keep_stored_custom_payment_term($value, $old_value)
         {
-            if (!is_array($value) || !is_array($old_value)) {
+            if (!is_array($value)) {
                 return $value;
             }
-            $stored = WC_Twoinc_Stored_Term::text($old_value['payment_terms_custom_days'] ?? '');
+            // No row yet on a fresh install, so the stored term is nothing and any value is a change.
+            $stored = is_array($old_value)
+                ? WC_Twoinc_Stored_Term::text($old_value['payment_terms_custom_days'] ?? '')
+                : '';
             if (!array_key_exists('payment_terms_custom_days', $value)) {
                 // A write that omits the row would drop the value; only an empty one removes it.
                 $value['payment_terms_custom_days'] = $stored;
@@ -2512,9 +2515,9 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function validate_payment_terms_custom_days_field($key, $value)
         {
-            // Absent from the post is "leave it alone", not "remove it": a partial save through
-            // another route posts no row, and the admin form always posts one.
-            if ($value === null) {
+            // Only an empty row removes the value: a post that carries no row, or something other
+            // than a value, leaves it alone. The admin form always posts a row.
+            if (!is_scalar($value)) {
                 return $this->stored_custom_payment_term();
             }
 

@@ -5098,6 +5098,15 @@ final class BrandConfigSpec
             ['45', '', '', [14], '', '', 'removal is accepted'],
             ['45', null, '45', [14], '', '', 'a post carrying no row leaves the stored term alone'],
             [
+                '45',
+                [],
+                '45',
+                [14],
+                '',
+                '',
+                'a post carrying something other than a value leaves the stored term alone',
+            ],
+            [
                 '30',
                 '30',
                 '',
@@ -5310,6 +5319,20 @@ final class BrandConfigSpec
 
             TinyAssert::same($expected, $guarded['payment_terms_custom_days'] ?? '', $description);
             TinyAssert::same('edited', $guarded['title'], $description . ' — and every sibling field is written as posted');
+        }
+
+        // A fresh install has no settings row, so there is nothing to keep and nothing to plant.
+        $fresh = [
+            ['30', '', 'a value written where no row exists at all is refused'],
+            ['', '', 'an empty row is written through'],
+        ];
+        foreach ($fresh as [$incoming, $expected, $description]) {
+            $guarded = WC_Twoinc::keep_stored_custom_payment_term(
+                ['payment_terms_custom_days' => $incoming],
+                false
+            );
+
+            TinyAssert::same($expected, $guarded['payment_terms_custom_days'], $description);
         }
     }
 
