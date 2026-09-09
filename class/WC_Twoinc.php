@@ -2713,15 +2713,12 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // A cached verdict spares the call, EXCEPT a cached 'ok' with no
-            // merchant identity resolved: the Validate button caches an 'ok'
-            // for a TYPED key, and only a live check of the STORED key
-            // persists merchant_id. Without it the constructor early-returns,
-            // the order hooks never register and the account-setup banner
-            // never clears — and this is the one screen that can heal it
-            // (ABN-537).
+            // merchant identity: the Validate button caches an 'ok' for a
+            // TYPED key, and only a live check of the STORED key persists
+            // merchant_id (ABN-537).
             $cached = get_transient(self::verification_cache_key($api_key));
             if (is_array($cached) && isset($cached['status'])) {
-                if ($cached['status'] !== 'ok' || $this->get_merchant_id()) {
+                if ($cached['status'] !== 'ok' || (string) $this->get_merchant_id() !== '') {
                     return;
                 }
             }
@@ -2796,7 +2793,7 @@ if (!class_exists('WC_Twoinc')) {
             if (isset($response['body'])) {
                 $body = json_decode($response['body'], true);
                 $code = $response['response']['code'];
-                if ($code == 200 && isset($body['id']) && !$api_key) {
+                if ($code == 200 && isset($body['id']) && (string) $body['id'] !== '' && !$api_key) {
                     // Only persist when verifying the saved API key. verify_api_key
                     // returns {id, short_name}; cache both for the settings display.
                     if ((string) $this->get_option('merchant_id') !== (string) $body['id']) {
@@ -2851,7 +2848,10 @@ if (!class_exists('WC_Twoinc')) {
             $code = isset($result['code']) ? (int) $result['code'] : null;
             if ($code === 200) {
                 // A captive portal or maintenance page answers 200 too; with no merchant record there is no identity to offer the method under.
-                if (!isset($result['body']['id'])) {
+                // An empty id is no record either: reported as 'ok' it left the
+                // settings screen re-verifying on every load, never resolving
+                // an identity (ABN-537).
+                if (!isset($result['body']['id']) || (string) $result['body']['id'] === '') {
                     return ['status' => 'error', 'code' => $code];
                 }
                 return ['status' => 'ok', 'code' => $code];

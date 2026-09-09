@@ -277,6 +277,7 @@ final class BrandConfigSpec
             'testSettingsScreenVerificationDoesNotFireOnOtherAdminPages',
             'testSettingsScreenVerificationSpendsNoCallWhenTheVerdictIsCached',
             'testCachedOkStillVerifiesWhileTheMerchantIdIsUnresolved',
+            'testAnEmptyMerchantIdIsNoRecordSoTheScreenStopsRetrying',
             'testSettingsScreenVerificationTimeoutIsBoundedForAPageRender',
             'testCachedStatusMissTimeoutIsShortNotAdminDefault',
             'testApiKeyNoticesCarryTwoProductNameAndStatusPlaceholder',
@@ -10341,6 +10342,9 @@ final class BrandConfigSpec
 
             public $seen_timeout = null;
 
+            /** Queued make_request() returns; empty means the default 200 with an id. */
+            public $responses = [];
+
             public function __construct($api_key, $merchant_id)
             {
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
@@ -10367,7 +10371,8 @@ final class BrandConfigSpec
             {
                 $this->make_request_calls++;
                 $this->seen_timeout = $timeout;
-                return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
+                return array_shift($this->responses)
+                    ?: ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
             }
         };
     }
@@ -10463,12 +10468,9 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-537. The Validate button caches an 'ok' for the key the merchant
-     * TYPED, and only a live check of the STORED key persists merchant_id. A
-     * cache read that honoured that 'ok' left the identity unresolved, which
-     * early-returns the constructor before the order hooks register and leaves
-     * the account-setup banner up on every other admin page — and this is the
-     * one screen that can heal it.
+     * ABN-537. Only a live check of the STORED key persists merchant_id, so a
+     * cache read that honoured the Validate button's 'ok' for a TYPED key left
+     * the identity unresolved on the one screen that can heal it.
      */
     private static function testCachedOkStillVerifiesWhileTheMerchantIdIsUnresolved(): void
     {
@@ -10478,6 +10480,7 @@ final class BrandConfigSpec
 
         $cases = [
             [['status' => 'ok', 'code' => 200, 'body' => null], '', 1, "a cached 'ok' with no merchant identity"],
+            [['status' => 'error', 'code' => 200, 'body' => null], '', 0, 'a cached recordless 200'],
             [['status' => 'ok', 'code' => 200, 'body' => null], 'mid', 0, "a cached 'ok' with the identity resolved"],
             [['status' => 'unreachable', 'code' => null, 'body' => null], '', 0, 'a cached outage verdict'],
             [['status' => 'invalid_key', 'code' => 401, 'body' => null], '', 0, 'a cached rejection'],
@@ -10500,6 +10503,54 @@ final class BrandConfigSpec
      * ABN-537. wp_remote_request()'s 30s default stalled the settings page for
      * half a minute against an unreachable API.
      */
+    /**
+     * ABN-537. An empty id passes isset(), so a 200 carrying one read as 'ok'
+     * with nothing to resolve — and the settings screen, which re-verifies
+     * precisely while the identity is unresolved, then called on every load
+     * with nothing to converge on.
+     */
+    private static function testAnEmptyMerchantIdIsNoRecordSoTheScreenStopsRetrying(): void
+    {
+        $cases = [
+            [['id' => '42'], 'ok', '42', 'a real merchant id'],
+            [['id' => ''], 'error', '', 'an empty merchant id'],
+            // Non-empty but falsy in PHP: a truthiness test here would re-verify forever.
+            [['id' => 0], 'ok', '0', 'a merchant id of zero'],
+            [[], 'error', '', 'no id field at all'],
+        ];
+
+        foreach ($cases as $case) {
+            list($body, $expected_status, $expected_stored, $description) = $case;
+            $verdict = WC_Twoinc::categorize_verification_result(['body' => $body, 'code' => 200]);
+            TinyAssert::same($expected_status, $verdict['status'], "verdict for $description");
+
+            self::onGatewaySettingsScreen(WC_Twoinc_Brand::get('gateway_id'));
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $gateway = self::verificationCountingGateway('key', '');
+            $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode($body)]];
+            $gateway->verify_api_key_action('woocommerce_page_wc-settings');
+            TinyAssert::same($expected_stored, (string) $gateway->options['merchant_id'], "stored merchant id for $description");
+
+            // The second page load must not call again: either the identity
+            // resolved, or the verdict is no longer 'ok'.
+            $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode($body)]];
+            $gateway->verify_api_key_action('woocommerce_page_wc-settings');
+            TinyAssert::same(1, $gateway->make_request_calls, "calls across two page loads for $description");
+        }
+
+        // A 200 carrying an empty id must not overwrite an identity that IS
+        // resolved — the old write wiped it and dropped every cached
+        // derivative with it.
+        self::onGatewaySettingsScreen(WC_Twoinc_Brand::get('gateway_id'));
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $resolved = self::verificationCountingGateway('key', '42');
+        $resolved->responses = [['response' => ['code' => 200], 'body' => json_encode(['id' => ''])]];
+        $resolved->verify_api_key(null, 10);
+        TinyAssert::same('42', (string) $resolved->options['merchant_id'], 'a resolved identity survives an empty id in the answer');
+
+        unset($_GET['tab'], $_GET['section']);
+    }
+
     private static function testSettingsScreenVerificationTimeoutIsBoundedForAPageRender(): void
     {
         self::onGatewaySettingsScreen(WC_Twoinc_Brand::get('gateway_id'));
