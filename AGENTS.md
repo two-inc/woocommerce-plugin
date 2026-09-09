@@ -395,8 +395,10 @@ The merchant record refreshes on an event, never on expiry
   reads the same resolver, so the reference term it prices against moves with
   the preference.
 - **Nothing but the admin puts a day count in `default_payment_term`.** The
-  field's first option is Automatic, an empty value, and the save validator
-  stores empty for any posted default the offered set does not carry. That
+  field's first option is Automatic, an empty value; the save validator stores
+  empty for any posted default the offered set does not carry, and the admin
+  JS that rebuilds the select as terms are ticked re-creates that option and
+  keeps only a selection still offered. That
   select posts on every save, so a synthesised day count is stored, becomes the
   resolver's first step and makes every later step unreachable. The merchant's
   own default term is 0 in its option row when the record carries none; the row

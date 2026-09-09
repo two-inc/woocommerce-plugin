@@ -3773,6 +3773,8 @@ if (!class_exists('WC_Twoinc')) {
                 'ajax_url' => admin_url('admin-ajax.php'),
                 // %s days label for the live Default Payment Term rebuild.
                 'days_label' => __('%s days', 'twoinc-payment-gateway'),
+                // Its leading empty option, which the rebuild re-creates.
+                'automatic_label' => __('Automatic', 'twoinc-payment-gateway'),
                 // Decimal separator for rendering fetched inline fee amounts.
                 'decimal_separator' => wc_get_price_decimal_separator(),
                 // The live surcharge grid mirrors ticked terms ∩ this list, like the PHP render.

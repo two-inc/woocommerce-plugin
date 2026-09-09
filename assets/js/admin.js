@@ -314,6 +314,7 @@ jQuery(function ($) {
     const $customDays = $("#" + prefix + "payment_terms_custom_days");
     const $defaultTerm = $("#" + prefix + "default_payment_term");
     const daysLabel = twoinc_admin.days_label || "%s days";
+    const automaticLabel = twoinc_admin.automatic_label || "Automatic";
 
     // Same rule as WC_Twoinc_Stored_Term::days(), the server's one reading of the stored value.
     function customDay() {
@@ -355,6 +356,9 @@ jQuery(function ($) {
       const terms = offeredTerms();
       const current = parseInt($defaultTerm.val(), 10) || 0;
       $defaultTerm.empty();
+      // First, so a selection that is no longer offered lands here rather than
+      // on a day count nobody chose (ABN-548).
+      $defaultTerm.append($("<option></option>").attr("value", "").text(automaticLabel));
       $.each(terms, function (_, days) {
         $defaultTerm.append(
           $("<option></option>").attr("value", days).text(daysLabel.replace("%s", days))
@@ -362,8 +366,6 @@ jQuery(function ($) {
       });
       if (terms.indexOf(current) !== -1) {
         $defaultTerm.val(current);
-      } else if (terms.length) {
-        $defaultTerm.val(terms[0]);
       }
     }
 
