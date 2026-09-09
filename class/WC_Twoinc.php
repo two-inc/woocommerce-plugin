@@ -2625,8 +2625,8 @@ if (!class_exists('WC_Twoinc')) {
          *   cache miss) must pass a short timeout — WordPress's own
          *   wp_remote_request() default the underlying make_request() falls
          *   back to is 30s, which would otherwise block that page render for
-         *   up to 30s while Two is unreachable (TWO-25326 follow-up, review
-         *   round 1). Admin-initiated checks (the settings page, on load or
+         *   up to 30s while Two is unreachable (TWO-25326 follow-up).
+         *   Admin-initiated checks (the settings page, on load or
          *   on typing) keep the longer default since a slower-but-certain
          *   answer is the right trade there.
          */
@@ -3595,9 +3595,9 @@ if (!class_exists('WC_Twoinc')) {
 
             $to_status = strtolower($to_status);
             // Cancelled/refunded are checked FIRST and unconditionally,
-            // ahead of the merchant-configured trigger set (TWO-25386
-            // review finding): 'cancelled' and 'refunded' are excluded from
-            // the fulfilment-trigger multiselect's own options list, but
+            // ahead of the merchant-configured trigger set (TWO-25386):
+            // 'cancelled' and 'refunded' are excluded from the
+            // fulfilment-trigger multiselect's own options list, but
             // this ordering is the actual safety net — it holds even
             // against a stale/hand-edited settings row that somehow
             // contains one of them, so a cancellation can never be

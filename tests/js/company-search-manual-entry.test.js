@@ -500,7 +500,7 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
-  describe("CSS overrides survive a host theme's own styling (#30.x.5, round 3)", () => {
+  describe("CSS overrides survive a host theme's own styling (#30.x.5)", () => {
     /**
      * jsdom's cascade does not resolve `!important` + specificity across two
      * separate sheets, so a rendered-style assertion here would be vacuous
@@ -558,7 +558,7 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
-  describe("placement below the visible field, not overlapping it (#30.x.5.3 round 3; reworked #30.x.9)", () => {
+  describe("placement below the visible field, not overlapping it (#30.x.5.3; reworked #30.x.9)", () => {
     test("#search_company_btn is appended into .woocommerce-input-wrapper, not #billing_company_field directly", () => {
       // WooCommerce core's own wrapper is around just the <input>, no label
       // inside it, so a button appended as its last child lands in normal flow
@@ -600,7 +600,7 @@ describe("company-search manual-entry affordance", () => {
       expect(btnStyle.textAlign).toBe("end");
     });
 
-    test("the wrapper is blockified explicitly, not left to whatever the host theme declares (round 1 review)", () => {
+    test("the wrapper is blockified explicitly, not left to whatever the host theme declares", () => {
       // `.woocommerce-input-wrapper` is a <span> — inline by default — and a
       // theme declaring it `display: flex` would put the button back on the
       // input's own line, re-creating the overlap this removes.
@@ -612,7 +612,7 @@ describe("company-search manual-entry affordance", () => {
       expect(m[1]).toMatch(/position:\s*relative/);
     });
 
-    test("#search_company_btn declares its below-the-field gap explicitly (round 1 review — Vader)", () => {
+    test("#search_company_btn declares its below-the-field gap explicitly", () => {
       // Mutation-caught gap: a mutation deleting `margin-top` passed the full
       // suite while `display`/`position`/`text-align` were asserted.
       const m = /^#search_company_btn,?\s*(?:#\S+\s*)*\{([^}]*)\}/m.exec(
@@ -622,7 +622,7 @@ describe("company-search manual-entry affordance", () => {
       expect(m[1]).toMatch(/margin-top:\s*4px/);
     });
 
-    test("#search_company_btn keeps width: 100% paired with box-sizing: border-box (round 2 review — Vader)", () => {
+    test("#search_company_btn keeps width: 100% paired with box-sizing: border-box", () => {
       // A <button> is a form control: at `width: auto` it shrink-wraps its own
       // label regardless of `display: block`, which makes `text-align: end` a
       // no-op. `box-sizing: border-box` is what stops the pair overflowing, so
@@ -945,8 +945,8 @@ describe("company-search manual-entry affordance", () => {
       const $back = helper.getSearchCompanyBtnNode();
 
       expect($back[0].style.display).toBe("none");
-      // In place, not floating: inside .woocommerce-input-wrapper (round 3,
-      // #30.x.5.3), so it renders immediately below the visible input box.
+      // In place, not floating: inside .woocommerce-input-wrapper (#30.x.5.3),
+      // so it renders immediately below the visible input box.
       expect($back.parent().hasClass("woocommerce-input-wrapper")).toBe(true);
       expect($back.closest("#billing_company_field").length).toBe(1);
     });
@@ -1000,7 +1000,7 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
-  describe("focus visibility and Enter/Space activation on the way back out (#30.x.7, round 4)", () => {
+  describe("focus visibility and Enter/Space activation on the way back out (#30.x.7)", () => {
     function stylesheetSource() {
       return fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8");
     }
@@ -1022,9 +1022,9 @@ describe("company-search manual-entry affordance", () => {
       expect(m[1]).toMatch(/border-color:\s*#808080\s*!important/);
     });
 
-    test("#search_company_btn declares explicit, tight padding (round 5)", () => {
-      // The round-5 border sits flush against the box, so the box has to be
-      // sized close to the text rather than left on the browser's own default
+    test("#search_company_btn declares explicit, tight padding", () => {
+      // The border sits flush against the box, so the box has to be sized
+      // close to the text rather than left on the browser's own default
       // button padding.
       const m = /^#search_company_btn,?\s*(?:#\S+\s*)*\{([^}]*)\}/m.exec(stylesheetSource());
       expect(m).not.toBeNull();

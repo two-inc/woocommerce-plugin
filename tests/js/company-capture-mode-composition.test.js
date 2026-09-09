@@ -327,9 +327,9 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
     // The guest case `restoreCapturedCompany()`'s own docblock names as
     // live-confirmed: WooCommerce's rendered value (or loadStorageInputs') is
     // the only source, so `window.twoinc.billing_company`/`company_id` are both
-    // undefined. Round 4 taught this function to CAPTURE such a pair; the
-    // search field is now the surface that has to SHOW it, and only the echo
-    // path was ever painted into it.
+    // undefined. This function CAPTURES such a pair; the search field is now
+    // the surface that has to SHOW it, and only the echo path was ever painted
+    // into it.
     test.each([
       ["a sole trader", "TWO:ST:GB:0f8c2b1a", "A Sole Trader"],
       ["a registry company", "912345678", "ACME Widgets Ltd"]

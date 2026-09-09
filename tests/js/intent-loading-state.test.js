@@ -91,7 +91,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       '<li class="wc_payment_method"><div class="payment_box">' +
         // The ARIA roles are the ones the PHP renderer emits, so the reveal
         // ordering that makes them announce anything is exercised on real
-        // markup (review round 2).
+        // markup.
         '<div class="twoinc-pay-box twoinc-loader hidden" role="status">' +
         '<span class="twoinc-loader__spinner" aria-hidden="true"></span>' +
         '<span class="twoinc-loader__text">Checking availability</span>' +
@@ -168,8 +168,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     test("with order intent disabled, no check is ever armed or issued", () => {
       // The `enable_order_intent !== "yes"` gate was entirely unpinned: deleting the
       // block, and loosening it to a truthiness test, both survived. No suite anywhere
-      // set the flag to anything but "yes" (review round 8). It is the merchant switch
-      // for the whole of this ticket's UI, so "off stays off" is worth a test.
+      // set the flag to anything but "yes". It is the merchant switch for the whole of
+      // this ticket's UI, so "off stays off" is worth a test.
       const ajax = harness.stubAjax($);
       try {
         window.twoinc.enable_order_intent = "no";
@@ -194,7 +194,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // `isReadyApprovalCheck()` ends in `!isAnyElementEmpty(values)`, and replacing
       // that with `return true` survived: the organisation-number guard above it is
       // pinned, so nothing exercised the array check — which exists for exactly this
-      // case, a number present but the name or country blank (review round 8).
+      // case, a number present but the name or country blank.
       const ajax = harness.stubAjax($);
       try {
         instance.customerCompany = {
@@ -230,12 +230,11 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("the loader follows with the request, not with the arming", () => {
-      // Round 5 reverted showing the loader on arming: it decoupled the loading
-      // state's lifetime from the request's, and four review rounds of stranded,
-      // blanked and duplicated spinners came out of that one change. Tied to the
-      // request, "the loader is up exactly while a request is outstanding" holds
-      // by construction. The visible cost is this gap, which is why it is pinned
-      // rather than left implicit.
+      // Showing the loader on arming decoupled the loading state's lifetime from
+      // the request's, and stranded, blanked and duplicated spinners came out of
+      // that one change. Tied to the request, "the loader is up exactly while a
+      // request is outstanding" holds by construction. The visible cost is this
+      // gap, which is why it is pinned rather than left implicit.
       const ajax = harness.stubAjax($);
       try {
         showStaleDecline();
@@ -278,10 +277,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // flight, so the older verdict is stale either way.
       instance.getApproval();
       expect(instance.orderIntentCheck.interval).not.toBeNull();
-      // Through showStaleDecline() for its positive control (review round 1):
-      // `shown()` is false both for a hidden box and for a box that does not
-      // exist, so without asserting the box is UP first, a typo in the selector
-      // made the assertion below pass on nothing.
+      // Through showStaleDecline() for its positive control: `shown()` is false
+      // both for a hidden box and for a box that does not exist, so without
+      // asserting the box is UP first, a typo in the selector made the
+      // assertion below pass on nothing.
       showStaleDecline();
 
       instance.getApproval();
@@ -336,11 +335,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("updateElements() still clears a stale verdict", () => {
-      // On an INCOMPLETE form, deliberately (review round 5). With a complete one
-      // this passed with `updateElements()`'s own clear deleted, because
-      // `getApproval()` clears too — so it pinned nothing. Incomplete, getApproval()
-      // takes its readiness early-return and this call is the only thing left that
-      // can hide the box.
+      // On an INCOMPLETE form, deliberately. With a complete one this passed with
+      // `updateElements()`'s own clear deleted, because `getApproval()` clears too —
+      // so it pinned nothing. Incomplete, getApproval() takes its readiness
+      // early-return and this call is the only thing left that can hide the box.
       showStaleDecline();
       instance.customerCompany.organization_number = "";
 
@@ -352,7 +350,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     test("updateElements() clears a stale approval too", () => {
       // Its own test rather than a second assertion on the one above: asserting
       // the approved box is hidden without ever showing it passes on an absent
-      // element (review round 1).
+      // element.
       dom.togglePaySubtitleDesc("intent-approved");
       expect(shown(".twoinc-intent-approved")).toBe(true);
       instance.customerCompany.organization_number = "";
@@ -364,11 +362,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
     test("a verdict about a form the buyer has since broken does not survive", () => {
       // This is the behaviour the two tests above depend on, stated as its own
-      // property (review round 5 asked whether it was wanted). It is: the verdict
-      // named a company that is no longer captured, so leaving it up would have the
-      // tile asserting something about a company the buyer has removed. The tile
-      // going blank is correct and self-correcting — completing the form arms a
-      // fresh check.
+      // property. It is: the verdict named a company that is no longer captured, so
+      // leaving it up would have the tile asserting something about a company the
+      // buyer has removed. The tile going blank is correct and self-correcting —
+      // completing the form arms a fresh check.
       showStaleDecline();
       $("#company_id").val("");
       instance.customerCompany.organization_number = "";
@@ -409,7 +406,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // The other half, and the one that strands a spinner: the request is already
       // out when the buyer empties a field. Its answer describes a form that no
       // longer exists, so it must not paint — and the loader must not sit there
-      // waiting for it (review round 5).
+      // waiting for it.
       const ajax = harness.stubAjax($);
       try {
         issueACheck(ajax);
@@ -459,8 +456,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       try {
         instance.getApproval();
         jest.advanceTimersByTime(1000);
-        // Loader-up asserted here too, not only on the approved path (review
-        // round 1) — otherwise "loader down afterwards" is one-sided.
+        // Loader-up asserted here too, not only on the approved path — otherwise
+        // "loader down afterwards" is one-sided.
         expect(shown(".twoinc-loader")).toBe(true);
         expect($(":input[value='" + GATEWAY_ID + "']").prop("checked")).toBe(true);
 
@@ -472,10 +469,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         expect($(".twoinc-pay-box.twoinc-err-payment-default").text()).toBe(
           "ACME Widgets Ltd (12345678)"
         );
-        // The gateway is deselected under the buyer (review round 2). This is
-        // the behaviour the failure boxes' `role="alert"` — assertive, not
-        // polite — is justified by, and it was asserted nowhere: settling
-        // through the real deferred is what reaches it, since
+        // The gateway is deselected under the buyer. This is the behaviour
+        // the failure boxes' `role="alert"` — assertive, not polite — is
+        // justified by, and it was asserted nowhere: settling through the
+        // real deferred is what reaches it, since
         // processOrderIntentResponse() alone does not deselect.
         expect($(":input[value='" + GATEWAY_ID + "']").prop("checked")).toBe(false);
       } finally {
@@ -496,7 +493,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
      * The third argument is the failure flag the real `.fail` handler passes:
      * which jQuery callback we came from is a fact only the caller has, and
      * sniffing it off the payload read a `status` field in a 200 response BODY as
-     * an HTTP status (review round 3).
+     * an HTTP status.
      */
     function failTheCheckWith(ajax, response) {
       instance.getApproval();
@@ -509,12 +506,12 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     }
 
     test("a 200 whose body is null does not strand the loader", () => {
-      // Every read of the response would be a TypeError, thrown AFTER
-      // `stillCurrent()` has released `inFlightSeq`/`inFlightXhr` and BEFORE the paint
-      // is armed — so the loader was up for the rest of the page with nothing able to
-      // reset it, since the abandon gate reads false on every flag by then. Same class
-      // as the round-1 `responseJSON` and `Array.append` throws, but on the SUCCESS
-      // path, which those guards never covered (review round 8).
+      // Every read of the response would be a TypeError, thrown AFTER `stillCurrent()`
+      // has released `inFlightSeq`/`inFlightXhr` and BEFORE the paint is armed — so
+      // the loader was up for the rest of the page with nothing able to reset it,
+      // since the abandon gate reads false on every flag by then. Same class as the
+      // `responseJSON` and `Array.append` throws, but on the SUCCESS path, which the
+      // `.fail`-branch guards never cover.
       const ajax = harness.stubAjax($);
       try {
         issueACheck(ajax);
@@ -537,8 +534,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // TypeError. The throw happened BEFORE the only code that renders a verdict
       // and takes the loader down, so the tile spun forever. Pre-existing, but
       // the loader now goes up a second earlier and is the thing that cleared the
-      // previous verdict, so a stranded loader is now the whole tile (review
-      // round 1).
+      // previous verdict, so a stranded loader is now the whole tile.
       const ajax = harness.stubAjax($);
       try {
         failTheCheckWith(ajax, { approved: false, status: 502 });
@@ -551,9 +547,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("an error_code-only failure body still routes to the phone box", () => {
-      // The `error_code` fallback was rewritten in round 1 (`"x" in obj && obj.x`
-      // -> `obj.x`) and covered by nothing — deleting the whole branch passed
-      // every test (review round 2).
+      // The `error_code` fallback reads `obj.error_code` directly; deleting
+      // the whole branch passed every test.
       const ajax = harness.stubAjax($);
       try {
         failTheCheckWith(ajax, {
@@ -572,7 +567,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     test("a real transport failure deselects the gateway", () => {
       // The fail handler's own deselection, reached through the real deferred —
       // `failTheCheckWith()` calls processOrderIntentResponse() directly and so
-      // cannot see it (review round 2).
+      // cannot see it.
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
@@ -594,8 +589,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // The ONLY route to `.twoinc-err-phone-number` called
       // `invalidFields.append()`, which Array does not have — so it threw every
       // time and that box has never once been on screen. It gets its red border
-      // in this pass, which would have been styling unreachable UI (review round
-      // 1).
+      // in this pass, which would have been styling unreachable UI.
       const ajax = harness.stubAjax($);
       try {
         failTheCheckWith(ajax, {
@@ -606,7 +600,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
         expect(shown(".twoinc-err-phone-number")).toBe(true);
         // Positive controls, so "the generic box is not showing" cannot pass on a
-        // missing element (review round 2).
+        // missing element.
         expect($(".twoinc-pay-box.twoinc-err-payment-default").length).toBe(1);
         expect(shown(".twoinc-err-payment-default")).toBe(false);
         expect($(".twoinc-pay-box.twoinc-loader").length).toBe(1);
@@ -659,8 +653,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         expect(shown(".twoinc-loader")).toBe(false);
 
         // And the counter is reset for the NEXT check, which is the only reason
-        // the reset in getApproval() exists (review round 2). Left at 10, a second
-        // price wait would give up after a single tick.
+        // the reset in getApproval() exists. Left at 10, a second price wait
+        // would give up after a single tick.
         instance.getApproval();
         jest.advanceTimersByTime(9000);
         expect(instance.orderIntentCheck.interval).not.toBeNull();
@@ -735,8 +729,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // This is what the second, re-asserted `checking-intent` call inside the
       // interval body is for: the re-armed pass arrives through the guard, which
       // returns without touching the timer, so the tick is where the loading
-      // state has to be true again. Round 1 shipped that line with no test at
-      // all — deleting it failed nothing.
+      // state has to be true again. That line shipped with no test at all —
+      // deleting it failed nothing.
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
@@ -822,7 +816,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     ]) {
       test("the loader comes down when " + trigger.name, () => {
         // The request has to be OUT for a loader to exist to take down: it goes up
-        // with the request, not with the arming (review round 5).
+        // with the request, not with the arming.
         issueACheck(ajax);
         const issued = ajax.calls.length;
 
@@ -832,7 +826,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
 
         // The superseded request is dropped rather than left running for an answer
-        // nobody will read (review round 5).
+        // nobody will read.
         expect(ajax.calls[issued - 1].abortedWhilePending).toBe(true);
 
         // What happens NEXT differs between the two and is asserted separately
@@ -845,8 +839,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // The parametrised tests above go through `issueACheck()`, which advances a
       // second first — so none of them is actually in the arming window, and
       // deleting `pendingCheck = false` from abandonOrderIntentCheck() survived the
-      // whole suite (review round 5). Unset, the 3s poller re-arms a check on a
-      // checkout already mid-submit.
+      // whole suite. Unset, the 3s poller re-arms a check on a checkout already
+      // mid-submit.
       instance.getApproval();
       instance.getApproval();
       expect(instance.orderIntentCheck.pendingCheck).toBe(true);
@@ -880,7 +874,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // running — and the unconditional re-arm then had `getApproval()`'s own clear
       // wipe the verdict anyway, with no repaint for at least a second, or at all
       // quickly for an approval (never cached). Every failed submit for an unrelated
-      // reason — a missing postcode — flickered the box (review round 7).
+      // reason — a missing postcode — flickered the box.
       dom.togglePaySubtitleDesc("intent-approved");
       expect(shown(".twoinc-intent-approved")).toBe(true);
       expect(instance.orderIntentCheck.interval).toBeNull();
@@ -895,7 +889,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     test("checkout_error re-arms, so the tile is not left blank", () => {
       // `checkout_error` does NOT fire `updated_checkout`, so nothing else would
       // run another check — the tile sat blank, no verdict and no spinner, for the
-      // rest of the page while the buyer corrected a field (review round 5).
+      // rest of the page while the buyer corrected a field.
       issueACheck(ajax);
       const issued = ajax.calls.length;
 
@@ -943,8 +937,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     test("an overlay that never clears gives up rather than spinning forever", () => {
       // This wait is the ONLY code that takes the loading state down, so an
       // overlay stuck up meant "Checking availability" for the rest of the page —
-      // the same defect the cart-total wait was bounded for in round 1, left
-      // unbounded here (review round 2).
+      // the same defect the cart-total wait is bounded for, left unbounded here.
       const ajax = harness.stubAjax($);
       try {
         blockCheckout();
@@ -1090,11 +1083,11 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     }
 
     test("a declining 200 is never routed by its body's own `status` field", () => {
-      // Mutation survivor found while verifying round 3: dropping the `isFailure`
-      // gate on the HTTP-status branch failed nothing. A 200 response BODY
-      // carrying `status: 400` and an `error_details` string was being read as an
-      // HTTP 400 and routed to the phone-number box — a wrong message on a
-      // perfectly good response, and `billing_phone` marked invalid for no reason.
+      // Mutation survivor: dropping the `isFailure` gate on the HTTP-status branch
+      // failed nothing. A 200 response BODY carrying `status: 400` and an
+      // `error_details` string was being read as an HTTP 400 and routed to the
+      // phone-number box — a wrong message on a perfectly good response, and
+      // `billing_phone` marked invalid for no reason.
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
@@ -1121,8 +1114,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // jQuery hands `.done` the parsed response BODY, so a field called `status`
       // in a perfectly good 200 was being read as an HTTP status — routing it down
       // the HTTP-error branch and, for a 5xx-looking value, refusing to cache a
-      // real verdict (review round 3). Which callback we came from is the fact
-      // that decides this, and only the caller knows it.
+      // real verdict. Which callback we came from is the fact that decides this,
+      // and only the caller knows it.
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
@@ -1139,11 +1132,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("an APPROVED verdict is deliberately not cached", () => {
-      // The cache exists so a decline is not re-asked on every checkout
-      // re-render; an approval is left to be re-checked, because the cart can
-      // change under it. Only the `else` branch writes the log, and nothing pinned
-      // that — adding a write to the approved branch passed every test (review
-      // round 4).
+      // The cache exists so a decline is not re-asked on every checkout re-render;
+      // an approval is left to be re-checked, because the cart can change under
+      // it. Only the `else` branch writes the log, and nothing pinned that —
+      // adding a write to the approved branch passed every test.
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
@@ -1161,7 +1153,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
     test("the tracking id from the response reaches the order field", () => {
       // Merchant-visible and covered by nothing: deleting both lines passed the
-      // whole suite (review round 4).
+      // whole suite.
       $("form[name='checkout']").append(
         "<input type='hidden' id='tracking_id' name='tracking_id' value='' />"
       );
@@ -1181,8 +1173,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     test("a transport failure is not cached, so the next check retries", () => {
       // A dropped connection is not a verdict. Cached, it declined this cart and
       // company for the rest of the page — permanently, since the cached branch
-      // disarms and no request is ever retried. One blip would lose the sale
-      // (review round 2).
+      // disarms and no request is ever retried. One blip would lose the sale.
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
@@ -1204,9 +1195,9 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
     for (const status of [400, 422, 499]) {
       test("a " + status + " business decline IS cached", () => {
-        // Parametrised over the window's LOWER boundary, its middle and its top
-        // (review round 7): adding 400 to RETRYABLE survived, and so did narrowing
-        // `>= 400` to `> 400`, because the only cacheable positive control was 422.
+        // Parametrised over the window's LOWER boundary, its middle and its top:
+        // adding 400 to RETRYABLE survived, and so did narrowing `>= 400` to `>
+        // 400`, because the only cacheable positive control was 422.
         instance.processOrderIntentResponse(
           { approved: false, status: status },
           "h" + status,
@@ -1220,7 +1211,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     for (const status of [500, 503]) {
       test("a " + status + " is a failure, not a verdict, so it is not cached", () => {
         // 500 exactly: widening `< 500` to `<= 500` survived, because the 5xx tests
-        // used 502 and 503 and never the boundary itself (review round 7).
+        // used 502 and 503 and never the boundary itself.
         instance.processOrderIntentResponse(
           { approved: false, status: status },
           "h" + status,
@@ -1233,8 +1224,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
     test("a cacheable verdict with no request hash is not filed under a blank key", () => {
       // Dropping the `hashedBody &&` guard survived: the pre-existing kill exercised a
-      // falsy hash on a NON-cacheable response, where the other guard already
-      // rejected it (review round 7).
+      // falsy hash on a NON-cacheable response, where the other guard already rejected
+      // it.
       instance.processOrderIntentResponse({ approved: false, status: 422 }, undefined, true);
 
       expect(Object.keys(instance.orderIntentLog).length).toBe(0);
@@ -1244,7 +1235,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // `getUnsecuredHash` returning `inp.length` survived every test, which means the
       // cache had only ever been exercised with bodies whose lengths differ. The
       // merchant-visible shape: a buyer swaps one 9-digit org number for another and
-      // is served the previous company's verdict (review round 7).
+      // is served the previous company's verdict.
       const a = JSON.stringify({ company: "111111111" });
       const b = JSON.stringify({ company: "222222222" });
       expect(a.length).toBe(b.length);
@@ -1303,7 +1294,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // The interval is disarmed before a request goes out, so nothing stopped a
       // second check arming and POSTing while the first was still outstanding — at
       // one per second against a 30s timeout, up to thirty in flight, all but the
-      // last already superseded (review round 5).
+      // last already superseded.
       const ajax = harness.stubAjax($);
       try {
         issueACheck(ajax);
@@ -1328,7 +1319,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     test("a cache hit retires a request still in flight for an earlier body", () => {
       // The cached verdict is by construction the answer to the body the form
       // holds now; the outstanding request is for an older one, and its answer
-      // would land afterwards and paint over it (review round 5).
+      // would land afterwards and paint over it.
       const ajax = harness.stubAjax($);
       try {
         // Cache a decline for the 120.00 cart.
@@ -1401,7 +1392,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // request is issued, up to a second after the buyer changes company — so a
       // response for company A landing inside that window painted A's verdict with
       // B's name and number in it. A decline attributed to the wrong company is the
-      // most misleading thing this tile can do (review round 5).
+      // most misleading thing this tile can do.
       const ajax = harness.stubAjax($);
       try {
         issueACheck(ajax);
@@ -1444,8 +1435,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // The only wrong-company test used `approved: false`, so the approved branch's
       // snapshot was unpinned and an APPROVAL naming the wrong company shipped
       // uncovered — the more damaging direction of the two, since it tells the buyer
-      // a company they have moved away from is good for the order (review round 6,
-      // found by mutation).
+      // a company they have moved away from is good for the order (found by
+      // mutation).
       const ajax = harness.stubAjax($);
       try {
         issueACheck(ajax);
@@ -1523,8 +1514,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // They used to come from different places — the body from `customerCompany`, the
       // label from `#billing_company`/`#company_id` — and `clearCompanyIfCountryStale()`
       // exists precisely because those two diverge (a number typed with no blur).
-      // Divergent, the verdict named a company the API was never asked about (review
-      // round 8).
+      // Divergent, the verdict named a company the API was never asked about.
       const ajax = harness.stubAjax($);
       try {
         // The record says ACME; the inputs say something else entirely.
@@ -1607,8 +1597,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // Neither the issue path nor the cached branch clears `renderInterval`, so a
       // paint still pending from an earlier response fired afterwards and put a
       // stale verdict over the newer check's loader. Reachable with an
-      // `updated_checkout` landing in the second between a response and its paint
-      // (review round 5).
+      // `updated_checkout` landing in the second between a response and its paint.
       const ajax = harness.stubAjax($);
       try {
         $(document.body).append('<div id="payment"><div class="blockOverlay"></div></div>');
@@ -1636,8 +1625,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     test("a superseded paint's timer is cleared, not just nulled", () => {
       // The mismatch branch nulls `renderInterval` AND clears the timer. Dropping the
       // `clearInterval` leaves an orphaned 1s interval per superseded paint, forever
-      // — the same unbounded-interval leak round 5 called out for the cached branch,
-      // not applied to its own new guard (review round 6, found by mutation).
+      // — the same unbounded-interval leak the cached branch was fixed for, not
+      // applied to its own new guard (found by mutation).
       const ajax = harness.stubAjax($);
       try {
         $(document.body).append('<div id="payment"><div class="blockOverlay"></div></div>');
@@ -1694,14 +1683,14 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     test("giving up does not wipe a verdict painted meanwhile", () => {
       // No loading state is up during the price wait, so there is nothing of this
       // check's to take down — and the blanket reset instead erased whatever else the
-      // tile was showing, with nothing left to re-arm (review round 5). Driven here
-      // with absent totals markup; the zero-total cart takes the same branch and is
-      // covered in its own test.
+      // tile was showing, with nothing left to re-arm. Driven here with absent totals
+      // markup; the zero-total cart takes the same branch and is covered in its own
+      // test.
       const ajax = harness.stubAjax($);
       try {
-        // Request 1 goes out and is left UNSETTLED on purpose (review round 6):
-        // settled, `abortedWhilePending` reads false however the give-up behaves, so
-        // the "does not touch an outstanding request" assertion below was vacuous.
+        // Request 1 goes out and is left UNSETTLED on purpose: settled,
+        // `abortedWhilePending` reads false however the give-up behaves, so the
+        // "does not touch an outstanding request" assertion below was vacuous.
         issueACheck(ajax);
 
         // A second check is armed and its cart total then becomes unreadable — plus a
@@ -1724,10 +1713,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
         expect(shown(".twoinc-err-payment-default")).toBe(true);
         expect(instance.orderIntentCheck.interval).toBeNull();
-        // `pendingCheck` too (review round 6): left set, initialize()'s 3s poller
-        // re-enters getApproval() for the life of the page — the exact leak this
-        // block's own comment claims to close. Unpinned because this describe never
-        // starts the poller.
+        // `pendingCheck` too: left set, initialize()'s 3s poller re-enters
+        // getApproval() for the life of the page — the exact leak this block's own
+        // comment claims to close. Unpinned because this describe never starts the
+        // poller.
         expect(instance.orderIntentCheck.pendingCheck).toBe(false);
         // And an outstanding request is deliberately left alone — this wait knows
         // nothing about it. Asserted rather than only claimed in prose.
@@ -1744,13 +1733,12 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // only ARMS — so the spinner for a request already in flight went down and the
       // replacement was a second away. Mutation, not review, is what proved this
       // needed a test: swapping the helper back for the blanket hide survived the
-      // whole suite (review round 5).
+      // whole suite.
       const ajax = harness.stubAjax($);
       try {
         issueACheck(ajax);
         // Staged by hand, not through togglePaySubtitleDesc, which would hide the
-        // loader — so both halves can be asserted at once (review round 6: the two
-        // clear-assertions here used to run against a box that was never shown).
+        // loader — so both halves can be asserted at once.
         revealVerdictBox(".twoinc-err-payment-default");
 
         instance.enableCompanySearch();
@@ -1771,8 +1759,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
   describe("the company-field change handler", () => {
     // Bound in `initialize()` and entirely untested: swapping it to the blanket
-    // hide, and deleting its clear outright, both survived the whole suite (review
-    // round 6, found by mutation). It is the manual-entry path a buyer types into.
+    // hide, and deleting its clear outright, both survived the whole suite (found
+    // by mutation). It is the manual-entry path a buyer types into.
     let ajax;
 
     beforeEach(() => {
@@ -1840,8 +1828,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // wrong for the same reason: it fires three seconds late, by which time the
       // check armed by the country handler's own `getApproval()` has issued (~1s) and
       // painted (~1.5-2s). Clearing then wipes a correct, current verdict — and
-      // nothing repaints it, because a country change fires no `updated_checkout`
-      // (review round 7). Its own comment named this failure while still causing it.
+      // nothing repaints it, because a country change fires no `updated_checkout`.
       const ajax = harness.stubAjax($);
       try {
         ctx.helper.clearSelectedCompany();
@@ -1868,8 +1855,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
     test("a second country change inside the 3s window supersedes the first re-read", () => {
       // Driven through the REAL bump, `syncBillingCountry()` — hand-incrementing
-      // `companySearchSeq` proved only that the guard compares two numbers (review
-      // round 5).
+      // `companySearchSeq` proved only that the guard compares two numbers.
       ctx.helper.countryDidChange("GB");
       $("#billing_country").append('<option value="NO">Norway</option>');
       $("#billing_country").append('<option value="SE">Sweden</option>');
@@ -1917,8 +1903,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("the deferred re-read cannot blank a loader for a live request", () => {
-      // The third statement in that closure was the blanket hide, pinned by nothing
-      // (review round 5). Firing three seconds late, it took the spinner down for a
+      // The third statement in that closure was the blanket hide, pinned by
+      // nothing. Firing three seconds late, it took the spinner down for a
       // request still outstanding and nothing re-armed.
       const ajax = harness.stubAjax($);
       try {
@@ -1964,7 +1950,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // failure, WooCommerce's own validation) and `checkout_error` fires for a
       // missing postcode. Resetting unconditionally wiped a perfectly good
       // verdict, and neither event fires `updated_checkout`, so nothing brought
-      // it back (review round 2).
+      // it back.
       dom.togglePaySubtitleDesc("intent-approved");
       expect(shown(".twoinc-intent-approved")).toBe(true);
       expect(instance.orderIntentCheck.interval).toBeNull();
@@ -1978,8 +1964,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // The return value answers "was anything running", which is what `checkout_error`
       // needs — an armed-but-unissued check is the most likely state to be in when a
       // submit fails validation, and the buyer is still there to retry. Narrowing the
-      // return to "was anything on screen" silently stopped re-arming for it (review
-      // round 8).
+      // return to "was anything on screen" silently stopped re-arming for it.
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
@@ -2010,10 +1995,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   describe("a response arriving after the check was abandoned does nothing", () => {
     test("Place Order orphans the in-flight response instead of painting it", () => {
       // The window between the interval being disarmed and the response arriving
-      // is the whole duration of the XHR, and round 2's `wasRunning` gate read
-      // every flag as falsy across it — so an abandon there skipped the reset and
-      // left the loader up, then the response landed and deselected the gateway on
-      // a checkout already mid-submit (review round 3).
+      // is the whole duration of the XHR, and a `wasRunning` gate reading every
+      // flag as falsy across it meant an abandon there skipped the reset and left
+      // the loader up, then the response landed and deselected the gateway on a
+      // checkout already mid-submit.
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
@@ -2046,11 +2031,11 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("abandoning supersedes FIRST, then aborts, so the abort cannot paint", () => {
-      // Ordering is the whole of it (review round 5). jQuery runs `.fail`
-      // synchronously for an abort, and that handler deselects the gateway and
-      // paints a decline. Because the counter has already moved, the aborted
-      // request's own `stillCurrent()` check fails and it does neither — which is
-      // what makes aborting safe here at all.
+      // Ordering is the whole of it. jQuery runs `.fail` synchronously for an
+      // abort, and that handler deselects the gateway and paints a decline.
+      // Because the counter has already moved, the aborted request's own
+      // `stillCurrent()` check fails and it does neither — which is what makes
+      // aborting safe here at all.
       const ajax = harness.stubAjax($);
       try {
         issueACheck(ajax);
@@ -2073,7 +2058,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     test("a stuck overlay gives up on the paint without orphaning a newer check", () => {
       // The give-up used to call abandonOrderIntentCheck(), which also bumps the
       // supersession counter — so a newer check armed while this paint was waiting
-      // was silently killed by an unrelated timeout (review round 3).
+      // was silently killed by an unrelated timeout.
       const ajax = harness.stubAjax($);
       try {
         $(document.body).append('<div id="payment"><div class="blockOverlay"></div></div>');
@@ -2090,11 +2075,9 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
         // The blocked paint is superseded, so the `paintSeq` guard retires it and
         // touches the tile not at all — leaving the newer check's own loading state
-        // exactly where it is. Round 3 reset here unconditionally and blanked it;
-        // round 4 "fixed" that with a hand-back that round 7 then showed to be
-        // unreachable, because superseded paints never reach the give-up branch at
-        // all. THIS is the assertion that matters, and it is the guard that satisfies
-        // it.
+        // exactly where it is. A hand-back here would be unreachable, because
+        // superseded paints never reach the give-up branch at all. THIS is the
+        // assertion that matters, and it is the guard that satisfies it.
         jest.advanceTimersByTime(9000);
         expect(shown(".twoinc-loader")).toBe(true);
 
@@ -2137,13 +2120,12 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
   describe("state released when a response settles", () => {
     test("a settled response releases inFlightSeq, so a later abandon spares the verdict", () => {
-      // `stillCurrent()` clears `inFlightSeq` as its side effect, and deleting
-      // that line passed the whole suite (review round 4). Left non-null, the
-      // abandon gate reads `wasRunning` as permanently true — so the next
-      // non-submitting Place Order click or unrelated `checkout_error` blanket-hides
-      // a perfectly good verdict, which is the exact defect the gate exists to
-      // prevent. Every other abandon test uses a path that never issues a request,
-      // so none of them reach it.
+      // `stillCurrent()` clears `inFlightSeq` as its side effect, and deleting that
+      // line passed the whole suite. Left non-null, the abandon gate reads
+      // `wasRunning` as permanently true — so the next non-submitting Place Order
+      // click or unrelated `checkout_error` blanket-hides a perfectly good verdict,
+      // which is the exact defect the gate exists to prevent. Every other abandon
+      // test uses a path that never issues a request, so none of them reach it.
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
@@ -2166,7 +2148,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // `stillCurrent()` releases `inFlightXhr` as well as `inFlightSeq`. Left set,
       // a later abandon calls `abort()` on a jqXHR that has already settled — a
       // no-op on a real XHR, but it also means the page holds a reference to every
-      // response for its lifetime. Mutation found this unpinned (review round 5).
+      // response for its lifetime. Mutation found this unpinned.
       const ajax = harness.stubAjax($);
       try {
         issueACheck(ajax);
@@ -2177,10 +2159,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         instance.abandonOrderIntentCheck();
 
         expect(ajax.calls[0].aborted).toBe(false);
-        // The stronger flag too (review round 6): with no assertion that it is
-        // FALSE anywhere, `abortedWhilePending` was indistinguishable from the
-        // `aborted` it was added to improve on, and the harness's `settled` guard
-        // behind it was vacuous.
+        // The stronger flag too: with no assertion that it is FALSE anywhere,
+        // `abortedWhilePending` was indistinguishable from the `aborted` it was
+        // added to improve on, and the harness's `settled` guard behind it was
+        // vacuous.
         expect(ajax.calls[0].abortedWhilePending).toBe(false);
       } finally {
         ajax.restore();
@@ -2191,8 +2173,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // processOrderIntentResponse() clears any pending paint before arming its
       // own. Without that the older interval's handle is overwritten, its own
       // `clearInterval` then targets the NEWER handle, and the orphan repaints
-      // every second forever. Deleting the pre-arm clear passed the suite (review
-      // round 4).
+      // every second forever. Deleting the pre-arm clear passed the suite.
       const ajax = harness.stubAjax($);
       try {
         $(document.body).append('<div id="payment"><div class="blockOverlay"></div></div>');
@@ -2245,9 +2226,9 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // `role="status"`/`role="alert"` only announce a content change made while
       // the region is in the accessibility tree. Writing the sentence first and
       // revealing second mutated a region that was not in the tree, then revealed
-      // one whose content had not changed — most likely no announcement at all
-      // (review round 2). Both happen in one task, so the tree is computed once
-      // and this is one announcement, not two.
+      // one whose content had not changed — most likely no announcement at all.
+      // Both happen in one task, so the tree is computed once and this is one
+      // announcement, not two.
       const box = document.querySelector(".twoinc-pay-box.twoinc-intent-approved");
       const seen = watch(box);
 
@@ -2267,8 +2248,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // and that is a DOM mutation inside a live region — so the same verdict was
       // re-announced on every `updated_checkout` and every field blur that re-ran
       // the pass. An assertive region repeating "not available for this order"
-      // each time the buyer edits a field is worse than the silence it replaced
-      // (review round 3).
+      // each time the buyer edits a field is worse than the silence it replaced.
       dom.togglePaySubtitleDesc("errored", ".twoinc-err-payment-default");
       const box = document.querySelector(".twoinc-pay-box.twoinc-err-payment-default");
       expect(box.textContent).toBe("ACME Widgets Ltd (12345678)");
@@ -2304,7 +2284,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // the set's text to the desired sentence read as "already correct" when only
       // the FIRST copy carried it — leaving the second visibly empty. Reachable if
       // a fragment swap ever leaves two copies of the gateway description live.
-      // Found by mutation, not review (review round 4).
+      // Found by mutation, not review.
       dom.togglePaySubtitleDesc("errored", ".twoinc-err-payment-default");
       const sentence = "ACME Widgets Ltd (12345678)";
       expect($(".twoinc-pay-box.twoinc-err-payment-default").text()).toBe(sentence);
@@ -2430,7 +2410,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       expect(spinner.backgroundRepeat).toBe("no-repeat");
       expect(spinner.backgroundSize).toBe("16px 16px");
       // It is a flex item beside a sentence that is longer in every locale this ships
-      // — nb_NO's is 23 characters — so it must not be allowed to shrink (round 8).
+      // — nb_NO's is 23 characters — so it must not be allowed to shrink.
       expect(spinner.flexShrink).toBe("0");
     });
 

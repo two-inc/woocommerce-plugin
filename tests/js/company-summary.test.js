@@ -248,7 +248,7 @@ describe("read-only captured-company summary", () => {
       );
     });
 
-    test("does not physically move the node when it is already correctly positioned (round 1 review — Han)", () => {
+    test("does not physically move the node when it is already correctly positioned", () => {
       // Detaching and re-inserting an already-correct node collapses a text
       // selection inside the summary — selecting the org number to copy it is
       // the only interaction this display affords. Spied on `insertAfter`
@@ -306,7 +306,7 @@ describe("read-only captured-company summary", () => {
       expect(idStyle.textAlign).toBe("end");
     });
 
-    test("the summary box carries WooCommerce core's own form-row padding, so the id lines up with the input's real edge (round 2 review — Vader)", () => {
+    test("the summary box carries WooCommerce core's own form-row padding, so the id lines up with the input's real edge", () => {
       // Computed style, not a source regex: the `[^}]*` capture used elsewhere
       // in this file terminates early on the `}` inside this rule's own CSS
       // comment, so a regex passes whatever the rule declares.
@@ -329,10 +329,10 @@ describe("read-only captured-company summary", () => {
     });
 
     test("neither the name nor the id can overflow past the row on a single unbroken token", () => {
-      // Round 1 review (Vader): the block-row fix stops the NUMBER competing
-      // with the name for space, but does nothing on its own for a single
-      // unbroken token — routine in DE/NL/NO registry names — which would
-      // otherwise overflow the row horizontally instead of wrapping.
+      // The block-row fix stops the NUMBER competing with the name for
+      // space, but does nothing on its own for a single unbroken token —
+      // routine in DE/NL/NO registry names — which would otherwise
+      // overflow the row horizontally instead of wrapping.
       const idBody = /\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(stylesheetSource());
       expect(idBody).not.toBeNull();
       expect(idBody[1]).toMatch(/overflow-wrap:\s*anywhere/);
@@ -355,12 +355,12 @@ describe("read-only captured-company summary", () => {
   });
 
   describe("pay-for-order page: number stays aligned with the name, not the full-width row (#30.x.9)", () => {
-    // Round 1 review (Han): that page lays the company fields out as
-    // flex-wrap items and gives the summary `flex-basis: 100%` — a
-    // full-page-width row, unlike the checkout page where the summary is
-    // only as wide as the (narrower) field above it. Right-aligning the id
-    // against that full width would detach it from the actual input, which
-    // sits centred between the two. Assert the override lands.
+    // That page lays the company fields out as flex-wrap items and gives
+    // the summary `flex-basis: 100%` — a full-page-width row, unlike the
+    // checkout page where the summary is only as wide as the (narrower)
+    // field above it. Right-aligning the id against that full width would
+    // detach it from the actual input, which sits centred between the two.
+    // Assert the override lands.
     test("the id's alignment is overridden back to the leading edge on .custom-checkout", () => {
       const m = /\.custom-checkout\s+\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(
         stylesheetSource()
@@ -369,7 +369,7 @@ describe("read-only captured-company summary", () => {
       expect(m[1]).toMatch(/text-align:\s*start/);
     });
 
-    test("the override actually wins the cascade, not just exists in source (round 2 review — Han)", () => {
+    test("the override actually wins the cascade, not just exists in source", () => {
       // Specificity settles the ordering, so what is guarded here is the
       // override rule silently ceasing to apply at all — a typo'd selector,
       // which a source-only regex cannot catch.
@@ -442,14 +442,14 @@ describe("read-only captured-company summary", () => {
       expect($("#company_id").prop("required")).toBe(false);
     });
 
-    test("stays name-only after a round trip through sole-trader mode (#30.x.13, round 1 review — Vader)", () => {
-      // Real dead end found live by Vader's review: sole-trader mode is
-      // reachable WHILE in manual entry — the mode chip is not hidden there.
-      // setMode snapshots and restores the capture mode around
-      // the trip, so a buyer who was in manual entry lands back on `manual`
-      // rather than `search` — without that restore toggleBusinessFields would
-      // show + REQUIRE #company_id_field with no working search widget behind
-      // it (enableCompanySearch early-returns) and no way back to name-only.
+    test("stays name-only after a round trip through sole-trader mode (#30.x.13)", () => {
+      // Real dead end, live-confirmed: sole-trader mode is reachable WHILE in
+      // manual entry — the mode chip is not hidden there. setMode snapshots
+      // and restores the capture mode around the trip, so a buyer who was in
+      // manual entry lands back on `manual` rather than `search` — without
+      // that restore toggleBusinessFields would show + REQUIRE
+      // #company_id_field with no working search widget behind it
+      // (enableCompanySearch early-returns) and no way back to name-only.
       pickCompany("ACME Widgets Ltd", "12345678");
       helper.enterManualCompanyEntry();
       typeCompanyName("Sole Proprietor Bakery");

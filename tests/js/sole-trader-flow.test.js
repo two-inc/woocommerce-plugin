@@ -658,13 +658,13 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * Round-3 review regressions (by Claude). Letting a fresh popup open over
-     * a hand-closed record's stale poll window — the round-2 fix above — put
-     * TWO undecided records in the list at once, which the ACCEPTED handler's
-     * forward `find(!decided)` then resolved to the STALE one in preference to
-     * the live popup that actually sent the message.
+     * Letting a fresh popup open over a hand-closed record's stale poll window
+     * — letting a hand-closed record's poll window lapse — put TWO undecided
+     * records in the list at once, which the ACCEPTED handler's forward
+     * `find(!decided)` then resolved to the STALE one in preference to the
+     * live popup that actually sent the message.
      */
-    describe("round-3 review regressions — ACCEPTED pairs with the popup that sent it", () => {
+    describe("ACCEPTED pairs with the popup that sent it", () => {
       // Opens a popup through `act`, returning the window handle it got.
       function openTracked(act) {
         const win = { closed: false };
@@ -3933,7 +3933,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
     });
 
-    describe("round-1 review regressions (Han/Vader/Leia) — races the dropdown-survives fix opened up", () => {
+    describe("races opened up by the dropdown-survives fix", () => {
       test("the Business chip is honoured before ACCEPTED, and its result cannot stomp the switch", () => {
         const flight = armUndecidedSignup();
         harness.openCompanyPanel($, ctx.helper);
@@ -4080,7 +4080,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
     });
 
-    describe("round-2 review regressions (Han/Vader) — isBusy() wired onto only 2 of the revert paths", () => {
+    describe("isBusy() gates hide()'s mode revert", () => {
       test("hide() does not revert mode while a signup popup is still open", () => {
         soleTrader.setMode("sole_trader");
         const win = { closed: false };
@@ -4120,7 +4120,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
     });
 
-    describe("round-3 review regressions (Han/Vader) — concurrent flights, isDeciding() vs isBusy(), country change", () => {
+    describe("concurrent flights, isDeciding() vs isBusy(), country change", () => {
       /**
        * Prime `countryDidChange`'s own tracker to the current GB before a
        * test switches the country — it returns false (no change) on its
@@ -4215,7 +4215,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
     });
 
-    describe("round-4 review regressions (Han/Vader) — a re-signup's own decision, not just the first one", () => {
+    describe("a re-signup's own decision, not just the first one", () => {
       beforeEach(() => {
         $("form[name='checkout']").after('<div id="order_review"></div>');
         ctx.Twoinc.getInstance().initialize(false);
@@ -4304,13 +4304,13 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
     });
 
-    describe("round-5/6 review regressions (Han/Vader) — soleTraderReconfirmingCount robustness", () => {
+    describe("soleTraderReconfirmingCount robustness", () => {
       beforeEach(() => {
         $("form[name='checkout']").after('<div id="order_review"></div>');
         ctx.Twoinc.getInstance().initialize(false);
       });
 
-      test("a second re-signup click while one is already outstanding is refused (round-6 structural hardening), not stacked as a second popup", () => {
+      test("a second re-signup click while one is already outstanding is refused, not stacked as a second popup", () => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "First Trader");
         jest.useFakeTimers();
@@ -4354,7 +4354,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         jest.useRealTimers();
       });
 
-      test("editing the email while a re-signup popup is open does not reset its count out from under it (round-6, Han/Vader)", () => {
+      test("editing the email while a re-signup popup is open does not reset its count out from under it", () => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "First Trader");
         soleTrader.availabilityByCountry = { GB: true };
@@ -4407,11 +4407,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     describe("bug 1/item 4.3 — re-clicking the Sole Trader chip once already adopted", () => {
-      // Doug's explicit override (item 4.3): an earlier round made this a
-      // no-op on the theory that the "select a different sole trader" link
-      // was the one deliberate re-signup entry point once adopted. Doug has
-      // now ruled that wrong — re-clicking the chip must act exactly like
-      // that link, not do nothing.
+      // Doug's explicit override (item 4.3): re-clicking the chip must act
+      // exactly like the "select a different sole trader" link, not do
+      // nothing.
       test("opens a re-signup popup for an adoption that came through the hosted flow", () => {
         $("#billing_email").val("buyer@example.test");
         soleTrader.onModeChipClick("sole_trader");
@@ -4750,8 +4748,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       [
         // Exercises the actual `window.addEventListener("pagehide", ...)`
         // wiring — a test that only calls `stopTokenRefresh()` directly
-        // would still pass even if that wiring were deleted (round-1
-        // review — Leia; collapsed round-2 review — Leia).
+        // would still pass even if that wiring were deleted.
         "a real pagehide dispatch",
         () => window.dispatchEvent(new Event("pagehide"))
       ]
@@ -4768,7 +4765,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       // The page is frozen, not destroyed — real browsers pause and resume
       // the interval across the freeze on their own. Tearing it down here
       // would leave a buyer restored from bfcache with a dead refresh loop
-      // for the rest of that checkout (round-1 review — Vader).
+      // for the rest of that checkout.
       realMint();
       const persisted = new Event("pagehide");
       Object.defineProperty(persisted, "persisted", { value: true });

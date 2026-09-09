@@ -2484,12 +2484,12 @@ let twoincDomHelper = {
           twoincDomHelper.setPayBoxText(
             intentBox,
             companyTemplate.replace("{company}", function () {
-              // Function replacer (Vader, round 1 review): a string replacer
-              // honours special patterns like `$&`/`$$` inside the SECOND
-              // argument, so a company literally named "Acme $& Corp" or
-              // "50% Ltd $$" would come out mangled with a plain-string
-              // replace. A function replacer passes companyText through
-              // literally, no matter what it contains.
+              // Function replacer: a string replacer honours special
+              // patterns like `$&`/`$$` inside the SECOND argument, so a
+              // company literally named "Acme $& Corp" or "50% Ltd $$"
+              // would come out mangled with a plain-string replace. A
+              // function replacer passes companyText through literally,
+              // no matter what it contains.
               return companyText;
             })
           );
@@ -2503,8 +2503,8 @@ let twoincDomHelper = {
         // box is a fixed, unrelated message and never gets one.
         let $errBox = jQuery(".twoinc-pay-box" + errSelector);
         // Unhidden first, for the announcement reason given in the approved
-        // branch above (review round 2). The phone-number box has no text to
-        // rewrite, so for it this is simply the reveal.
+        // branch above. The phone-number box has no text to rewrite, so for
+        // it this is simply the reveal.
         $errBox.removeClass("hidden");
         if (errSelector === ".twoinc-err-payment-default") {
           if ($errBox.data("twoincDefaultText") === undefined) {
@@ -2982,13 +2982,12 @@ let twoincTermChips = {
       $chip.append(jQuery("<span>", { class: "twoinc-term-chip__days", text: daysLabel }));
 
       if (!twoincTermChips.feesLoaded) {
-        // Fee quote in flight: show animated loading dots instead of a
-        // blank chip. Never render the configured rate — only the real
-        // quoted amount once it arrives.
-        // twoinc-dots carries the shared dot-pulse styling; the BEM class stays
-        // as the chip-scoped hook. Appearance is unchanged. It used to be
-        // shared with the order-intent loader, which paints the spinner GIF
-        // now — this is its only consumer (review round 8).
+        // Fee quote in flight: show animated loading dots instead of a blank
+        // chip. Never render the configured rate — only the real quoted amount
+        // once it arrives. twoinc-dots carries the shared dot-pulse styling;
+        // the BEM class stays as the chip-scoped hook. Appearance is unchanged.
+        // It used to be shared with the order-intent loader, which paints the
+        // spinner GIF now — this is its only consumer.
         const $loading = jQuery("<span>", {
           class: "twoinc-term-chip__loading twoinc-dots",
           "aria-hidden": "true"
@@ -3111,9 +3110,9 @@ function createSoleTraderController(companySearch) {
      * second running invisibly.
      *
      * Wired to the real async duration — every terminal branch of the call graph
-     * settles its own flight — never to a fixed timeout. Adversarial review of
-     * this exact feature upstream found stuck-forever spinners on two separate
-     * abandon/retry paths, so every `cb(...)` below is a settle point.
+     * settles its own flight — never to a fixed timeout. This exact feature
+     * upstream had stuck-forever spinners on two separate abandon/retry paths,
+     * so every `cb(...)` below is a settle point.
      *
      * Held by `watchPopupClose()` for as long as the signup popup itself is
      * open, and by the ACCEPTED handler across its own buyer lookup.
@@ -4290,9 +4289,8 @@ function createSoleTraderController(companySearch) {
      * same tolerance `fetchTokens` itself already has for its callers.
      *
      * Deliberately does NOT also call `beginFlight()`/`settleFlight()` itself
-     * (round-1 review, rejected): holding the flag for a background round trip
-     * nobody asked for would only over-block the Business chip,
-     * `reopenSearch()` and click-to-reopen.
+     * — holding the flag for a background round trip nobody asked for would
+     * only over-block the Business chip, `reopenSearch()` and click-to-reopen.
      *
      * @returns {void}
      */
@@ -4617,8 +4615,7 @@ class Twoinc {
       // painting a verdict. Held here rather than in a local, so that
       // abandonOrderIntentCheck() can cancel it: it used to be unreachable, and
       // an orphan copy of it would paint a verdict onto a tile that had already
-      // been reset — after Place Order, on a checkout mid-submit (review round
-      // 2).
+      // been reset — after Place Order, on a checkout mid-submit.
       renderInterval: null,
       // Backoff after a 429: `updated_checkout` re-arms a check per keystroke,
       // so one refusal otherwise becomes a request per second all window.
@@ -4751,12 +4748,11 @@ class Twoinc {
     // Handle the representative inputs blur event
     $body.on("blur", "#company_id, #billing_company_display", self.onCompanyManualInputBlur);
 
-    // Handle the company inputs change event
-    // Wrapped, not passed by reference (review round 5). Bound directly, jQuery
-    // hands the handler its Event object as the `action` argument — which happened
-    // to degenerate to the blanket hide, because no action name matches an Event,
-    // so it did the right thing by accident and would break the moment
-    // togglePaySubtitleDesc grew a truthy-action branch.
+    // Handle the company inputs change event Wrapped, not passed by reference.
+    // Bound directly, jQuery hands the handler its Event object as the `action`
+    // argument — which happened to degenerate to the blanket hide, because no
+    // action name matches an Event, so it did the right thing by accident and
+    // would break the moment togglePaySubtitleDesc grew a truthy-action branch.
     $body.on("change", "#billing_company", function () {
       if (!twoincCompanyCapture.isNameField(this)) return;
       Twoinc.getInstance().customerCompany.company_name = twoincSelectWooHelper.getCompanyName();
@@ -5379,10 +5375,10 @@ class Twoinc {
       if (isFailure && response.status >= 400) {
         // @TODO: use the error code returned by the API
         //
-        // Two fixes here, both found in review round 1 and both about this
-        // function throwing before it reaches the render below — which is the
-        // ONLY thing that takes the loading state down, so a throw here now
-        // leaves "Checking availability" on screen for the rest of the page.
+        // Two fixes here, both about this function throwing before it reaches
+        // the render below — which is the ONLY thing that takes the loading
+        // state down, so a throw here now leaves "Checking availability" on
+        // screen for the rest of the page.
         //
         // 1. `responseJSON` is undefined for any failure that did not carry a
         //    JSON body — a proxy 502 with an HTML error page, a parse error —
