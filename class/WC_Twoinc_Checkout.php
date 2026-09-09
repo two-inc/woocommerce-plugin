@@ -204,14 +204,13 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             ];
 
             // The shipping/delivery role's own COMPLETE company-search
-            // instance (TWO-40) — same three-field shape as
-            // billing's above (search-anchor, name carrier, number carrier),
-            // registered unconditionally: `TwoCompanySearch`'s shipping
-            // instance mounts against `#shipping_company_display` regardless
-            // of whether the "ship to a different address?" form is
-            // currently shown, the same way the billing control is always
-            // registered regardless of the admin's company-search-location
-            // setting.
+            // instance (TWO-40) — same three-field shape as billing's above
+            // (search-anchor, name carrier, number carrier), registered
+            // unconditionally: `TwoCompanySearch`'s shipping instance mounts
+            // against `#shipping_company_display` regardless of whether the
+            // "ship to a different address?" form is currently shown, the same
+            // way the billing control is always registered regardless of the
+            // admin's company-search-location setting.
             if (!isset($fields['shipping']['shipping_company'])) {
                 $fields['shipping']['shipping_company'] = [
                     'label' => __('Company name', 'twoinc-payment-gateway'),

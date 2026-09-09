@@ -664,10 +664,10 @@ describe("read-only captured-company summary", () => {
   /**
    * The captured company renders INSIDE the intent-message sentences
    * themselves — the approved notice and the declined ("not available") box
-   * both carry it (TWO-25326) — so "shown" and "carries the
-   * company" collapse into one question per box. What is worth asserting:
-   * which template each box substitutes from, that they do not
-   * cross-contaminate, and that the no-company fallback still works.
+   * both carry it (TWO-25326) — so "shown" and "carries the company" collapse
+   * into one question per box. What is worth asserting: which template each
+   * box substitutes from, that they do not cross-contaminate, and that the
+   * no-company fallback still works.
    */
   describe("intent-message boxes carry the captured company (TWO-25326)", () => {
     // Capture a company without leaving the intent notice on screen.

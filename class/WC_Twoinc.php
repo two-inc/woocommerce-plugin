@@ -1989,9 +1989,9 @@ if (!class_exists('WC_Twoinc')) {
                     // paragraphs are its children, so the help text below the
                     // grid wraps at exactly the grid's width and stays locked
                     // to it if that width ever changes. Without the container
-                    // the paragraphs are
-                    // laid out against the full <td class="forminp">, which in
-                    // a WooCommerce settings table runs to the page margin. ?>
+                    // the help paragraphs are laid out against the full
+                    // <td class="forminp">, which in a WooCommerce settings
+                    // table runs to the page margin. ?>
                     <div class="twoinc-surcharge-grid-container">
                     <p class="twoinc-surcharge-grid-empty"<?php echo empty($terms) ? '' : ' style="display:none"'; ?>><?php esc_html_e('No payment terms are offered yet — configure the offered terms above first.', 'twoinc-payment-gateway'); ?></p>
                     <table class="widefat twoinc-surcharge-grid" data-field-key="<?php echo esc_attr($field_key); ?>"<?php echo empty($terms) ? ' style="display:none"' : ''; ?>>
@@ -2485,9 +2485,9 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Assemble the checkout payment-box description.
          *
-         * Block order is cross-platform parity: brand tagline directly
-         * under the method title, then the term chips,
-         * then the sole-trader toggle, with the about block trailing.
+         * Block order is cross-platform parity: brand tagline directly under
+         * the method title, then the term chips, then the sole-trader toggle,
+         * with the about block trailing.
          *
          * WooCommerce core renders the method title and the gateway icon
          * together inside the payment method's <label>, and this

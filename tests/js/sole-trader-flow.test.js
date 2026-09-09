@@ -4493,10 +4493,9 @@ describe("TWO-40 — sole-trader flow", () => {
       test("still switches to manual entry via a REAL click on the REAL chip inside the reopened panel", () => {
         // The test above calls `activateManualEntry()` directly. This one
         // drives the same scenario through the actual panel the adopted sole
-        // trader is rendered through (TWO-40) — attached,
-        // reopened, and clicked for real — so a regression that only shows up
-        // once the panel is genuinely live cannot hide behind a call that
-        // skips it.
+        // trader is rendered through (TWO-40) — attached, reopened, and
+        // clicked for real — so a regression that only shows up once the panel
+        // is genuinely live cannot hide behind a call that skips it.
         $("#billing_email").val("buyer@example.test");
         soleTrader.onModeChipClick("sole_trader");
 

@@ -1731,10 +1731,9 @@ class TwoCompanySearch {
       Twoinc.getInstance().clearAddress(this.role);
     }
     Twoinc.getInstance().addressStateFor(this.role).registryApplied = false;
-    // Not a blind `{}` (TWO-40): `write()` above already
-    // recomputed this, but a shipping fallback may be the reason it isn't
-    // empty — clearing billing's own capture doesn't mean nothing is
-    // captured any more.
+    // Not a blind `{}` (TWO-40): `write()` above already recomputed this, but
+    // a shipping fallback may be the reason it isn't empty — clearing
+    // billing's own capture doesn't mean nothing is captured any more.
     twoincCompanyCapture.syncOrderCompany();
 
     // Clearing a capture changes the visible company-name surface exactly as
@@ -2297,8 +2296,8 @@ let twoincDomHelper = {
 
     // Relocate the company-search control (TWO-25326) before
     // renderCompanySummary() below: the summary's anchor is relative to
-    // whichever field is currently its neighbour, and this call may just
-    // have moved that field's wrapper into the tile.
+    // whichever field is currently its neighbour, and this call may just have
+    // moved that field's wrapper into the tile.
     twoincSelectWooHelper.syncCompanySearchTileLocation();
 
     twoincSelectWooHelper.renderCompanySummary();
@@ -3594,12 +3593,11 @@ function createSoleTraderController(companySearch) {
 
     /**
      * Is a sole-trader round trip or a signup popup currently outstanding
-     * (TWO-40)? The guard every other way to leave/interrupt
-     * sole-trader mode checks before acting: the widget/chips deliberately
-     * survive this window, so paths once unreachable while
-     * `mode === "sole_trader"` (Business chip, reopenSearch(), an ordinary
-     * pick) are reachable now, and acting on them mid-wait races the flow's
-     * own resolution.
+     * (TWO-40)? The guard every other way to leave/interrupt sole-trader mode
+     * checks before acting: the widget/chips deliberately survive this window,
+     * so paths once unreachable while `mode === "sole_trader"` (Business chip,
+     * reopenSearch(), an ordinary pick) are reachable now, and acting on them
+     * mid-wait races the flow's own resolution.
      */
     isBusy: function () {
       return controller.flightDepth > 0 || controller.activePopupWatchers.length > 0;
@@ -4676,10 +4674,9 @@ class Twoinc {
       twoincDomHelper.isTwoincVisible() ||
       // Admin's address-area preference, not the buyer-driven capture mode —
       // see the comment on the equivalent check in toggleBusinessFields
-      // (TWO-25326). No longer ANDed with
-      // a separate "for other payment methods" toggle (removed, TWO-25326 —
-      // that setting is now just this same checkbox, so the AND collapsed
-      // to a no-op).
+      // (TWO-25326). No longer ANDed with a separate "for other payment
+      // methods" toggle (removed, TWO-25326 — that setting is now just this
+      // same checkbox, so the AND collapsed to a no-op).
       window.twoinc.company_search_location === "address_area"
     ) {
       // Toggle the business fields
@@ -4810,11 +4807,11 @@ class Twoinc {
       soleTrader.reopenSearch();
     });
 
-    // Click-to-reopen out of an adopted sole trader (TWO-40,
-    // live-reported by Doug) — see `reopenSearch()`'s own comment. A plain
-    // delegated binding is fine here, unlike `searchCompanyBtnId`'s: these
-    // are static inputs present from page load, not a button built and
-    // rebuilt on every dropdown open.
+    // Click-to-reopen out of an adopted sole trader (TWO-40, live-reported by
+    // Doug) — see `reopenSearch()`'s own comment. A plain delegated binding is
+    // fine here, unlike `searchCompanyBtnId`'s: these are static inputs
+    // present from page load, not a button built and rebuilt on every dropdown
+    // open.
     $body.on("click", "#billing_company, #company_id", function () {
       // Only where the click has no other meaning: the readonly lock an
       // adoption applies. Ungated (PR #502) it cleared the capture and
@@ -6012,8 +6009,8 @@ class Twoinc {
   }
 
   /**
-   * Handle the shipping country input change (TWO-40) — the
-   * delivery-role counterpart of `onCountryInputChange`/`syncBillingCountry`.
+   * Handle the shipping country input change (TWO-40) — the delivery-role
+   * counterpart of `onCountryInputChange`/`syncBillingCountry`.
    *
    * Never writes `customerCompany` directly: unlike billing, shipping's
    * capture only reaches the order intent through `resolveOrderCompany()`'s

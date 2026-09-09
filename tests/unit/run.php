@@ -9070,14 +9070,14 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326: the standalone company-tile label this section originally
-     * tested (PR #431) is gone outright, on every brand, notice switch or not
-     * — it is superseded, not conditional. The company-search tile slot that
-     * replaces its POSITION is unrelated to the notice switch entirely: it
-     * exists to let the location SETTING move the search control into the
-     * tile, which has nothing to do with whether the approved-intent
-     * reassurance copy is on. It must therefore render on BOTH a brand that
-     * suppresses the notice and one that does not.
+     * TWO-25326: the standalone company-tile label PR #431 originally tested
+     * is gone outright, on every brand, notice switch or not — it is
+     * superseded, not conditional. The company-search tile slot that replaces
+     * its POSITION is unrelated to the notice switch entirely: it exists to
+     * let the location SETTING move the search control into the tile, which
+     * has nothing to do with whether the approved-intent reassurance copy is
+     * on. It must therefore render on BOTH a brand that suppresses the notice
+     * and one that does not.
      *
      * The declined ("not available") box is the one still worth pinning
      * against the switch here (TWO-25224's rule, extended by TWO-25326's new

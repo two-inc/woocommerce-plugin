@@ -111,13 +111,13 @@
  * its sentence; that heading is being dropped in the same pass, and this
  * platform must not grow one — the sentence already names the product.
  *
- * `overflow-wrap: anywhere` predates the colour (TWO-25326) and is why the
- * two company-carrying boxes are grouped: they hold the captured company
+ * `overflow-wrap: anywhere` predates the colour (TWO-25326) and is why the two
+ * company-carrying boxes are grouped: they hold the captured company
  * (`<name> (<number>)`) directly in their sentence, where the standalone
- * `.twoinc-company-tile-label` used to, and registry
- * names in DE/NL/NO routinely contain a single unbroken token wider than the
- * tile column. The phone-number box carries a fixed short sentence and needs
- * no such protection, which is the one declaration it does not share.
+ * `.twoinc-company-tile-label` used to, and registry names in DE/NL/NO
+ * routinely contain a single unbroken token wider than the tile column. The
+ * phone-number box carries a fixed short sentence and needs no such
+ * protection, which is the one declaration it does not share.
  */
 .twoinc-pay-box.twoinc-intent-approved,
 .twoinc-pay-box.twoinc-err-payment-default {

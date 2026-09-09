@@ -136,9 +136,9 @@ describe("company-search tile location (TWO-25326)", () => {
      * plugin's control, and neither may end up in the tile.
      * `#billing_company_field` is the plain, unenhanced fallback the buyer
      * types into when manual entry or sole-trader mode takes over.
-     * `#company_id_field` is a plain hidden input with no visible home to
-     * move to — a bare, unlabelled, REQUIRED "Company ID" box floating in
-     * the payment tile is checkout-blocking confusion.
+     * `#company_id_field` is a plain hidden input with no visible home to move
+     * to — a bare, unlabelled, REQUIRED "Company ID" box floating in the
+     * payment tile is checkout-blocking confusion.
      */
     test("never puts #billing_company_field or #company_id_field in the tile — both stay in the address form, editable", () => {
       helper.syncCompanySearchTileLocation();
