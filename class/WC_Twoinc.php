@@ -2695,14 +2695,9 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Re-verify the stored key on the gateway's own settings screen.
-         *
-         * Hooked to admin_enqueue_scripts, which fires on EVERY wp-admin
-         * request, so the screen check is what keeps an unreachable API from
-         * blocking the whole of wp-admin rather than one settings page
-         * (ABN-537). The cached verdict is consulted first for the same
-         * reason: a settings page reloaded during an outage must not spend a
-         * fresh wire call each time.
+         * Re-verify the stored key on the gateway's own settings screen. The
+         * hook fires on every wp-admin request, so without the screen check an
+         * unreachable API blocked the whole administration area (ABN-537).
          *
          * @param string $hook_suffix current admin page, from the hook.
          */
@@ -2717,16 +2712,22 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
+            // A cached verdict spares the call, EXCEPT a cached 'ok' with no
+            // merchant identity resolved: the Validate button caches an 'ok'
+            // for a TYPED key, and only a live check of the STORED key
+            // persists merchant_id. Without it the constructor early-returns,
+            // the order hooks never register and the account-setup banner
+            // never clears — and this is the one screen that can heal it
+            // (ABN-537).
             $cached = get_transient(self::verification_cache_key($api_key));
             if (is_array($cached) && isset($cached['status'])) {
-                return;
+                if ($cached['status'] !== 'ok' || $this->get_merchant_id()) {
+                    return;
+                }
             }
 
-            // This admin-page load is a fresh, live re-check of the STORED
-            // key — strictly more current than whatever the checkout-side
-            // cache (get_api_key_verification_status()) might be holding.
-            // Feed it forward so a merchant who just fixed a broken key
-            // doesn't have to wait out API_KEY_VERIFICATION_TTL for
+            // Feeds the checkout-side cache too, so a merchant who just fixed
+            // a broken key doesn't wait out API_KEY_VERIFICATION_TTL for
             // checkout to notice (TWO-25326 follow-up).
             $this->cache_verification_result(
                 $api_key,
@@ -2734,20 +2735,28 @@ if (!class_exists('WC_Twoinc')) {
             );
         }
 
-        /**
-         * WooCommerce's settings page, Payments tab, this gateway's own
-         * section. Section case is normalised the way WooCommerce's own
-         * settings router normalises it.
-         */
+        /** WooCommerce's settings page, Payments tab, this gateway's own section. */
         private function is_gateway_settings_screen(string $hook_suffix): bool
         {
             if ($hook_suffix !== 'woocommerce_page_wc-settings') {
                 return false;
             }
-            $tab = isset($_GET['tab']) ? strtolower((string) wp_unslash($_GET['tab'])) : '';
-            $section = isset($_GET['section']) ? strtolower((string) wp_unslash($_GET['section'])) : '';
+            $tab = self::settings_query_arg('tab');
+            $section = self::settings_query_arg('section');
+            // WooCommerce's payment-gateway settings router accepts either the
+            // gateway id or its sanitized class name as the section, and older
+            // Manage links use the latter.
+            $sections = [strtolower((string) $this->id), strtolower(sanitize_title(get_class($this)))];
 
-            return $tab === 'checkout' && $section === strtolower((string) $this->id);
+            return $tab === 'checkout' && in_array($section, $sections, true);
+        }
+
+        /** Lower-cased scalar $_GET value; a nested array is not a section name. */
+        private static function settings_query_arg(string $key): string
+        {
+            $value = $_GET[$key] ?? '';
+
+            return is_string($value) ? strtolower((string) wp_unslash($value)) : '';
         }
 
         /**
@@ -2894,13 +2903,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         const API_KEY_VERIFICATION_TIMEOUT = 5;
 
-        /**
-         * Timeout (seconds) for the settings-screen re-verification. Longer
-         * than the checkout-side cap because an admin can afford a
-         * slower-but-certain answer, but still bounded: it runs inline in a
-         * page render, which wp_remote_request()'s own 30s default would
-         * stall for half a minute against an unreachable API (ABN-537).
-         */
+        /** Bounded because it runs inline in a page render (ABN-537). */
         const ADMIN_API_KEY_VERIFICATION_TIMEOUT = 10;
 
         /**
