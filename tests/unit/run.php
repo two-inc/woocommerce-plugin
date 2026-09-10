@@ -110,6 +110,7 @@ final class BrandConfigSpec
             'testSurchargeGridValidationNormalisesAndRejects',
             'testSurchargeGridEnforcesMerchantFixedCap',
             'testSurchargeRefusalIsVisibleAndNothingPartiallySaves',
+            'testAnInvalidSurchargeFigureNamesItselfInTheSurvivingNoticeBucket',
             'testStoredCustomTermNormalisation',
             'testDeprecatedCustomTermRendersKeepOrRemove',
             'testDeprecatedCustomTermSaveStates',
@@ -4609,10 +4610,11 @@ final class BrandConfigSpec
      * (admin_options).
      *
      * 1. The refusal was SILENT. WooCommerce records a throwing validator's
-     *    message with WC_Settings_API::add_error and nothing in core prints
-     *    that bucket — display_errors() is the gateway's job and this plugin
-     *    never called it. A merchant who typed a cap of 0 saw the grid edit
-     *    revert with no notice on a page that looked like it saved.
+     *    message with WC_Settings_API::add_error, then re-instantiates every
+     *    gateway before the settings page renders — so that bucket belongs to
+     *    an object that no longer exists, and a gateway calling
+     *    display_errors() on itself prints nothing. A merchant who typed a
+     *    cap of 0 saw the grid edit revert under a success notice (ABN-552).
      *
      * 2. The save was PARTIAL. Core skips only the field that threw, so
      *    refusing the grid still saved surcharge_type: switching a shop with
@@ -4665,26 +4667,105 @@ final class BrandConfigSpec
             'the type field must refuse the enable for the same reason'
         );
 
-        // And the refusal is now VISIBLE: admin_options() prints the notice,
-        // above the settings form rather than below the grid.
-        ob_start();
-        $gateway->admin_options();
-        $html = ob_get_clean();
-        TinyAssert::true(strpos($html, 'woocommerce_errors') !== false, 'the settings page must print the error notice');
-        TinyAssert::true(strpos($html, 'cannot be 0') !== false, 'the cap refusal must reach the page');
+        // And the refusal is now VISIBLE, in the only bucket that outlives the save: the object
+        // that would render display_errors() is a different one, constructed after the save action,
+        // and it holds no errors of its own. WC_Admin_Settings' bucket is static and reaches the
+        // page, where show_messages() prints errors INSTEAD of core's success notice.
+        $rendered = self::gateway();
+        $rendered->init_form_fields();
+        TinyAssert::same([], $rendered->get_errors(), 'the instance that renders the page holds no error of its own');
+        $surfaced = implode("\n", $GLOBALS['__twoinc_test_admin_errors']);
+        TinyAssert::true(strpos($surfaced, 'cannot be 0') !== false, 'the cap refusal must reach the settings-page notice');
         TinyAssert::true(
-            strpos($html, 'woocommerce_errors') < strpos($html, '<table class="form-table"'),
-            'the notice must precede the settings form'
+            strpos($surfaced, 'before enabling a percentage surcharge') !== false,
+            'the type refusal must reach it too'
         );
 
-        // A clean save prints NO notice — the call is unconditional, so an
-        // empty error bucket must stay silent.
+        // A save with nothing to refuse adds no error, so nothing suppresses the success notice.
+        $GLOBALS['__twoinc_test_admin_errors'] = [];
         $clean = self::gateway();
         $clean->init_form_fields();
-        ob_start();
-        $clean->admin_options();
-        $clean_html = ob_get_clean();
-        TinyAssert::same(false, strpos($clean_html, 'woocommerce_errors'), 'no notice without errors');
+        $clean->init_settings();
+        $clean->test_post_data = [
+            $clean->get_field_key('surcharge_type') => 'none',
+            $clean->get_field_key('payment_terms_days') => ['30'],
+        ];
+        $clean->process_admin_options();
+        TinyAssert::same([], $GLOBALS['__twoinc_test_admin_errors'], 'a save with nothing to refuse must stay silent');
+    }
+
+    /**
+     * ABN-552. An invalid surcharge figure was refused correctly and reported
+     * nowhere: the save recorded the reason with WC_Settings_API::add_error,
+     * and WooCommerce then re-instantiated every gateway before rendering the
+     * settings page, so the bucket holding it belonged to an object that no
+     * longer existed. The merchant read "Your settings have been saved" over a
+     * cell that had reverted.
+     *
+     * Drives the real save loop and asserts the bucket that OUTLIVES it, since
+     * that is the only one the page can print. It is also the bucket whose
+     * contents suppress core's success notice, so one assertion covers both
+     * halves of the report.
+     */
+    private static function testAnInvalidSurchargeFigureNamesItselfInTheSurvivingNoticeBucket(): void
+    {
+        // [posted cell, posted value, the phrase the refusal must carry, why].
+        $cases = [
+            ['limit', '0', 'cannot be 0', 'a cap of zero clamps the whole fee line to nothing'],
+            ['limit', '-1', 'must be a non-negative number', 'a negative cap is not a number a cap can take'],
+            ['limit', 'abc', 'must be a non-negative number', 'text in a numeric cell is not a cap'],
+            ['percentage', '-1', 'must be a non-negative number', 'a negative percentage would credit the buyer'],
+            ['percentage', 'abc', 'must be a non-negative number', 'text in a numeric cell is not a percentage'],
+            ['percentage', '101', 'must be between 0 and 100', 'a percentage over 100 charges more than the basket'],
+        ];
+
+        foreach ($cases as [$column, $posted, $phrase, $description]) {
+            self::reset();
+            $gateway = self::gateway();
+            $gateway->init_form_fields();
+            $option_key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$option_key] = [
+                'surcharge_type' => 'percentage',
+                'surcharge_tax_treatment' => 'standard',
+                'payment_terms_days' => ['30'],
+                'surcharge_grid' => [30 => ['percentage' => '50', 'limit' => '10']],
+            ];
+            $gateway->init_settings();
+            $row = ['fixed' => '', 'percentage' => '50', 'limit' => '10'];
+            $row[$column] = $posted;
+            $gateway->test_post_data = [
+                $gateway->get_field_key('surcharge_type') => 'percentage',
+                $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+                $gateway->get_field_key('payment_terms_days') => ['30'],
+                $gateway->get_field_key('surcharge_grid') => [30 => $row],
+            ];
+
+            $gateway->process_admin_options();
+
+            // The invalid figure never lands — the report's own finding, kept asserted here so a
+            // notice fix cannot be mistaken for a validation fix.
+            $saved = get_option($option_key, []);
+            TinyAssert::same(
+                [30 => ['percentage' => '50', 'limit' => '10']],
+                $saved['surcharge_grid'],
+                $description . ': the stored grid must stand'
+            );
+
+            // And the reason reaches the page, in the bucket that survives the save. The gateway
+            // the page renders is constructed after it and holds nothing.
+            $surfaced = implode("\n", $GLOBALS['__twoinc_test_admin_errors']);
+            TinyAssert::true(
+                strpos($surfaced, $phrase) !== false,
+                $description . ": the refusal must say why [$surfaced]"
+            );
+            TinyAssert::true(
+                strpos($surfaced, '30-day') !== false,
+                $description . ': and name the term whose cell to correct'
+            );
+            $rendered = self::gateway();
+            $rendered->init_form_fields();
+            TinyAssert::same([], $rendered->get_errors(), $description . ': the rendering instance holds no error of its own');
+        }
     }
 
     /**
@@ -11053,6 +11134,9 @@ final class BrandConfigSpec
             $gateway->test_post_data = [
                 $gateway->get_field_key('api_key') => 'new-key',
                 $gateway->get_field_key('title') => 'edited title',
+                // The settings form always posts the term checkboxes; an absent group is the
+                // merchant unticking every term, which is refused (ABN-553).
+                $gateway->get_field_key('payment_terms_days') => ['30'],
             ];
             $gateway->process_admin_options();
             $saved = get_option($option_key, []);

@@ -6862,15 +6862,6 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function admin_options()
         {
-            // Surfaces per-field validation failures: when a validate_*_field
-            // method throws, WooCommerce records it via
-            // WC_Settings_API::add_error and moves on (field doesn't assign,
-            // everything else saves) but nothing in core prints that bucket —
-            // without this call a merchant who typed a cap of 0 (TWO-25289)
-            // saw the grid revert with no notice. Different bucket from
-            // WC_Admin_Settings::add_error, which the settings page prints
-            // itself. Printed before the fields so it sits above the form.
-            $this->display_errors();
             parent::admin_options();
             $components = [sprintf(
                 /* translators: 1: base plugin provenance, e.g. "2.23.9 (eb7bf92cec07, deployed 2026-07-08 11:35 UTC)" */
@@ -7072,6 +7063,13 @@ if (!class_exists('WC_Twoinc')) {
             // Save all settings (with the API key reverted only on a rejection)
             $_POST = $post_data;
             parent::process_admin_options();
+            // WooCommerce re-instantiates every gateway immediately after firing the save action, so
+            // WC_Settings_API's per-field error bucket belongs to an object that is gone before the
+            // settings page renders. WC_Admin_Settings' bucket is static, and its show_messages()
+            // prints errors INSTEAD of core's unconditional "Your settings have been saved."
+            foreach ($this->get_errors() as $error) {
+                WC_Admin_Settings::add_error($error);
+            }
             $this->refetch_merchant_record_on_identity_save();
         }
 
