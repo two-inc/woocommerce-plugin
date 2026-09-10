@@ -1,14 +1,4 @@
 jQuery(function ($) {
-  function toggleChildrenFields(parentRadio, childrenRadios) {
-    if (!parentRadio.prop("checked")) {
-      childrenRadios.prop("checked", false);
-      childrenRadios.attr("disabled", true);
-    } else {
-      childrenRadios.prop("checked", true);
-      childrenRadios.attr("disabled", false);
-    }
-  }
-
   // ── Custom request headers table ────────────────────────────────────
   // Row indices are only a POST grouping key, so a removed row leaves a gap
   // rather than forcing a renumber; validate_two_custom_headers_field()
@@ -77,17 +67,6 @@ jQuery(function ($) {
         .open();
   });
 
-  $("body").on(
-    "change",
-    "#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search",
-    function (e) {
-      toggleChildrenFields(
-        $(this),
-        $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_address_lookup")
-      );
-    }
-  );
-
   jQuery("[id*='" + twoinc_admin.gateway_id + "'].wc-settings-sub-title").append(
     '<a href="#" class="collapsed setting-dropdown"><span class="dashicons dashicons-arrow-down-alt2"></span></a>'
   );
@@ -107,11 +86,6 @@ jQuery(function ($) {
   jQuery("h3.wc-settings-sub-title, p.submit").before('<hr class="setting-separator" />');
 
   jQuery("h3.wc-settings-sub-title").next().hide();
-
-  toggleChildrenFields(
-    $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search"),
-    $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_address_lookup")
-  );
 
   let verificationTimeout;
   const $apiKeyField = $("#woocommerce_" + twoinc_admin.gateway_id + "_api_key");
