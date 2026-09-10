@@ -181,6 +181,63 @@ describe("the two address forms are independent", () => {
     expect(ctx.Twoinc.getInstance().addressStateFor("billing").registryApplied).toBe(false);
   });
 
+  /**
+   * ABN-551. Replacing a captured company must not leave any component of the
+   * outgoing one behind. Line 2 was the live case: a sole trader adopted by
+   * autofill writes it, and the registry record for the company chosen next
+   * carries no premises, so setAddress had nothing to say about line 2 and the
+   * previous line survived a completed replacement.
+   */
+  test.each([
+    [
+      { street: "Registry Street 1", city: "Registryville", postal_code: "AB1 2CD" },
+      { address_1: "Registry Street 1", address_2: "", city: "Registryville", postcode: "AB1 2CD" },
+      "a record with no premises clears the line 2 the outgoing one wrote"
+    ],
+    [
+      {
+        building: "Flat 9",
+        street: "Registry Street 1",
+        city: "Registryville",
+        postal_code: "AB1 2CD"
+      },
+      {
+        address_1: "Flat 9",
+        address_2: "Registry Street 1",
+        city: "Registryville",
+        postal_code: "AB1 2CD"
+      },
+      "a record WITH premises still fills both lines"
+    ],
+    [
+      { street: "Registry Street 1" },
+      { address_1: "Registry Street 1", address_2: "", city: "", postcode: "" },
+      "a record carrying only a street clears city and postcode too"
+    ]
+  ])("%#: replacing a captured address (%s)", (record, expected, _description) => {
+    // What the outgoing capture left on the form, premises and all.
+    ctx.Twoinc.getInstance().setAddress(
+      {
+        building: "Outgoing Annexe",
+        street: "Outgoing Street 4",
+        city: "Outgoingville",
+        postal_code: "OG1 1AA"
+      },
+      "billing"
+    );
+
+    ctx.Twoinc.getInstance().addressLookup({ lookup_id: "billing-lookup" }, "billing");
+    ajax.last().succeed({ addresses: [record] });
+
+    const landed = addressOf("billing");
+    expect(landed.address_1).toBe(expected.address_1);
+    expect(landed.address_2).toBe(expected.address_2 || "");
+    expect(landed.city).toBe(expected.city === undefined ? "Registryville" : expected.city);
+    expect(landed.postcode).toBe(expected.postcode === undefined ? "AB1 2CD" : expected.postcode);
+    // Role-scoped, so the other form keeps whatever the buyer put there.
+    expect(addressOf("shipping")).toEqual(BLANK);
+  });
+
   test.each([
     ["billing", "shipping"],
     ["shipping", "billing"]

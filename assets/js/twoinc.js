@@ -5544,6 +5544,9 @@ class Twoinc {
       if (requestCountry && landedCountry && landedCountry !== requestCountry) return;
       // Use new address lookup by default
       if (response.addresses) {
+        // Cleared first because setAddress writes only what the payload carries: a component the
+        // new record omits would otherwise keep the outgoing company's value.
+        self.clearAddress(addressRole);
         self.setAddress(response.addresses[0], addressRole);
         // Only here, on the branch that actually writes registry data. A
         // buyer's own address (account-prefilled, or typed by hand) never
