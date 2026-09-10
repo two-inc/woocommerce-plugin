@@ -2890,6 +2890,14 @@ if (!class_exists('WC_Twoinc')) {
             $offered = array_values(array_unique($offered));
             sort($offered);
 
+            // Nothing offered at all is the selection validate_two_payment_terms_field refuses, so
+            // the stored terms stand and the default that pointed at them must stand with them —
+            // computing Automatic from a rejected selection changes a setting nobody edited.
+            if (count($offered) === 0) {
+                $current = $this->get_option($key);
+                return is_scalar($current) ? (string) $current : '';
+            }
+
             $value = (int) $value;
             if (in_array($value, $offered, true)) {
                 return (string) $value;

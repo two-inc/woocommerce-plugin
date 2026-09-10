@@ -111,6 +111,7 @@ final class BrandConfigSpec
             'testSurchargeGridEnforcesMerchantFixedCap',
             'testSurchargeRefusalIsVisibleAndNothingPartiallySaves',
             'testAnInvalidSurchargeFigureNamesItselfInTheSurvivingNoticeBucket',
+            'testAnEmptyTermSelectionIsRefusedAndTheDefaultTermStands',
             'testStoredCustomTermNormalisation',
             'testDeprecatedCustomTermRendersKeepOrRemove',
             'testDeprecatedCustomTermSaveStates',
@@ -4765,6 +4766,72 @@ final class BrandConfigSpec
             $rendered = self::gateway();
             $rendered->init_form_fields();
             TinyAssert::same([], $rendered->get_errors(), $description . ': the rendering instance holds no error of its own');
+        }
+    }
+
+    /**
+     * ABN-553. Unticking every payment term reported success, put the previous
+     * selection back, and changed the stored default term to Automatic —
+     * because WooCommerce skips only the field that threw, so the refused term
+     * list was preserved while default_payment_term was recomputed from the
+     * empty selection that had just been rejected and written.
+     */
+    private static function testAnEmptyTermSelectionIsRefusedAndTheDefaultTermStands(): void
+    {
+        // [posted term selection, posted custom term, the default that must stand, why].
+        $cases = [
+            [null, '', '30', 'unticking every term posts no group at all'],
+            [[], '', '30', 'an empty group is the same decision'],
+            [['30'], '', '30', 'a selection that still holds the default is untouched'],
+            [['60'], '', '', 'dropping the default term itself does hand the choice back to Automatic'],
+        ];
+
+        foreach ($cases as [$posted_terms, $custom, $expected_default, $description]) {
+            self::reset();
+            $gateway = self::gateway();
+            $gateway->init_form_fields();
+            $option_key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$option_key] = [
+                'payment_terms_days' => ['14', '30', '60', '90'],
+                'default_payment_term' => '30',
+                'payment_terms_custom_days' => '',
+            ];
+            $gateway->init_settings();
+            $post = [
+                $gateway->get_field_key('default_payment_term') => '30',
+                $gateway->get_field_key('payment_terms_custom_days') => $custom,
+            ];
+            if ($posted_terms !== null) {
+                $post[$gateway->get_field_key('payment_terms_days')] = $posted_terms;
+            }
+            $gateway->test_post_data = $post;
+            $_POST = $post;
+
+            $gateway->process_admin_options();
+            $saved = get_option($option_key, []);
+            $_POST = [];
+
+            TinyAssert::same(
+                $expected_default,
+                $saved['default_payment_term'] ?? null,
+                $description . ': the stored default term'
+            );
+
+            $refused = $expected_default === '30' && ($posted_terms === null || $posted_terms === []);
+            if ($refused) {
+                // Nothing about the selection moved, and the merchant is told which choice to make.
+                TinyAssert::same(
+                    ['14', '30', '60', '90'],
+                    $saved['payment_terms_days'],
+                    $description . ': the refused selection keeps its stored value'
+                );
+                TinyAssert::true(
+                    strpos(implode("\n", $GLOBALS['__twoinc_test_admin_errors']), 'Select at least one payment term') !== false,
+                    $description . ': the empty selection must be refused out loud'
+                );
+            } else {
+                TinyAssert::same([], $GLOBALS['__twoinc_test_admin_errors'], $description . ': nothing to refuse');
+            }
         }
     }
 
