@@ -3919,10 +3919,12 @@ function createSoleTraderController(companySearch) {
       ) {
         controller.setMode("business");
       }
-      controller.restoreLaunchFocus(chipOwnsOutcome || controller.soleTraderAdopted);
+      // This popup's own outcome, not the global adoption state an earlier popup set: a re-signup
+      // closed by hand decided nothing, so the launcher still owns the focus it gave up.
+      controller.restoreLaunchFocus(chipOwnsOutcome || watcher.decided);
     },
 
-    /** Give an abandoned launch's focus back — to the company field when the holder is gone, never once adopted. */
+    /** Give an abandoned launch's focus back — to the company field when the holder is gone. */
     restoreLaunchFocus: function (outcomeOwned) {
       if (!controller.restoreOnSettle || controller.activePopupWatchers.length) return;
       controller.restoreOnSettle = false;
@@ -3933,7 +3935,16 @@ function createSoleTraderController(companySearch) {
         node.focus();
         return;
       }
-      // Unlike Magento, the field's own opener reopens the popover after a hand-closed, non-adopted popup — accepted (TWO-25658).
+      if (controller.soleTraderAdopted) {
+        // The holder may have been inside the dropdown this settle closed. The adopted state's own
+        // launcher sits outside it and reopens the same chooser, so it takes the focus instead of
+        // the company field, whose opener would reopen the search popover over the adopted lock.
+        const $launcher = controller.getDifferentSoleTraderBtnNode();
+        if ($launcher.length && companySearch.isOnScreen($launcher)) $launcher.trigger("focus");
+        return;
+      }
+      // Unlike Magento, the company field's opener reopening the popover after an abandoned signup
+      // is accepted (TWO-25658).
       companySearch.focusVisibleCompanyField(companySearch.companyFieldSelector());
     },
 

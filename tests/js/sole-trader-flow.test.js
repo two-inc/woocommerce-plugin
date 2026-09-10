@@ -3199,7 +3199,7 @@ describe("TWO-40 — sole-trader flow", () => {
         jest.useRealTimers();
       });
 
-      /** A keyboard buyer gets their place back once an abandoned popup has settled — unless they have moved on, or a sole trader is adopted (the field's opener would reopen the popover over the lock). */
+      /** A keyboard buyer gets their place back once an abandoned popup has settled — unless they have moved on. Once a sole trader is adopted only the launcher is given it back, never the company field, whose opener would reopen the popover over the lock. */
       test.each([
         {
           adopted: true,
@@ -3207,8 +3207,19 @@ describe("TWO-40 — sole-trader flow", () => {
           settle: (win) => {
             win.closed = true;
           },
-          focusedAfter: () => document.body,
-          description: "closing a re-signup by hand while adopted gives nothing back"
+          focusedAfter: differentSoleTraderBtn,
+          description:
+            "closing a re-signup by hand while adopted gives the launcher its focus back (ABN-561)"
+        },
+        {
+          adopted: true,
+          launcher: () => chipNode("sole_trader"),
+          settle: (win) => {
+            win.closed = true;
+          },
+          // The chip is inside the dropdown the settle closes, so the adopted state's own launcher takes it.
+          focusedAfter: differentSoleTraderBtn,
+          description: "the same, launched from the adopted chip rather than the link (ABN-561)"
         },
         {
           // The settle closes the popover the chip lives in, so the holder is gone and the company field's opener lands focus in the query.
