@@ -2312,7 +2312,7 @@ describe("TWO-40 — sole-trader flow", () => {
         // clicked with nothing open. The close is conditional, so it is a
         // no-op here rather than a second code path.
         harness.openCompanyPanel($, ctx.helper);
-        ctx.helper.closeCompanySearchDropdown();
+        ctx.helper.closeCompanySearchDropdown({ returnFocus: false });
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
         const win = { closed: false };
@@ -2752,7 +2752,7 @@ describe("TWO-40 — sole-trader flow", () => {
             window.open = jest.fn(() => fakePopup());
             jest.useFakeTimers();
           }
-          if (!popoverOpen) ctx.helper.closeCompanySearchDropdown();
+          if (!popoverOpen) ctx.helper.closeCompanySearchDropdown({ returnFocus: false });
           jest.advanceTimersByTime(0);
           expect(ctx.helper.companySearchDropdownIsOpen()).toBe(popoverOpen);
           const openedBefore = window.open.mock.calls.length;
@@ -3722,7 +3722,7 @@ describe("TWO-40 — sole-trader flow", () => {
         const ajax = harness.stubAjax($);
         harness.openCompanyPanel($, ctx.helper);
         ctx.helper.onPick({ id: "A Registered Co", company_id: "12345678" });
-        ctx.helper.closeCompanySearchDropdown();
+        ctx.helper.closeCompanySearchDropdown({ returnFocus: false });
         expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
         expect($("#company_id").val()).toBe("12345678");
 
@@ -3958,7 +3958,7 @@ describe("TWO-40 — sole-trader flow", () => {
             harness.openCompanyPanel($, ctx.helper);
             jest.spyOn(soleTrader, "launchSignup").mockImplementation(() => {});
             clickChip("sole_trader");
-            ctx.helper.closeCompanySearchDropdown();
+            ctx.helper.closeCompanySearchDropdown({ returnFocus: false });
 
             soleTrader.setMode("business");
 

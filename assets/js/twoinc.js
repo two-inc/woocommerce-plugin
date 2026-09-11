@@ -1345,9 +1345,14 @@ class TwoCompanySearch {
     return this.isOnScreen(jQuery(this.companyFieldSelector()));
   }
 
-  closeCompanySearchDropdown() {
+  /**
+   * @param {object} [options] `returnFocus: false` where focus has already
+   *        settled somewhere the buyer put it, so taking it back would undo
+   *        their own move.
+   */
+  closeCompanySearchDropdown(options) {
     const panel = this.panel;
-    if (panel) panel.close();
+    if (panel) panel.close(options);
   }
 
   /** No production caller: the tests' read of the panel's open state. */
@@ -3457,7 +3462,10 @@ function createSoleTraderController(companySearch) {
           .removeClass("twoinc-sole-trader-toggle--busy");
         if (controller.closeDropdownOnSettle) {
           controller.closeDropdownOnSettle = false;
-          companySearch.closeCompanySearchDropdown();
+          // This path places focus itself, once the popup has gone: the
+          // launcher that held it, or the company field, whose own opener then
+          // brings the picker back (TWO-25658).
+          companySearch.closeCompanySearchDropdown({ returnFocus: false });
         }
       }
       companySearch.syncSoleTraderSurfaces();
@@ -4007,7 +4015,9 @@ function createSoleTraderController(companySearch) {
         // The field counts as inside: it is the popover's own trigger, and its focus opener would otherwise race rule (3) on event order.
         const field = jQuery(companySearch.companyFieldSelector())[0];
         if (target !== field && !(popover && popover.contains(target))) {
-          companySearch.closeCompanySearchDropdown();
+          // This whole handler runs BECAUSE focus landed on `target`; returning
+          // it to the company field would take it straight back off (TWO-25658).
+          companySearch.closeCompanySearchDropdown({ returnFocus: false });
         }
         // Last, so a focus the launch moves finds this controller's popups already closed and nothing left here to relaunch.
         if (relaunch && typeof relaunch.click === "function") relaunch.click();
@@ -5959,8 +5969,9 @@ class Twoinc {
     // wholesale, so `self.getApproval()` at the end of this function finds
     // an incomplete form and retires the in-flight request through its
     // own readiness guard.
-    // The panel drops whatever the outgoing country's search left in it.
-    twoincSelectWooHelper.closeCompanySearchDropdown();
+    // The panel drops whatever the outgoing country's search left in it. Focus
+    // stays where it is: the buyer is in the country select.
+    twoincSelectWooHelper.closeCompanySearchDropdown({ returnFocus: false });
 
     // Skipped entirely while sole-trader mode owns the field: this
     // rebuilds the search widget and wipes the capture pair
@@ -6013,7 +6024,7 @@ class Twoinc {
     // availability answer for the OUTGOING shipping country must not land.
     helper.companySearchSeq += 1;
     Twoinc.getInstance().addressStateFor(twoincAddressRoles.delivery()).lookupSeq += 1;
-    helper.closeCompanySearchDropdown();
+    helper.closeCompanySearchDropdown({ returnFocus: false });
 
     if (helper.soleTrader.mode !== "sole_trader") {
       // Recomputes `customerCompany` itself via `write()`'s own resolver call

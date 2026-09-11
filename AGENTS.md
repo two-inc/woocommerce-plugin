@@ -129,6 +129,19 @@ Vendored assets
   offered chip where the query row is withdrawn, so no mode opens the panel with
   focus nowhere. Same state a click leaves it in, and the same on every platform
   that carries this control.
+- **Closing the panel puts focus back on the company-name field** — Escape, a
+  pointer press outside it, a company adopted from the results, manual entry
+  taking the field over, and the plugin's own close when a sole-trader signup
+  answers (ABN-554). The field's own focus opener is held off for that one
+  programmatic focus alone, so any keydown on the field, a pointer press on it,
+  or focus arriving from anywhere else brings the popover straight back.
+- **Three closes pass `returnFocus: false`, and each has a reason.** The
+  deferred close-on-focus-leave fires only once focus has settled on another
+  control, so taking it back would undo the buyer's own Tab (TWO-25326). The
+  `focusin` classifier runs BECAUSE focus landed elsewhere. A country change
+  leaves the buyer in the country select. The sole-trader settle places focus
+  itself once the popup has gone, and the company field's own opener is what
+  brings the picker back there (TWO-25658).
 - **The open panel takes the field's tab stop** — `tabindex="-1"` while it is up,
   and on close the field's PRIOR value restored exactly, which is removal when
   there was none — a theme's own `tabindex` is given back, not removed
