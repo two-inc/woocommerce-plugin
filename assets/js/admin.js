@@ -67,9 +67,8 @@ jQuery(function ($) {
         .open();
   });
 
-  // Ticking "search in address entry" BY HAND switches autofill on with it, as a convenience.
-  // Edge, never level: nothing here writes the autofill checkbox on render or on an untick, so a
-  // stored value renders and posts back as stored (ABN-562).
+  // Ticking "search in address entry" by hand switches autofill on with it. Edge, never level —
+  // nothing writes that checkbox on render or on an untick, so a stored off survives a save (ABN-562).
   $("body").on(
     "change",
     "#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search",

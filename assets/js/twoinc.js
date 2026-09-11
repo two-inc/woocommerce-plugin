@@ -5728,8 +5728,7 @@ class Twoinc {
    *
    * The state/county control is cleared too: `setRegion()` writes a registry
    * region onto it, so a replacement whose record omits one would otherwise
-   * keep the outgoing company's county (ABN-551). The country is untouched, so
-   * the control keeps whatever options that country gives it.
+   * keep the outgoing company's county (ABN-551).
    *
    * @param {string} [role] address role to clear
    * @returns {void}

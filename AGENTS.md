@@ -219,7 +219,8 @@ close. The Sole trader chip does not: it lives inside the dropdown the settle
 closes. Focus then goes to whichever launcher is still standing, which once a
 sole trader is adopted is the "select a different sole trader" link, and that
 link reopens the same chooser. Where nothing was adopted, focus goes to the
-company name field instead, whose own opener reopens the search popover.
+company name field instead, whose own opener reopens the search popover and
+takes the focus into its query.
 
 One consistent target — always the company name field — would read better than
 a target that depends on which control the buyer launched from. It is not done:
