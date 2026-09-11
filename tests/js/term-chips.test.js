@@ -1,8 +1,9 @@
 /**
  * The payment-terms chip renderer in assets/js/twoinc.js.
  *
- * Four behaviours are pinned here because all four are silent when they
- * regress — the chips still render, just saying the wrong thing:
+ * Two families are pinned here. The first is what the chips SAY, because every
+ * one of these is silent when it regresses — the chips still render, just
+ * saying the wrong thing:
  *
  *   1. exactly one offered term  → the single chip names itself
  *      ("Payment Terms 30 days") and NO heading sits above it;
@@ -13,8 +14,14 @@
  *   4. whether an amount shows is decided over the whole offered set
  *      (ABN-528), so chips never disagree about carrying a fee.
  *
+ * The second is the radio-group keyboard contract the chips' roles advertise
+ * (ABN-554): one tab stop, arrow traversal with wrapping, the checked and
+ * visual states moving as one, focus surviving a re-render, and one commit per
+ * sweep. Tab order itself is not observable in jsdom, so the tab-stop count and
+ * the focus ring are verified in a real browser instead.
+ *
  * The chip contract is cross-platform: every platform's checkout renders the
- * same four rules, so a change here belongs in all of them.
+ * same rules, so a change here belongs in all of them.
  */
 
 "use strict";
