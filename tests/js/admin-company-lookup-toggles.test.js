@@ -1,13 +1,17 @@
 /**
- * ABN-562. The two company-lookup checkboxes are independent settings, and the
- * admin script must not rewrite either of them on render.
+ * ABN-562. "Enable company search in address entry" and "Autofill company
+ * address" are two stored settings with one convenience between them: ticking
+ * the first BY HAND switches the second on with it.
  *
- * "Enable company search in address entry" does not switch company search off
- * — it only moves the control between the address section and the payment tile
- * (see WC_Twoinc_Checkout::derive_company_search_location) — so "Autofill
- * company address" is not conditional on it. Driving the child's state from the
- * parent's showed a stored OFF as ON, and the next save of any unrelated
- * setting posted that tick back and switched autofill on again.
+ * That sync is edge-triggered. On render, and on the first being unticked, the
+ * second is left exactly as stored — driving it from the first's level showed a
+ * stored OFF as ON, and the next save of any unrelated setting posted that tick
+ * back and switched autofill on again. The second is never disabled either: a
+ * disabled input posts nothing, which WooCommerce stores as off.
+ *
+ * The first does not switch company search off — it only moves the control
+ * between the address section and the payment tile (see
+ * WC_Twoinc_Checkout::derive_company_search_location).
  */
 
 "use strict";
@@ -20,9 +24,14 @@ describe("company-lookup toggles", () => {
   const search = () => "#" + FIELD_PREFIX + "enable_company_search";
   const autofill = () => "#" + FIELD_PREFIX + "enable_address_lookup";
 
-  // [stored company search, stored autofill, description]
+  /** A merchant's own click: the value moves, then the browser fires `change`. */
+  function tick($, selector, checked) {
+    $(selector).prop("checked", checked).trigger("change");
+  }
+
+  // A page load is also what a save renders, so these cases are what survives one.
   test.each([
-    [true, false, "autofill saved off stays off under company search on"],
+    [true, false, "autofill saved off renders off under company search on"],
     [true, true, "both on are left on"],
     [false, true, "autofill saved on survives company search being off"],
     [false, false, "both off are left off"]
@@ -34,23 +43,60 @@ describe("company-lookup toggles", () => {
 
     expect($(search()).prop("checked")).toBe(storedSearch);
     expect($(autofill()).prop("checked")).toBe(storedAutofill);
-    // A disabled input posts nothing, which WooCommerce stores as off — so the
-    // stored value only survives an unrelated save while the input is enabled.
     expect($(autofill()).prop("disabled")).toBe(false);
   });
 
   test.each([
-    [false, "ticking company search"],
-    [true, "unticking company search"]
-  ])(
-    "company search starts checked=%s — %s does not touch the autofill value",
-    async (startChecked, _description) => {
-      const { $ } = await loadAdmin({ companySearch: startChecked, addressLookup: false });
-
-      $(search()).prop("checked", !startChecked).trigger("change");
-
-      expect($(autofill()).prop("checked")).toBe(false);
-      expect($(autofill()).prop("disabled")).toBe(false);
+    {
+      storedSearch: true,
+      storedAutofill: false,
+      act: () => {},
+      autofillAfter: false,
+      description: "a load with company search already on leaves a stored off alone"
+    },
+    {
+      storedSearch: false,
+      storedAutofill: false,
+      act: ($) => tick($, search(), true),
+      autofillAfter: true,
+      description: "ticking company search by hand switches autofill on with it"
+    },
+    {
+      storedSearch: false,
+      storedAutofill: false,
+      act: ($) => {
+        tick($, search(), true);
+        tick($, autofill(), false);
+      },
+      autofillAfter: false,
+      description: "unticking autofill after that edge sticks"
+    },
+    {
+      storedSearch: true,
+      storedAutofill: false,
+      act: ($) => {
+        tick($, search(), false);
+        tick($, search(), true);
+      },
+      autofillAfter: true,
+      description: "company search off then on again fires the edge again"
+    },
+    {
+      storedSearch: true,
+      storedAutofill: true,
+      act: ($) => tick($, search(), false),
+      autofillAfter: true,
+      description: "unticking company search never switches autofill off"
     }
-  );
+  ])("$description", async ({ storedSearch, storedAutofill, act, autofillAfter }) => {
+    const { $ } = await loadAdmin({
+      companySearch: storedSearch,
+      addressLookup: storedAutofill
+    });
+
+    act($);
+
+    expect($(autofill()).prop("checked")).toBe(autofillAfter);
+    expect($(autofill()).prop("disabled")).toBe(false);
+  });
 });

@@ -67,6 +67,18 @@ jQuery(function ($) {
         .open();
   });
 
+  // Ticking "search in address entry" BY HAND switches autofill on with it, as a convenience.
+  // Edge, never level: nothing here writes the autofill checkbox on render or on an untick, so a
+  // stored value renders and posts back as stored (ABN-562).
+  $("body").on(
+    "change",
+    "#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search",
+    function () {
+      if (!$(this).prop("checked")) return;
+      $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_address_lookup").prop("checked", true);
+    }
+  );
+
   jQuery("[id*='" + twoinc_admin.gateway_id + "'].wc-settings-sub-title").append(
     '<a href="#" class="collapsed setting-dropdown"><span class="dashicons dashicons-arrow-down-alt2"></span></a>'
   );
