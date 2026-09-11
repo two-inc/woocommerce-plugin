@@ -169,6 +169,13 @@ The payment-term chips are a radio group
   `render()` hands focus back to the rebuilt chip carrying the same term. Every fee
   quote, every term selection and every other checkout update re-renders, so without
   it the ordinary click path drops focus to the body too.
+- **One resolver decides the term a request is charged for.**
+  `WC_Twoinc_Payment_Terms::resolve_charged_term()` prefers the posted hidden
+  field and falls back to the session, and the cart fee, the availability gate
+  and the order payload all read it. The field follows a chip the moment the
+  buyer moves to it while the session follows a round trip later, so a fee
+  resolved from the session alone charges the term the buyer left while the order
+  is booked on the one they chose.
 - **Selection follows focus, so the commit is coalesced.** Each committed change
   costs a selection post, a full checkout update and a fresh fee quote, and an arrow
   sweep crosses every chip on the way. The arrow keys update the chips and the hidden
