@@ -69,6 +69,12 @@
     // silently fails to hide offers the buyer a mode the country cannot serve.
     const HIDDEN_CLASS = 'two-hidden';
 
+    /** @returns {boolean} whether focus is on nothing at all */
+    function focusIsUnplaced() {
+        const active = document.activeElement;
+        return !active || active === document.body || active === document.documentElement;
+    }
+
     /**
      * Every member the injected `search` API must carry. Checked at
      * construction because a host that supplies a partial one fails silently:
@@ -1003,6 +1009,8 @@
         const self = this;
         if (!this._chips) return;
         const selected = this.getSelectedMode();
+        // The node, read before the sync that takes it away (ABN-554).
+        const heldFocus = this._holdsFocus() ? document.activeElement : null;
         this._syncQueryVisibility(selected);
         this._unbind(this._chips);
         this._chips.innerHTML = '';
@@ -1035,6 +1043,31 @@
             self._chips.appendChild(button);
         });
         this._chips.classList.toggle(HIDDEN_CLASS, actionable === 0);
+        // A mode change takes away whatever held focus, so the control places
+        // focus again rather than leaving the buyer on nothing.
+        if (heldFocus && this._focusHolderIsGone(heldFocus)) {
+            if (this._open) this._focusOnOpen();
+            else this.restoreFieldFocus();
+        }
+    };
+
+    /**
+     * Whether the sync has taken away the node that held focus.
+     *
+     * Asks the NODE, not where focus is now: a rebuilt chip row deletes it
+     * (ABN-561), while a withdrawn query row only hides it and the browser's
+     * own blur for that lands after this handler — so `activeElement` still
+     * names an input the buyer can no longer see or type into.
+     *
+     * @param {Element} node the holder as it was before the sync
+     * @returns {boolean}
+     */
+    CompanySearchPanel.prototype._focusHolderIsGone = function (node) {
+        if (!node.isConnected) return true;
+        // Only while the popover is up: a closed panel is not the buyer's
+        // place either way, so a caret still recorded in it is nobody's cue.
+        if (this._open && node === this._query && this._queryRowIsHidden()) return true;
+        return focusIsUnplaced();
     };
 
     /**
