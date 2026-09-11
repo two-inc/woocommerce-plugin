@@ -3018,9 +3018,15 @@ let twoincTermChips = {
       const daysLabel = twoincTermChips.labelTemplate(cfg, single).replace("%s", days);
       $chip.append(jQuery("<span>", { class: "twoinc-term-chip__days", text: daysLabel }));
 
+      // The amount this chip will show: blank while the quote is in flight,
+      // when the whole offered set quotes nothing, and when the quote did not
+      // price this term.
+      const feeLabel =
+        twoincTermChips.feesLoaded && !allFeesZero ? twoincTermChips.feeLabel(days) : "";
+
       // Only under end-of-month terms: under standard terms the visible text
       // already says it, and a name restating it risks WCAG 2.5.3.
-      const explanation = twoincTermChips.explanation(cfg, days);
+      const explanation = twoincTermChips.explanation(cfg, days, feeLabel);
       if (explanation) {
         $chip.attr({ title: explanation, "aria-label": explanation });
       }
@@ -3040,11 +3046,8 @@ let twoincTermChips = {
           $loading.append(jQuery("<span>", { text: "." }));
         }
         $chip.append($loading);
-      } else if (!allFeesZero) {
-        const feeLabel = twoincTermChips.feeLabel(days);
-        if (feeLabel !== "") {
-          $chip.append(jQuery("<span>", { class: "twoinc-term-chip__fee", text: "+" + feeLabel }));
-        }
+      } else if (feeLabel !== "") {
+        $chip.append(jQuery("<span>", { class: "twoinc-term-chip__fee", text: "+" + feeLabel }));
       }
       if (!single) {
         $chip.on("click", function () {
@@ -3098,14 +3101,24 @@ let twoincTermChips = {
   /**
    * What "EOM+30" means, spelled out, and empty under standard terms. Opens
    * with the visible token: WCAG 2.5.3 requires the accessible name to contain
-   * the visible text.
+   * the visible text. An aria-label replaces the whole accessible name, so a
+   * priced chip states its amount too, or the amount inside it is announced
+   * nowhere. Each wording is one translated sentence, never assembled.
    *
    * @param {Object} cfg window.twoinc.payment_terms
    * @param {number} days the term
+   * @param {string} [feeText] the formatted amount, unprefixed and blank unless
+   *     the chip displays one
    * @returns {string}
    */
-  explanation: function (cfg, days) {
-    if (!cfg.eom || !cfg.eom_explainer) {
+  explanation: function (cfg, days, feeText) {
+    if (!cfg.eom) {
+      return "";
+    }
+    if (feeText && cfg.eom_explainer_fee) {
+      return cfg.eom_explainer_fee.split("%1$s").join(days).split("%2$s").join(feeText);
+    }
+    if (!cfg.eom_explainer) {
       return "";
     }
     return cfg.eom_explainer.split("%s").join(days);

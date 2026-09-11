@@ -453,6 +453,14 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                         'EOM+%s: pay %s days after the end of the month',
                         'twoinc-payment-gateway'
                     ),
+                    // An aria-label replaces the whole accessible name, so a
+                    // chip's own fee is announced nowhere unless the name states
+                    // it. `%1$s` is the day count, `%2$s` the formatted amount
+                    // the browser holds.
+                    'eom_explainer_fee' => __(
+                        'EOM+%1$s: pay %1$s days after the end of the month, plus a %2$s surcharge',
+                        'twoinc-payment-gateway'
+                    ),
                     // Chips render whenever a term is offered, including the
                     // single-term case — Magento shows that one term (and its
                     // surcharge) as a disabled chip rather than hiding it.

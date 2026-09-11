@@ -6708,9 +6708,19 @@ final class BrandConfigSpec
             $copy = $decoded['payment_terms'] ?? [];
 
             TinyAssert::same($eom, $copy['eom'] ?? null, $case . ' publishes whether the term is end of month');
+            // The fee sentence numbers its placeholders because two different
+            // values go in; compared against the token on the shared `%s` form.
+            foreach (['eom_explainer', 'eom_explainer_fee'] as $key) {
+                $sentence = str_replace(['%1$s', '%2$s'], '%s', (string) ($copy[$key] ?? ''));
+                TinyAssert::true(
+                    strpos($sentence, (string) ($copy['days_label_eom'] ?? 'missing')) === 0,
+                    $case . ' spells the token out starting with the token itself: ' . $key
+                );
+            }
+            // The browser substitutes the amount, so its placeholder has to survive.
             TinyAssert::true(
-                strpos((string) ($copy['eom_explainer'] ?? ''), (string) ($copy['days_label_eom'] ?? 'missing')) === 0,
-                $case . ' spells the token out starting with the token itself'
+                strpos((string) ($copy['eom_explainer_fee'] ?? ''), '%2$s') !== false,
+                $case . ' leaves the amount for the browser to substitute'
             );
         }
         unset($GLOBALS['__twoinc_test_is_checkout'], $GLOBALS['__twoinc_test_transients']);

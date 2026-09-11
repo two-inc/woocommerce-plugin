@@ -1286,6 +1286,11 @@ msgstr "EOM+%s"
 msgid "EOM+%s: pay %s days after the end of the month"
 msgstr "EOM+%s: betaal %s dagen na het einde van de maand"
 
+#: class/WC_Twoinc_Checkout.php:460
+#, php-format
+msgid "EOM+%1$s: pay %1$s days after the end of the month, plus a %2$s surcharge"
+msgstr "EOM+%1$s: betaal %1$s dagen na het einde van de maand, plus %2$s toeslag"
+
 #: class/WC_Twoinc_Checkout.php:451
 #, php-format
 msgid "Payment Terms EOM+%s"
