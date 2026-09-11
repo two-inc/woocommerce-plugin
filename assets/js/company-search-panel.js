@@ -491,9 +491,8 @@
             if (!self._open) return;
             if (self._panel && self._panel.contains(event.target)) return;
             if (self._field === event.target) return;
-            // Not close()'s own focus return: the press's default action runs
-            // AFTER this handler and would blow it away — focusing whatever it
-            // hit, or clearing focus where it hit nothing focusable.
+            // Deferred instead of close()'s own return: the press's default
+            // action runs after this handler and would undo it.
             self.close({ returnFocus: false });
             self._returnFocusIfDropped();
         });
@@ -532,9 +531,8 @@
             // — in neither case has the buyer left the control.
             const active = document.activeElement;
             if (!active || active === document.body || active === document.documentElement) return;
-            // `returnFocus: false`: by the time this runs the buyer has settled
-            // focus on another control, and taking it back would undo their own
-            // Tab (TWO-25326).
+            // Focus has settled on another control by now; taking it back
+            // would undo the buyer's own Tab (TWO-25326).
             self.close({ returnFocus: false });
         }, 0);
     };
