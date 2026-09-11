@@ -35,8 +35,8 @@ describe("payment terms chips", () => {
   function mount(cfg, fees) {
     ctx = harness.loadTwoinc({ payment_terms: cfg });
     document.body.innerHTML = [
-      '<label class="twoinc-term-chips-heading hidden"></label>',
-      '<div class="twoinc-term-chips hidden" role="radiogroup"></div>'
+      '<span class="twoinc-term-chips-heading hidden" id="twoinc-term-chips-heading"></span>',
+      '<div class="twoinc-term-chips hidden" role="radiogroup" aria-labelledby="twoinc-term-chips-heading"></div>'
     ].join("");
     ctx.termChips.fees = fees || {};
     ctx.termChips.feesLoaded = true;

@@ -243,6 +243,7 @@ final class BrandConfigSpec
             'testClientVersionSuffixesShortShaWhenStamped',
             'testClientVersionIsQueryEncodedAsPlus',
             'testPaymentBoxOrdersTaglineChipsThenSoleTrader',
+            'testTermChipGroupIsNamedByANonLabelHeading',
             'testPaymentBoxRendersCompanySearchTileSlotBetweenSoleTraderAndIntentMessage',
             'testDeclinedBoxCarriesCompanyTemplate',
             'testSelectedTermInputPrecedesChipsContainer',
@@ -10213,6 +10214,30 @@ final class BrandConfigSpec
      * `twoinc-sole-trader-note-slot` here only ever holds the
      * signup-prompt note and in-flight error.
      */
+    /**
+     * The chip radiogroup takes its accessible name from the heading above it,
+     * and that heading is not a `label`: a `label` names exactly one form
+     * control, and this one names a group (ABN-554).
+     */
+    private static function testTermChipGroupIsNamedByANonLabelHeading(): void
+    {
+        $html = self::gateway()->build_payment_description();
+
+        TinyAssert::true(
+            strpos($html, '<span class="twoinc-term-chips-heading hidden" id="twoinc-term-chips-heading">') !== false,
+            'the chip heading must be a span carrying the id the group points at'
+        );
+        TinyAssert::true(
+            strpos($html, 'class="twoinc-term-chips hidden" role="radiogroup" aria-labelledby="twoinc-term-chips-heading"') !== false,
+            'the chip radiogroup must be named by the heading'
+        );
+        TinyAssert::true(
+            strpos($html, 'twoinc-term-chips-heading') !== false
+                && strpos($html, '<label class="twoinc-term-chips-heading') === false,
+            'the chip heading must not be a label element'
+        );
+    }
+
     private static function testPaymentBoxOrdersTaglineChipsThenSoleTrader(): void
     {
         self::useTaglineBrand();

@@ -422,7 +422,8 @@
 /* Payment terms chip selector (TWO-24751) */
 /*
  * Heading above the chips, shown only when more than one term is offered.
- * A plain form label, not a chip.
+ * It names the chip radiogroup, so it is a `span` and needs the block display
+ * a form label would have carried.
  */
 .twoinc-term-chips-heading {
   display: block;
