@@ -140,6 +140,7 @@ final class BrandConfigSpec
             'testPaymentTermsValidationRequiresSelection',
             'testDefaultTermCoercedToOfferedSet',
             'testOrderPayloadCarriesSelectedAndAvailableTerms',
+            'testCartFeeAndOrderPayloadChargeTheSameTerm',
             'testPaymentTermsInvalidPostFallsBackToDefault',
             'testPaymentTermsDisabledMeansNoPayloadTerms',
             'testPaymentTermsTypeOfferedOnlyToShopsAlreadyOnEndOfMonth',
@@ -243,6 +244,7 @@ final class BrandConfigSpec
             'testClientVersionSuffixesShortShaWhenStamped',
             'testClientVersionIsQueryEncodedAsPlus',
             'testPaymentBoxOrdersTaglineChipsThenSoleTrader',
+            'testTermChipGroupIsNamedByANonLabelHeading',
             'testPaymentBoxRendersCompanySearchTileSlotBetweenSoleTraderAndIntentMessage',
             'testDeclinedBoxCarriesCompanyTemplate',
             'testSelectedTermInputPrecedesChipsContainer',
@@ -6589,6 +6591,62 @@ final class BrandConfigSpec
         unset($_POST[$terms_key], $_POST[$custom_key], $GLOBALS['__twoinc_test_options'][$due_option]);
     }
 
+    /**
+     * The fee the basket carries and the term the order is booked on must be
+     * the same term (ABN-554). The hidden checkout field follows a chip the
+     * moment the buyer moves to it, while the session follows it a round trip
+     * later, so a fee resolved from the session alone charges the term the
+     * buyer left.
+     */
+    private static function testCartFeeAndOrderPayloadChargeTheSameTerm(): void
+    {
+        $gateway = new class extends WC_Twoinc {
+            public array $quoted_terms = [];
+
+            public function __construct()
+            {
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                $options = [
+                    'surcharge_type' => 'percentage',
+                    'payment_terms_days' => [30, 60],
+                    'surcharge_grid' => [30 => ['percentage' => 1.0], 60 => ['percentage' => 4.0]],
+                ];
+                return $options[$key] ?? $empty_value ?? '';
+            }
+
+            public function get_merchant_available_terms(): array
+            {
+                return [30, 60];
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                $this->quoted_terms[] = $payload['order_terms']['duration_days'] ?? null;
+                return ['response' => ['code' => 200], 'body' => json_encode(['buyer_fee_share' => '7.00', 'currency' => 'EUR'])];
+            }
+        };
+
+        self::withGatewayInstance($gateway, static function () use ($gateway) {
+            WC_Twoinc_Payment_Terms::reset_fee_cache();
+            WC()->session = new StubSession();
+            WC()->session->set('chosen_payment_method', $gateway->id);
+            WC()->session->set(WC_Twoinc_Payment_Terms::SESSION_KEY, 30);
+            WC()->customer = new StubCustomer('NO');
+            $_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] = '60';
+
+            WC_Twoinc_Payment_Terms::apply_cart_fee(new StubFeeCart());
+            $payload = WC_Twoinc_Payment_Terms::get_order_payload_terms($gateway, new StubOrder());
+
+            TinyAssert::same([60], $gateway->quoted_terms, 'the cart fee must be quoted for the posted term');
+            TinyAssert::same(60, $payload['terms']['duration_days'], 'the order must be booked on the posted term');
+        });
+
+        unset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]);
+    }
+
     private static function testOrderPayloadCarriesSelectedAndAvailableTerms(): void
     {
         $gateway = self::termsGateway(['payment_terms_days' => ['14', '30', '60', '90']]);
@@ -10213,6 +10271,30 @@ final class BrandConfigSpec
      * `twoinc-sole-trader-note-slot` here only ever holds the
      * signup-prompt note and in-flight error.
      */
+    /**
+     * The chip radiogroup takes its accessible name from the heading above it,
+     * and that heading is not a `label`: a `label` names exactly one form
+     * control, and this one names a group (ABN-554).
+     */
+    private static function testTermChipGroupIsNamedByANonLabelHeading(): void
+    {
+        $html = self::gateway()->build_payment_description();
+
+        TinyAssert::true(
+            strpos($html, '<span class="twoinc-term-chips-heading hidden" id="twoinc-term-chips-heading">') !== false,
+            'the chip heading must be a span carrying the id the group points at'
+        );
+        TinyAssert::true(
+            strpos($html, 'class="twoinc-term-chips hidden" role="radiogroup" aria-labelledby="twoinc-term-chips-heading"') !== false,
+            'the chip radiogroup must be named by the heading'
+        );
+        TinyAssert::true(
+            strpos($html, 'twoinc-term-chips-heading') !== false
+                && strpos($html, '<label class="twoinc-term-chips-heading') === false,
+            'the chip heading must not be a label element'
+        );
+    }
+
     private static function testPaymentBoxOrdersTaglineChipsThenSoleTrader(): void
     {
         self::useTaglineBrand();

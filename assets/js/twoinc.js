@@ -2881,6 +2881,13 @@ let twoincDomHelper = {
 let twoincTermChips = {
   fees: {},
   feesLoaded: false,
+  // The term a commit is about to post, or `null` when the committed
+  // selection is the whole truth.
+  pendingTerm: null,
+  commitTimer: null,
+  // Long enough to cover a fast arrow sweep across the row, short enough that
+  // a buyer who stops on a chip sees the total follow almost at once.
+  commitDelayMs: 500,
 
   config: function () {
     return (window.twoinc && window.twoinc.payment_terms) || { enabled: false };
@@ -2952,10 +2959,24 @@ let twoincTermChips = {
   render: function (terms, selected) {
     const $container = jQuery(".twoinc-term-chips");
     if ($container.length === 0) return;
+    // The rebuild below replaces every chip, so a chip the buyer is on is
+    // destroyed and focus falls to the body. Read before emptying the
+    // container, which moves activeElement to the body.
+    const focusedDays = jQuery.contains($container[0], document.activeElement)
+      ? jQuery(document.activeElement).attr("data-days")
+      : undefined;
     $container.empty();
 
     const cfg = twoincTermChips.config();
     const single = terms.length === 1;
+    // A commit still waiting out a sweep is the buyer's real choice, so an
+    // unrelated checkout update must not re-render the chips back onto the
+    // committed term.
+    const checkedTerm =
+      twoincTermChips.pendingTerm !== null && terms.indexOf(twoincTermChips.pendingTerm) !== -1
+        ? twoincTermChips.pendingTerm
+        : selected;
+    const focusableTerm = twoincTermChips.focusableTerm(terms, checkedTerm);
 
     // Whether a fee shows is decided over the whole offered set, never per
     // chip — the rule every platform follows. An unresolved quote counts as
@@ -2977,7 +2998,9 @@ let twoincTermChips = {
     }
 
     terms.forEach(function (days) {
-      const isSelected = days === selected;
+      // One predicate behind the tick and the exposed state, so the two
+      // cannot drift apart.
+      const isSelected = days === checkedTerm;
       const $chip = jQuery("<button>", {
         type: "button",
         class:
@@ -2986,6 +3009,9 @@ let twoincTermChips = {
           (single ? " twoinc-term-chip--single" : ""),
         role: "radio",
         "aria-checked": isSelected ? "true" : "false",
+        // The group is a single tab stop: only the chip the keyboard would
+        // arrive on is tabbable (ABN-554).
+        tabindex: days === focusableTerm ? 0 : -1,
         "data-days": days,
         disabled: single
       });
@@ -3033,6 +3059,14 @@ let twoincTermChips = {
       $container.append($chip);
     });
 
+    // Put focus back on the rebuilt chip carrying the same term. Focus outside
+    // the group is left alone, and a term the rebuild no longer offers has no
+    // equivalent chip to return to (ABN-554).
+    if (focusedDays !== undefined) {
+      const $again = $container.find('.twoinc-term-chip[data-days="' + focusedDays + '"]');
+      if ($again.length > 0) $again[0].focus();
+    }
+
     // The selection rides the checkout form post so process_payment can
     // validate it without depending on the session.
     let $hidden = $container.find("input[name='two_selected_term']");
@@ -3040,15 +3074,121 @@ let twoincTermChips = {
       $hidden = jQuery("<input>", { type: "hidden", name: "two_selected_term" });
       $container.append($hidden);
     }
-    $hidden.val(selected);
+    $hidden.val(checkedTerm);
+  },
+
+  /**
+   * The term the group's single tab stop sits on. A selection matching no
+   * offered term falls back to the first, so the group cannot leave the tab
+   * order altogether.
+   *
+   * @param {number[]} terms offered day counts
+   * @param {number} selected the checked term
+   * @returns {number|undefined}
+   */
+  focusableTerm: function (terms, selected) {
+    return terms.indexOf(selected) === -1 ? terms[0] : selected;
+  },
+
+  /**
+   * The radio-group keyboard contract the chips' roles advertise (ABN-554):
+   * the arrow keys move the checked term and the focus together, Home and End
+   * jump to the ends, and both ends wrap. Modified arrow keys are left to the
+   * browser, or the group swallows shortcuts such as Alt+Left for "back".
+   *
+   * @param {JQuery.KeyDownEvent} event
+   */
+  onKeydown: function (event) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+
+    const $chips = jQuery(event.currentTarget).find(".twoinc-term-chip").not(":disabled");
+    if ($chips.length < 2) return;
+
+    // Focus can sit outside the chips when the group is entered by a click on
+    // its padding, so the tab stop stands in for "where the keyboard is".
+    let current = $chips.index(document.activeElement);
+    if (current === -1) current = Math.max($chips.index($chips.filter('[tabindex="0"]')), 0);
+
+    let next;
+    switch (event.key) {
+      case "ArrowRight":
+      case "ArrowDown":
+        next = (current + 1) % $chips.length;
+        break;
+      case "ArrowLeft":
+      case "ArrowUp":
+        next = (current - 1 + $chips.length) % $chips.length;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = $chips.length - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    twoincTermChips.moveTo($chips.eq(next));
+  },
+
+  /**
+   * Move the checked state, the tab stop and the focus onto one chip, in
+   * place. Re-rendering here would destroy the chip the focus just landed on.
+   *
+   * @param {JQuery} $chip the chip to check
+   */
+  moveTo: function ($chip) {
+    const days = parseInt($chip.attr("data-days"), 10);
+    const $container = $chip.closest(".twoinc-term-chips");
+
+    $container.find(".twoinc-term-chip").each(function () {
+      const isSelected = this === $chip[0];
+      jQuery(this)
+        .toggleClass("twoinc-term-chip--selected", isSelected)
+        .attr({ "aria-checked": isSelected ? "true" : "false", tabindex: isSelected ? 0 : -1 });
+    });
+    $container.find("input[name='two_selected_term']").val(days);
+    $chip[0].focus();
+    twoincTermChips.commit(days);
+  },
+
+  /**
+   * Post the buyer's term once the sweep settles. Selection follows focus, so
+   * every arrow key changes the term, and committing each one would cost a
+   * selection post, a full checkout update and a fresh fee quote per
+   * keystroke. The hidden field is already current and is what the order is
+   * composed on, so the wait costs only the displayed total.
+   *
+   * @param {number} days the term to commit
+   */
+  commit: function (days) {
+    clearTimeout(twoincTermChips.commitTimer);
+    // A sweep that comes back to the term the server already holds has nothing
+    // to commit, and posting it would cost a checkout update for no change.
+    if (days === twoincTermChips.config().selected) {
+      twoincTermChips.pendingTerm = null;
+      return;
+    }
+    twoincTermChips.pendingTerm = days;
+    twoincTermChips.commitTimer = setTimeout(function () {
+      twoincTermChips.select(days);
+    }, twoincTermChips.commitDelayMs);
   },
 
   select: function (days) {
+    // Supersedes a keyboard commit still waiting out its sweep.
+    clearTimeout(twoincTermChips.commitTimer);
+    twoincTermChips.pendingTerm = days;
+
     const cfg = twoincTermChips.config();
     if (!cfg.select_url) return;
     jQuery
       .post(cfg.select_url, { days: days, csrf_token: cfg.csrf_token })
       .done(function (response) {
+        // Only where this response is still the latest word: a newer
+        // selection made mid-flight must survive the older one landing.
+        if (twoincTermChips.pendingTerm === days) twoincTermChips.pendingTerm = null;
         if (response && response.success && response.data) {
           cfg.selected = response.data.selected;
           // Recalculate totals so the offset fee follows the new term;
@@ -3058,9 +3198,22 @@ let twoincTermChips = {
       })
       .fail(function () {
         // Keep the previous selection on failure.
+        if (twoincTermChips.pendingTerm === days) twoincTermChips.pendingTerm = null;
       });
   }
 };
+
+// Delegated because a checkout update replaces the payment fragment, and with
+// it the chip container this listens on. On `document`, not `document.body`:
+// this script is enqueued in the head, where there is no body yet and a
+// binding on it silently attaches to nothing. Namespaced and unbound first so
+// a second evaluation of this script replaces the handler rather than stacking
+// a second one that moves the selection twice per key.
+jQuery(document)
+  .off("keydown.twoincTermChips")
+  .on("keydown.twoincTermChips", ".twoinc-term-chips", function (event) {
+    twoincTermChips.onKeydown(event);
+  });
 
 /**
  * The prefetched autofill answer — the buyer object, or `false` for "nobody
