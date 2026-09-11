@@ -98,13 +98,6 @@ describe("closing the popover hands focus back to the company-name field", () =>
     {
       drive: async () => {
         harness.openCompanyPanel($, helper);
-        dispatchMousedown(backdrop());
-      },
-      description: "a pointer press on a page area that takes no focus of its own"
-    },
-    {
-      drive: async () => {
-        harness.openCompanyPanel($, helper);
         await searchYielding("example", [
           {
             name: "Example Trading Co",
@@ -165,6 +158,34 @@ describe("closing the popover hands focus back to the company-name field", () =>
 
     expect(panelIsOpen()).toBe(true);
     expect(displayField().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  /**
+   * The press's own default action runs after the panel's handler: it focuses
+   * whatever it hit, or clears focus where it hit nothing focusable. jsdom
+   * performs neither, so each case plays the browser's part explicitly — which
+   * is also what makes the two cases distinguishable at all.
+   */
+  test.each([
+    {
+      settleFocus: () => document.querySelector(OUTSIDE_FIELD).focus(),
+      expected: () => document.querySelector(OUTSIDE_FIELD),
+      description: "a press on another control leaves focus on that control"
+    },
+    {
+      settleFocus: () => document.activeElement.blur(),
+      expected: () => displayField(),
+      description: "a press on anything unfocusable hands focus to the company field"
+    }
+  ])("$description", async ({ settleFocus, expected }) => {
+    harness.openCompanyPanel($, helper);
+
+    dispatchMousedown(backdrop());
+    settleFocus();
+    jest.advanceTimersByTime(1);
+
+    expect(panelIsOpen()).toBe(false);
+    expect(document.activeElement).toBe(expected());
   });
 
   test("focus settling outside the control closes the panel and leaves that control alone", () => {
