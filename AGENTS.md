@@ -175,10 +175,14 @@ The payment-term chips are a radio group
   `two_selected_term` field in place and arm one delayed commit; a click supersedes a
   commit still waiting. The order is composed on that posted field, current from the
   first keystroke, so the delay costs only the displayed total.
-- The keydown binding is delegated from the body and namespaced, unbound before it is
-  bound: a checkout update replaces the payment fragment and the container with it,
-  and a second evaluation of the script would otherwise stack a handler that moves
-  the selection twice per key.
+- **The keydown binding is delegated from `document`, not `document.body`.** This
+  script is enqueued in the head, where there is no body yet, so a body-rooted
+  binding attaches to nothing at all — and jsdom cannot catch it, because the Jest
+  harness evaluates the source with a body already present. It is delegated rather
+  than bound on the container because a checkout update replaces the payment
+  fragment and the container with it, and namespaced with an unbind first so a
+  second evaluation of the script replaces the handler instead of stacking one that
+  moves the selection twice per key.
 
 Keyboard behaviour is not verifiable in jsdom
 
