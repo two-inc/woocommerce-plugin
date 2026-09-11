@@ -3924,7 +3924,7 @@ function createSoleTraderController(companySearch) {
       controller.restoreLaunchFocus(chipOwnsOutcome || watcher.decided);
     },
 
-    /** Give an abandoned launch's focus back — to the company field when the holder is gone. */
+    /** Give an abandoned launch's focus back — to the adopted launcher or the company field when the holder is gone. */
     restoreLaunchFocus: function (outcomeOwned) {
       if (!controller.restoreOnSettle || controller.activePopupWatchers.length) return;
       controller.restoreOnSettle = false;
