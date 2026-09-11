@@ -134,4 +134,20 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
     expect(document.activeElement).toBe(document.querySelector(QUERY));
   });
 
+  test.each([
+    { reach: () => document.querySelector(QUERY), description: "the query field" },
+    {
+      reach: () => chipNode("manual"),
+      description: "a mode chip, which is what holds focus once the query row is withdrawn"
+    }
+  ])("Escape on $description closes the popover and hands the field back", ({ reach }) => {
+    open();
+    const from = reach();
+    from.focus();
+
+    pressKey(from, "Escape");
+
+    expect(helper.companySearchDropdownIsOpen()).toBe(false);
+    expect(document.activeElement).toBe(document.querySelector("#billing_company_display"));
+  });
 });
