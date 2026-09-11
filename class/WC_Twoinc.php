@@ -7071,10 +7071,9 @@ if (!class_exists('WC_Twoinc')) {
             // Save all settings (with the API key reverted only on a rejection)
             $_POST = $post_data;
             parent::process_admin_options();
-            // WooCommerce re-instantiates every gateway immediately after firing the save action, so
-            // WC_Settings_API's per-field error bucket belongs to an object that is gone before the
-            // settings page renders. WC_Admin_Settings' bucket is static, and its show_messages()
-            // prints errors INSTEAD of core's unconditional "Your settings have been saved."
+            // WooCommerce re-instantiates every gateway after the save action, so this object's own
+            // error bucket never reaches the page; WC_Admin_Settings' is static and its
+            // show_messages() prints errors instead of core's unconditional success notice.
             foreach ($this->get_errors() as $error) {
                 WC_Admin_Settings::add_error($error);
             }
