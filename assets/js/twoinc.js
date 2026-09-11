@@ -5726,8 +5726,10 @@ class Twoinc {
    * the registry wrote for the OUTGOING company must not survive — so it is
    * its own function rather than a magic empty payload.
    *
-   * The state/county control is left alone: it belongs to the country, not to
-   * the company, and the country is not what is being cleared here.
+   * The state/county control is cleared too: `setRegion()` writes a registry
+   * region onto it, so a replacement whose record omits one would otherwise
+   * keep the outgoing company's county (ABN-551). The country is untouched, so
+   * the control keeps whatever options that country gives it.
    *
    * @param {string} [role] address role to clear
    * @returns {void}
@@ -5737,6 +5739,10 @@ class Twoinc {
     ["address_1", "address_2", "city", "postcode"].forEach(function (name) {
       jQuery(twoincAddressRoles.field(role, name)).val("");
     });
+    // selectWoo renders a state select's label from its value, so a blanked select needs the
+    // change to stop showing the county it no longer holds.
+    const $state = jQuery(twoincAddressRoles.field(role, "state"));
+    if ($state.length) $state.val("").trigger("change");
     jQuery(document.body).trigger("update_checkout");
   }
 

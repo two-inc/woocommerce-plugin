@@ -189,32 +189,37 @@ describe("the two address forms are independent", () => {
    * previous line survived a completed replacement.
    */
   test.each([
-    [
-      { street: "Registry Street 1", city: "Registryville", postal_code: "AB1 2CD" },
-      { address_1: "Registry Street 1", address_2: "", city: "Registryville", postcode: "AB1 2CD" },
-      "a record with no premises clears the line 2 the outgoing one wrote"
-    ],
-    [
-      {
+    {
+      record: { street: "Registry Street 1", city: "Registryville", postal_code: "AB1 2CD" },
+      expected: {
+        address_1: "Registry Street 1",
+        address_2: "",
+        city: "Registryville",
+        postcode: "AB1 2CD"
+      },
+      description: "a record with no premises clears the line 2 the outgoing one wrote"
+    },
+    {
+      record: {
         building: "Flat 9",
         street: "Registry Street 1",
         city: "Registryville",
         postal_code: "AB1 2CD"
       },
-      {
+      expected: {
         address_1: "Flat 9",
         address_2: "Registry Street 1",
         city: "Registryville",
-        postal_code: "AB1 2CD"
+        postcode: "AB1 2CD"
       },
-      "a record WITH premises still fills both lines"
-    ],
-    [
-      { street: "Registry Street 1" },
-      { address_1: "Registry Street 1", address_2: "", city: "", postcode: "" },
-      "a record carrying only a street clears city and postcode too"
-    ]
-  ])("%#: replacing a captured address (%s)", (record, expected, _description) => {
+      description: "a record WITH premises still fills both lines"
+    },
+    {
+      record: { street: "Registry Street 1" },
+      expected: { address_1: "Registry Street 1", address_2: "", city: "", postcode: "" },
+      description: "a record carrying only a street clears city and postcode too"
+    }
+  ])("replacing a captured address: $description", ({ record, expected }) => {
     // What the outgoing capture left on the form, premises and all.
     ctx.Twoinc.getInstance().setAddress(
       {
@@ -229,13 +234,40 @@ describe("the two address forms are independent", () => {
     ctx.Twoinc.getInstance().addressLookup({ lookup_id: "billing-lookup" }, "billing");
     ajax.last().succeed({ addresses: [record] });
 
-    const landed = addressOf("billing");
-    expect(landed.address_1).toBe(expected.address_1);
-    expect(landed.address_2).toBe(expected.address_2 || "");
-    expect(landed.city).toBe(expected.city === undefined ? "Registryville" : expected.city);
-    expect(landed.postcode).toBe(expected.postcode === undefined ? "AB1 2CD" : expected.postcode);
+    expect(addressOf("billing")).toMatchObject(expected);
     // Role-scoped, so the other form keeps whatever the buyer put there.
     expect(addressOf("shipping")).toEqual(BLANK);
+  });
+
+  /**
+   * ABN-551 again, for the component `clearAddress` used to skip: `setRegion`
+   * writes a registry region onto the state control, so a record that carries
+   * none left the outgoing company's county on the form.
+   */
+  test.each([
+    {
+      stateMarkup: '<input type="text" id="billing_state" name="billing_state" value="" />',
+      outgoing: "Kent",
+      description: "a free-text county input"
+    },
+    {
+      stateMarkup:
+        '<select id="billing_state" name="billing_state">' +
+        '<option value=""></option><option value="KEN">Kent</option></select>',
+      outgoing: "KEN",
+      description: "a state select"
+    }
+  ])("a replacement carrying no region clears $description", ({ stateMarkup, outgoing }) => {
+    buildAddressForm({ billingStateMarkup: stateMarkup });
+    $("#billing_state").val(outgoing);
+
+    ctx.Twoinc.getInstance().addressLookup({ lookup_id: "billing-lookup" }, "billing");
+    ajax.last().succeed({
+      addresses: [{ street: "Registry Street 1", city: "Registryville" }]
+    });
+
+    expect($("#billing_state").val()).toBe("");
+    expect($("#billing_city").val()).toBe("Registryville");
   });
 
   test.each([
