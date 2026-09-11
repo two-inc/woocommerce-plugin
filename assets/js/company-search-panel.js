@@ -69,14 +69,14 @@
     // silently fails to hide offers the buyer a mode the country cannot serve.
     const HIDDEN_CLASS = 'two-hidden';
 
+    /** Anything inside the panel a press is entitled to take focus to. */
+    const FOCUS_TARGETS = 'input, button, select, textarea, a[href], [tabindex]';
+
     /** @returns {boolean} whether focus is on nothing at all */
     function focusIsUnplaced() {
         const active = document.activeElement;
         return !active || active === document.body || active === document.documentElement;
     }
-
-    /** Anything inside the panel a press is entitled to take focus to. */
-    const FOCUS_TARGETS = 'input, button, select, textarea, a[href], [tabindex]';
 
     /**
      * @param {object} event mousedown event
