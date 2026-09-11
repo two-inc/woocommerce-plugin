@@ -129,6 +129,10 @@ Vendored assets
   offered chip where the query row is withdrawn, so no mode opens the panel with
   focus nowhere. Same state a click leaves it in, and the same on every platform
   that carries this control.
+- **A chip-row rebuild replaces every chip, so the focused one is destroyed.** The
+  rebuild hands focus to the company field, and only where it actually disconnected
+  the focused node — moving focus unconditionally would take it off whatever the
+  buyer was legitimately using (ABN-561).
 - **The open panel takes the field's tab stop** — `tabindex="-1"` while it is up,
   and on close the field's PRIOR value restored exactly, which is removal when
   there was none — a theme's own `tabindex` is given back, not removed
