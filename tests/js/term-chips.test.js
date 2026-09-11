@@ -633,16 +633,19 @@ describe("payment terms chips", () => {
     test.each([
       { focus: 90, checked: "30", tabbable: ["90"], case: "a chip the buyer has not chosen" },
       { focus: 30, checked: "30", tabbable: ["30"], case: "the checked chip itself" }
-    ])("a re-render keeps the tab stop on the focused chip: $case", ({ focus, checked, tabbable }) => {
-      const chips = mountGroup(30);
-      focusChip(focus);
+    ])(
+      "a re-render keeps the tab stop on the focused chip: $case",
+      ({ focus, checked, tabbable }) => {
+        const chips = mountGroup(30);
+        focusChip(focus);
 
-      chips.render([30, 60, 90], 30);
+        chips.render([30, 60, 90], 30);
 
-      expect(focusedDays()).toBe(String(focus));
-      expect(tabbableDays()).toEqual(tabbable);
-      expect(checkedDays()).toBe(checked);
-    });
+        expect(focusedDays()).toBe(String(focus));
+        expect(tabbableDays()).toEqual(tabbable);
+        expect(checkedDays()).toBe(checked);
+      }
+    );
 
     // Focus outside the group leaves the tab stop where the selection puts it.
     test("a re-render with focus outside the group tabs to the checked chip", () => {
