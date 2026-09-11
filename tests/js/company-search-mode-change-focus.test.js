@@ -146,14 +146,26 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
   });
 
   test.each([
-    { target: () => document.querySelector(PANEL), cancelled: true, description: "the panel's own padding" },
-    { target: () => document.querySelector(MESSAGE), cancelled: true, description: "the message line" },
+    {
+      target: () => document.querySelector(PANEL),
+      cancelled: true,
+      description: "the panel's own padding"
+    },
+    {
+      target: () => document.querySelector(MESSAGE),
+      cancelled: true,
+      description: "the message line"
+    },
     {
       target: () => document.querySelector(QUERY),
       cancelled: false,
       description: "the query field, which the press must still be able to place the caret in"
     },
-    { target: () => document.querySelector(CHIPS), cancelled: true, description: "the chip row between two chips" }
+    {
+      target: () => document.querySelector(CHIPS),
+      cancelled: true,
+      description: "the chip row between two chips"
+    }
   ])("a press on $description changes nothing", ({ target, cancelled }) => {
     open();
     const before = document.activeElement;
