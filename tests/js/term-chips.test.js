@@ -300,4 +300,60 @@ describe("payment terms chips", () => {
       expect(ctx.$(".twoinc-term-chip__loading")).toHaveLength(0);
     });
   });
+
+  // Every re-render replaces every chip, so a chip the buyer is on is
+  // destroyed. Without a handover focus falls to the body and the keyboard
+  // loses its place in the group (ABN-554).
+  describe("a re-render under the buyer's focus", () => {
+    /** @returns {string|null} the day-count of the focused chip, if any */
+    function focusedDays() {
+      const active = document.activeElement;
+      return active && active.classList.contains("twoinc-term-chip")
+        ? active.getAttribute("data-days")
+        : null;
+    }
+
+    function chipFor(days) {
+      return ctx.$('.twoinc-term-chip[data-days="' + days + '"]')[0];
+    }
+
+    test.each([
+      {
+        rerenderTerms: [30, 60, 90],
+        expected: "60",
+        description: "the same term keeps the focus on its rebuilt chip"
+      },
+      {
+        rerenderTerms: [30, 90],
+        expected: null,
+        description: "a term no longer offered has no chip to hand focus back to"
+      }
+    ])("$description", ({ rerenderTerms, expected }) => {
+      const chips = mount(
+        Object.assign({ enabled: true, terms: [30, 60, 90], selected: 30 }, COPY)
+      );
+      chips.render([30, 60, 90], 30);
+      const before = chipFor(60);
+      before.focus();
+      expect(focusedDays()).toBe("60");
+
+      chips.render(rerenderTerms, 30);
+
+      expect(focusedDays()).toBe(expected);
+      if (expected !== null) expect(document.activeElement).not.toBe(before);
+    });
+
+    test("leaves focus alone when it sits outside the chip group", () => {
+      const chips = mount(
+        Object.assign({ enabled: true, terms: [30, 60], selected: 30 }, COPY)
+      );
+      chips.render([30, 60], 30);
+      const $outside = ctx.$('<button type="button" id="outside"></button>').appendTo(document.body);
+      $outside[0].focus();
+
+      chips.render([30, 60], 30);
+
+      expect(document.activeElement.id).toBe("outside");
+    });
+  });
 });

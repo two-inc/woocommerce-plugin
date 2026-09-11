@@ -2952,6 +2952,12 @@ let twoincTermChips = {
   render: function (terms, selected) {
     const $container = jQuery(".twoinc-term-chips");
     if ($container.length === 0) return;
+    // The rebuild below replaces every chip, so a chip the buyer is on is
+    // destroyed and focus falls to the body. Read before emptying the
+    // container, which moves activeElement to the body.
+    const focusedDays = jQuery.contains($container[0], document.activeElement)
+      ? jQuery(document.activeElement).attr("data-days")
+      : undefined;
     $container.empty();
 
     const cfg = twoincTermChips.config();
@@ -3032,6 +3038,14 @@ let twoincTermChips = {
       }
       $container.append($chip);
     });
+
+    // Put focus back on the rebuilt chip carrying the same term. Focus outside
+    // the group is left alone, and a term the rebuild no longer offers has no
+    // equivalent chip to return to (ABN-554).
+    if (focusedDays !== undefined) {
+      const $again = $container.find('.twoinc-term-chip[data-days="' + focusedDays + '"]');
+      if ($again.length > 0) $again[0].focus();
+    }
 
     // The selection rides the checkout form post so process_payment can
     // validate it without depending on the session.
