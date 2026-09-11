@@ -118,6 +118,7 @@ final class BrandConfigSpec
             'testDeprecatedCustomTermFoldsInOnlyAgainstAResolvedOfferedSet',
             'testDeprecatedCustomTermWriteGuardHoldsEverySettingsWrite',
             'testDeprecatedCustomTermCopyIsTranslatedInEveryLocale',
+            'testChipCopyIsTranslatedInEveryLocale',
             'testZeroCapOnAnUnrenderedRowDoesNotBlockEnabling',
             'testDisablingSurchargesIsNeverBlockedByAZeroCap',
             'testUnrecognisedSurchargeMethodIsRefusedOnSave',
@@ -6415,6 +6416,95 @@ final class BrandConfigSpec
     }
 
     /**
+     * ABN-554. The chip strip's buyer-facing copy, in EVERY catalogue the plugin ships.
+     * es_ES is thinner than the other three, so a string added to the checkout reaches it
+     * only if somebody puts it there — and a Spanish shop then reads English beside a
+     * Spanish PrestaShop shop, with nothing else in the suite reporting it.
+     */
+    private static function testChipCopyIsTranslatedInEveryLocale(): void
+    {
+        $languages = dirname(__DIR__, 2) . '/languages/';
+        $cases = [
+            [
+                '%s days',
+                [
+                    'es_ES' => '%s días',
+                    'nb_NO' => '%s dager',
+                    'nl_NL' => '%s dagen',
+                    'sv_SE' => '%s dagar',
+                ],
+                'chip text under standard terms',
+            ],
+            [
+                'Selected payment terms',
+                [
+                    'es_ES' => 'Condiciones de pago seleccionadas',
+                    'nb_NO' => 'Valgte betalingsvilkår',
+                    'nl_NL' => 'Gewenste betaaltermijn',
+                    'sv_SE' => 'Valda betalningsvillkor',
+                ],
+                'heading that names the chip group',
+            ],
+            [
+                'EOM+%s',
+                [
+                    'es_ES' => 'EOM+%s',
+                    'nb_NO' => 'EOM+%s',
+                    'nl_NL' => 'EOM+%s',
+                    'sv_SE' => 'EOM+%s',
+                ],
+                'chip text under end-of-month terms',
+            ],
+            [
+                'EOM+%s: pay %s days after the end of the month',
+                [
+                    'es_ES' => 'EOM+%s: pague %s días después del final del mes',
+                    'nb_NO' => 'EOM+%s: betal %s dager etter månedens slutt',
+                    'nl_NL' => 'EOM+%s: betaal %s dagen na het einde van de maand',
+                    'sv_SE' => 'EOM+%s: betala %s dagar efter månadens slut',
+                ],
+                'end-of-month chip name',
+            ],
+            [
+                'EOM+%1$s: pay %1$s days after the end of the month, plus a %2$s surcharge',
+                [
+                    'es_ES' => 'EOM+%1$s: pague %1$s días después del final del mes, más un recargo de %2$s',
+                    'nb_NO' => 'EOM+%1$s: betal %1$s dager etter månedens slutt, pluss %2$s i tillegg',
+                    'nl_NL' => 'EOM+%1$s: betaal %1$s dagen na het einde van de maand, plus %2$s toeslag',
+                    'sv_SE' => 'EOM+%1$s: betala %1$s dagar efter månadens slut, plus %2$s i avgift',
+                ],
+                'end-of-month chip name stating the surcharge',
+            ],
+        ];
+        foreach ($cases as [$msgid, $expected, $description]) {
+            TinyAssert::true(
+                strpos(
+                    (string) file_get_contents($languages . 'twoinc-payment-gateway.pot'),
+                    addcslashes($msgid, '"\\')
+                ) !== false,
+                "the .pot is missing the $description — regenerate it"
+            );
+            foreach ($expected as $locale => $translation) {
+                TinyAssert::same(
+                    $translation,
+                    self::poTranslation(
+                        (string) file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.po'),
+                        $msgid
+                    ),
+                    "the $locale catalogue does not pair the $description with its translation"
+                );
+                TinyAssert::true(
+                    strpos(
+                        (string) file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.mo'),
+                        $translation
+                    ) !== false,
+                    "the compiled $locale catalogue predates the $description — recompile with msgfmt"
+                );
+            }
+        }
+    }
+
+    /**
      * ABN-522. Every write to the settings row is held to remove-or-keep, not just the admin
      * form's: the REST settings endpoint runs none of the gateway's own field validators.
      */
@@ -6708,6 +6798,14 @@ final class BrandConfigSpec
             $copy = $decoded['payment_terms'] ?? [];
 
             TinyAssert::same($eom, $copy['eom'] ?? null, $case . ' publishes whether the term is end of month');
+            // A lone chip reads exactly as one of several does, so there is no
+            // second template for it to diverge through (ABN-554).
+            foreach (['single_label', 'single_label_eom'] as $key) {
+                TinyAssert::true(
+                    !array_key_exists($key, $copy),
+                    $case . ' publishes no sole-term text override: ' . $key
+                );
+            }
             // The fee sentence numbers its placeholders because two different
             // values go in; compared against the token on the shared `%s` form.
             foreach (['eom_explainer', 'eom_explainer_fee'] as $key) {

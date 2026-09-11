@@ -2976,7 +2976,11 @@ let twoincTermChips = {
       twoincTermChips.pendingTerm !== null && terms.indexOf(twoincTermChips.pendingTerm) !== -1
         ? twoincTermChips.pendingTerm
         : selected;
-    const focusableTerm = twoincTermChips.focusableTerm(terms, checkedTerm);
+    const focusableTerm = twoincTermChips.focusableTerm(
+      terms,
+      checkedTerm,
+      focusedDays === undefined ? undefined : parseInt(focusedDays, 10)
+    );
 
     // Whether a fee shows is decided over the whole offered set, never per
     // chip — the rule every platform follows. An unresolved quote counts as
@@ -2986,12 +2990,10 @@ let twoincTermChips = {
       return (fee ? parseFloat(fee.buyer_fee_share) || 0 : 0) < 0.005;
     });
 
-    // Heading placement follows the cross-platform rule: shown ABOVE the
-    // chips only when the buyer has a choice to make. A single chip carries
-    // its own "Payment Terms N days" label instead, so a heading there would
-    // say the same thing twice.
+    // Shown whenever any chip is: a chip's text states only the term, so this
+    // is what names the radiogroup, one term or several (ABN-554).
     const $heading = jQuery(".twoinc-term-chips-heading");
-    if (single || terms.length === 0) {
+    if (terms.length === 0) {
       $heading.addClass("hidden").text("");
     } else {
       $heading.text(cfg.heading || "").removeClass("hidden");
@@ -3015,7 +3017,7 @@ let twoincTermChips = {
         "data-days": days,
         disabled: single
       });
-      const daysLabel = twoincTermChips.labelTemplate(cfg, single).replace("%s", days);
+      const daysLabel = twoincTermChips.labelTemplate(cfg).replace("%s", days);
       $chip.append(jQuery("<span>", { class: "twoinc-term-chip__days", text: daysLabel }));
 
       // The amount this chip will show: blank while the quote is in flight,
@@ -3076,10 +3078,9 @@ let twoincTermChips = {
   },
 
   /**
-   * The chip's visible-text template. An end-of-month term falls due that many
-   * days after the end of the month, so the bare day count states the wrong due
-   * date for it (ABN-554). A lone chip is not a choice, so it names what it is
-   * rather than carrying the bare count.
+   * The chip's visible-text template, the same one term or several. An
+   * end-of-month term falls due that many days after the end of the month, so
+   * the bare day count states the wrong due date for it (ABN-554).
    *
    * Both templates come from PHP, already translated. The fallbacks degrade to
    * the SHORTER localised form rather than to an English sentence: an English
@@ -3088,14 +3089,13 @@ let twoincTermChips = {
    * (heading does the same, falling back to '' rather than to English).
    *
    * @param {Object} cfg window.twoinc.payment_terms
-   * @param {boolean} single whether one term is offered
    * @returns {string}
    */
-  labelTemplate: function (cfg, single) {
+  labelTemplate: function (cfg) {
     if (cfg.eom) {
-      return (single ? cfg.single_label_eom : cfg.days_label_eom) || "EOM+%s";
+      return cfg.days_label_eom || "EOM+%s";
     }
-    return (single ? cfg.single_label || cfg.days_label : cfg.days_label) || "%s";
+    return cfg.days_label || "%s";
   },
 
   /**
@@ -3125,15 +3125,21 @@ let twoincTermChips = {
   },
 
   /**
-   * The term the group's single tab stop sits on. A selection matching no
-   * offered term falls back to the first, so the group cannot leave the tab
-   * order altogether.
+   * The term the group's single tab stop sits on. The focused chip wins over
+   * the checked one: leaving the tab stop elsewhere would send a Shift-Tab back
+   * into the group to a different chip than the one outlined (ABN-554). A
+   * selection matching no offered term falls back to the first, so the group
+   * cannot leave the tab order altogether.
    *
    * @param {number[]} terms offered day counts
    * @param {number} selected the checked term
+   * @param {number} [focused] the term the focused chip carries, if any
    * @returns {number|undefined}
    */
-  focusableTerm: function (terms, selected) {
+  focusableTerm: function (terms, selected, focused) {
+    if (focused !== undefined && terms.indexOf(focused) !== -1) {
+      return focused;
+    }
     return terms.indexOf(selected) === -1 ? terms[0] : selected;
   },
 
