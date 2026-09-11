@@ -261,6 +261,10 @@ The standard for EVERY gateway setting, not only the surcharge method.
   outside the field's known set, judged on the RAW submission — so a crafted
   POST cannot store a value nothing understands. Only the field's explicit
   unset key persists as the default.
+- The merchant is told. A refusal is re-emitted into `WC_Admin_Settings`' static
+  error bucket, which outlives the gateway object WooCommerce discards on save
+  and which suppresses core's blanket success notice. A gateway's own
+  `display_errors()` prints on an object that no longer holds the refusal.
 - Read paths raise. The settings reader is the single choke point: it maps the
   unset key to the default and throws for anything else. Callers that price a
   fee or build an order let that throw.
@@ -396,9 +400,10 @@ The merchant record refreshes on an event, never on expiry
   the preference.
 - **Nothing but the admin puts a day count in `default_payment_term`.** The
   field's first option is Automatic, an empty value; the save validator stores
-  empty for any posted default the offered set does not carry, except on an
-  unresolved backend list, where it keeps whatever was stored rather than
-  reading a degraded set as a merchant decision. The admin JS that rebuilds the
+  empty for any posted default the offered set does not carry, except where
+  that set is empty — an unresolved backend list, or a selection with nothing
+  ticked, which the terms validator refuses — and it keeps whatever was stored
+  rather than reading a set no merchant chose as a decision. The admin JS that rebuilds the
   select as terms are ticked re-creates that option and keeps only a selection
   still offered. Anything that synthesises a day count there instead is stored
   by the next save, becomes the resolver's first step, and makes every later
