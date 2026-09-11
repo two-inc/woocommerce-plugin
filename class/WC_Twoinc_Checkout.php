@@ -442,6 +442,17 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     //             "N days" text INSIDE the single chip.
                     'heading' => __('Selected payment terms', 'twoinc-payment-gateway'),
                     'single_label' => __('Payment Terms %s days', 'twoinc-payment-gateway'),
+                    // An end-of-month term falls due that many days after the end
+                    // of the month, so the bare day count states the wrong due date
+                    // for it (ABN-554). Both placeholders in the explainer are the
+                    // same day count; the chip renderer substitutes every one.
+                    'eom' => WC_Twoinc_Payment_Terms::is_end_of_month($this->wc_twoinc),
+                    'days_label_eom' => __('EOM+%s', 'twoinc-payment-gateway'),
+                    'single_label_eom' => __('Payment Terms EOM+%s', 'twoinc-payment-gateway'),
+                    'eom_explainer' => __(
+                        'EOM+%s: pay %s days after the end of the month',
+                        'twoinc-payment-gateway'
+                    ),
                     // Chips render whenever a term is offered, including the
                     // single-term case — Magento shows that one term (and its
                     // surcharge) as a disabled chip rather than hiding it.

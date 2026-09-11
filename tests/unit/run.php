@@ -144,6 +144,7 @@ final class BrandConfigSpec
             'testPaymentTermsInvalidPostFallsBackToDefault',
             'testPaymentTermsDisabledMeansNoPayloadTerms',
             'testPaymentTermsTypeOfferedOnlyToShopsAlreadyOnEndOfMonth',
+            'testChipCopyStatesTheTermType',
             'testSoleTraderAvailableWhenRegistryListsIt',
             'testSoleTraderTokensMintedRegardlessOfCountry',
             'testSoleTraderTokensMintedWithNoCountryPosted',
@@ -6645,6 +6646,74 @@ final class BrandConfigSpec
         });
 
         unset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]);
+    }
+
+    /**
+     * The chip copy the browser renders has to name the term type. An
+     * end-of-month term falls due that many days after the end of the month,
+     * so the bare day count states the wrong due date for it, and the
+     * accessible name has to contain the visible token WCAG 2.5.3 requires
+     * (ABN-554).
+     */
+    private static function testChipCopyStatesTheTermType(): void
+    {
+        $make_gateway = static function (string $type) {
+            return new class ($type) extends WC_Twoinc {
+                public $options;
+
+                public function __construct($type)
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                    $this->options = [
+                        'api_key' => 'key',
+                        'merchant_id' => '42',
+                        'payment_terms_type' => $type,
+                        'payment_terms_days' => [30],
+                    ];
+                }
+
+                public function get_twoinc_checkout_host()
+                {
+                    return 'https://api.example';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                {
+                    if (strpos($endpoint, 'verify_api_key') !== false) {
+                        return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
+                    }
+                    return [
+                        'response' => ['code' => 200],
+                        'body' => json_encode(['id' => '42', 'available_terms' => [30]]),
+                    ];
+                }
+            };
+        };
+
+        $GLOBALS['__twoinc_test_is_checkout'] = true;
+        foreach ([['end_of_month', true, 'a legacy end-of-month shop'], ['standard', false, 'a standard shop']] as [$type, $eom, $case]) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            WC_Twoinc::reset_merchant_record_memo();
+
+            ob_start();
+            (new WC_Twoinc_Checkout($make_gateway($type)))->inject_cart_details();
+            $printed = (string) ob_get_clean();
+
+            $decoded = json_decode((string) preg_replace('#^<script>window\.twoinc = (.*);</script>$#s', '$1', trim($printed)), true);
+            $copy = $decoded['payment_terms'] ?? [];
+
+            TinyAssert::same($eom, $copy['eom'] ?? null, $case . ' publishes whether the term is end of month');
+            TinyAssert::true(
+                strpos((string) ($copy['eom_explainer'] ?? ''), (string) ($copy['days_label_eom'] ?? 'missing')) === 0,
+                $case . ' spells the token out starting with the token itself'
+            );
+        }
+        unset($GLOBALS['__twoinc_test_is_checkout'], $GLOBALS['__twoinc_test_transients']);
     }
 
     private static function testOrderPayloadCarriesSelectedAndAvailableTerms(): void

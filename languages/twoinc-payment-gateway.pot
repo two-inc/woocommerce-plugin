@@ -1278,6 +1278,21 @@ msgstr ""
 msgid "Payment Terms %s days"
 msgstr ""
 
+#: class/WC_Twoinc_Checkout.php:450
+#, php-format
+msgid "EOM+%s"
+msgstr ""
+
+#: class/WC_Twoinc_Checkout.php:453
+#, php-format
+msgid "EOM+%s: pay %s days after the end of the month"
+msgstr ""
+
+#: class/WC_Twoinc_Checkout.php:451
+#, php-format
+msgid "Payment Terms EOM+%s"
+msgstr ""
+
 #: class/WC_Twoinc_Checkout.php:469
 msgid "Registered company"
 msgstr ""

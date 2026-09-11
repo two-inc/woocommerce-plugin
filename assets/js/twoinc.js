@@ -3015,20 +3015,15 @@ let twoincTermChips = {
         "data-days": days,
         disabled: single
       });
-      // A lone chip is not a choice, so it names what it is: the
-      // single-term label rather than the bare "N days" used when the buyer
-      // is picking between chips.
-      // Both templates come from PHP, already translated. The fallbacks
-      // degrade to the SHORTER localised form rather than to an English
-      // sentence: an English literal here renders as plausible copy on a
-      // non-English shop and hides the fact that the label never arrived,
-      // which is the failure class TWO-25270 was (heading does the same,
-      // falling back to '' rather than to English).
-      const labelTemplate = single
-        ? cfg.single_label || cfg.days_label || "%s"
-        : cfg.days_label || "%s";
-      const daysLabel = labelTemplate.replace("%s", days);
+      const daysLabel = twoincTermChips.labelTemplate(cfg, single).replace("%s", days);
       $chip.append(jQuery("<span>", { class: "twoinc-term-chip__days", text: daysLabel }));
+
+      // Only under end-of-month terms: under standard terms the visible text
+      // already says it, and a name restating it risks WCAG 2.5.3.
+      const explanation = twoincTermChips.explanation(cfg, days);
+      if (explanation) {
+        $chip.attr({ title: explanation, "aria-label": explanation });
+      }
 
       if (!twoincTermChips.feesLoaded) {
         // Fee quote in flight: show animated loading dots instead of a blank
@@ -3075,6 +3070,45 @@ let twoincTermChips = {
       $container.append($hidden);
     }
     $hidden.val(checkedTerm);
+  },
+
+  /**
+   * The chip's visible-text template. An end-of-month term falls due that many
+   * days after the end of the month, so the bare day count states the wrong due
+   * date for it (ABN-554). A lone chip is not a choice, so it names what it is
+   * rather than carrying the bare count.
+   *
+   * Both templates come from PHP, already translated. The fallbacks degrade to
+   * the SHORTER localised form rather than to an English sentence: an English
+   * literal here renders as plausible copy on a non-English shop and hides the
+   * fact that the label never arrived, which is the failure class TWO-25270 was
+   * (heading does the same, falling back to '' rather than to English).
+   *
+   * @param {Object} cfg window.twoinc.payment_terms
+   * @param {boolean} single whether one term is offered
+   * @returns {string}
+   */
+  labelTemplate: function (cfg, single) {
+    if (cfg.eom) {
+      return (single ? cfg.single_label_eom : cfg.days_label_eom) || "EOM+%s";
+    }
+    return (single ? cfg.single_label || cfg.days_label : cfg.days_label) || "%s";
+  },
+
+  /**
+   * What "EOM+30" means, spelled out, and empty under standard terms. Opens
+   * with the visible token: WCAG 2.5.3 requires the accessible name to contain
+   * the visible text.
+   *
+   * @param {Object} cfg window.twoinc.payment_terms
+   * @param {number} days the term
+   * @returns {string}
+   */
+  explanation: function (cfg, days) {
+    if (!cfg.eom || !cfg.eom_explainer) {
+      return "";
+    }
+    return cfg.eom_explainer.split("%s").join(days);
   },
 
   /**
