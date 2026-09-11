@@ -1277,6 +1277,21 @@ msgstr "Valda betalningsvillkor"
 msgid "Payment Terms %s days"
 msgstr "Betalningsvillkors %s dagar"
 
+#: class/WC_Twoinc_Checkout.php:450
+#, php-format
+msgid "EOM+%s"
+msgstr "EOM+%s"
+
+#: class/WC_Twoinc_Checkout.php:453
+#, php-format
+msgid "EOM+%s: pay %s days after the end of the month"
+msgstr "EOM+%s: betala %s dagar efter månadens slut"
+
+#: class/WC_Twoinc_Checkout.php:451
+#, php-format
+msgid "Payment Terms EOM+%s"
+msgstr "Betalningsvillkors EOM+%s"
+
 #: class/WC_Twoinc_Checkout.php:469
 msgid "Registered company"
 msgstr "Registrerat företag"

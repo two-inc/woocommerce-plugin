@@ -145,6 +145,113 @@ describe("payment terms chips", () => {
     });
   });
 
+  describe("the term type", () => {
+    const EOM = {
+      eom: true,
+      days_label_eom: "EOM+%s",
+      single_label_eom: "Payment Terms EOM+%s",
+      eom_explainer: "EOM+%s: pay %s days after the end of the month"
+    };
+
+    /** @returns {Array<Array<string|undefined>>} each chip's [title, aria-label] */
+    function chipNames() {
+      return ctx
+        .$(".twoinc-term-chip")
+        .map(function () {
+          return [[ctx.$(this).attr("title"), ctx.$(this).attr("aria-label")]];
+        })
+        .get();
+    }
+
+    test.each([
+      {
+        copy: COPY,
+        labels: ["30 days", "60 days"],
+        names: [
+          [undefined, undefined],
+          [undefined, undefined]
+        ],
+        case: "a standard term states the days from invoice and needs no name of its own"
+      },
+      {
+        copy: Object.assign({}, COPY, EOM),
+        labels: ["EOM+30", "EOM+60"],
+        names: [
+          [
+            "EOM+30: pay 30 days after the end of the month",
+            "EOM+30: pay 30 days after the end of the month"
+          ],
+          [
+            "EOM+60: pay 60 days after the end of the month",
+            "EOM+60: pay 60 days after the end of the month"
+          ]
+        ],
+        case: "an end-of-month term names the month end and spells it out"
+      }
+    ])("the chip states the term: $case", ({ copy, labels, names }) => {
+      const chips = mount(Object.assign({ enabled: true, terms: [30, 60], selected: 30 }, copy));
+      chips.render([30, 60], 30);
+
+      expect(chipDayLabels()).toEqual(labels);
+      expect(chipNames()).toEqual(names);
+    });
+
+    test.each([
+      {
+        copy: COPY,
+        labels: ["Payment Terms 30 days"],
+        names: [[undefined, undefined]],
+        case: "a standard one"
+      },
+      {
+        copy: Object.assign({}, COPY, EOM),
+        labels: ["Payment Terms EOM+30"],
+        names: [
+          [
+            "EOM+30: pay 30 days after the end of the month",
+            "EOM+30: pay 30 days after the end of the month"
+          ]
+        ],
+        case: "an end-of-month one"
+      }
+    ])("a single offered term: $case", ({ copy, labels, names }) => {
+      const chips = mount(Object.assign({ enabled: true, terms: [30], selected: 30 }, copy));
+      chips.render([30], 30);
+
+      expect(chipDayLabels()).toEqual(labels);
+      expect(chipNames()).toEqual(names);
+      expect(headingText()).toBe("");
+    });
+
+    test("the accessible name contains the visible text", () => {
+      const chips = mount(
+        Object.assign({ enabled: true, terms: [1, 30, 120], selected: 30 }, COPY, EOM)
+      );
+      chips.render([1, 30, 120], 30);
+
+      // WCAG 2.5.3 Label in Name.
+      chipDayLabels().forEach(function (label, i) {
+        expect(chipNames()[i][1]).toContain(label);
+      });
+    });
+
+    test("a missing end-of-month template still never reads as a standard term", () => {
+      const chips = mount(
+        Object.assign({ enabled: true, terms: [30, 60], selected: 30 }, COPY, EOM, {
+          days_label_eom: "",
+          eom_explainer: ""
+        })
+      );
+      chips.render([30, 60], 30);
+
+      expect(chipDayLabels()).toEqual(["EOM+30", "EOM+60"]);
+      expect(chipNames()).toEqual([
+        [undefined, undefined],
+        [undefined, undefined]
+      ]);
+    });
+  });
+
   describe("the fee amount", () => {
     /** @returns {string[]} the fee text of each rendered chip, in order */
     function chipFees() {

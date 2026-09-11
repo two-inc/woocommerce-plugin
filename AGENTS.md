@@ -157,8 +157,19 @@ The payment-term chips are a radio group
   defect.
 - **The group is named by the heading above it**, through `aria-labelledby`. That
   heading is a `span`: a `label` names exactly one form control, so as a `label` it
-  named nothing and left the group anonymous. No chip carries an `aria-label` — the
-  visible "N days" already reads as a name, and a second one risks WCAG 2.5.3.
+  named nothing and left the group anonymous. A standard-term chip carries no
+  `aria-label` — the visible "N days" already reads as a name, and a second one
+  risks WCAG 2.5.3.
+- **A chip states its term type, not just a day count.** An end-of-month term
+  falls due that many days after the end of the month, so a chip reading
+  "30 days" on a shop configured that way states the wrong due date. The visible
+  text is `30 days` under standard terms and `EOM+30` under end of month, and the
+  end-of-month chip alone carries a `title` and an `aria-label` spelling it out:
+  `EOM+30: pay 30 days after the end of the month`. The name opens with the
+  visible token because WCAG 2.5.3 requires it to contain the visible text. The
+  copy is translated PHP-side and reaches the renderer in the checkout bootstrap
+  alongside the flag saying which type is stored; a missing end-of-month template
+  degrades to the bare `EOM+30` token rather than to a standard-term label.
 - One expression decides both the visual `--selected` class and `aria-checked`, so
   the tick and the exposed state cannot drift apart. A selection matching no offered
   chip leaves nothing checked and puts the tab stop on the first, so the group

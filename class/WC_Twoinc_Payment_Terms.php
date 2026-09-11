@@ -741,10 +741,21 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         public static function build_terms_block($gateway, int $days): array
         {
             $block = ['type' => 'NET_TERMS', 'duration_days' => $days];
-            if ($gateway->get_option('payment_terms_type') === 'end_of_month') {
+            if (self::is_end_of_month($gateway)) {
                 $block['duration_days_calculated_from'] = 'END_OF_MONTH';
             }
             return $block;
+        }
+
+        /**
+         * Whether the merchant offers end-of-month terms, which fall due that
+         * many days after the end of the month rather than from the invoice.
+         * The buyer-facing chip text depends on it as much as the booked order
+         * does (ABN-554).
+         */
+        public static function is_end_of_month($gateway): bool
+        {
+            return $gateway->get_option('payment_terms_type') === 'end_of_month';
         }
 
         /**
