@@ -27,13 +27,10 @@ export TWO_API_BASE_URL TWO_PORTAL_BASE_URL TWO_CHECKOUT_BASE_URL
 help:
 	@awk '/^## /{desc=substr($$0,4)} /^[a-zA-Z_-]+:/{if(desc){printf "  \033[36m%-16s\033[0m %s\n",$$1,desc; desc=""}}' $(MAKEFILE_LIST)
 
-# Docker Desktop resolves a WSL bind source once, when the container is
-# CREATED, and re-establishes that mapping on every start. A WSL or Docker
-# Desktop restart in between can leave it stale, and the plugin then mounts as
-# an EMPTY directory over wp-content/plugins/tillit-payment-gateway: the shop
-# comes up healthy, serves no plugin, and reports nothing anywhere (ABN-554).
-# `docker compose up -d` alone does not fix it - the container is already
-# running with the broken mapping, so nothing is recreated.
+# Docker Desktop resolves a WSL bind source when the container is CREATED, and
+# a restart in between can leave that mapping stale: the plugin mounts as an
+# EMPTY directory, the shop comes up healthy serving no plugin, and nothing
+# reports it. `up -d` cannot repair it - nothing is recreated (ABN-554).
 check-plugin-mount:
 	@docker compose exec -T wordpress \
 		test -f /var/www/html/wp-content/plugins/tillit-payment-gateway/tillit-payment-gateway.php \
