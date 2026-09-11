@@ -69,8 +69,12 @@
     // silently fails to hide offers the buyer a mode the country cannot serve.
     const HIDDEN_CLASS = 'two-hidden';
 
-    /** Anything inside the panel a press is entitled to take focus to. */
-    const FOCUS_TARGETS = 'input, button, select, textarea, a[href], [tabindex]';
+    /**
+     * The controls inside the panel a press is entitled to focus. Deliberately
+     * not `[tabindex]`: a results list carrying one of its own — which jQuery
+     * UI's does on the sibling platform — has padding the buyer means nothing by.
+     */
+    const FOCUS_TARGETS = 'input, button, select, textarea, a[href]';
 
     /** @returns {boolean} whether focus is on nothing at all */
     function focusIsUnplaced() {
