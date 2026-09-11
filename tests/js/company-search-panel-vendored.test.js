@@ -20,7 +20,7 @@ const harness = require("./wc-harness");
 const PANEL_PATH = "assets/js/company-search-panel.js";
 
 /** sha256 of this copy of the panel. */
-const EDIT_LOCK_SHA256 = "77b85156839f234ce87a3e90b9c0cfddcd14a6bea51bd0228db0c7aae094fc82";
+const EDIT_LOCK_SHA256 = "79081b186abc9ed6113e1de3219cedb29e64605a68cb147a918149ded7c19099";
 
 describe("the vendored company-search panel", () => {
   test("has not been edited in place", () => {

@@ -75,6 +75,25 @@
         return !active || active === document.body || active === document.documentElement;
     }
 
+    /** Anything inside the panel a press is entitled to take focus to. */
+    const FOCUS_TARGETS = 'input, button, select, textarea, a[href], [tabindex]';
+
+    /**
+     * @param {object} event mousedown event
+     * @returns {boolean} whether the press is dead space rather than a control
+     *          or a scrollbar
+     */
+    function pressIsDeadSpace(event) {
+        const node = event.target;
+        if (!node || node.nodeType !== 1 || !node.closest) return false;
+        if (node.closest(FOCUS_TARGETS)) return false;
+        const scrollable = node.scrollHeight > node.clientHeight || node.scrollWidth > node.clientWidth;
+        // A press on a native scrollbar lands outside the content box, and
+        // cancelling it would stop the drag scrolling the results.
+        if (scrollable && (event.offsetX >= node.clientWidth || event.offsetY >= node.clientHeight)) return false;
+        return true;
+    }
+
     /**
      * Every member the injected `search` API must carry. Checked at
      * construction because a host that supplies a partial one fails silently:
@@ -519,6 +538,13 @@
             if (event.key !== 'Escape') return;
             event.preventDefault();
             self.close();
+        });
+
+        // A press on the panel's own dead space is not a gesture: its default
+        // action would blur the caret out of the query field and leave the open
+        // popover holding nothing (ABN-554).
+        this._bindEvent(this._panel, 'mousedown', function (event) {
+            if (pressIsDeadSpace(event)) event.preventDefault();
         });
     };
 
