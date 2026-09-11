@@ -124,6 +124,17 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
     expect(document.querySelector(PANEL).contains(document.activeElement)).toBe(true);
   });
 
+  test("the company-name field where the mode leaves nothing in the popover to focus", () => {
+    open();
+    // Only the mode the buyer is in is offered, so the chip row is withheld and
+    // the withdrawn query row leaves the open panel with nothing in it.
+    helper.panel.isChipVisible = (mode) => mode === "sole_trader";
+
+    clickChip("sole_trader");
+
+    expect(document.activeElement).toBe(document.querySelector("#billing_company_display"));
+  });
+
   test("the registered-company chip puts the caret back in the query field", () => {
     open();
     clickChip("sole_trader");

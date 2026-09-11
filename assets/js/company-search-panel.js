@@ -759,15 +759,19 @@
      * The query field where it is shown, else the first offered chip: a mode
      * that suppresses the query row would otherwise open the panel with focus
      * nowhere (ABN-525).
+     *
+     * @returns {boolean} whether it found anything to focus
      */
     CompanySearchPanel.prototype._focusOnOpen = function () {
         if (this._query && !this._queryRowIsHidden()) {
             this._query.focus();
-            return;
+            return true;
         }
-        if (!this._chips || this._chips.classList.contains(HIDDEN_CLASS)) return;
+        if (!this._chips || this._chips.classList.contains(HIDDEN_CLASS)) return false;
         const chip = this._chips.querySelector('.' + CHIP_CLASS + ':not(.' + HIDDEN_CLASS + ')');
-        if (chip) chip.focus();
+        if (!chip) return false;
+        chip.focus();
+        return true;
     };
 
     /** @returns {boolean} whether `_syncQueryVisibility` has the query row hidden */
@@ -1078,8 +1082,9 @@
         // A mode change takes away whatever held focus, so the control places
         // focus again rather than leaving the buyer on nothing.
         if (heldFocus && this._focusHolderIsGone(heldFocus)) {
-            if (this._open) this._focusOnOpen();
-            else this.restoreFieldFocus();
+            // The field where the open panel has nothing focusable left in it
+            // — a mode whose chips are all withheld offers the buyer nothing.
+            if (!this._open || !this._focusOnOpen()) this.restoreFieldFocus();
         }
     };
 
