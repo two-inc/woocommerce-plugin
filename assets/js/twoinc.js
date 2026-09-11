@@ -3936,10 +3936,10 @@ function createSoleTraderController(companySearch) {
         return;
       }
       if (controller.soleTraderAdopted) {
-        // The holder may have been inside the dropdown this settle closed. The adopted state's own
-        // launcher sits outside it and reopens the same chooser, so it takes the focus instead of
-        // the company field, whose opener would reopen the search popover over the adopted lock.
-        const $launcher = controller.getDifferentSoleTraderBtnNode();
+        // The adopted state's own launcher, not the company field: the field's opener would reopen
+        // the search popover over the adopted lock. Read rather than
+        // getDifferentSoleTraderBtnNode(), which builds the link and re-anchors it.
+        const $launcher = jQuery("#" + companySearch.differentSoleTraderBtnId);
         if ($launcher.length && companySearch.isOnScreen($launcher)) $launcher.trigger("focus");
         return;
       }

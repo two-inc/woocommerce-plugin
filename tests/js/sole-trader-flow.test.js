@@ -3272,6 +3272,31 @@ describe("TWO-40 — sole-trader flow", () => {
       });
 
       /**
+       * The link is built lazily and only where it is shown, so adoption with
+       * no offered registration leaves it absent. A settle looking for it must
+       * leave it absent too, rather than inserting a hidden button into the
+       * address form of a checkout that never shows one.
+       */
+      test("a settle while adopted does not build the launcher it looks for (ABN-561)", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        armListeners();
+        chipNode("sole_trader").focus();
+        soleTrader.launchSignup();
+        expect(differentSoleTraderBtn()).toBeNull();
+
+        soleTrader.soleTraderAdopted = true;
+        win.closed = true;
+        jest.advanceTimersByTime(300);
+
+        expect(differentSoleTraderBtn()).toBeNull();
+        jest.useRealTimers();
+      });
+
+      /**
        * WebKit does not focus a control on click, so a Safari buyer's click on
        * this button fires no focusin and rule (2) never runs: the click's own
        * launch raises the outstanding re-signup instead of replacing it. A
