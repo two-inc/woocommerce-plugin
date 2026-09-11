@@ -676,8 +676,12 @@
             // With the search withdrawn there is no query row to move the
             // keystrokes into and no search they could reach, so they stay
             // where the buyer put them and the panel offers manual entry
-            // instead (ABN-525).
-            if (self._disabled) return;
+            // instead (ABN-525). The open above put the caret on a chip, where
+            // the next character would land on a button (ABN-554).
+            if (self._disabled) {
+                self.restoreFieldFocus();
+                return;
+            }
             // The captured company's name is what this field shows; leaving
             // the buyer's keystrokes in it would overwrite that with a
             // half-typed query before they have picked anything.

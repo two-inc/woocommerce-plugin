@@ -188,6 +188,17 @@ describe("company search country gate", () => {
     expect(document.activeElement).toBe(document.querySelector(".two-company-dropdown__query"));
   });
 
+  test("the field keeps the caret across its own input event, so a space is text and not a chip press", () => {
+    ctx.helper.syncCompanySearchAvailability();
+    supportedCountriesRequest().succeed({ supported_countries: ["US"] });
+    const field = document.querySelector(ctx.helper.companyFieldSelector());
+
+    field.value = "f";
+    field.dispatchEvent(new window.Event("input", { bubbles: true }));
+
+    expect(document.activeElement).toBe(field);
+  });
+
   test("typing in the field while the search is withdrawn queues no search", () => {
     ctx.helper.syncCompanySearchAvailability();
     supportedCountriesRequest().succeed({ supported_countries: ["US"] });
