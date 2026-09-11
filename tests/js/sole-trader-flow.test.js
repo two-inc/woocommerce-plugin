@@ -2312,6 +2312,7 @@ describe("TWO-40 — sole-trader flow", () => {
         // clicked with nothing open. The close is conditional, so it is a
         // no-op here rather than a second code path.
         harness.openCompanyPanel($, ctx.helper);
+        // Setup, not a buyer gesture: focus must stay where the case put it.
         ctx.helper.closeCompanySearchDropdown({ returnFocus: false });
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
@@ -3722,7 +3723,7 @@ describe("TWO-40 — sole-trader flow", () => {
         const ajax = harness.stubAjax($);
         harness.openCompanyPanel($, ctx.helper);
         ctx.helper.onPick({ id: "A Registered Co", company_id: "12345678" });
-        ctx.helper.closeCompanySearchDropdown({ returnFocus: false });
+        ctx.helper.closeCompanySearchDropdown();
         expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
         expect($("#company_id").val()).toBe("12345678");
 
@@ -3958,7 +3959,7 @@ describe("TWO-40 — sole-trader flow", () => {
             harness.openCompanyPanel($, ctx.helper);
             jest.spyOn(soleTrader, "launchSignup").mockImplementation(() => {});
             clickChip("sole_trader");
-            ctx.helper.closeCompanySearchDropdown({ returnFocus: false });
+            ctx.helper.closeCompanySearchDropdown();
 
             soleTrader.setMode("business");
 
