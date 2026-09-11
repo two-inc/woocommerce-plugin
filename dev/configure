@@ -9,10 +9,16 @@ set -e
 GATEWAY_ID="${TWO_GATEWAY_ID:-woocommerce-gateway-tillit}"
 OPTION_KEY="woocommerce_${GATEWAY_ID}_settings"
 
+SEED="${WOOCOM_PLUGIN_CONFIG_JSON:-docker/config/local.json}"
+# local.json is untracked, so a fresh clone seeds from the template instead.
+if [ ! -f "/opt/tillit-payment-gateway/$SEED" ]; then
+    SEED="docker/config/local.json.tpl"
+fi
+
 if ! wp option get "$OPTION_KEY" >/dev/null 2>&1; then
-    echo "Option $OPTION_KEY not found — seeding from ${WOOCOM_PLUGIN_CONFIG_JSON:-docker/config/local.json}"
+    echo "Option $OPTION_KEY not found — seeding from $SEED"
     wp option update "$OPTION_KEY" --format=json \
-        <"/opt/tillit-payment-gateway/${WOOCOM_PLUGIN_CONFIG_JSON:-docker/config/local.json}"
+        <"/opt/tillit-payment-gateway/$SEED"
 fi
 
 if [ -n "$TWO_API_KEY" ]; then

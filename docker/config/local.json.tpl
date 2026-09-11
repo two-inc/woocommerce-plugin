@@ -6,7 +6,7 @@
   "clear_options_on_uninstall": "no",
   "payment_terms_days": [14, 30, 60, 90],
   "section_api_credentials": "",
-  "api_key": "secret_test_ePLc4yzRw2w-sUzJTtUABPMvTfnI0WrazJ1aotjX2Bw",
+  "api_key": "secret_test_REPLACE_ME",
   "section_checkout_options": "",
   "enable_order_intent": "yes",
   "add_field_invoice_email": "yes",
