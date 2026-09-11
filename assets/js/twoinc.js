@@ -3163,8 +3163,14 @@ let twoincTermChips = {
    * @param {number} days the term to commit
    */
   commit: function (days) {
-    twoincTermChips.pendingTerm = days;
     clearTimeout(twoincTermChips.commitTimer);
+    // A sweep that comes back to the term the server already holds has nothing
+    // to commit, and posting it would cost a checkout update for no change.
+    if (days === twoincTermChips.config().selected) {
+      twoincTermChips.pendingTerm = null;
+      return;
+    }
+    twoincTermChips.pendingTerm = days;
     twoincTermChips.commitTimer = setTimeout(function () {
       twoincTermChips.select(days);
     }, twoincTermChips.commitDelayMs);
@@ -3197,11 +3203,13 @@ let twoincTermChips = {
   }
 };
 
-// Delegated from the body because a checkout update replaces the payment
-// fragment, and with it the chip container this listens on. Namespaced and
-// unbound first so a second evaluation of this script replaces the handler
-// rather than stacking a second one that moves the selection twice per key.
-jQuery(document.body)
+// Delegated because a checkout update replaces the payment fragment, and with
+// it the chip container this listens on. On `document`, not `document.body`:
+// this script is enqueued in the head, where there is no body yet and a
+// binding on it silently attaches to nothing. Namespaced and unbound first so
+// a second evaluation of this script replaces the handler rather than stacking
+// a second one that moves the selection twice per key.
+jQuery(document)
   .off("keydown.twoincTermChips")
   .on("keydown.twoincTermChips", ".twoinc-term-chips", function (event) {
     twoincTermChips.onKeydown(event);

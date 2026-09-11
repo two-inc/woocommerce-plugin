@@ -497,6 +497,23 @@ describe("payment terms chips", () => {
       expect(event.isDefaultPrevented()).toBe(false);
     });
 
+    // The script is enqueued in the HEAD, where `document.body` is still null,
+    // so a delegated binding rooted on the body attaches to nothing at all.
+    // Not observable through behaviour here: the Jest harness evaluates the
+    // source with a body already present, so a body-rooted binding passes
+    // every keyboard case above and fails on a real checkout.
+    test("the keydown binding is rooted on the document, not the body", () => {
+      mountGroup(60);
+      const bodyEvents = ctx.$._data(document.body, "events") || {};
+      const documentEvents = ctx.$._data(document, "events") || {};
+
+      const namespaces = (documentEvents.keydown || []).map((handler) => handler.namespace);
+      expect(namespaces).toContain("twoincTermChips");
+      expect((bodyEvents.keydown || []).map((handler) => handler.namespace)).not.toContain(
+        "twoincTermChips"
+      );
+    });
+
     test("a lone chip has nothing to traverse", () => {
       const chips = mount(Object.assign({ enabled: true, terms: [30], selected: 30 }, COPY));
       chips.render([30], 30);
@@ -564,6 +581,19 @@ describe("payment terms chips", () => {
         expect(selectedDays()).toBe("60");
         expect(tabbableDays()).toEqual(["60"]);
         expect(ctx.$("input[name='two_selected_term']").val()).toBe("60");
+      });
+
+      test("a sweep that returns to the committed term posts nothing", () => {
+        const chips = mountGroup(30);
+        ajax = harness.stubAjax(ctx.$);
+        focusChip(30);
+
+        press("ArrowRight");
+        press("ArrowLeft");
+        jest.advanceTimersByTime(chips.commitDelayMs);
+
+        expect(checkedDays()).toBe("30");
+        expect(selectPosts()).toBe(0);
       });
 
       test("a click supersedes a commit the sweep has not posted yet", () => {
