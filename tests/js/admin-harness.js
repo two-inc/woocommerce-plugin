@@ -81,6 +81,8 @@ function installJQuery() {
  * stored cap with isset(), so a stored 0 renders as `value="0"`.
  *
  * @param {Object} options
+ * @param {boolean} options.companySearch stored enable_company_search
+ * @param {boolean} options.addressLookup stored enable_address_lookup
  * @param {number[]} options.terms preset term checkboxes to render
  * @param {number[]} options.checked which of those start ticked
  * @param {Object} options.stored the stored grid, keyed by term days
@@ -103,6 +105,10 @@ function buildSettingsPage(options) {
   const stored = opts.stored || {};
   const type = opts.type || "percentage";
   const gridKey = FIELD_PREFIX + "surcharge_grid";
+  // WC_Settings_API renders a checkbox pre-ticked from the stored value, so these two carry
+  // whatever the merchant last saved. Default to on, the shipped field defaults.
+  const companySearchChecked = opts.companySearch === undefined ? true : !!opts.companySearch;
+  const addressLookupChecked = opts.addressLookup === undefined ? true : !!opts.addressLookup;
 
   const checkboxes = terms
     .map(function (days) {
@@ -217,6 +223,20 @@ function buildSettingsPage(options) {
       (opts.customDays === undefined ? "" : opts.customDays) +
       '" selected></option><option value="">Remove</option></select></td></tr>',
     '    <tr><td><select id="' + FIELD_PREFIX + 'default_payment_term"></select></td></tr>',
+    '    <tr><td><input type="checkbox" id="' +
+      FIELD_PREFIX +
+      'enable_company_search" name="' +
+      FIELD_PREFIX +
+      'enable_company_search"' +
+      (companySearchChecked ? " checked" : "") +
+      " /></td></tr>",
+    '    <tr><td><input type="checkbox" id="' +
+      FIELD_PREFIX +
+      'enable_address_lookup" name="' +
+      FIELD_PREFIX +
+      'enable_address_lookup"' +
+      (addressLookupChecked ? " checked" : "") +
+      " /></td></tr>",
     '    <tr><td><select id="' + FIELD_PREFIX + 'surcharge_type">',
     ["none", "fixed", "percentage", "fixed_and_percentage"]
       .map(function (t) {

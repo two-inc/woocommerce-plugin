@@ -2890,6 +2890,14 @@ if (!class_exists('WC_Twoinc')) {
             $offered = array_values(array_unique($offered));
             sort($offered);
 
+            // Nothing offered at all is the selection validate_two_payment_terms_field refuses, so
+            // the stored terms stand and the default that pointed at them must stand with them —
+            // computing Automatic from a rejected selection changes a setting nobody edited.
+            if (count($offered) === 0) {
+                $current = $this->get_option($key);
+                return is_scalar($current) ? (string) $current : '';
+            }
+
             $value = (int) $value;
             if (in_array($value, $offered, true)) {
                 return (string) $value;
@@ -6862,15 +6870,6 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function admin_options()
         {
-            // Surfaces per-field validation failures: when a validate_*_field
-            // method throws, WooCommerce records it via
-            // WC_Settings_API::add_error and moves on (field doesn't assign,
-            // everything else saves) but nothing in core prints that bucket —
-            // without this call a merchant who typed a cap of 0 (TWO-25289)
-            // saw the grid revert with no notice. Different bucket from
-            // WC_Admin_Settings::add_error, which the settings page prints
-            // itself. Printed before the fields so it sits above the form.
-            $this->display_errors();
             parent::admin_options();
             $components = [sprintf(
                 /* translators: 1: base plugin provenance, e.g. "2.23.9 (eb7bf92cec07, deployed 2026-07-08 11:35 UTC)" */
@@ -7072,6 +7071,12 @@ if (!class_exists('WC_Twoinc')) {
             // Save all settings (with the API key reverted only on a rejection)
             $_POST = $post_data;
             parent::process_admin_options();
+            // WooCommerce re-instantiates every gateway after the save action, so this object's own
+            // error bucket never reaches the page; WC_Admin_Settings' is static and its
+            // show_messages() prints errors instead of core's unconditional success notice.
+            foreach ($this->get_errors() as $error) {
+                WC_Admin_Settings::add_error($error);
+            }
             $this->refetch_merchant_record_on_identity_save();
         }
 

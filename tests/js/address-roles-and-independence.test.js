@@ -181,6 +181,112 @@ describe("the two address forms are independent", () => {
     expect(ctx.Twoinc.getInstance().addressStateFor("billing").registryApplied).toBe(false);
   });
 
+  /**
+   * ABN-551. Replacing a captured company must not leave any component of the
+   * outgoing one behind. Line 2 was the live case: a sole trader adopted by
+   * autofill writes it, and the registry record for the company chosen next
+   * carries no premises, so setAddress had nothing to say about line 2 and the
+   * previous line survived a completed replacement.
+   */
+  test.each([
+    {
+      record: { street: "Registry Street 1", city: "Registryville", postal_code: "AB1 2CD" },
+      expected: {
+        address_1: "Registry Street 1",
+        address_2: "",
+        city: "Registryville",
+        postcode: "AB1 2CD"
+      },
+      description: "a record with no premises clears the line 2 the outgoing one wrote"
+    },
+    {
+      record: {
+        building: "Flat 9",
+        street: "Registry Street 1",
+        city: "Registryville",
+        postal_code: "AB1 2CD"
+      },
+      expected: {
+        address_1: "Flat 9",
+        address_2: "Registry Street 1",
+        city: "Registryville",
+        postcode: "AB1 2CD"
+      },
+      description: "a record WITH premises still fills both lines"
+    },
+    {
+      record: { street: "Registry Street 1" },
+      expected: { address_1: "Registry Street 1", address_2: "", city: "", postcode: "" },
+      description: "a record carrying only a street clears city and postcode too"
+    }
+  ])("replacing a captured address: $description", ({ record, expected }) => {
+    // What the outgoing capture left on the form, premises and all.
+    ctx.Twoinc.getInstance().setAddress(
+      {
+        building: "Outgoing Annexe",
+        street: "Outgoing Street 4",
+        city: "Outgoingville",
+        postal_code: "OG1 1AA"
+      },
+      "billing"
+    );
+
+    ctx.Twoinc.getInstance().addressLookup({ lookup_id: "billing-lookup" }, "billing");
+    ajax.last().succeed({ addresses: [record] });
+
+    expect(addressOf("billing")).toMatchObject(expected);
+    // Role-scoped, so the other form keeps whatever the buyer put there.
+    expect(addressOf("shipping")).toEqual(BLANK);
+  });
+
+  /**
+   * ABN-551 again, for the component `clearAddress` used to skip: `setRegion`
+   * writes a registry region onto the state control, so a record that carries
+   * none left the outgoing company's county on the form.
+   */
+  test.each([
+    {
+      stateMarkup: '<input type="text" id="billing_state" name="billing_state" value="" />',
+      outgoing: "Kent",
+      description: "a free-text county input"
+    },
+    {
+      stateMarkup:
+        '<select id="billing_state" name="billing_state">' +
+        '<option value=""></option><option value="KEN">Kent</option></select>',
+      outgoing: "KEN",
+      description: "a state select"
+    }
+  ])("a replacement carrying no region clears $description", ({ stateMarkup, outgoing }) => {
+    buildAddressForm({ billingStateMarkup: stateMarkup });
+    $("#billing_state").val(outgoing);
+
+    ctx.Twoinc.getInstance().addressLookup({ lookup_id: "billing-lookup" }, "billing");
+    ajax.last().succeed({
+      addresses: [{ street: "Registry Street 1", city: "Registryville" }]
+    });
+
+    expect($("#billing_state").val()).toBe("");
+    expect($("#billing_city").val()).toBe("Registryville");
+  });
+
+  test.each([
+    [{ addresses: [] }, "an empty list"],
+    [{}, "no list at all"]
+  ])("a response carrying no record leaves the captured address alone (%s)", (response) => {
+    ctx.Twoinc.getInstance().setAddress(
+      { street: "Outgoing Street 4", city: "Outgoingville", postal_code: "OG1 1AA" },
+      "billing"
+    );
+
+    ctx.Twoinc.getInstance().addressLookup({ lookup_id: "billing-lookup" }, "billing");
+    ajax.last().succeed(response);
+
+    expect(addressOf("billing").address_1).toBe("Outgoing Street 4");
+    expect(addressOf("billing").city).toBe("Outgoingville");
+    expect(addressOf("billing").postcode).toBe("OG1 1AA");
+  });
+
   test.each([
     ["billing", "shipping"],
     ["shipping", "billing"]

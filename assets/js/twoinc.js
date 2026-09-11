@@ -3919,10 +3919,12 @@ function createSoleTraderController(companySearch) {
       ) {
         controller.setMode("business");
       }
-      controller.restoreLaunchFocus(chipOwnsOutcome || controller.soleTraderAdopted);
+      // This popup's own outcome, not the global adoption state an earlier popup set: a re-signup
+      // closed by hand decided nothing, so the launcher still owns the focus it gave up.
+      controller.restoreLaunchFocus(chipOwnsOutcome || watcher.decided);
     },
 
-    /** Give an abandoned launch's focus back — to the company field when the holder is gone, never once adopted. */
+    /** Give an abandoned launch's focus back — to the adopted launcher or the company field when the holder is gone. */
     restoreLaunchFocus: function (outcomeOwned) {
       if (!controller.restoreOnSettle || controller.activePopupWatchers.length) return;
       controller.restoreOnSettle = false;
@@ -3933,7 +3935,16 @@ function createSoleTraderController(companySearch) {
         node.focus();
         return;
       }
-      // Unlike Magento, the field's own opener reopens the popover after a hand-closed, non-adopted popup — accepted (TWO-25658).
+      if (controller.soleTraderAdopted) {
+        // The adopted state's own launcher, not the company field: the field's opener would reopen
+        // the search popover over the adopted lock. Read rather than
+        // getDifferentSoleTraderBtnNode(), which builds the link and re-anchors it.
+        const $launcher = jQuery("#" + companySearch.differentSoleTraderBtnId);
+        if ($launcher.length && companySearch.isOnScreen($launcher)) $launcher.trigger("focus");
+        return;
+      }
+      // Unlike Magento, the company field's opener reopening the popover after an abandoned signup
+      // is accepted (TWO-25658).
       companySearch.focusVisibleCompanyField(companySearch.companyFieldSelector());
     },
 
@@ -5543,7 +5554,12 @@ class Twoinc {
       const landedCountry = twoincAddressRoles.country(addressRole);
       if (requestCountry && landedCountry && landedCountry !== requestCountry) return;
       // Use new address lookup by default
-      if (response.addresses) {
+      // Length, not truthiness: an empty list carries no record, and clearing on it would blank a
+      // captured address the buyer still has.
+      if (response.addresses && response.addresses.length) {
+        // Cleared first because setAddress writes only what the payload carries: a component the
+        // new record omits would otherwise keep the outgoing company's value.
+        self.clearAddress(addressRole);
         self.setAddress(response.addresses[0], addressRole);
         // Only here, on the branch that actually writes registry data. A
         // buyer's own address (account-prefilled, or typed by hand) never
@@ -5710,8 +5726,9 @@ class Twoinc {
    * the registry wrote for the OUTGOING company must not survive — so it is
    * its own function rather than a magic empty payload.
    *
-   * The state/county control is left alone: it belongs to the country, not to
-   * the company, and the country is not what is being cleared here.
+   * The state/county control is cleared too: `setRegion()` writes a registry
+   * region onto it, so a replacement whose record omits one would otherwise
+   * keep the outgoing company's county (ABN-551).
    *
    * @param {string} [role] address role to clear
    * @returns {void}
@@ -5721,6 +5738,10 @@ class Twoinc {
     ["address_1", "address_2", "city", "postcode"].forEach(function (name) {
       jQuery(twoincAddressRoles.field(role, name)).val("");
     });
+    // selectWoo renders a state select's label from its value, so a blanked select needs the
+    // change to stop showing the county it no longer holds.
+    const $state = jQuery(twoincAddressRoles.field(role, "state"));
+    if ($state.length) $state.val("").trigger("change");
     jQuery(document.body).trigger("update_checkout");
   }
 

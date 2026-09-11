@@ -1,14 +1,4 @@
 jQuery(function ($) {
-  function toggleChildrenFields(parentRadio, childrenRadios) {
-    if (!parentRadio.prop("checked")) {
-      childrenRadios.prop("checked", false);
-      childrenRadios.attr("disabled", true);
-    } else {
-      childrenRadios.prop("checked", true);
-      childrenRadios.attr("disabled", false);
-    }
-  }
-
   // ── Custom request headers table ────────────────────────────────────
   // Row indices are only a POST grouping key, so a removed row leaves a gap
   // rather than forcing a renumber; validate_two_custom_headers_field()
@@ -77,14 +67,14 @@ jQuery(function ($) {
         .open();
   });
 
+  // Ticking "search in address entry" by hand switches autofill on with it. Edge, never level —
+  // nothing writes that checkbox on render or on an untick, so a stored off survives a save (ABN-562).
   $("body").on(
     "change",
     "#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search",
-    function (e) {
-      toggleChildrenFields(
-        $(this),
-        $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_address_lookup")
-      );
+    function () {
+      if (!$(this).prop("checked")) return;
+      $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_address_lookup").prop("checked", true);
     }
   );
 
@@ -107,11 +97,6 @@ jQuery(function ($) {
   jQuery("h3.wc-settings-sub-title, p.submit").before('<hr class="setting-separator" />');
 
   jQuery("h3.wc-settings-sub-title").next().hide();
-
-  toggleChildrenFields(
-    $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search"),
-    $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_address_lookup")
-  );
 
   let verificationTimeout;
   const $apiKeyField = $("#woocommerce_" + twoinc_admin.gateway_id + "_api_key");

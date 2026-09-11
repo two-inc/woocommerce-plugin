@@ -211,6 +211,23 @@ re-rendered chip reads as another role's and the rule inverts on it: returning t
 very chip that launched the popup closes it, and on a two-role page a descendant search
 can answer with the other role's popover outright.
 
+Where a hand-closed signup popup leaves focus
+
+A popup the buyer closes themselves decided nothing, so the launcher still owns
+the focus it gave up and gets it back — as long as that launcher survived the
+close. The Sole trader chip does not: it lives inside the dropdown the settle
+closes. Focus then goes to whichever launcher is still standing, which once a
+sole trader is adopted is the "select a different sole trader" link, and that
+link reopens the same chooser. Where nothing was adopted, focus goes to the
+company name field instead, whose own opener reopens the search popover and
+takes the focus into its query.
+
+One consistent target — always the company name field — would read better than
+a target that depends on which control the buyer launched from. It is not done:
+the field's opener would have to be revised to guarantee the popover opens when
+that is wanted and stays closed when it is not, and getting that right is hard
+enough that the inconsistency is the safer state to be in (ABN-561).
+
 The custom request-header table
 
 - The Diagnostics header table sends any number of named headers on calls to the Two
@@ -261,6 +278,10 @@ The standard for EVERY gateway setting, not only the surcharge method.
   outside the field's known set, judged on the RAW submission — so a crafted
   POST cannot store a value nothing understands. Only the field's explicit
   unset key persists as the default.
+- The merchant is told. A refusal is re-emitted into `WC_Admin_Settings`' static
+  error bucket, which outlives the gateway object WooCommerce discards on save
+  and which suppresses core's blanket success notice. A gateway's own
+  `display_errors()` prints on an object that no longer holds the refusal.
 - Read paths raise. The settings reader is the single choke point: it maps the
   unset key to the default and throws for anything else. Callers that price a
   fee or build an order let that throw.
@@ -396,9 +417,10 @@ The merchant record refreshes on an event, never on expiry
   the preference.
 - **Nothing but the admin puts a day count in `default_payment_term`.** The
   field's first option is Automatic, an empty value; the save validator stores
-  empty for any posted default the offered set does not carry, except on an
-  unresolved backend list, where it keeps whatever was stored rather than
-  reading a degraded set as a merchant decision. The admin JS that rebuilds the
+  empty for any posted default the offered set does not carry, except where
+  that set is empty — an unresolved backend list, or a selection with nothing
+  ticked, which the terms validator refuses — and it keeps whatever was stored
+  rather than reading a set no merchant chose as a decision. The admin JS that rebuilds the
   select as terms are ticked re-creates that option and keeps only a selection
   still offered. Anything that synthesises a day count there instead is stored
   by the next save, becomes the resolver's first step, and makes every later
