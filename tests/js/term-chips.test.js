@@ -344,16 +344,240 @@ describe("payment terms chips", () => {
     });
 
     test("leaves focus alone when it sits outside the chip group", () => {
-      const chips = mount(
-        Object.assign({ enabled: true, terms: [30, 60], selected: 30 }, COPY)
-      );
+      const chips = mount(Object.assign({ enabled: true, terms: [30, 60], selected: 30 }, COPY));
       chips.render([30, 60], 30);
-      const $outside = ctx.$('<button type="button" id="outside"></button>').appendTo(document.body);
+      const $outside = ctx
+        .$('<button type="button" id="outside"></button>')
+        .appendTo(document.body);
       $outside[0].focus();
 
       chips.render([30, 60], 30);
 
       expect(document.activeElement.id).toBe("outside");
+    });
+  });
+
+  // The chips advertise themselves as a radio group, so they owe that role's
+  // keyboard contract: the group is ONE tab stop and the arrow keys move the
+  // checked term and the focus together (ABN-554, W3C APG radio pattern).
+  // Tab order itself is not observable in jsdom and is verified in a browser;
+  // what is observable here is the roving tabindex the browser reads, and the
+  // focus the handler moves itself.
+  describe("the keyboard contract", () => {
+    const SELECT_URL = "https://shop.example.test/?wc-ajax=two_select_term";
+
+    /**
+     * Three chips with the middle one checked, so a traversal has somewhere to
+     * go in both directions and both wraps are reachable in one step.
+     */
+    function mountGroup(selected) {
+      const chips = mount(
+        Object.assign(
+          {
+            enabled: true,
+            terms: [30, 60, 90],
+            selected: selected,
+            select_url: SELECT_URL,
+            csrf_token: "test-checkout-csrf-token"
+          },
+          COPY
+        )
+      );
+      chips.render([30, 60, 90], selected);
+      return chips;
+    }
+
+    /** @returns {string|null} the day-count of the focused chip, if any */
+    function focusedDays() {
+      const active = document.activeElement;
+      return active && active.classList.contains("twoinc-term-chip")
+        ? active.getAttribute("data-days")
+        : null;
+    }
+
+    /** @returns {string[]} the day-count of every chip carrying the tab stop */
+    function tabbableDays() {
+      return ctx
+        .$('.twoinc-term-chip[tabindex="0"]')
+        .map(function () {
+          return ctx.$(this).attr("data-days");
+        })
+        .get();
+    }
+
+    /** @returns {string|null} the day-count of the chip exposed as checked */
+    function checkedDays() {
+      const $checked = ctx.$('.twoinc-term-chip[aria-checked="true"]');
+      return $checked.length === 1 ? $checked.attr("data-days") : null;
+    }
+
+    /** @returns {string|null} the day-count of the chip painted as selected */
+    function selectedDays() {
+      const $selected = ctx.$(".twoinc-term-chip--selected");
+      return $selected.length === 1 ? $selected.attr("data-days") : null;
+    }
+
+    function focusChip(days) {
+      ctx.$('.twoinc-term-chip[data-days="' + days + '"]')[0].focus();
+    }
+
+    /** Dispatch one keydown from the focused chip and hand back the event. */
+    function press(key, modifiers) {
+      const event = ctx.$.Event("keydown", Object.assign({ key: key }, modifiers || {}));
+      ctx.$(document.activeElement).trigger(event);
+      return event;
+    }
+
+    test("renders exactly one tab stop, on the checked chip", () => {
+      mountGroup(60);
+
+      expect(tabbableDays()).toEqual(["60"]);
+      expect(ctx.$(".twoinc-term-chip")).toHaveLength(3);
+    });
+
+    // A stale session selection, or a term withdrawn between the render and
+    // the quote: the group must not drop out of the tab order over it.
+    test("a selection matching no chip puts the tab stop on the first", () => {
+      mountGroup(45);
+
+      expect(tabbableDays()).toEqual(["30"]);
+      expect(checkedDays()).toBeNull();
+    });
+
+    test.each([
+      { from: 60, key: "ArrowRight", expected: "90", description: "ArrowRight moves forward" },
+      { from: 60, key: "ArrowDown", expected: "90", description: "ArrowDown moves forward" },
+      { from: 60, key: "ArrowLeft", expected: "30", description: "ArrowLeft moves back" },
+      { from: 60, key: "ArrowUp", expected: "30", description: "ArrowUp moves back" },
+      { from: 90, key: "ArrowRight", expected: "30", description: "the last chip wraps forward" },
+      { from: 30, key: "ArrowLeft", expected: "90", description: "the first chip wraps back" },
+      { from: 60, key: "Home", expected: "30", description: "Home jumps to the first" },
+      { from: 60, key: "End", expected: "90", description: "End jumps to the last" }
+    ])("$description", ({ from, key, expected }) => {
+      mountGroup(from);
+      focusChip(from);
+
+      const event = press(key);
+
+      // The group has consumed the key, so the page must not also scroll.
+      expect(event.isDefaultPrevented()).toBe(true);
+      expect(focusedDays()).toBe(expected);
+      expect(tabbableDays()).toEqual([expected]);
+      // Selection follows focus, and the tick and the exposed state move as
+      // one: neither can be left behind on the chip the buyer has left.
+      expect(checkedDays()).toBe(expected);
+      expect(selectedDays()).toBe(expected);
+      expect(ctx.$("input[name='two_selected_term']").val()).toBe(expected);
+    });
+
+    // Alt+Left is "back" and Ctrl/Cmd+Arrow are the browser's own text and
+    // history shortcuts. Swallowing them broke navigation on another platform.
+    test.each([
+      { modifiers: { altKey: true }, description: "Alt+ArrowLeft is left to the browser" },
+      { modifiers: { ctrlKey: true }, description: "Ctrl+ArrowLeft is left to the browser" },
+      { modifiers: { metaKey: true }, description: "Cmd+ArrowLeft is left to the browser" }
+    ])("$description", ({ modifiers }) => {
+      mountGroup(60);
+      focusChip(60);
+
+      const event = press("ArrowLeft", modifiers);
+
+      expect(focusedDays()).toBe("60");
+      expect(checkedDays()).toBe("60");
+      expect(event.isDefaultPrevented()).toBe(false);
+    });
+
+    test("a key the group does not own keeps its default action", () => {
+      mountGroup(60);
+      focusChip(60);
+
+      const event = press("Tab");
+
+      expect(focusedDays()).toBe("60");
+      expect(event.isDefaultPrevented()).toBe(false);
+    });
+
+    test("a lone chip has nothing to traverse", () => {
+      const chips = mount(Object.assign({ enabled: true, terms: [30], selected: 30 }, COPY));
+      chips.render([30], 30);
+
+      const event = ctx.$.Event("keydown", { key: "ArrowRight" });
+      ctx.$(".twoinc-term-chip").trigger(event);
+
+      expect(event.isDefaultPrevented()).toBe(false);
+      expect(checkedDays()).toBe("30");
+    });
+
+    describe("what a sweep costs", () => {
+      let ajax;
+
+      beforeEach(() => {
+        jest.useFakeTimers();
+      });
+
+      afterEach(() => {
+        jest.useRealTimers();
+        if (ajax) ajax.restore();
+        ajax = null;
+      });
+
+      /** @returns {number} selection posts issued so far */
+      function selectPosts() {
+        return ajax.calls.filter((call) => call.url === SELECT_URL).length;
+      }
+
+      // Selection follows focus, so a four-key sweep changes the term four
+      // times. Each committed change costs a selection post, a full checkout
+      // update and a fresh fee quote, so committing per keystroke turns one
+      // keyboard gesture into a request storm.
+      test("a sweep commits once, on the term it settles on", () => {
+        const chips = mountGroup(30);
+        ajax = harness.stubAjax(ctx.$);
+        focusChip(30);
+
+        press("ArrowRight");
+        press("ArrowRight");
+        press("ArrowLeft");
+
+        expect(focusedDays()).toBe("60");
+        expect(checkedDays()).toBe("60");
+        expect(selectPosts()).toBe(0);
+
+        jest.advanceTimersByTime(chips.commitDelayMs);
+
+        expect(selectPosts()).toBe(1);
+        expect(harness.requestParams(ajax.last()).get("days")).toBe("60");
+      });
+
+      // The chips carry the term the order is composed on, so a checkout
+      // update landing mid-sweep must not paint the committed term back over
+      // the buyer's choice.
+      test("a re-render mid-sweep keeps the uncommitted term", () => {
+        const chips = mountGroup(30);
+        ajax = harness.stubAjax(ctx.$);
+        focusChip(30);
+        press("ArrowRight");
+
+        chips.render([30, 60, 90], 30);
+
+        expect(checkedDays()).toBe("60");
+        expect(selectedDays()).toBe("60");
+        expect(tabbableDays()).toEqual(["60"]);
+        expect(ctx.$("input[name='two_selected_term']").val()).toBe("60");
+      });
+
+      test("a click supersedes a commit the sweep has not posted yet", () => {
+        const chips = mountGroup(30);
+        ajax = harness.stubAjax(ctx.$);
+        focusChip(30);
+        press("ArrowRight");
+
+        ctx.$('.twoinc-term-chip[data-days="90"]').trigger("click");
+        jest.advanceTimersByTime(chips.commitDelayMs);
+
+        expect(selectPosts()).toBe(1);
+        expect(harness.requestParams(ajax.last()).get("days")).toBe("90");
+      });
     });
   });
 });

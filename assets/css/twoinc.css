@@ -476,6 +476,16 @@
   background: #3043d1;
   color: #fff;
 }
+/*
+ * The group is a single tab stop with arrow-key traversal, so the focused chip
+ * is the only thing saying where the keyboard is. Offset outside the chip so
+ * the ring stays visible against the selected chip's own blue fill.
+ * Keyboard only: a clicked chip gets no ring.
+ */
+.twoinc-term-chip:focus-visible {
+  outline: 2px solid #3043d1;
+  outline-offset: 2px;
+}
 .twoinc-term-chip--single {
   cursor: default;
 }
