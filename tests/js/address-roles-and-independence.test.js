@@ -239,6 +239,23 @@ describe("the two address forms are independent", () => {
   });
 
   test.each([
+    [{ addresses: [] }, "an empty list"],
+    [{}, "no list at all"]
+  ])("a response carrying no record leaves the captured address alone (%s)", (response) => {
+    ctx.Twoinc.getInstance().setAddress(
+      { street: "Outgoing Street 4", city: "Outgoingville", postal_code: "OG1 1AA" },
+      "billing"
+    );
+
+    ctx.Twoinc.getInstance().addressLookup({ lookup_id: "billing-lookup" }, "billing");
+    ajax.last().succeed(response);
+
+    expect(addressOf("billing").address_1).toBe("Outgoing Street 4");
+    expect(addressOf("billing").city).toBe("Outgoingville");
+    expect(addressOf("billing").postcode).toBe("OG1 1AA");
+  });
+
+  test.each([
     ["billing", "shipping"],
     ["shipping", "billing"]
   ])("clearAddress(%s) leaves %s untouched", (cleared, kept) => {

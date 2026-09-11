@@ -5554,7 +5554,9 @@ class Twoinc {
       const landedCountry = twoincAddressRoles.country(addressRole);
       if (requestCountry && landedCountry && landedCountry !== requestCountry) return;
       // Use new address lookup by default
-      if (response.addresses) {
+      // Length, not truthiness: an empty list carries no record, and clearing on it would blank a
+      // captured address the buyer still has.
+      if (response.addresses && response.addresses.length) {
         // Cleared first because setAddress writes only what the payload carries: a component the
         // new record omits would otherwise keep the outgoing company's value.
         self.clearAddress(addressRole);
