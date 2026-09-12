@@ -167,6 +167,26 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
     expect(document.activeElement).toBe(field);
   });
 
+  test.each([
+    {
+      withdraw: () => clickChip("sole_trader"),
+      description: "a mode change that withdraws the query row"
+    },
+    {
+      withdraw: () => helper.panel.setDisabled(true),
+      description: "a country the registry search does not cover"
+    }
+  ])("a printable key on a chip after $description goes to the company field", ({ withdraw }) => {
+    open();
+    withdraw();
+    const chip = chipNode("manual");
+    chip.focus();
+
+    pressKey(chip, "a");
+
+    expect(document.activeElement).toBe(document.querySelector("#billing_company_display"));
+  });
+
   test("the character the field opener moves across outlives the next chip sync", () => {
     open();
     clickChip("sole_trader");
@@ -178,6 +198,9 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
     helper.panel.syncChips();
 
     expect(document.querySelector(QUERY).value).toBe("a");
+    // The sync still drops the message, which explains a search row the buyer
+    // cannot see.
+    expect(document.querySelector(MESSAGE).textContent).toBe("");
   });
 
   test.each([

@@ -567,11 +567,11 @@
             self.close();
         });
 
-        // A chip is a `<button>`, which swallows typing, and the withdrawn
-        // search leaves no query row to hold the caret instead — so a printable
-        // key belongs in the company-name field (ABN-554).
+        // A chip is a `<button>`, which swallows typing, and a mode with no
+        // query row leaves nothing else in the panel to hold the caret — so a
+        // printable key belongs in the company-name field (ABN-554).
         this._bindEvent(this._panel, 'keydown', function (event) {
-            if (!self._disabled) return;
+            if (!self._queryRowIsHidden()) return;
             if (event.ctrlKey || event.metaKey || event.altKey) return;
             // Space and Enter activate the focused chip; a single code point is
             // otherwise exactly what produced text.
@@ -1179,15 +1179,16 @@
         const row = this._query.closest('.' + SEARCH_ROW_CLASS);
         const wasHidden = !row || row.classList.contains(HIDDEN_CLASS);
         if (row) row.classList.toggle(HIDDEN_CLASS, !searching);
-        // On the withdrawal itself, never on a later sync of an already-hidden
-        // row: that would also drop the character the field's opener has just
-        // moved across, before the mode change that reveals the row (ABN-554).
-        if (searching || wasHidden) return;
+        if (searching) return;
+        this._renderMessage('');
+        // Only on the withdrawal itself: a later sync of an already-hidden row
+        // would also drop the character the field's opener has just moved
+        // across, ahead of the mode change that reveals the row (ABN-554).
+        if (wasHidden) return;
         // Blanking the value fires no event, so the rows the dropped term
         // produced would stay painted and clickable under a search row that is
         // no longer rendered.
         this._query.value = '';
-        this._renderMessage('');
     };
 
     // ------------------------------------------------------------------ field
