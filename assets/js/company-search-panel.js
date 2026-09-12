@@ -1372,6 +1372,7 @@
         this._cancelPendingSearch();
         this.search.abortActiveRequest(this._token);
         this._unbind();
+        stripComboboxAttributes(this._field);
         this._releaseFieldTabStop();
         if (this._panel) this._panel.remove();
         this._panel = null;

@@ -89,6 +89,14 @@ describe("the panel's combobox attributes", () => {
         return held;
       },
       description: "unmount, which stays re-mountable"
+    },
+    {
+      release: (p) => {
+        const held = field("company_a");
+        p.destroy();
+        return held;
+      },
+      description: "destroy, which is final"
     }
   ])("come off the field left behind ($description)", ({ release }) => {
     expect(comboboxAttributes(field("company_a"))).toEqual(COMBOBOX_ATTRIBUTES);
