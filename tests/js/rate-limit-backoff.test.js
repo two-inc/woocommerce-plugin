@@ -587,6 +587,33 @@ describe("company-search 429 backoff", () => {
   });
 
   test.each([
+    {
+      refused: (c) => c.helper,
+      other: (c) => c.shippingHelper,
+      description: "billing refused, delivery still searches"
+    },
+    {
+      refused: (c) => c.shippingHelper,
+      other: (c) => c.helper,
+      description: "delivery refused, billing still searches"
+    }
+  ])("the backoff parks one role's search alone — $description", async ({ refused, other }) => {
+    const searchWith = (h, term) =>
+      h.searchCompanies({ config: {}, token: term, term: term, getCountryCode: () => "GB" });
+
+    const first = searchWith(refused(ctx), "acme");
+    ajax.last().failWith(429, "30");
+    await expect(first).resolves.toEqual({ unavailable: true });
+
+    expect(refused(ctx).companySearchBackoffUntil).toBe(Date.now() + 30000);
+    expect(other(ctx).companySearchBackoffUntil).toBe(0);
+
+    searchWith(other(ctx), "acme");
+
+    expect(ajax.calls.length).toBe(2);
+  });
+
+  test.each([
     { status: 500, description: "an unreachable search" },
     { status: 0, description: "a dropped connection" }
   ])("$description does not back off", async ({ status }) => {
