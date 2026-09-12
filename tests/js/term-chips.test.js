@@ -5,10 +5,10 @@
  * one of these is silent when it regresses — the chips still render, just
  * saying the wrong thing:
  *
- *   1. exactly one offered term  → the single chip names itself
- *      ("Payment Terms 30 days") and NO heading sits above it;
- *   2. more than one            → the heading ("Selected payment terms") sits
- *      above and the chips carry the bare "N days";
+ *   1. a chip's visible text is the term and nothing else — "30 days", or
+ *      "EOM+30" — one term or several;
+ *   2. the heading ("Selected payment terms") sits above the chips whenever any
+ *      is rendered, and is what names the radiogroup;
  *   3. the fee label shows the currency SYMBOL (the server-formatted
  *      buyer_fee_share_display), never the currency code;
  *   4. whether an amount shows is decided over the whole offered set
@@ -52,7 +52,6 @@ describe("payment terms chips", () => {
 
   const COPY = {
     days_label: "%s days",
-    single_label: "Payment Terms %s days",
     heading: "Selected payment terms"
   };
 
@@ -76,25 +75,23 @@ describe("payment terms chips", () => {
   }
 
   describe("exactly one offered term", () => {
-    test("names the term inside the chip and renders no heading", () => {
-      const chips = mount(Object.assign({ enabled: true, terms: [30], selected: 30 }, COPY));
-      chips.render([30], 30);
+    test.each([
+      { days: 30, text: "30 days", case: "a standard term" },
+      { days: 1, text: "1 days", case: "the shortest one" },
+      { days: 120, text: "120 days", case: "a three-digit one" }
+    ])("the lone chip reads as one of several does: $case", ({ days, text }) => {
+      const lone = mount(Object.assign({ enabled: true, terms: [days], selected: days }, COPY));
+      lone.render([days], days);
+      expect(chipDayLabels()).toEqual([text]);
+      // The prefix this replaces ("Payment Terms 30 days") was the chip naming
+      // its own group; the heading above it does that now.
+      expect(headingText()).toBe("Selected payment terms");
 
-      expect(chipDayLabels()).toEqual(["Payment Terms 30 days"]);
-      expect(headingText()).toBe("");
-    });
-
-    // The chip templates are translated PHP-side. A fallback that spelled
-    // out English would render as plausible copy on a non-English shop and
-    // hide the fact that the label never arrived — the same failure that
-    // made a Dutch tagline look intentional on an English shop (TWO-25270).
-    test("a missing single_label degrades to the plain day label, not English", () => {
-      const chips = mount(
-        Object.assign({ enabled: true, terms: [30], selected: 30 }, COPY, { single_label: "" })
+      const several = mount(
+        Object.assign({ enabled: true, terms: [days, 999], selected: days }, COPY)
       );
-      chips.render([30], 30);
-
-      expect(chipDayLabels()).toEqual(["30 days"]);
+      several.render([days, 999], days);
+      expect(chipDayLabels()[0]).toEqual(text);
     });
 
     test("no label copy at all leaves the chip visibly bare, never English", () => {
@@ -134,14 +131,18 @@ describe("payment terms chips", () => {
       expect(ctx.$(".twoinc-term-chips-heading").nextAll(".twoinc-term-chips")).toHaveLength(1);
     });
 
-    test("dropping back to a single term retracts the heading", () => {
+    test.each([
+      { terms: [30], heading: "Selected payment terms", labels: ["30 days"], case: "one term" },
+      { terms: [], heading: "", labels: [], case: "none at all" }
+    ])("dropping back to $case leaves the heading: $heading", ({ terms, heading, labels }) => {
       const chips = mount(Object.assign({ enabled: true, terms: [30, 60], selected: 30 }, COPY));
       chips.render([30, 60], 30);
       expect(headingText()).toBe("Selected payment terms");
 
-      chips.render([30], 30);
-      expect(headingText()).toBe("");
-      expect(chipDayLabels()).toEqual(["Payment Terms 30 days"]);
+      chips.render(terms, 30);
+
+      expect(headingText()).toBe(heading);
+      expect(chipDayLabels()).toEqual(labels);
     });
   });
 
@@ -149,7 +150,6 @@ describe("payment terms chips", () => {
     const EOM = {
       eom: true,
       days_label_eom: "EOM+%s",
-      single_label_eom: "Payment Terms EOM+%s",
       eom_explainer: "EOM+%s: pay %s days after the end of the month"
     };
 
@@ -199,13 +199,13 @@ describe("payment terms chips", () => {
     test.each([
       {
         copy: COPY,
-        labels: ["Payment Terms 30 days"],
+        labels: ["30 days"],
         names: [[undefined, undefined]],
         case: "a standard one"
       },
       {
         copy: Object.assign({}, COPY, EOM),
-        labels: ["Payment Terms EOM+30"],
+        labels: ["EOM+30"],
         names: [
           [
             "EOM+30: pay 30 days after the end of the month",
@@ -220,7 +220,7 @@ describe("payment terms chips", () => {
 
       expect(chipDayLabels()).toEqual(labels);
       expect(chipNames()).toEqual(names);
-      expect(headingText()).toBe("");
+      expect(headingText()).toBe("Selected payment terms");
     });
 
     test("the accessible name contains the visible text", () => {
@@ -628,6 +628,34 @@ describe("payment terms chips", () => {
       );
     });
 
+    // Shift-Tab back into the group has to land on the chip that is outlined,
+    // so the tab stop follows the focus rather than the checked term.
+    test.each([
+      { focus: 90, checked: "30", tabbable: ["90"], case: "a chip the buyer has not chosen" },
+      { focus: 30, checked: "30", tabbable: ["30"], case: "the checked chip itself" }
+    ])(
+      "a re-render keeps the tab stop on the focused chip: $case",
+      ({ focus, checked, tabbable }) => {
+        const chips = mountGroup(30);
+        focusChip(focus);
+
+        chips.render([30, 60, 90], 30);
+
+        expect(focusedDays()).toBe(String(focus));
+        expect(tabbableDays()).toEqual(tabbable);
+        expect(checkedDays()).toBe(checked);
+      }
+    );
+
+    // Focus outside the group leaves the tab stop where the selection puts it.
+    test("a re-render with focus outside the group tabs to the checked chip", () => {
+      const chips = mountGroup(60);
+
+      chips.render([30, 60, 90], 60);
+
+      expect(tabbableDays()).toEqual(["60"]);
+    });
+
     test("a lone chip has nothing to traverse", () => {
       const chips = mount(Object.assign({ enabled: true, terms: [30], selected: 30 }, COPY));
       chips.render([30], 30);
@@ -734,7 +762,6 @@ describe("payment terms chips", () => {
     const EOM = {
       eom: true,
       days_label_eom: "EOM+%s",
-      single_label_eom: "Payment Terms EOM+%s",
       eom_explainer: "EOM+%s: pay %s days after the end of the month",
       eom_explainer_fee: "EOM+%1$s: pay %1$s days after the end of the month, plus a %2$s surcharge"
     };
