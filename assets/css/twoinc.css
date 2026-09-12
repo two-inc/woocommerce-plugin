@@ -818,8 +818,11 @@
   border-color: #3043d1;
 }
 
-.two-company-mode-chip:focus {
-  outline-offset: -2px;
+/* The same ring as `.twoinc-term-chip`, for the same reason: offset outside so
+   it stays visible against the selected chip's own blue fill (ABN-554). */
+.two-company-mode-chip:focus-visible {
+  outline: 2px solid #3043d1;
+  outline-offset: 2px;
 }
 
 /* Tint only the unselected chips: `:focus` outranks `--selected`, so tinting
