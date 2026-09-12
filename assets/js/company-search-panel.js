@@ -70,6 +70,35 @@
     const HIDDEN_CLASS = 'two-hidden';
 
     /**
+     * The controls inside the panel a press is entitled to focus. Deliberately
+     * not `[tabindex]`: a results list carrying one of its own — which jQuery
+     * UI's does on the sibling platform — has padding the buyer means nothing by.
+     */
+    const FOCUS_TARGETS = 'input, button, select, textarea, a[href]';
+
+    /** @returns {boolean} whether focus is on nothing at all */
+    function focusIsUnplaced() {
+        const active = document.activeElement;
+        return !active || active === document.body || active === document.documentElement;
+    }
+
+    /**
+     * @param {object} event mousedown event
+     * @returns {boolean} whether the press is dead space rather than a control
+     *          or a scrollbar
+     */
+    function pressIsDeadSpace(event) {
+        const node = event.target;
+        if (!node || node.nodeType !== 1 || !node.closest) return false;
+        if (node.closest(FOCUS_TARGETS)) return false;
+        const scrollable = node.scrollHeight > node.clientHeight || node.scrollWidth > node.clientWidth;
+        // A press on a native scrollbar lands outside the content box, and
+        // cancelling it would stop the drag scrolling the results.
+        if (scrollable && (event.offsetX >= node.clientWidth || event.offsetY >= node.clientHeight)) return false;
+        return true;
+    }
+
+    /**
      * Every member the injected `search` API must carry. Checked at
      * construction because a host that supplies a partial one fails silently:
      * a missing `abortActiveRequest` throws inside a close, a missing
@@ -491,7 +520,10 @@
             if (!self._open) return;
             if (self._panel && self._panel.contains(event.target)) return;
             if (self._field === event.target) return;
-            self.close();
+            // Deferred instead of close()'s own return: the press's default
+            // action runs after this handler and would undo it.
+            self.close({ returnFocus: false });
+            self._returnFocusIfDropped();
         });
 
         // A mouse click is not the only way to leave: tabbing off the last chip
@@ -500,6 +532,35 @@
         // without this the buyer has no keyboard route out at all.
         this._bindEvent(this._panel, 'focusout', function () {
             self._scheduleFocusOutClose();
+        });
+
+        // On the panel, not the query field: outside registered-company mode
+        // the query row is withdrawn and a chip is what holds focus, and the
+        // panel drawn over the next control left that buyer no way out
+        // (ABN-554).
+        this._bindEvent(this._panel, 'keydown', function (event) {
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            self.close();
+        });
+
+        // A chip is a `<button>`, which swallows typing, and the withdrawn
+        // search leaves no query row to hold the caret instead — so a printable
+        // key belongs in the company-name field (ABN-554).
+        this._bindEvent(this._panel, 'keydown', function (event) {
+            if (!self._disabled) return;
+            if (event.ctrlKey || event.metaKey || event.altKey) return;
+            // Space and Enter activate the focused chip; a single code point is
+            // otherwise exactly what produced text.
+            if (!event.key || event.key.length !== 1 || event.key === ' ') return;
+            self.restoreFieldFocus();
+        });
+
+        // A press on the panel's own dead space is not a gesture: its default
+        // action would blur the caret out of the query field and leave the open
+        // popover holding nothing (ABN-554).
+        this._bindEvent(this._panel, 'mousedown', function (event) {
+            if (pressIsDeadSpace(event)) event.preventDefault();
         });
     };
 
@@ -528,7 +589,9 @@
             // — in neither case has the buyer left the control.
             const active = document.activeElement;
             if (!active || active === document.body || active === document.documentElement) return;
-            self.close();
+            // Focus has settled on another control by now; taking it back
+            // would undo the buyer's own Tab (TWO-25326).
+            self.close({ returnFocus: false });
         }, 0);
     };
 
@@ -601,6 +664,10 @@
             // The buyer is leaving, not searching.
             if (event.key === 'Tab' || event.key === 'Escape') return;
             self.open();
+            // The open puts the caret on a chip where the withdrawn search
+            // leaves no query row, and the character this keystroke is about to
+            // insert would land on a button (ABN-554).
+            if (self._disabled) self.restoreFieldFocus();
         });
         this._bindEvent(field, 'input', function () {
             const typed = field.value;
@@ -609,8 +676,12 @@
             // With the search withdrawn there is no query row to move the
             // keystrokes into and no search they could reach, so they stay
             // where the buyer put them and the panel offers manual entry
-            // instead (ABN-525).
-            if (self._disabled) return;
+            // instead (ABN-525). The open above put the caret on a chip, where
+            // the next character would land on a button (ABN-554).
+            if (self._disabled) {
+                self.restoreFieldFocus();
+                return;
+            }
             // The captured company's name is what this field shows; leaving
             // the buyer's keystrokes in it would overwrite that with a
             // half-typed query before they have picked anything.
@@ -622,7 +693,8 @@
     };
 
     /**
-     * Arrow keys walk the results, Enter takes the active one, Escape closes.
+     * Arrow keys walk the results and Enter takes the active one. Escape is the
+     * whole panel's, bound where every control inside it is reachable.
      *
      * Tab is deliberately untouched: the next tab stop is the chips, which is
      * the tab order the DOM already describes.
@@ -630,11 +702,6 @@
      * @param {object} event keydown event
      */
     CompanySearchPanel.prototype._onQueryKeydown = function (event) {
-        if (event.key === 'Escape') {
-            event.preventDefault();
-            this.close({ returnFocus: true });
-            return;
-        }
         if (event.key === 'Enter') {
             event.preventDefault();
             if (this._activeIndex >= 0) this._selectIndex(this._activeIndex);
@@ -716,15 +783,19 @@
      * The query field where it is shown, else the first offered chip: a mode
      * that suppresses the query row would otherwise open the panel with focus
      * nowhere (ABN-525).
+     *
+     * @returns {boolean} whether it found anything to focus
      */
     CompanySearchPanel.prototype._focusOnOpen = function () {
         if (this._query && !this._queryRowIsHidden()) {
             this._query.focus();
-            return;
+            return true;
         }
-        if (!this._chips || this._chips.classList.contains(HIDDEN_CLASS)) return;
+        if (!this._chips || this._chips.classList.contains(HIDDEN_CLASS)) return false;
         const chip = this._chips.querySelector('.' + CHIP_CLASS + ':not(.' + HIDDEN_CLASS + ')');
-        if (chip) chip.focus();
+        if (!chip) return false;
+        chip.focus();
+        return true;
     };
 
     /** @returns {boolean} whether `_syncQueryVisibility` has the query row hidden */
@@ -736,10 +807,15 @@
     /**
      * Close the panel and drop whatever the last search left in it.
      *
+     * Focus goes back to the company field however the close was reached, so
+     * the buyer is never left standing on a control that has just gone
+     * (ABN-554). The field's own open-on-focus opener is held off for that one
+     * programmatic focus alone, so the next keystroke, click or Tab arrival
+     * reopens.
+     *
      * @param {object} [options]
-     * @param {boolean} [options.returnFocus] put focus back on the field —
-     *        what Escape means. Left off for a click elsewhere, where the
-     *        buyer has already chosen where to go.
+     * @param {boolean} [options.returnFocus] `false` where focus has already
+     *        settled somewhere the buyer put it.
      */
     CompanySearchPanel.prototype.close = function (options) {
         if (!this._panel || !this._open) return;
@@ -757,13 +833,39 @@
         this._items = [];
         this._activeIndex = -1;
         if (this._field) this._field.setAttribute('aria-expanded', 'false');
-        if (options && options.returnFocus && this._field) {
-            // Guards the field's own focus opener against reopening the panel
-            // this call is closing.
-            this._closing = true;
+        if (!options || options.returnFocus !== false) this.restoreFieldFocus();
+    };
+
+    /**
+     * Put focus back on the company field, leaving the panel's open state as it
+     * was. `_closing` holds off the field's own focus opener, and the pending
+     * focus-out close is cancelled because the field sits OUTSIDE the panel
+     * node, so arriving on it otherwise reads as leaving the control.
+     */
+    CompanySearchPanel.prototype.restoreFieldFocus = function () {
+        if (!this._field) return;
+        this._closing = true;
+        try {
             this._field.focus();
+        } finally {
             this._closing = false;
         }
+        this._cancelFocusOutClose();
+    };
+
+    /**
+     * Take focus back only if the pointer press that closed the panel left it
+     * nowhere, which is what a press on anything unfocusable does. Deferred by
+     * one tick so the press's own default action has already settled.
+     */
+    CompanySearchPanel.prototype._returnFocusIfDropped = function () {
+        const self = this;
+        setTimeout(function () {
+            if (self._destroyed || self._open) return;
+            const active = document.activeElement;
+            if (active && active !== document.body && active !== document.documentElement) return;
+            self.restoreFieldFocus();
+        }, 0);
     };
 
     /** @returns {boolean} whether the panel is currently open */
@@ -967,6 +1069,8 @@
         const self = this;
         if (!this._chips) return;
         const selected = this.getSelectedMode();
+        // The node, read before the sync that takes it away (ABN-554).
+        const heldFocus = this._holdsFocus() ? document.activeElement : null;
         this._syncQueryVisibility(selected);
         this._unbind(this._chips);
         this._chips.innerHTML = '';
@@ -999,6 +1103,32 @@
             self._chips.appendChild(button);
         });
         this._chips.classList.toggle(HIDDEN_CLASS, actionable === 0);
+        // A mode change takes away whatever held focus, so the control places
+        // focus again rather than leaving the buyer on nothing.
+        if (heldFocus && this._focusHolderIsGone(heldFocus)) {
+            // The field where the open panel has nothing focusable left in it
+            // — a mode whose chips are all withheld offers the buyer nothing.
+            if (!this._open || !this._focusOnOpen()) this.restoreFieldFocus();
+        }
+    };
+
+    /**
+     * Whether the sync has taken away the node that held focus.
+     *
+     * Asks the NODE, not where focus is now: a rebuilt chip row deletes it
+     * (ABN-561), while a withdrawn query row only hides it and the browser's
+     * own blur for that lands after this handler — so `activeElement` still
+     * names an input the buyer can no longer see or type into.
+     *
+     * @param {Element} node the holder as it was before the sync
+     * @returns {boolean}
+     */
+    CompanySearchPanel.prototype._focusHolderIsGone = function (node) {
+        if (!node.isConnected) return true;
+        // Only while the popover is up: a closed panel is not the buyer's
+        // place either way, so a caret still recorded in it is nobody's cue.
+        if (this._open && node === this._query && this._queryRowIsHidden()) return true;
+        return focusIsUnplaced();
     };
 
     /**
