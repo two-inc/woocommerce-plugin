@@ -194,3 +194,17 @@ msgstr "oculto para cestas en una moneda en la que el recargo al comprador no pu
 #: class/WC_Twoinc.php
 msgid "Automatic"
 msgstr "Automático"
+
+#: class/WC_Twoinc_Payment_Terms.php
+msgid "Payment terms fee"
+msgstr "Comisión por condiciones de pago"
+
+#: class/WC_Twoinc_Payment_Terms.php
+#, php-format
+msgid "Payment terms fee - %s days"
+msgstr "Comisión por condiciones de pago - %s días"
+
+#: class/WC_Twoinc_Payment_Terms.php
+#, php-format
+msgid "Payment terms fee - %s days from end of month"
+msgstr "Comisión por condiciones de pago - %s días desde el final del mes"

@@ -1613,3 +1613,17 @@ msgstr "verborgen voor winkelwagens in een valuta waarin de toeslag voor de kope
 #: class/WC_Twoinc.php
 msgid "Automatic"
 msgstr "Automatisch"
+
+#: class/WC_Twoinc_Payment_Terms.php
+msgid "Payment terms fee"
+msgstr "Betaaltermijn toeslag"
+
+#: class/WC_Twoinc_Payment_Terms.php
+#, php-format
+msgid "Payment terms fee - %s days"
+msgstr "Betaaltermijn toeslag - %s dagen"
+
+#: class/WC_Twoinc_Payment_Terms.php
+#, php-format
+msgid "Payment terms fee - %s days from end of month"
+msgstr "Betaaltermijn toeslag - %s dagen vanaf het einde van de maand"

@@ -132,8 +132,8 @@ final class BrandConfigSpec
             'testSurchargeFeeCustomClassTaxedAtSelectedClassRates',
             'testSurchargeFeeAlwaysZeroNeverTaxed',
             'testSurchargeChipAmountMatchesFeeLineTaxBasis',
-            'testSurchargeFeeLabelMatchesMagentoWording',
-            'testSurchargeFeeLabelMerchantTemplateOverridesDefault',
+            'testSurchargeFeeLabelDefaultWordingPerTermsBasis',
+            'testSurchargeFeeLabelOverridesIgnoreTermsBasis',
             'testSurchargeFeeCustomClassFallsBackWhenClassDeleted',
             'testSurchargeTaxSettingsValidationAndStaleNotice',
             'testNeverTaxedTreatmentSuppressedUnconditionally',
@@ -5496,7 +5496,7 @@ final class BrandConfigSpec
 
             public function get_merchant_available_terms(): array
             {
-                return [14, 30, 60, 90];
+                return $this->options['__test_available_terms'] ?? [14, 30, 60, 90];
             }
 
             public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
@@ -5671,36 +5671,69 @@ final class BrandConfigSpec
         }
     }
 
-    private static function testSurchargeFeeLabelMatchesMagentoWording(): void
+    /**
+     * The default fee-line wording spells the term the way the chip does, so
+     * an end-of-month order's summary cannot understate when it falls due
+     * (ABN-554).
+     */
+    private static function testSurchargeFeeLabelDefaultWordingPerTermsBasis(): void
     {
-        // No merchant override, no brand override: the fee line's label
-        // must match Magento's "Payment terms fee - %1 days" convention,
-        // not the old "Service charge" wording.
         foreach (
             [
-                [14, 'Payment terms fee - 14 days'],
-                [30, 'Payment terms fee - 30 days'],
-                [90, 'Payment terms fee - 90 days'],
+                ['standard', 14, 'Payment terms fee - 14 days', 'standard 14-day term'],
+                ['standard', 30, 'Payment terms fee - 30 days', 'standard 30-day term'],
+                ['standard', 90, 'Payment terms fee - 90 days', 'standard 90-day term'],
+                ['end_of_month', 30, 'Payment terms fee - 30 days from end of month', 'EOM 30-day term'],
+                ['end_of_month', 45, 'Payment terms fee - 45 days from end of month', 'EOM 45-day term'],
+                ['end_of_month', 60, 'Payment terms fee - 60 days from end of month', 'EOM 60-day term'],
             ] as $case
         ) {
-            list($days, $expected) = $case;
+            list($type, $days, $expected, $description) = $case;
             $fee = self::runApplyCartFee([
+                'payment_terms_type' => $type,
                 'payment_terms_days' => [],
                 'payment_terms_custom_days' => $days,
+                '__test_available_terms' => [$days],
                 'surcharge_grid' => [$days => ['percentage' => 2.0]],
             ])->fees[0];
-            TinyAssert::same($expected, $fee['name'], "label for a {$days}-day term");
+            TinyAssert::same($expected, $fee['name'], 'default label, ' . $description);
         }
     }
 
-    private static function testSurchargeFeeLabelMerchantTemplateOverridesDefault(): void
+    /**
+     * A merchant template and a brand overlay label are both verbatim: the
+     * end-of-month suffix belongs to the default wording alone.
+     */
+    private static function testSurchargeFeeLabelOverridesIgnoreTermsBasis(): void
     {
-        // A merchant-set surcharge_line_description wins over the default,
-        // %s replaced with the selected term's day count.
-        $fee = self::runApplyCartFee([
-            'surcharge_line_description' => 'Custom fee - %s days',
-        ])->fees[0];
-        TinyAssert::same('Custom fee - 30 days', $fee['name']);
+        foreach (
+            [
+                ['standard', null, 'Custom fee - 30 days', 'merchant template, standard terms'],
+                ['end_of_month', null, 'Custom fee - 30 days', 'merchant template, EOM terms'],
+                ['standard', 'feelabelbrand', 'Overlay fee line', 'brand label, standard terms'],
+                ['end_of_month', 'feelabelbrand', 'Overlay fee line', 'brand label, EOM terms'],
+            ] as $case
+        ) {
+            list($type, $brand, $expected, $description) = $case;
+            $options = ['payment_terms_type' => $type];
+            if ($brand === null) {
+                $options['surcharge_line_description'] = 'Custom fee - %s days';
+            } else {
+                WC_Twoinc_Brand::reset();
+                remove_all_filters('twoinc_brand_file');
+                add_filter('twoinc_brand_file', static function ($file) use ($brand) {
+                    return __DIR__ . '/fixtures/' . $brand . '.php';
+                });
+            }
+
+            $fee = self::runApplyCartFee($options)->fees[0];
+            TinyAssert::same($expected, $fee['name'], 'override label, ' . $description);
+
+            if ($brand !== null) {
+                remove_all_filters('twoinc_brand_file');
+                WC_Twoinc_Brand::reset();
+            }
+        }
     }
 
     private static function testSurchargeFeeCustomClassFallsBackWhenClassDeleted(): void

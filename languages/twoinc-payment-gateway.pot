@@ -1615,3 +1615,17 @@ msgstr ""
 #: class/WC_Twoinc.php
 msgid "Automatic"
 msgstr ""
+
+#: class/WC_Twoinc_Payment_Terms.php
+msgid "Payment terms fee"
+msgstr ""
+
+#: class/WC_Twoinc_Payment_Terms.php
+#, php-format
+msgid "Payment terms fee - %s days"
+msgstr ""
+
+#: class/WC_Twoinc_Payment_Terms.php
+#, php-format
+msgid "Payment terms fee - %s days from end of month"
+msgstr ""
