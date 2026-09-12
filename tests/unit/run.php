@@ -118,6 +118,7 @@ final class BrandConfigSpec
             'testDeprecatedCustomTermFoldsInOnlyAgainstAResolvedOfferedSet',
             'testDeprecatedCustomTermWriteGuardHoldsEverySettingsWrite',
             'testDeprecatedCustomTermCopyIsTranslatedInEveryLocale',
+            'testChipCopyIsTranslatedInEveryLocale',
             'testZeroCapOnAnUnrenderedRowDoesNotBlockEnabling',
             'testDisablingSurchargesIsNeverBlockedByAZeroCap',
             'testUnrecognisedSurchargeMethodIsRefusedOnSave',
@@ -140,9 +141,11 @@ final class BrandConfigSpec
             'testPaymentTermsValidationRequiresSelection',
             'testDefaultTermCoercedToOfferedSet',
             'testOrderPayloadCarriesSelectedAndAvailableTerms',
+            'testCartFeeAndOrderPayloadChargeTheSameTerm',
             'testPaymentTermsInvalidPostFallsBackToDefault',
             'testPaymentTermsDisabledMeansNoPayloadTerms',
             'testPaymentTermsTypeOfferedOnlyToShopsAlreadyOnEndOfMonth',
+            'testChipCopyStatesTheTermType',
             'testSoleTraderAvailableWhenRegistryListsIt',
             'testSoleTraderTokensMintedRegardlessOfCountry',
             'testSoleTraderTokensMintedWithNoCountryPosted',
@@ -243,6 +246,7 @@ final class BrandConfigSpec
             'testClientVersionSuffixesShortShaWhenStamped',
             'testClientVersionIsQueryEncodedAsPlus',
             'testPaymentBoxOrdersTaglineChipsThenSoleTrader',
+            'testTermChipGroupIsNamedByANonLabelHeading',
             'testPaymentBoxRendersCompanySearchTileSlotBetweenSoleTraderAndIntentMessage',
             'testDeclinedBoxCarriesCompanyTemplate',
             'testSelectedTermInputPrecedesChipsContainer',
@@ -6412,6 +6416,95 @@ final class BrandConfigSpec
     }
 
     /**
+     * ABN-554. The chip strip's buyer-facing copy, in EVERY catalogue the plugin ships.
+     * es_ES is thinner than the other three, so a string added to the checkout reaches it
+     * only if somebody puts it there — and a Spanish shop then reads English beside a
+     * Spanish PrestaShop shop, with nothing else in the suite reporting it.
+     */
+    private static function testChipCopyIsTranslatedInEveryLocale(): void
+    {
+        $languages = dirname(__DIR__, 2) . '/languages/';
+        $cases = [
+            [
+                '%s days',
+                [
+                    'es_ES' => '%s días',
+                    'nb_NO' => '%s dager',
+                    'nl_NL' => '%s dagen',
+                    'sv_SE' => '%s dagar',
+                ],
+                'chip text under standard terms',
+            ],
+            [
+                'Selected payment terms',
+                [
+                    'es_ES' => 'Condiciones de pago seleccionadas',
+                    'nb_NO' => 'Valgte betalingsvilkår',
+                    'nl_NL' => 'Gewenste betaaltermijn',
+                    'sv_SE' => 'Valda betalningsvillkor',
+                ],
+                'heading that names the chip group',
+            ],
+            [
+                'EOM+%s',
+                [
+                    'es_ES' => 'EOM+%s',
+                    'nb_NO' => 'EOM+%s',
+                    'nl_NL' => 'EOM+%s',
+                    'sv_SE' => 'EOM+%s',
+                ],
+                'chip text under end-of-month terms',
+            ],
+            [
+                'EOM+%s: pay %s days after the end of the month',
+                [
+                    'es_ES' => 'EOM+%s: pague %s días después del final del mes',
+                    'nb_NO' => 'EOM+%s: betal %s dager etter månedens slutt',
+                    'nl_NL' => 'EOM+%s: betaal %s dagen na het einde van de maand',
+                    'sv_SE' => 'EOM+%s: betala %s dagar efter månadens slut',
+                ],
+                'end-of-month chip name',
+            ],
+            [
+                'EOM+%1$s: pay %1$s days after the end of the month, plus a %2$s surcharge',
+                [
+                    'es_ES' => 'EOM+%1$s: pague %1$s días después del final del mes, más un recargo de %2$s',
+                    'nb_NO' => 'EOM+%1$s: betal %1$s dager etter månedens slutt, pluss %2$s i tillegg',
+                    'nl_NL' => 'EOM+%1$s: betaal %1$s dagen na het einde van de maand, plus %2$s toeslag',
+                    'sv_SE' => 'EOM+%1$s: betala %1$s dagar efter månadens slut, plus %2$s i avgift',
+                ],
+                'end-of-month chip name stating the surcharge',
+            ],
+        ];
+        foreach ($cases as [$msgid, $expected, $description]) {
+            TinyAssert::true(
+                strpos(
+                    (string) file_get_contents($languages . 'twoinc-payment-gateway.pot'),
+                    addcslashes($msgid, '"\\')
+                ) !== false,
+                "the .pot is missing the $description — regenerate it"
+            );
+            foreach ($expected as $locale => $translation) {
+                TinyAssert::same(
+                    $translation,
+                    self::poTranslation(
+                        (string) file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.po'),
+                        $msgid
+                    ),
+                    "the $locale catalogue does not pair the $description with its translation"
+                );
+                TinyAssert::true(
+                    strpos(
+                        (string) file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.mo'),
+                        $translation
+                    ) !== false,
+                    "the compiled $locale catalogue predates the $description — recompile with msgfmt"
+                );
+            }
+        }
+    }
+
+    /**
      * ABN-522. Every write to the settings row is held to remove-or-keep, not just the admin
      * form's: the REST settings endpoint runs none of the gateway's own field validators.
      */
@@ -6587,6 +6680,148 @@ final class BrandConfigSpec
         }
 
         unset($_POST[$terms_key], $_POST[$custom_key], $GLOBALS['__twoinc_test_options'][$due_option]);
+    }
+
+    /**
+     * The fee the basket carries and the term the order is booked on must be
+     * the same term (ABN-554). The hidden checkout field follows a chip the
+     * moment the buyer moves to it, while the session follows it a round trip
+     * later, so a fee resolved from the session alone charges the term the
+     * buyer left.
+     */
+    private static function testCartFeeAndOrderPayloadChargeTheSameTerm(): void
+    {
+        $gateway = new class extends WC_Twoinc {
+            public array $quoted_terms = [];
+
+            public function __construct()
+            {
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                $options = [
+                    'surcharge_type' => 'percentage',
+                    'payment_terms_days' => [30, 60],
+                    'surcharge_grid' => [30 => ['percentage' => 1.0], 60 => ['percentage' => 4.0]],
+                ];
+                return $options[$key] ?? $empty_value ?? '';
+            }
+
+            public function get_merchant_available_terms(): array
+            {
+                return [30, 60];
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                $this->quoted_terms[] = $payload['order_terms']['duration_days'] ?? null;
+                return ['response' => ['code' => 200], 'body' => json_encode(['buyer_fee_share' => '7.00', 'currency' => 'EUR'])];
+            }
+        };
+
+        self::withGatewayInstance($gateway, static function () use ($gateway) {
+            WC_Twoinc_Payment_Terms::reset_fee_cache();
+            WC()->session = new StubSession();
+            WC()->session->set('chosen_payment_method', $gateway->id);
+            WC()->session->set(WC_Twoinc_Payment_Terms::SESSION_KEY, 30);
+            WC()->customer = new StubCustomer('NO');
+            $_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] = '60';
+
+            WC_Twoinc_Payment_Terms::apply_cart_fee(new StubFeeCart());
+            $payload = WC_Twoinc_Payment_Terms::get_order_payload_terms($gateway, new StubOrder());
+
+            TinyAssert::same([60], $gateway->quoted_terms, 'the cart fee must be quoted for the posted term');
+            TinyAssert::same(60, $payload['terms']['duration_days'], 'the order must be booked on the posted term');
+        });
+
+        unset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]);
+    }
+
+    /**
+     * The chip copy the browser renders has to name the term type. An
+     * end-of-month term falls due that many days after the end of the month,
+     * so the bare day count states the wrong due date for it, and the
+     * accessible name has to contain the visible token WCAG 2.5.3 requires
+     * (ABN-554).
+     */
+    private static function testChipCopyStatesTheTermType(): void
+    {
+        $make_gateway = static function (string $type) {
+            return new class ($type) extends WC_Twoinc {
+                public $options;
+
+                public function __construct($type)
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                    $this->options = [
+                        'api_key' => 'key',
+                        'merchant_id' => '42',
+                        'payment_terms_type' => $type,
+                        'payment_terms_days' => [30],
+                    ];
+                }
+
+                public function get_twoinc_checkout_host()
+                {
+                    return 'https://api.example';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                {
+                    if (strpos($endpoint, 'verify_api_key') !== false) {
+                        return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
+                    }
+                    return [
+                        'response' => ['code' => 200],
+                        'body' => json_encode(['id' => '42', 'available_terms' => [30]]),
+                    ];
+                }
+            };
+        };
+
+        $GLOBALS['__twoinc_test_is_checkout'] = true;
+        foreach ([['end_of_month', true, 'a legacy end-of-month shop'], ['standard', false, 'a standard shop']] as [$type, $eom, $case]) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            WC_Twoinc::reset_merchant_record_memo();
+
+            ob_start();
+            (new WC_Twoinc_Checkout($make_gateway($type)))->inject_cart_details();
+            $printed = (string) ob_get_clean();
+
+            $decoded = json_decode((string) preg_replace('#^<script>window\.twoinc = (.*);</script>$#s', '$1', trim($printed)), true);
+            $copy = $decoded['payment_terms'] ?? [];
+
+            TinyAssert::same($eom, $copy['eom'] ?? null, $case . ' publishes whether the term is end of month');
+            // A lone chip reads exactly as one of several does, so there is no
+            // second template for it to diverge through (ABN-554).
+            foreach (['single_label', 'single_label_eom'] as $key) {
+                TinyAssert::true(
+                    !array_key_exists($key, $copy),
+                    $case . ' publishes no sole-term text override: ' . $key
+                );
+            }
+            // The fee sentence numbers its placeholders because two different
+            // values go in; compared against the token on the shared `%s` form.
+            foreach (['eom_explainer', 'eom_explainer_fee'] as $key) {
+                $sentence = str_replace(['%1$s', '%2$s'], '%s', (string) ($copy[$key] ?? ''));
+                TinyAssert::true(
+                    strpos($sentence, (string) ($copy['days_label_eom'] ?? 'missing')) === 0,
+                    $case . ' spells the token out starting with the token itself: ' . $key
+                );
+            }
+            // The browser substitutes the amount, so its placeholder has to survive.
+            TinyAssert::true(
+                strpos((string) ($copy['eom_explainer_fee'] ?? ''), '%2$s') !== false,
+                $case . ' leaves the amount for the browser to substitute'
+            );
+        }
+        unset($GLOBALS['__twoinc_test_is_checkout'], $GLOBALS['__twoinc_test_transients']);
     }
 
     private static function testOrderPayloadCarriesSelectedAndAvailableTerms(): void
@@ -10213,6 +10448,30 @@ final class BrandConfigSpec
      * `twoinc-sole-trader-note-slot` here only ever holds the
      * signup-prompt note and in-flight error.
      */
+    /**
+     * The chip radiogroup takes its accessible name from the heading above it,
+     * and that heading is not a `label`: a `label` names exactly one form
+     * control, and this one names a group (ABN-554).
+     */
+    private static function testTermChipGroupIsNamedByANonLabelHeading(): void
+    {
+        $html = self::gateway()->build_payment_description();
+
+        TinyAssert::true(
+            strpos($html, '<span class="twoinc-term-chips-heading hidden" id="twoinc-term-chips-heading">') !== false,
+            'the chip heading must be a span carrying the id the group points at'
+        );
+        TinyAssert::true(
+            strpos($html, 'class="twoinc-term-chips hidden" role="radiogroup" aria-labelledby="twoinc-term-chips-heading"') !== false,
+            'the chip radiogroup must be named by the heading'
+        );
+        TinyAssert::true(
+            strpos($html, 'twoinc-term-chips-heading') !== false
+                && strpos($html, '<label class="twoinc-term-chips-heading') === false,
+            'the chip heading must not be a label element'
+        );
+    }
+
     private static function testPaymentBoxOrdersTaglineChipsThenSoleTrader(): void
     {
         self::useTaglineBrand();

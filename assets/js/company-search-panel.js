@@ -1052,6 +1052,7 @@
         // The node, read before the sync that takes it away (ABN-554).
         const heldFocus = this._holdsFocus() ? document.activeElement : null;
         this._syncQueryVisibility(selected);
+        const heldFocus = this._holdsFocus() ? document.activeElement : null;
         this._unbind(this._chips);
         this._chips.innerHTML = '';
         let actionable = 0;
