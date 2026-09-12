@@ -1,9 +1,10 @@
 /**
  * ABN-561. A chip activation rebuilds the whole chip row, so the chip the buyer
- * was on is destroyed and focus falls to `<body>`. The rebuild hands focus to
- * the company field, but only where it actually disconnected the focused node —
- * an unconditional move would take focus off whatever the buyer was legitimately
- * using.
+ * was on is destroyed and focus falls to `<body>`. The sync places focus again,
+ * but only where it actually took away the node that held it — an unconditional
+ * move would take focus off whatever the buyer was legitimately using. An open
+ * panel places it inside itself; the company field is where a closed one lands
+ * (ABN-554).
  *
  * jsdom has no sequential focus navigation and no layout, so these assertions
  * read `document.activeElement` after driving the rebuild directly. They say
@@ -17,7 +18,6 @@ const harness = require("./wc-harness");
 
 describe("focus when the chip row is rebuilt", () => {
   let ctx;
-  let field;
   let panel;
 
   beforeEach(() => {
@@ -26,7 +26,6 @@ describe("focus when the chip row is rebuilt", () => {
     ctx.$("#billing_company_display_field").removeClass("hidden");
     ctx.helper.attach();
     ctx.helper.openCompanySearchDropdown();
-    field = document.querySelector("#billing_company_display");
     panel = ctx.helper.panel;
   });
 
@@ -38,17 +37,17 @@ describe("focus when the chip row is rebuilt", () => {
   test.each([
     {
       pickTarget: () => document.querySelector(".two-company-mode-chip"),
-      keepsFocus: false,
-      description: "a chip the rebuild destroys hands focus to the company field"
+      pickExpected: () => document.querySelector(".two-company-dropdown__query"),
+      description: "a chip the rebuild destroys hands focus into the open panel"
     },
     {
       pickTarget: () => document.querySelector(".two-company-dropdown__query"),
-      keepsFocus: true,
+      pickExpected: null,
       description: "the query field is inside the panel and survives, so it keeps focus"
     },
     {
       pickTarget: () => document.querySelector("#billing_country"),
-      keepsFocus: true,
+      pickExpected: null,
       description: "focus outside the panel is left where the buyer put it"
     },
     {
@@ -57,17 +56,17 @@ describe("focus when the chip row is rebuilt", () => {
         host.setAttribute("tabindex", "-1");
         return host;
       },
-      keepsFocus: true,
+      pickExpected: null,
       description: "the chips host encloses the chips but is not disconnected, so focus stays"
     }
-  ])("$description", ({ pickTarget, keepsFocus }) => {
+  ])("$description", ({ pickTarget, pickExpected }) => {
     const target = pickTarget();
     target.focus();
     expect(document.activeElement).toBe(target);
 
     panel.syncChips();
 
-    expect(document.activeElement).toBe(keepsFocus ? target : field);
+    expect(document.activeElement).toBe(pickExpected ? pickExpected() : target);
   });
 
   test("the handover leaves the panel open", () => {
