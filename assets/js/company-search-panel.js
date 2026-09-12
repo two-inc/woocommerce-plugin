@@ -661,8 +661,17 @@
         });
         this._bindEvent(field, 'keydown', function (event) {
             if (event.ctrlKey || event.metaKey || event.altKey) return;
+            // Bound here as well: the panel's own Escape sits on a node this
+            // field is only a sibling of, and a mode change parks focus here
+            // (ABN-554).
+            if (event.key === 'Escape') {
+                if (!self._open) return;
+                event.preventDefault();
+                self.close();
+                return;
+            }
             // The buyer is leaving, not searching.
-            if (event.key === 'Tab' || event.key === 'Escape') return;
+            if (event.key === 'Tab') return;
             self.open();
             // The open puts the caret on a chip where the withdrawn search
             // leaves no query row, and the character this keystroke is about to
