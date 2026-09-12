@@ -1614,3 +1614,17 @@ msgstr "skjult for handlekorger i en valuta kjøpertillegget ikke kan prises i"
 #: class/WC_Twoinc.php
 msgid "Automatic"
 msgstr "Automatisk"
+
+#: class/WC_Twoinc_Payment_Terms.php
+msgid "Payment terms fee"
+msgstr "Gebyr for betalingsvilkår"
+
+#: class/WC_Twoinc_Payment_Terms.php
+#, php-format
+msgid "Payment terms fee - %s days"
+msgstr "Gebyr for betalingsvilkår - %s dager"
+
+#: class/WC_Twoinc_Payment_Terms.php
+#, php-format
+msgid "Payment terms fee - %s days from end of month"
+msgstr "Gebyr for betalingsvilkår - %s dager fra månedens slutt"

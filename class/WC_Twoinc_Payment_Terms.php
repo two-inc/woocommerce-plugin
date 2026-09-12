@@ -1090,7 +1090,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * Buyer-facing label for the fee line. A merchant-set
          * surcharge_line_description wins (with %s replaced by the selected
          * term days, as on every platform); otherwise the brand label, else the
-         * translated cross-platform default wording.
+         * translated cross-platform default wording, whose days are spelled as
+         * running from the end of the month under end-of-month terms (ABN-554).
          */
         public static function get_fee_label(): string
         {
@@ -1107,7 +1108,10 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             if ($days === null) {
                 return __('Payment terms fee', 'twoinc-payment-gateway');
             }
-            return str_replace('%s', (string) $days, __('Payment terms fee - %s days', 'twoinc-payment-gateway'));
+            $default = self::is_end_of_month($gateway)
+                ? __('Payment terms fee - %s days from end of month', 'twoinc-payment-gateway')
+                : __('Payment terms fee - %s days', 'twoinc-payment-gateway');
+            return str_replace('%s', (string) $days, $default);
         }
 
         /**

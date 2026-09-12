@@ -224,6 +224,13 @@ The payment-term chips are a radio group
   copy is translated PHP-side and reaches the renderer in the checkout bootstrap
   alongside the flag saying which type is stored; a missing end-of-month template
   degrades to the bare `EOM+30` token rather than to a standard-term label.
+- **The surcharge's own line states the term type too**, for the same reason the
+  chip does: the default wording is `Payment terms fee - 30 days` under standard
+  terms and `Payment terms fee - 30 days from end of month` under end of month.
+  It is decided once, where the fee line is named, so the cart, the order, the
+  emails and the admin order view cannot disagree. A merchant-set line
+  description and a brand overlay's fee-line label are both taken verbatim — an
+  operator who names the line names all of it.
 - **That name states the surcharge as well**, because an `aria-label` replaces the
   whole accessible name and the `+€n,nn` rendered inside the chip is then announced
   nowhere. A priced end-of-month chip is named
