@@ -2075,7 +2075,10 @@ let twoincSupportedSearchCountries = {
 // The fetch above resolves after every control may already have attached
 // (or not yet have), so each control re-checks itself once the answer lands
 // rather than the fetch trying to know who asked.
-jQuery(document.body).on("twoinc_supported_search_countries_updated", function () {
+//
+// Rooted on `document`: this file is enqueued into the HEAD, where
+// `document.body` is still null and a binding on it reaches nothing (ABN-554).
+jQuery(document).on("twoinc_supported_search_countries_updated", function () {
   twoincCompanySearchControls.forEach(function (control) {
     control.syncCompanySearchAvailability();
   });
