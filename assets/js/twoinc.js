@@ -4203,6 +4203,8 @@ function createSoleTraderController(companySearch) {
      */
     parkLaunchFocus: function () {
       window.setTimeout(function () {
+        // A flight already over owns its own focus: the settle reads where focus is.
+        if (!controller.activePopupWatchers.length) return;
         const active = document.activeElement;
         if (active && active !== document.body && active !== document.documentElement) return;
         const panel = companySearch.panel;
