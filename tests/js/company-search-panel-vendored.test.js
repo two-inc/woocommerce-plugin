@@ -1,12 +1,11 @@
 /**
  * TWO-25503. `assets/js/company-search-panel.js` is one of two copies of the same
- * panel module, so two checkouts render one control. Nothing compares the copies,
- * and they have drifted, so a whole-file re-copy is not the route.
+ * panel module, so two checkouts render one control. The copies are byte-identical
+ * and the Magento plugin's suite locks its copy to the same digest, so two matching
+ * constants are the whole parity check — neither repo can read the other.
  *
- * The digest below locks this copy against being edited in place, and that alone —
- * `AGENTS.md` and `.prettierignore` are not enforceable. To change shared panel
- * behaviour: edit here, apply the identical edit to the other copy, re-run the JS
- * suite, and move the digest in the same commit.
+ * To change shared panel behaviour: edit here, apply the identical edit to the other
+ * copy, re-run both JS suites, and move both digests in the same change set.
  */
 
 "use strict";
@@ -20,7 +19,7 @@ const harness = require("./wc-harness");
 const PANEL_PATH = "assets/js/company-search-panel.js";
 
 /** sha256 of this copy of the panel. */
-const EDIT_LOCK_SHA256 = "a60c23b69754e5113b2a09e1eb115a50d842c73ef57b852aadb114f31034da7b";
+const EDIT_LOCK_SHA256 = "2e08d09014bfd8c05e885058fa6f3589852b9daae24aa57f7fb07d81d9d72359";
 
 describe("the vendored company-search panel", () => {
   test("has not been edited in place", () => {

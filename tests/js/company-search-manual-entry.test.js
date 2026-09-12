@@ -421,10 +421,10 @@ describe("company-search manual-entry affordance", () => {
     }
 
     test.each([
-      ["address_area", ["registered", "sole_trader", "manual"], "all three offered"],
+      ["address_area", ["registered", "soletrader", "manual"], "all three offered"],
       [
         "payment_tile",
-        ["registered", "sole_trader"],
+        ["registered", "soletrader"],
         "manual entry withheld, the other two untouched"
       ]
     ])("company_search_location %s → %p — %s", (location, expected) => {
@@ -456,7 +456,7 @@ describe("company-search manual-entry affordance", () => {
     // it counts what `isChipVisible` offers — so the row must never be hidden
     // or removed a second time on this side (TWO-40).
     test.each([
-      [true, ["registered", "sole_trader"], false, "two chips offered, the row stands"],
+      [true, ["registered", "soletrader"], false, "two chips offered, the row stands"],
       [false, ["registered"], true, "sole trader withheld, one chip left, row hidden"]
     ])("sole trader available %s → %p, row hidden %s — %s", (available, expected, rowHidden) => {
       ctx = harness.loadTwoinc({

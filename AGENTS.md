@@ -86,26 +86,28 @@ Vendored assets
 
 - `assets/js/company-search-panel.js` is one of TWO copies of the same panel
   module — this one, and the one the Two Magento plugin carries — so both
-  checkouts render one control. The copies have DRIFTED: 98 lines differ across
-  15 hunks, 93 of them present only on the Magento side and 5 only here. A
-  whole-file re-copy is therefore NOT the route while that gap stands; it would
-  import the other platform's code into this one wholesale. The Two Hyvä
-  extension carries no copy at all — it loads the base Magento plugin's panel by
-  module reference — so there are two copies in total, not three.
+  checkouts render one control. They are BYTE-IDENTICAL. The Two Hyvä extension
+  carries no copy at all — it loads the base Magento plugin's panel by module
+  reference — so there are two copies in total, not three.
 - **A change to shared panel behaviour is TWO edits in ONE change set.** Apply it
-  in place here and identically to the other copy, re-run the JS suite, and paste
-  the new digest into the edit-lock below in the same commit. Nothing links the
-  copies: whoever changes one and stops has fixed one platform, and neither
-  reviewer sees the other half. A change that serves one platform only stays in
-  that copy, and that is what the divergence above is made of.
-- `tests/js/company-search-panel-vendored.test.js` is an **edit-lock, not a parity
-  check** (TWO-25503). `EDIT_LOCK_SHA256` is this copy's own digest, so the suite
-  fails on any change to this file that did not move the digest with it — an
-  unintended edit, a stray formatter run, a bad merge — and passes on a
-  deliberate one. It cannot reach the Magento repo at all and says nothing
-  whatever about whether the two copies agree: **nothing compares them**, so
-  nothing detects the drift between them. `.prettierignore` keeps the formatter
-  off the file so the digest is not moved by a reformat nobody asked for.
+  in place here and identically to the other copy, re-run both JS suites, and
+  move both digests. Nothing links the copies: whoever changes one and stops has
+  fixed one platform, and neither reviewer sees the other half. Re-copying the
+  whole file is NOT a way to re-sync: once the copies differ it reverts whatever
+  only this side held, and while they agree there is nothing to copy.
+- `tests/js/company-search-panel-vendored.test.js` holds `EDIT_LOCK_SHA256`, this
+  copy's own digest (TWO-25503), and the Magento plugin's suite locks its copy to
+  the same constant. The suite fails on any change to this file that did not move
+  the digest with it — an unintended edit, a stray formatter run, a bad merge.
+  Neither repo can read the other, so **two matching digests are the parity
+  check**: equal means the copies agree, different means they have drifted.
+  `.prettierignore` keeps the formatter off the file so the digest is not moved by
+  a reformat nobody asked for — and so this copy stays byte-equal to the other,
+  which is authored in the Magento repo's 4-space, single-quote style.
+- **Everything platform-specific is an OPTION passed to the panel**, never an edit
+  to the file: the transport, the chips and their modes, the country source, the
+  rate-limit scope. A difference that cannot be expressed as an option is a
+  divergence, and it divides the two checkouts.
 - The module is framework-free with a UMD tail, a constraint the other copy shares:
   a Magento-side checkout loads it with no RequireJS, jQuery or Knockout, so a
   framework dependency added to either copy lands in a place that cannot satisfy

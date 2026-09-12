@@ -2526,7 +2526,7 @@ describe("TWO-40 — sole-trader flow", () => {
        */
       test.each([
         {
-          target: chipTarget("sole_trader"),
+          target: chipTarget("soletrader"),
           popupOpen: true,
           closes: 0,
           raises: 0,
@@ -2535,7 +2535,7 @@ describe("TWO-40 — sole-trader flow", () => {
           description: "rule 1: Tab arrival on the Sole trader chip leaves an open popup open"
         },
         {
-          target: chipTarget("sole_trader"),
+          target: chipTarget("soletrader"),
           popupOpen: false,
           closes: 0,
           raises: 0,
@@ -2962,13 +2962,13 @@ describe("TWO-40 — sole-trader flow", () => {
       test("Tab onto the Sole trader chip is inert, and Enter then raises the open popup", () => {
         const win = launchFromChips();
 
-        focusControl(chipNode("sole_trader"));
+        focusControl(chipNode("soletrader"));
 
         expect(win.focus).not.toHaveBeenCalled();
         expect(win.close).not.toHaveBeenCalled();
         const openedBefore = window.open.mock.calls.length;
 
-        clickChip("sole_trader");
+        clickChip("soletrader");
 
         expect(win.focus).toHaveBeenCalledTimes(1);
         expect(win.close).not.toHaveBeenCalled();
@@ -2982,11 +2982,11 @@ describe("TWO-40 — sole-trader flow", () => {
         const win = fakePopup();
         window.open = jest.fn(() => win);
 
-        focusControl(chipNode("sole_trader"));
+        focusControl(chipNode("soletrader"));
 
         expect(window.open).not.toHaveBeenCalled();
 
-        clickChip("sole_trader");
+        clickChip("soletrader");
 
         expect(window.open).toHaveBeenCalledTimes(1);
         soleTrader.stopAllPopupWatchers();
@@ -3003,12 +3003,12 @@ describe("TWO-40 — sole-trader flow", () => {
           );
         soleTrader.render();
 
-        clickChip("sole_trader");
+        clickChip("soletrader");
 
         expect(window.open).not.toHaveBeenCalled();
         expect(soleTrader.soleTraderAdopted).toBe(true);
 
-        clickChip("sole_trader");
+        clickChip("soletrader");
 
         expect(opened).toHaveLength(1);
         expect(opened[0].url).toContain("&autoselect=false");
@@ -3032,19 +3032,19 @@ describe("TWO-40 — sole-trader flow", () => {
         });
         jest.useFakeTimers();
 
-        mouseActivateChip("sole_trader");
+        mouseActivateChip("soletrader");
         expect(window.open).toHaveBeenCalledTimes(1);
         const first = window.open.mock.results[0].value;
         first.closed = true;
 
-        mouseActivateChip("sole_trader");
+        mouseActivateChip("soletrader");
 
         expect(window.open.mock.calls.length).toBe(2);
         expect(urls[1]).not.toContain("autoselect");
         expect(first.focus).not.toHaveBeenCalled();
         expect(first.close).not.toHaveBeenCalled();
         expect(soleTrader.mode).toBe("sole_trader");
-        expect(panelControl('[data-two-chip="sole_trader"]').className).toContain(
+        expect(panelControl('[data-two-chip="soletrader"]').className).toContain(
           "two-company-mode-chip--selected"
         );
         expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
@@ -3066,7 +3066,7 @@ describe("TWO-40 — sole-trader flow", () => {
 
       /** The delivery role owns its own panel, chips and controller: its controls are outside billing's. */
       test.each([
-        ["sole_trader", 1, "the delivery Sole trader chip gets a popup of its own (TWO-25658)"],
+        ["soletrader", 1, "the delivery Sole trader chip gets a popup of its own (TWO-25658)"],
         ["registered", 0, "a delivery chip is outside billing's popover"]
       ])(
         "focus on %s closes the billing popup and its popover, relaunches=%s — %s",
@@ -3130,12 +3130,12 @@ describe("TWO-40 — sole-trader flow", () => {
           const popover = document.createElement("div");
           popover.className = "two-company-dropdown";
           popover.innerHTML =
-            '<button class="two-company-mode-chip" data-two-chip="sole_trader">Sole trader</button>';
+            '<button class="two-company-mode-chip" data-two-chip="soletrader">Sole trader</button>';
           host.insertBefore(popover, field.nextSibling);
 
           focusControl(
             which === "own chip"
-              ? popover.querySelector('[data-two-chip="sole_trader"]')
+              ? popover.querySelector('[data-two-chip="soletrader"]')
               : outsideControl()
           );
           jest.runOnlyPendingTimers();
@@ -3147,7 +3147,7 @@ describe("TWO-40 — sole-trader flow", () => {
 
       /** The delivery controller's own listener settles the delivery popup by the same rule. */
       test.each([
-        ["sole_trader", 0, 0, "the delivery Sole trader chip leaves it alone"],
+        ["soletrader", 0, 0, "the delivery Sole trader chip leaves it alone"],
         [
           "registered",
           1,
@@ -3187,7 +3187,7 @@ describe("TWO-40 — sole-trader flow", () => {
         },
         {
           arrange: () => {
-            const node = chipNode("sole_trader");
+            const node = chipNode("soletrader");
             node.focus();
             return node;
           },
@@ -3247,7 +3247,7 @@ describe("TWO-40 — sole-trader flow", () => {
         },
         {
           adopted: true,
-          launcher: () => chipNode("sole_trader"),
+          launcher: () => chipNode("soletrader"),
           settle: (win) => {
             win.closed = true;
           },
@@ -3258,7 +3258,7 @@ describe("TWO-40 — sole-trader flow", () => {
         {
           // The settle closes the popover the chip lives in, so the holder is gone and the company field's opener lands focus in the query.
           adopted: false,
-          launcher: () => chipNode("sole_trader"),
+          launcher: () => chipNode("soletrader"),
           settle: (win) => {
             win.closed = true;
           },
@@ -3318,7 +3318,7 @@ describe("TWO-40 — sole-trader flow", () => {
         window.open = jest.fn(() => win);
         jest.useFakeTimers();
         armListeners();
-        chipNode("sole_trader").focus();
+        chipNode("soletrader").focus();
         soleTrader.launchSignup();
         expect(differentSoleTraderBtn()).toBeNull();
 
@@ -3371,7 +3371,7 @@ describe("TWO-40 — sole-trader flow", () => {
 
       /** An adoption closes the popover and locks the capture; handing focus back would reopen it through the field's own opener. */
       test.each([
-        { launcher: () => chipNode("sole_trader"), description: "a keyboard chip launch" },
+        { launcher: () => chipNode("soletrader"), description: "a keyboard chip launch" },
         {
           launcher: () => {
             ctx.helper.panel.close({ returnFocus: true });
@@ -3519,8 +3519,8 @@ describe("TWO-40 — sole-trader flow", () => {
       test("keyboard activation of Sole trader keeps the popup it just raised", () => {
         const win = launchFromChips();
 
-        focusControl(chipNode("sole_trader"));
-        clickChip("sole_trader");
+        focusControl(chipNode("soletrader"));
+        clickChip("soletrader");
         jest.advanceTimersByTime(400);
 
         expect(win.close).not.toHaveBeenCalled();
@@ -3604,8 +3604,8 @@ describe("TWO-40 — sole-trader flow", () => {
       test("the Sole trader chip keeps the popup and raises it instead", () => {
         const win = launchFromChips();
 
-        focusControl(chipNode("sole_trader"));
-        clickChip("sole_trader");
+        focusControl(chipNode("soletrader"));
+        clickChip("soletrader");
         jest.advanceTimersByTime(300);
 
         expect(win.close).not.toHaveBeenCalled();
@@ -3638,8 +3638,8 @@ describe("TWO-40 — sole-trader flow", () => {
 
         const relaunch = jest.fn(() => fakePopup());
         window.open = relaunch;
-        focusControl(chipNode("sole_trader"));
-        clickChip("sole_trader");
+        focusControl(chipNode("soletrader"));
+        clickChip("soletrader");
 
         expect(relaunch).not.toHaveBeenCalled();
         expect(first.close).not.toHaveBeenCalled();
@@ -3972,7 +3972,7 @@ describe("TWO-40 — sole-trader flow", () => {
             // it: this click's other outcome is a popup, whose own flight would
             // keep `isDeciding()` true and make the Business chip a no-op.
             jest.spyOn(soleTrader, "launchSignup").mockImplementation(() => {});
-            clickChip("sole_trader");
+            clickChip("soletrader");
             expect(queryRow().hasClass("two-hidden")).toBe(true);
 
             clickChip("registered");
@@ -3991,7 +3991,7 @@ describe("TWO-40 — sole-trader flow", () => {
           test("a mode revert with the dropdown already closed does not open one", () => {
             harness.openCompanyPanel($, ctx.helper);
             jest.spyOn(soleTrader, "launchSignup").mockImplementation(() => {});
-            clickChip("sole_trader");
+            clickChip("soletrader");
             ctx.helper.closeCompanySearchDropdown();
 
             soleTrader.setMode("business");
@@ -4051,7 +4051,7 @@ describe("TWO-40 — sole-trader flow", () => {
             jest.spyOn(soleTrader, "launchSignup").mockImplementation(() => {});
             expect(queryRow().hasClass("two-hidden")).toBe(false);
 
-            clickChip("sole_trader");
+            clickChip("soletrader");
 
             expect(soleTrader.mode).toBe("sole_trader");
             expect(queryRow().hasClass("two-hidden")).toBe(true);

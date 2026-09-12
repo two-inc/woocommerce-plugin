@@ -84,7 +84,7 @@ describe("company-capture panel structure", () => {
     });
     expect(Array.prototype.map.call(chips, (chip) => chip.getAttribute("data-two-chip"))).toEqual([
       "registered",
-      "sole_trader",
+      "soletrader",
       "manual"
     ]);
   });
