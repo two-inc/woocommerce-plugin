@@ -28,7 +28,7 @@ test("sole trader mode chooser follows registry country support", async ({ page 
 
   const chips = page.locator(checkout.SOLE_TRADER_TOGGLE);
   const businessChip = chips.locator(`${checkout.MODE_CHIP}[data-two-chip="registered"]`);
-  const soleTraderChip = chips.locator(`${checkout.MODE_CHIP}[data-two-chip="sole_trader"]`);
+  const soleTraderChip = chips.locator(`${checkout.MODE_CHIP}[data-two-chip="soletrader"]`);
 
   // GB is the store's default country and is sole-trader capable.
   await checkout.openCompanySearch(page);

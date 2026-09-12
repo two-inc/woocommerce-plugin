@@ -60,6 +60,7 @@
     const ROW_CLASS = 'two-company-dropdown__row';
     const ROW_ACTIVE_CLASS = 'two-company-dropdown__row--active';
     const BACK_CLASS = 'two-company-search-back';
+    const ACTION_LINK_CLASS = 'two-field-action-link';
     const CHIPS_CLASS = 'two-company-mode-chips';
     const CHIP_CLASS = 'two-company-mode-chip';
     const CHIP_SELECTED_CLASS = 'two-company-mode-chip--selected';
@@ -68,6 +69,21 @@
     // — Luma ships one, several one-page checkouts do not, and a chip that
     // silently fails to hide offers the buyer a mode the country cannot serve.
     const HIDDEN_CLASS = 'two-hidden';
+
+    /**
+     * What `_attach()` puts on the host field to announce the combobox. Left on
+     * a field this panel has moved off, it offers a keyboard buyer a listbox
+     * that is not there and points `aria-controls` at a removed popover
+     * (TWO-25554).
+     */
+    const COMBOBOX_ATTRIBUTES = ['role', 'aria-haspopup', 'aria-controls', 'aria-expanded'];
+
+    function stripComboboxAttributes(field) {
+        if (!field) return;
+        COMBOBOX_ATTRIBUTES.forEach(function (attr) {
+            field.removeAttribute(attr);
+        });
+    }
 
     /**
      * The controls inside the panel a press is entitled to focus. Deliberately
@@ -139,8 +155,8 @@
      * @param {string} options.fieldSelector selector for the company-name input
      *        this panel anchors to. Re-read on every `bind()`, so a node
      *        replaced by a checkout re-render is picked up.
-     * @param {object} options.config brand config subtree — needs
-     *        `checkoutApiUrl`, `companySearchLimit`.
+     * @param {object} options.config the host's config subtree, handed to the
+     *        transport untouched — its contract, never this module's.
      * @param {object} options.search the transport, carrying every member of
      *        SEARCH_API_CONTRACT. Luma passes its `company-search` module
      *        verbatim; Hyvä passes an adapter over its own engine.
@@ -152,6 +168,9 @@
      *        nothing and drives `bind()` itself.
      * @param {function(): (string|undefined)} [options.getCountryCode] the
      *        current ISO country code, read fresh on every search.
+     * @param {function(): object} [options.getSearchScope] this panel's own
+     *        rate-limit scope, so a 429 parks this panel alone. Defaults to the
+     *        panel itself.
      * @param {function(): Array<{mode: string, text: string,
      *        onActivate: function}>} options.getChips the chips to render, in
      *        display order. Called on every sync, so a chip's label can follow
@@ -169,6 +188,7 @@
      *        link to come back out of manual entry.
      */
     function CompanySearchPanel(options) {
+        const self = this;
         options = options || {};
         this.fieldSelector = options.fieldSelector;
         this.config = options.config;
@@ -176,6 +196,9 @@
         this.translate = options.translate || function (text) { return text; };
         this.observe = options.observe || null;
         this.getCountryCode = options.getCountryCode || function () { return ''; };
+        // This panel itself where the host names nothing: the rate-limit scope
+        // must outlive a re-bind, which the bind token deliberately does not.
+        this.getSearchScope = options.getSearchScope || function () { return self; };
         this.getChips = options.getChips || function () { return []; };
         this.isChipVisible = options.isChipVisible || function () { return true; };
         this.getSelectedMode = options.getSelectedMode || function () { return ''; };
@@ -361,13 +384,13 @@
             // wrapper is a second anchor: the sole-trader fallback note then
             // renders against a host the buyer has left.
             this._releaseWrap(previous);
+            stripComboboxAttributes(previous);
             this._releaseFieldTabStop();
             // Fresh identity, so a search issued by the node this call replaces
             // resolves into a token nothing is listening for.
             this._token = {};
         }
         this._field = field;
-
         this._buildPanel(this._ensureWrap(field));
         this.syncChips();
 
@@ -949,6 +972,7 @@
             .searchCompanies({
                 config: this.config,
                 token: this._token,
+                scope: this.getSearchScope(),
                 term: query,
                 getCountryCode: this.getCountryCode
             })
@@ -1196,9 +1220,7 @@
         this.close();
         if (this._field) {
             this._unbind(this._field);
-            ['role', 'aria-haspopup', 'aria-controls', 'aria-expanded'].forEach(function (attr) {
-                this._field.removeAttribute(attr);
-            }, this);
+            stripComboboxAttributes(this._field);
         }
         this.renderBackToSearchLink();
     };
@@ -1224,7 +1246,7 @@
         this.removeBackToSearchLink();
         const link = document.createElement('button');
         link.type = 'button';
-        link.className = BACK_CLASS;
+        link.className = `${BACK_CLASS} ${ACTION_LINK_CLASS}`;
         link.textContent = this.translate('Search for company');
         this._bindEvent(link, 'click', function (event) {
             event.preventDefault();
@@ -1283,6 +1305,11 @@
         return this._field ? [this._field] : [];
     };
 
+    /** @returns {?Element} this panel's own popover, never a page-wide match */
+    CompanySearchPanel.prototype.getPanelElement = function () {
+        return this._panel || null;
+    };
+
     /**
      * @returns {boolean} whether the panel is built and anchored
      *
@@ -1301,6 +1328,34 @@
     /** @returns {object|null} the current bind identity — for tests that pin it */
     CompanySearchPanel.prototype.getBindToken = function () {
         return this._token;
+    };
+
+    /**
+     * Give the host field back, keeping this panel re-mountable — unlike
+     * destroy(), which is final.
+     *
+     * Without it a field this panel has left keeps its key handlers, its popover
+     * and its combobox attributes, so the control the buyer has moved off stays
+     * live under the one they are using (TWO-25554).
+     */
+    CompanySearchPanel.prototype.unmount = function () {
+        this._cancelFocusOutClose();
+        this._cancelPendingSearch();
+        this.search.abortActiveRequest(this._token);
+        this.removeBackToSearchLink();
+        this._releaseWrap(this._field);
+        stripComboboxAttributes(this._field);
+        this._releaseFieldTabStop();
+        this._field = null;
+        this._panel = null;
+        this._query = null;
+        this._results = null;
+        this._chips = null;
+        this._open = false;
+        releaseOpenSlot(this);
+        // A search issued by the bind this call ends resolves into a token
+        // nothing is listening for.
+        this._token = {};
     };
 
     /**

@@ -114,7 +114,7 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
   test("a sole-trader launch the browser blocked keeps focus inside the open popover", () => {
     open();
 
-    clickChip("sole_trader");
+    clickChip("soletrader");
 
     expect(helper.companySearchDropdownIsOpen()).toBe(true);
     expect(document.querySelector(".two-company-dropdown__search").classList).toContain(
@@ -128,16 +128,16 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
     open();
     // Only the mode the buyer is in is offered, so the chip row is withheld and
     // the withdrawn query row leaves the open panel with nothing in it.
-    helper.panel.isChipVisible = (mode) => mode === "sole_trader";
+    helper.panel.isChipVisible = (mode) => mode === "soletrader";
 
-    clickChip("sole_trader");
+    clickChip("soletrader");
 
     expect(document.activeElement).toBe(document.querySelector("#billing_company_display"));
   });
 
   test("the registered-company chip puts the caret back in the query field", () => {
     open();
-    clickChip("sole_trader");
+    clickChip("soletrader");
 
     clickChip("registered");
 
@@ -196,7 +196,7 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
 
   test("Escape on the company field the signup launch parks focus on", () => {
     open();
-    clickChip("sole_trader");
+    clickChip("soletrader");
     // The popover is held up for the signup's duration with focus on the field,
     // which sits outside the panel node Escape is bound to.
     helper.panel.restoreFieldFocus();

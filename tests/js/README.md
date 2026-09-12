@@ -76,7 +76,7 @@ PrestaShop's (TWO-25503):
   `.two-company-dropdown__results`, `.two-company-mode-chips`.
 - the `hidden` attribute is the outer visibility switch, and re-attaching adopts the panel
   already there rather than building a second.
-- every chip is inside the panel, in `registered` / `sole_trader` / `manual` order, none
+- every chip is inside the panel, in `registered` / `soletrader` / `manual` order, none
   beside it.
 
 `company-search-transport.test.js` — `searchApi()` and `searchCompanies()`:

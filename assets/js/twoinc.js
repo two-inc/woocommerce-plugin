@@ -1181,7 +1181,7 @@ class TwoCompanySearch {
         }
       },
       {
-        mode: "sole_trader",
+        mode: "soletrader",
         text: (cfg.text && cfg.text.sole_trader) || "Sole trader",
         onActivate: () => {
           this.soleTrader.onModeChipClick("sole_trader");
@@ -1205,7 +1205,7 @@ class TwoCompanySearch {
    * @returns {boolean}
    */
   isChipVisible(mode) {
-    if (mode === "sole_trader") return this.soleTrader.isAvailable();
+    if (mode === "soletrader") return this.soleTrader.isAvailable();
     if (mode === "manual") return this.manualEntryIsAvailable();
     if (mode === "registered") return this.registeredSearchIsAvailable();
     return true;
@@ -1265,7 +1265,7 @@ class TwoCompanySearch {
    */
   selectedMode() {
     if (twoincCompanyCapture.modeFor(this.role) === "manual") return "manual";
-    if (this.soleTrader.mode === "sole_trader") return "sole_trader";
+    if (this.soleTrader.mode === "sole_trader") return "soletrader";
     return "registered";
   }
 
@@ -4253,7 +4253,7 @@ function createSoleTraderController(companySearch) {
         }
         const popover = controller.ownPopover();
         const chip = target.closest("." + companySearch.modeChipClass);
-        const isSoleTraderChip = !!chip && chip.getAttribute("data-two-chip") === "sole_trader";
+        const isSoleTraderChip = !!chip && chip.getAttribute("data-two-chip") === "soletrader";
         if (isSoleTraderChip && popover && popover.contains(chip)) {
           // Only an activation moves the popup: Tabbing onto this chip is the buyer passing through, and it must leave the popup as they left it (TWO-25658).
           return;

@@ -303,7 +303,7 @@ describe("capture modes composed, not taken one at a time", () => {
       ctx.helper.syncModeChips();
 
       expect($(".two-company-mode-chip[data-two-chip='manual']").attr("aria-pressed")).toBe("true");
-      expect($(".two-company-mode-chip[data-two-chip='sole_trader']").attr("aria-pressed")).toBe(
+      expect($(".two-company-mode-chip[data-two-chip='soletrader']").attr("aria-pressed")).toBe(
         "false"
       );
     });
