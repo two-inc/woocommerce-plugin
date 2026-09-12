@@ -2793,8 +2793,14 @@ describe("TWO-40 — sole-trader flow", () => {
        * nothing and no keystroke reaches any control (ABN-554).
        */
       test.each([
-        { refire: false, description: "the launch parks the focus it dropped on the company field" },
-        { refire: true, description: "a window return re-firing focus there is not the buyer coming back" }
+        {
+          refire: false,
+          description: "the launch parks the focus it dropped on the company field"
+        },
+        {
+          refire: true,
+          description: "a window return re-firing focus there is not the buyer coming back"
+        }
       ])("$description (ABN-554)", ({ refire }) => {
         const win = launchFromChips();
         const field = ctx.helper.panel.getField()[0];
