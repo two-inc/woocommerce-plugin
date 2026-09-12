@@ -491,7 +491,10 @@
             if (!self._open) return;
             if (self._panel && self._panel.contains(event.target)) return;
             if (self._field === event.target) return;
-            self.close();
+            // Deferred instead of close()'s own return: the press's default
+            // action runs after this handler and would undo it.
+            self.close({ returnFocus: false });
+            self._returnFocusIfDropped();
         });
 
         // A mouse click is not the only way to leave: tabbing off the last chip
@@ -528,7 +531,9 @@
             // — in neither case has the buyer left the control.
             const active = document.activeElement;
             if (!active || active === document.body || active === document.documentElement) return;
-            self.close();
+            // Focus has settled on another control by now; taking it back
+            // would undo the buyer's own Tab (TWO-25326).
+            self.close({ returnFocus: false });
         }, 0);
     };
 
@@ -632,7 +637,7 @@
     CompanySearchPanel.prototype._onQueryKeydown = function (event) {
         if (event.key === 'Escape') {
             event.preventDefault();
-            this.close({ returnFocus: true });
+            this.close();
             return;
         }
         if (event.key === 'Enter') {
@@ -736,10 +741,15 @@
     /**
      * Close the panel and drop whatever the last search left in it.
      *
+     * Focus goes back to the company field however the close was reached, so
+     * the buyer is never left standing on a control that has just gone
+     * (ABN-554). The field's own open-on-focus opener is held off for that one
+     * programmatic focus alone, so the next keystroke, click or Tab arrival
+     * reopens.
+     *
      * @param {object} [options]
-     * @param {boolean} [options.returnFocus] put focus back on the field —
-     *        what Escape means. Left off for a click elsewhere, where the
-     *        buyer has already chosen where to go.
+     * @param {boolean} [options.returnFocus] `false` where focus has already
+     *        settled somewhere the buyer put it.
      */
     CompanySearchPanel.prototype.close = function (options) {
         if (!this._panel || !this._open) return;
@@ -757,9 +767,7 @@
         this._items = [];
         this._activeIndex = -1;
         if (this._field) this._field.setAttribute('aria-expanded', 'false');
-        if (options && options.returnFocus) {
-            this.restoreFieldFocus();
-        }
+        if (!options || options.returnFocus !== false) this.restoreFieldFocus();
     };
 
     /**
@@ -777,6 +785,21 @@
             this._closing = false;
         }
         this._cancelFocusOutClose();
+    };
+
+    /**
+     * Take focus back only if the pointer press that closed the panel left it
+     * nowhere, which is what a press on anything unfocusable does. Deferred by
+     * one tick so the press's own default action has already settled.
+     */
+    CompanySearchPanel.prototype._returnFocusIfDropped = function () {
+        const self = this;
+        setTimeout(function () {
+            if (self._destroyed || self._open) return;
+            const active = document.activeElement;
+            if (active && active !== document.body && active !== document.documentElement) return;
+            self.restoreFieldFocus();
+        }, 0);
     };
 
     /** @returns {boolean} whether the panel is currently open */

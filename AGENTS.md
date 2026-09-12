@@ -129,6 +129,25 @@ Vendored assets
   offered chip where the query row is withdrawn, so no mode opens the panel with
   focus nowhere. Same state a click leaves it in, and the same on every platform
   that carries this control.
+- **Closing the panel puts focus back on the company-name field** — Escape, a
+  pointer press outside it, a company adopted from the results, manual entry
+  taking the field over, and the plugin's own close when a sole-trader signup
+  answers (ABN-554). The field's own focus opener is held off for that one
+  programmatic focus alone, so any keydown on the field, a pointer press on it,
+  or focus arriving from anywhere else brings the popover straight back.
+- **Three closes pass `returnFocus: false`, and each has a reason.** The
+  deferred close-on-focus-leave fires only once focus has settled on another
+  control, so taking it back would undo the buyer's own Tab (TWO-25326). The
+  `focusin` classifier runs BECAUSE focus landed elsewhere. A country change
+  leaves the buyer in the country select. The sole-trader settle places focus
+  itself once the popup has gone, and the company field's own opener is what
+  brings the picker back there (TWO-25658).
+- **A pointer press outside the popover takes focus back only where the press
+  left it nowhere**, and one tick later rather than in the handler: the press's
+  own default action runs after the handler and either focuses what it hit or
+  clears focus entirely, so focusing the field from the handler is simply
+  undone. Neither default action exists in jsdom, which is why this needed a
+  real browser.
 - **A chip-row rebuild replaces every chip, so the focused one is destroyed.** The
   rebuild hands focus to the company field, and only where it actually disconnected
   the focused node — moving focus unconditionally would take it off whatever the
