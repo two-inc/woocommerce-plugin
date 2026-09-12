@@ -107,6 +107,70 @@ TWO\_\* env values to the gateway settings after you edit `.env` (run
 The default `.env` targets a locally running Checkout API backend
 (`portal.localhost`) — no additional setup required.
 
+### The shop is up but serves no Two payment method
+
+First check that the plugin's files are actually visible inside the container:
+
+```bash
+docker compose exec -T wordpress ls /var/www/html/wp-content/plugins/tillit-payment-gateway
+```
+
+An empty directory means Docker Desktop's bind mapping went stale. It resolves
+the host path once, when the container is CREATED, and re-establishes that
+mapping on every start — a WSL or Docker Desktop restart in between can break
+it, and the shop then comes up healthy, serves no plugin, and reports nothing
+anywhere. `docker compose up -d` does not repair it, because the container is
+already running and nothing gets recreated:
+
+```bash
+docker compose up -d --force-recreate
+```
+
+`make run` runs the same check itself and says this when it fails.
+
+### Environment selector, key and hosts have to agree
+
+`docker/config/local.json` pins `checkout_env` to `PROD`, which
+`WC_Twoinc_Helper::get_environment_mode()` resolves to `production`. On a
+localhost shop that is not the environment the gateway talks to:
+`get_effective_environment_mode()` treats a dev-sniffed shop still carrying the
+default mode as non-production and resolves it from `TWOINC_DEV_API_HOST`
+instead — `https://api.staging.two.inc` gives `staging`, and an unset variable
+falls back to `staging` as well. So a `secret_test_` staging merchant key is
+the key that belongs in `TWO_API_KEY` here, and a production key would never
+be used even if it were set.
+
+`make run` exports `TWO_API_BASE_URL` (staging for an `@two.inc` gcloud
+account, sandbox otherwise) and docker-compose threads it through as
+`TWOINC_DEV_API_HOST`. A bare `docker compose up -d` does not, which leaves
+that variable empty in the container — harmless on localhost, but check it with
+`docker exec wordpress env | grep TWOINC_DEV` before concluding the key is
+wrong.
+
+### Clearing a cached API-key verdict
+
+The gateway caches its key-verification outcome for 300s in the
+`twoinc_api_key_status_<hash>` transient, keyed by the key itself. A verdict
+recorded while the configuration was wrong therefore keeps the payment method
+withheld for up to five minutes after the fix, and the expired row stays
+visible in `wp_options` long after it stopped being served — so a
+`status: invalid_key` row found by hand is not evidence of a live failure.
+Clear it:
+
+```bash
+docker compose exec -T wpcli wp transient delete --all
+```
+
+Confirm the key itself independently of the shop:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "X-API-Key: $TWO_API_KEY" https://api.staging.two.inc/v1/merchant/verify_api_key
+```
+
+`200` is a good key for that environment; `401` means the key and the resolved
+environment disagree.
+
 If you wish to use the staging site,
 
 ```bash

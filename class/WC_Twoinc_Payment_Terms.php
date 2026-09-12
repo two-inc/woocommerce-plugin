@@ -641,12 +641,15 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * The term this request would be charged for: the posted selection
-         * (the hidden checkout field, which is the only signal on a
-         * sessionless submit) else the session's, resolved the same way
-         * get_order_payload_terms() resolves the term it puts on the order.
+         * The ONE definition of the term this request is charged for: the
+         * posted selection (the hidden checkout field, which is the only
+         * signal on a sessionless submit) else the session's. The cart fee,
+         * the availability gate and the order payload all resolve it here, or
+         * the buyer is charged one term's fee and booked on another — the
+         * hidden field follows a chip immediately while the session follows it
+         * a round trip later (ABN-554).
          */
-        private static function resolve_charged_term($gateway): ?int
+        public static function resolve_charged_term($gateway): ?int
         {
             $terms = self::get_available_terms($gateway);
             $posted = isset($_POST[self::SESSION_KEY]) ? (int) $_POST[self::SESSION_KEY] : 0;
@@ -738,10 +741,21 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         public static function build_terms_block($gateway, int $days): array
         {
             $block = ['type' => 'NET_TERMS', 'duration_days' => $days];
-            if ($gateway->get_option('payment_terms_type') === 'end_of_month') {
+            if (self::is_end_of_month($gateway)) {
                 $block['duration_days_calculated_from'] = 'END_OF_MONTH';
             }
             return $block;
+        }
+
+        /**
+         * Whether the merchant offers end-of-month terms, which fall due that
+         * many days after the end of the month rather than from the invoice.
+         * The buyer-facing chip text depends on it as much as the booked order
+         * does (ABN-554).
+         */
+        public static function is_end_of_month($gateway): bool
+        {
+            return $gateway->get_option('payment_terms_type') === 'end_of_month';
         }
 
         /**
@@ -1016,7 +1030,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return;
             }
 
-            $selected = self::get_selected_term($gateway);
+            $selected = self::resolve_charged_term($gateway);
             if ($selected === null || !self::has_chargeable_surcharge($gateway, $selected)) {
                 return;
             }
@@ -1215,11 +1229,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             if (!self::is_enabled($gateway)) {
                 return null;
             }
-            // The selection posts with the checkout form (hidden field kept in
-            // sync by JS) so order-pay-page submissions work without a session.
-            $posted = isset($_POST[self::SESSION_KEY]) ? (int) $_POST[self::SESSION_KEY] : 0;
             $terms = self::get_available_terms($gateway);
-            $selected = in_array($posted, $terms, true) ? $posted : self::get_selected_term($gateway);
+            $selected = self::resolve_charged_term($gateway);
             if ($selected === null) {
                 return null;
             }

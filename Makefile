@@ -19,7 +19,7 @@ export TWO_API_BASE_URL TWO_PORTAL_BASE_URL TWO_CHECKOUT_BASE_URL
 
 .PHONY: help install configure run debug proxy stop clean logs logs-wpcli \
 	test-unit test-js test format archive bump patch minor major \
-	e2e-install e2e-test e2e-test-headed phpcs phpstan
+	e2e-install e2e-test e2e-test-headed phpcs phpstan check-plugin-mount
 
 .DEFAULT_GOAL := help
 
@@ -27,9 +27,22 @@ export TWO_API_BASE_URL TWO_PORTAL_BASE_URL TWO_CHECKOUT_BASE_URL
 help:
 	@awk '/^## /{desc=substr($$0,4)} /^[a-zA-Z_-]+:/{if(desc){printf "  \033[36m%-16s\033[0m %s\n",$$1,desc; desc=""}}' $(MAKEFILE_LIST)
 
+# Docker Desktop resolves a WSL bind source when the container is CREATED, and
+# a restart in between can leave that mapping stale: the plugin mounts as an
+# EMPTY directory, the shop comes up healthy serving no plugin, and nothing
+# reports it. `up -d` cannot repair it - nothing is recreated (ABN-554).
+check-plugin-mount:
+	@docker compose exec -T wordpress \
+		test -f /var/www/html/wp-content/plugins/tillit-payment-gateway/tillit-payment-gateway.php \
+		|| { echo "Error: the plugin bind-mount is EMPTY inside the wordpress container."; \
+		     echo "Docker Desktop's bind mapping is stale. Recreate the containers:"; \
+		     echo "  docker compose up -d --force-recreate"; \
+		     exit 1; }
+
 ## Start the WordPress + WooCommerce dev container
 run:
 	docker compose up -d
+	@$(MAKE) --no-print-directory check-plugin-mount
 	@./start-proxy.sh --background || true
 	@PROXY_URL=$$(./start-proxy.sh url 2>/dev/null); \
 	echo ""; \
