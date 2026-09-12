@@ -158,6 +158,10 @@ Vendored assets
   not a descendant: a mode change, and the sole-trader signup launch that parks
   focus there while the popover is deliberately held open, both leave the
   dismissal key on a node the panel's handler never sees (ABN-554).
+- **The field's own keydown opener hands the caret straight back whenever the
+  mode leaves no query row.** `open()` parks it on a mode chip in that case, and
+  a `<button>` destroys the character the buyer is part-way through typing
+  (ABN-554).
 - **A mode change places focus again, wherever it took it from.** The chip row
   is rebuilt from scratch and a mode that withdraws the query row hides the
   input the caret was in, which is what a pointer buyer's chip click leaves

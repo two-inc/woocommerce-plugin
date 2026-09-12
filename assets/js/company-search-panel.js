@@ -696,10 +696,10 @@
             // The buyer is leaving, not searching.
             if (event.key === 'Tab') return;
             self.open();
-            // The open puts the caret on a chip where the withdrawn search
-            // leaves no query row, and the character this keystroke is about to
-            // insert would land on a button (ABN-554).
-            if (self._disabled) self.restoreFieldFocus();
+            // The open puts the caret on a chip wherever the mode leaves no
+            // query row, and the character this keystroke is about to insert
+            // would land on a button (ABN-554).
+            if (self._queryRowIsHidden()) self.restoreFieldFocus();
         });
         this._bindEvent(field, 'input', function () {
             const typed = field.value;
@@ -1177,8 +1177,12 @@
         if (!this._query) return;
         const searching = mode === 'registered' && !this._disabled;
         const row = this._query.closest('.' + SEARCH_ROW_CLASS);
+        const wasHidden = !row || row.classList.contains(HIDDEN_CLASS);
         if (row) row.classList.toggle(HIDDEN_CLASS, !searching);
-        if (searching) return;
+        // On the withdrawal itself, never on a later sync of an already-hidden
+        // row: that would also drop the character the field's opener has just
+        // moved across, before the mode change that reveals the row (ABN-554).
+        if (searching || wasHidden) return;
         // Blanking the value fires no event, so the rows the dropped term
         // produced would stay painted and clickable under a search row that is
         // no longer rendered.

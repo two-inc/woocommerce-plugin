@@ -147,6 +147,41 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
 
   test.each([
     {
+      withdraw: () => clickChip("sole_trader"),
+      description: "a mode change that withdraws the query row"
+    },
+    {
+      withdraw: () => helper.panel.setDisabled(true),
+      description: "a country the registry search does not cover"
+    }
+  ])("after $description the caret is on the company field, not on a chip", ({ withdraw }) => {
+    open();
+    withdraw();
+    // Where the signup launch parks it, and where a buyer who clicked the field
+    // is already standing.
+    helper.panel.restoreFieldFocus();
+    const field = document.querySelector("#billing_company_display");
+
+    pressKey(field, "a");
+
+    expect(document.activeElement).toBe(field);
+  });
+
+  test("the character the field opener moves across outlives the next chip sync", () => {
+    open();
+    clickChip("sole_trader");
+    helper.panel.restoreFieldFocus();
+    const field = document.querySelector("#billing_company_display");
+    field.value = "a";
+
+    field.dispatchEvent(new window.Event("input", { bubbles: true }));
+    helper.panel.syncChips();
+
+    expect(document.querySelector(QUERY).value).toBe("a");
+  });
+
+  test.each([
+    {
       target: () => document.querySelector(PANEL),
       cancelled: true,
       description: "the panel's own padding"
