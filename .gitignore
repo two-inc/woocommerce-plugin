@@ -1,5 +1,7 @@
 # Environment
-docker/config/
+docker/config/*
+# Tracked so dev/configure can seed a fresh clone; the real local.json stays ignored.
+!docker/config/local.json.tpl
 .vscode/
 .envrc
 .direnv/
