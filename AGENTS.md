@@ -138,8 +138,9 @@ Vendored assets
   key pressed on the field, whose own opener would otherwise park the caret on
   the chip before the character arrives. Space and Enter are excluded, since both
   activate the focused chip. The field's `input` handler then leaves the buyer's
-  text where they can see it and copies it into the withdrawn query row, ready
-  for the mode change that reveals it.
+  text where they can see it and, where a MODE withdrew the row, copies it into
+  the query ready for the mode change that reveals it — not where the country
+  gate did, since no search there can ever run.
 - **Closing the panel puts focus back on the company-name field** — Escape, a
   pointer press outside it, a company adopted from the results, manual entry
   taking the field over, and the plugin's own close when a sole-trader signup
