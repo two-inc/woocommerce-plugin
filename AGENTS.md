@@ -92,9 +92,9 @@ Vendored assets
 - **A change to shared panel behaviour is TWO edits in ONE change set.** Apply it
   in place here and identically to the other copy, re-run both JS suites, and
   move both digests. Nothing links the copies: whoever changes one and stops has
-  fixed one platform, and neither reviewer sees the other half. Do NOT re-copy
-  the whole file to "re-sync" — while the copies differ a copy imports the other
-  platform's code wholesale and silently reverts whatever only this side had.
+  fixed one platform, and neither reviewer sees the other half. Re-copying the
+  whole file is NOT a way to re-sync: once the copies differ it reverts whatever
+  only this side held, and while they agree there is nothing to copy.
 - `tests/js/company-search-panel-vendored.test.js` holds `EDIT_LOCK_SHA256`, this
   copy's own digest (TWO-25503), and the Magento plugin's suite locks its copy to
   the same constant. The suite fails on any change to this file that did not move
