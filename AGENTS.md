@@ -170,6 +170,16 @@ The payment-term chips are a radio group
   copy is translated PHP-side and reaches the renderer in the checkout bootstrap
   alongside the flag saying which type is stored; a missing end-of-month template
   degrades to the bare `EOM+30` token rather than to a standard-term label.
+- **That name states the surcharge as well**, because an `aria-label` replaces the
+  whole accessible name and the `+€n,nn` rendered inside the chip is then announced
+  nowhere. A priced end-of-month chip is named
+  `EOM+30: pay 30 days after the end of the month, plus a €7,25 surcharge`. That is
+  a second whole sentence rather than the first with a clause appended, so a
+  translator can order the clauses, and its placeholders are numbered because the
+  day count and the amount are different values. The chips are rebuilt when the
+  quote lands, so the name follows the amount in. A term the quote did not price, a
+  set where every term quotes nothing, and a quote still in flight all name no
+  amount — the same three states that show no amount on the chip.
 - One expression decides both the visual `--selected` class and `aria-checked`, so
   the tick and the exposed state cannot drift apart. A selection matching no offered
   chip leaves nothing checked and puts the tab stop on the first, so the group

@@ -724,4 +724,155 @@ describe("payment terms chips", () => {
       });
     });
   });
+
+  /**
+   * ABN-554. An aria-label replaces the whole accessible name, so the "+€n,nn"
+   * rendered inside an end-of-month chip is announced nowhere unless the name
+   * states it too.
+   */
+  describe("the surcharge in the chip name", () => {
+    const EOM = {
+      eom: true,
+      days_label_eom: "EOM+%s",
+      single_label_eom: "Payment Terms EOM+%s",
+      eom_explainer: "EOM+%s: pay %s days after the end of the month",
+      eom_explainer_fee: "EOM+%1$s: pay %1$s days after the end of the month, plus a %2$s surcharge"
+    };
+
+    /** One term's entry as the fees endpoint returns it. */
+    function quote(amount, display) {
+      return { buyer_fee_share: amount, currency: "EUR", buyer_fee_share_display: display };
+    }
+
+    /** @returns {Array<string|undefined>} each chip's aria-label, in order */
+    function chipNames() {
+      return ctx
+        .$(".twoinc-term-chip")
+        .map(function () {
+          return ctx.$(this).attr("aria-label");
+        })
+        .get();
+    }
+
+    test.each([
+      {
+        copy: EOM,
+        fees: { 30: quote("7.25", "€7,25"), 60: quote("9.00", "€9,00") },
+        loaded: true,
+        expected: [
+          "EOM+30: pay 30 days after the end of the month, plus a €7,25 surcharge",
+          "EOM+60: pay 60 days after the end of the month, plus a €9,00 surcharge"
+        ],
+        description: "a priced term states the fee the label would otherwise silence"
+      },
+      {
+        copy: EOM,
+        fees: { 30: quote("0", "€0,00"), 60: quote("0", "€0,00") },
+        loaded: true,
+        expected: [
+          "EOM+30: pay 30 days after the end of the month",
+          "EOM+60: pay 60 days after the end of the month"
+        ],
+        description: "a set quoting nothing states no amount"
+      },
+      {
+        copy: EOM,
+        fees: {},
+        loaded: false,
+        expected: [
+          "EOM+30: pay 30 days after the end of the month",
+          "EOM+60: pay 60 days after the end of the month"
+        ],
+        description: "a quote still in flight states no amount either"
+      },
+      {
+        copy: EOM,
+        fees: { 30: quote("7.25", "€7,25"), 60: null },
+        loaded: true,
+        expected: [
+          "EOM+30: pay 30 days after the end of the month, plus a €7,25 surcharge",
+          "EOM+60: pay 60 days after the end of the month"
+        ],
+        description: "a term the quote never priced states none while its sibling does"
+      },
+      {
+        copy: {},
+        fees: { 30: quote("7.25", "€7,25"), 60: quote("9.00", "€9,00") },
+        loaded: true,
+        expected: [undefined, undefined],
+        description: "a standard term is left unnamed whatever it costs"
+      },
+      {
+        copy: Object.assign({}, EOM, { eom_explainer_fee: "" }),
+        fees: { 30: quote("7.25", "€7,25"), 60: quote("9.00", "€9,00") },
+        loaded: true,
+        expected: [
+          "EOM+30: pay 30 days after the end of the month",
+          "EOM+60: pay 60 days after the end of the month"
+        ],
+        description: "a missing fee sentence degrades to the plain one, never to a broken template"
+      }
+    ])("$description", ({ copy, fees, loaded, expected }) => {
+      const chips = mount(
+        Object.assign({ enabled: true, terms: [30, 60], selected: 30 }, COPY, copy),
+        fees
+      );
+      chips.feesLoaded = loaded;
+      chips.render([30, 60], 30);
+
+      expect(chipNames()).toEqual(expected);
+    });
+
+    test("the name picks the fee up when the quote lands", () => {
+      const chips = mount(
+        Object.assign({ enabled: true, terms: [30, 60], selected: 30 }, COPY, EOM)
+      );
+      chips.fees = {};
+      chips.feesLoaded = false;
+      chips.render([30, 60], 30);
+
+      expect(chipNames()[0]).toBe("EOM+30: pay 30 days after the end of the month");
+
+      chips.fees = { 30: quote("7.25", "€7,25"), 60: quote("9.00", "€9,00") };
+      chips.feesLoaded = true;
+      chips.render([30, 60], 30);
+
+      expect(chipNames()[0]).toBe(
+        "EOM+30: pay 30 days after the end of the month, plus a €7,25 surcharge"
+      );
+    });
+
+    test("the accessible name contains the visible text", () => {
+      const chips = mount(
+        Object.assign({ enabled: true, terms: [1, 30, 120], selected: 30 }, COPY, EOM),
+        {
+          1: quote("1.00", "€1,00"),
+          30: quote("7.25", "€7,25"),
+          120: quote("30.00", "€30,00")
+        }
+      );
+      chips.render([1, 30, 120], 30);
+
+      // WCAG 2.5.3 Label in Name, for the visible token and the visible amount.
+      chipDayLabels().forEach(function (label, i) {
+        expect(chipNames()[i]).toContain(label);
+      });
+      expect(chipNames()[1]).toContain("€7,25");
+    });
+
+    test("the sole offered term names its fee on a chip that is already a button", () => {
+      const chips = mount(Object.assign({ enabled: true, terms: [30], selected: 30 }, COPY, EOM), {
+        30: quote("7.25", "€7,25")
+      });
+      chips.render([30], 30);
+
+      const chip = ctx.$(".twoinc-term-chip")[0];
+
+      expect(chip.tagName).toBe("BUTTON");
+      expect(chip.disabled).toBe(true);
+      expect(chipNames()).toEqual([
+        "EOM+30: pay 30 days after the end of the month, plus a €7,25 surcharge"
+      ]);
+    });
+  });
 });
