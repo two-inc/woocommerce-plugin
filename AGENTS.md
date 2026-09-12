@@ -148,11 +148,14 @@ Vendored assets
   leaves the buyer in the country select. The sole-trader settle places focus
   itself once the popup has gone, and the company field's own opener is what
   brings the picker back there (TWO-25658).
-- **Escape is bound to the PANEL, not to the query field.** Outside
-  registered-company mode the query row is withdrawn and a chip is what holds
-  focus, and the popover is drawn over the control below the field — so an
-  Escape the query field alone answers leaves that buyer with no route out at
-  all (ABN-554).
+- **Escape is bound to the PANEL and to the company field, not to the query
+  field.** Outside registered-company mode the query row is withdrawn and a chip
+  is what holds focus, and the popover is drawn over the control below the field
+  — so an Escape the query field alone answers leaves that buyer with no route
+  out at all. The field needs its own binding because it is the panel's SIBLING,
+  not a descendant: a mode change, and the sole-trader signup launch that parks
+  focus there while the popover is deliberately held open, both leave the
+  dismissal key on a node the panel's handler never sees (ABN-554).
 - **A mode change places focus again, wherever it took it from.** The chip row
   is rebuilt from scratch and a mode that withdraws the query row hides the
   input the caret was in, which is what a pointer buyer's chip click leaves

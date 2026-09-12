@@ -193,4 +193,24 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
     expect(helper.companySearchDropdownIsOpen()).toBe(false);
     expect(document.activeElement).toBe(document.querySelector("#billing_company_display"));
   });
+
+  test("Escape on the company field the signup launch parks focus on", () => {
+    open();
+    clickChip("sole_trader");
+    // The popover is held up for the signup's duration with focus on the field,
+    // which sits outside the panel node Escape is bound to.
+    helper.panel.restoreFieldFocus();
+    const field = document.querySelector("#billing_company_display");
+
+    const event = new window.KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true
+    });
+    field.dispatchEvent(event);
+
+    expect(helper.companySearchDropdownIsOpen()).toBe(false);
+    expect(document.activeElement).toBe(field);
+    expect(event.defaultPrevented).toBe(true);
+  });
 });
