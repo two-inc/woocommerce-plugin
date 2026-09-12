@@ -317,9 +317,14 @@ classified once — whether a popup is up or not — and these are the three rul
   outside the panel node, and a buyer typing a query is still inside the control;
   its own focus opener would otherwise race this rule on event order.
 
-A window or application switch lands on no control at all and settles nothing.
-Launchers are not exempt from rule two — a launch blurs whatever holds focus first,
-so a window return re-fires focus on nothing.
+Launchers are not exempt from rule two — a launch blurs whatever holds focus first.
+A popover left on screen for the flight around a document focusing nothing reaches
+no keystroke at all, so the launch parks that focus on the company field one tick
+later, through the panel, which holds off the field's own opener (ABN-554). That one
+control is exempt from the rules above until focus leaves it: a window return re-fires
+`focusin` there with no `focusout` before it, and that is not the buyer arriving. The
+settle drops the park before it decides where focus belongs, so what it reads is the
+unplaced focus the launch actually left.
 
 **Reaching another role's Sole trader chip by FOCUS closes this popup and launches
 one for that chip** — the exemption is gated on the chip being inside this role's own
