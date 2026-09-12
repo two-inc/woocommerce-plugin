@@ -544,6 +544,18 @@
             self.close();
         });
 
+        // A chip is a `<button>`, which swallows typing, and the withdrawn
+        // search leaves no query row to hold the caret instead — so a printable
+        // key belongs in the company-name field (ABN-554).
+        this._bindEvent(this._panel, 'keydown', function (event) {
+            if (!self._disabled) return;
+            if (event.ctrlKey || event.metaKey || event.altKey) return;
+            // Space and Enter activate the focused chip; a single code point is
+            // otherwise exactly what produced text.
+            if (!event.key || event.key.length !== 1 || event.key === ' ') return;
+            self.restoreFieldFocus();
+        });
+
         // A press on the panel's own dead space is not a gesture: its default
         // action would blur the caret out of the query field and leave the open
         // popover holding nothing (ABN-554).
@@ -652,6 +664,10 @@
             // The buyer is leaving, not searching.
             if (event.key === 'Tab' || event.key === 'Escape') return;
             self.open();
+            // The open puts the caret on a chip where the withdrawn search
+            // leaves no query row, and the character this keystroke is about to
+            // insert would land on a button (ABN-554).
+            if (self._disabled) self.restoreFieldFocus();
         });
         this._bindEvent(field, 'input', function () {
             const typed = field.value;
@@ -660,8 +676,12 @@
             // With the search withdrawn there is no query row to move the
             // keystrokes into and no search they could reach, so they stay
             // where the buyer put them and the panel offers manual entry
-            // instead (ABN-525).
-            if (self._disabled) return;
+            // instead (ABN-525). The open above put the caret on a chip, where
+            // the next character would land on a button (ABN-554).
+            if (self._disabled) {
+                self.restoreFieldFocus();
+                return;
+            }
             // The captured company's name is what this field shows; leaving
             // the buyer's keystrokes in it would overwrite that with a
             // half-typed query before they have picked anything.
