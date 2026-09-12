@@ -1345,9 +1345,14 @@ class TwoCompanySearch {
     return this.isOnScreen(jQuery(this.companyFieldSelector()));
   }
 
-  closeCompanySearchDropdown() {
+  /**
+   * @param {object} [options] `returnFocus: false` where focus has already
+   *        settled somewhere the buyer put it, so taking it back would undo
+   *        their own move.
+   */
+  closeCompanySearchDropdown(options) {
     const panel = this.panel;
-    if (panel) panel.close();
+    if (panel) panel.close(options);
   }
 
   /** No production caller: the tests' read of the panel's open state. */
@@ -2884,6 +2889,13 @@ let twoincDomHelper = {
 let twoincTermChips = {
   fees: {},
   feesLoaded: false,
+  // The term a commit is about to post, or `null` when the committed
+  // selection is the whole truth.
+  pendingTerm: null,
+  commitTimer: null,
+  // Long enough to cover a fast arrow sweep across the row, short enough that
+  // a buyer who stops on a chip sees the total follow almost at once.
+  commitDelayMs: 500,
 
   config: function () {
     return (window.twoinc && window.twoinc.payment_terms) || { enabled: false };
@@ -2955,10 +2967,28 @@ let twoincTermChips = {
   render: function (terms, selected) {
     const $container = jQuery(".twoinc-term-chips");
     if ($container.length === 0) return;
+    // The rebuild below replaces every chip, so a chip the buyer is on is
+    // destroyed and focus falls to the body. Read before emptying the
+    // container, which moves activeElement to the body.
+    const focusedDays = jQuery.contains($container[0], document.activeElement)
+      ? jQuery(document.activeElement).attr("data-days")
+      : undefined;
     $container.empty();
 
     const cfg = twoincTermChips.config();
     const single = terms.length === 1;
+    // A commit still waiting out a sweep is the buyer's real choice, so an
+    // unrelated checkout update must not re-render the chips back onto the
+    // committed term.
+    const checkedTerm =
+      twoincTermChips.pendingTerm !== null && terms.indexOf(twoincTermChips.pendingTerm) !== -1
+        ? twoincTermChips.pendingTerm
+        : selected;
+    const focusableTerm = twoincTermChips.focusableTerm(
+      terms,
+      checkedTerm,
+      focusedDays === undefined ? undefined : parseInt(focusedDays, 10)
+    );
 
     // Whether a fee shows is decided over the whole offered set, never per
     // chip — the rule every platform follows. An unresolved quote counts as
@@ -2968,19 +2998,19 @@ let twoincTermChips = {
       return (fee ? parseFloat(fee.buyer_fee_share) || 0 : 0) < 0.005;
     });
 
-    // Heading placement follows the cross-platform rule: shown ABOVE the
-    // chips only when the buyer has a choice to make. A single chip carries
-    // its own "Payment Terms N days" label instead, so a heading there would
-    // say the same thing twice.
+    // Shown whenever any chip is: a chip's text states only the term, so this
+    // is what names the radiogroup, one term or several (ABN-554).
     const $heading = jQuery(".twoinc-term-chips-heading");
-    if (single || terms.length === 0) {
+    if (terms.length === 0) {
       $heading.addClass("hidden").text("");
     } else {
       $heading.text(cfg.heading || "").removeClass("hidden");
     }
 
     terms.forEach(function (days) {
-      const isSelected = days === selected;
+      // One predicate behind the tick and the exposed state, so the two
+      // cannot drift apart.
+      const isSelected = days === checkedTerm;
       const $chip = jQuery("<button>", {
         type: "button",
         class:
@@ -2989,23 +3019,27 @@ let twoincTermChips = {
           (single ? " twoinc-term-chip--single" : ""),
         role: "radio",
         "aria-checked": isSelected ? "true" : "false",
+        // The group is a single tab stop: only the chip the keyboard would
+        // arrive on is tabbable (ABN-554).
+        tabindex: days === focusableTerm ? 0 : -1,
         "data-days": days,
         disabled: single
       });
-      // A lone chip is not a choice, so it names what it is: the
-      // single-term label rather than the bare "N days" used when the buyer
-      // is picking between chips.
-      // Both templates come from PHP, already translated. The fallbacks
-      // degrade to the SHORTER localised form rather than to an English
-      // sentence: an English literal here renders as plausible copy on a
-      // non-English shop and hides the fact that the label never arrived,
-      // which is the failure class TWO-25270 was (heading does the same,
-      // falling back to '' rather than to English).
-      const labelTemplate = single
-        ? cfg.single_label || cfg.days_label || "%s"
-        : cfg.days_label || "%s";
-      const daysLabel = labelTemplate.replace("%s", days);
+      const daysLabel = twoincTermChips.labelTemplate(cfg).replace("%s", days);
       $chip.append(jQuery("<span>", { class: "twoinc-term-chip__days", text: daysLabel }));
+
+      // The amount this chip will show: blank while the quote is in flight,
+      // when the whole offered set quotes nothing, and when the quote did not
+      // price this term.
+      const feeLabel =
+        twoincTermChips.feesLoaded && !allFeesZero ? twoincTermChips.feeLabel(days) : "";
+
+      // Only under end-of-month terms: under standard terms the visible text
+      // already says it, and a name restating it risks WCAG 2.5.3.
+      const explanation = twoincTermChips.explanation(cfg, days, feeLabel);
+      if (explanation) {
+        $chip.attr({ title: explanation, "aria-label": explanation });
+      }
 
       if (!twoincTermChips.feesLoaded) {
         // Fee quote in flight: show animated loading dots instead of a blank
@@ -3022,11 +3056,8 @@ let twoincTermChips = {
           $loading.append(jQuery("<span>", { text: "." }));
         }
         $chip.append($loading);
-      } else if (!allFeesZero) {
-        const feeLabel = twoincTermChips.feeLabel(days);
-        if (feeLabel !== "") {
-          $chip.append(jQuery("<span>", { class: "twoinc-term-chip__fee", text: "+" + feeLabel }));
-        }
+      } else if (feeLabel !== "") {
+        $chip.append(jQuery("<span>", { class: "twoinc-term-chip__fee", text: "+" + feeLabel }));
       }
       if (!single) {
         $chip.on("click", function () {
@@ -3036,6 +3067,14 @@ let twoincTermChips = {
       $container.append($chip);
     });
 
+    // Put focus back on the rebuilt chip carrying the same term. Focus outside
+    // the group is left alone, and a term the rebuild no longer offers has no
+    // equivalent chip to return to (ABN-554).
+    if (focusedDays !== undefined) {
+      const $again = $container.find('.twoinc-term-chip[data-days="' + focusedDays + '"]');
+      if ($again.length > 0) $again[0].focus();
+    }
+
     // The selection rides the checkout form post so process_payment can
     // validate it without depending on the session.
     let $hidden = $container.find("input[name='two_selected_term']");
@@ -3043,15 +3082,174 @@ let twoincTermChips = {
       $hidden = jQuery("<input>", { type: "hidden", name: "two_selected_term" });
       $container.append($hidden);
     }
-    $hidden.val(selected);
+    $hidden.val(checkedTerm);
+  },
+
+  /**
+   * The chip's visible-text template, the same one term or several. An
+   * end-of-month term falls due that many days after the end of the month, so
+   * the bare day count states the wrong due date for it (ABN-554).
+   *
+   * Both templates come from PHP, already translated. The fallbacks degrade to
+   * the SHORTER localised form rather than to an English sentence: an English
+   * literal here renders as plausible copy on a non-English shop and hides the
+   * fact that the label never arrived, which is the failure class TWO-25270 was
+   * (heading does the same, falling back to '' rather than to English).
+   *
+   * @param {Object} cfg window.twoinc.payment_terms
+   * @returns {string}
+   */
+  labelTemplate: function (cfg) {
+    if (cfg.eom) {
+      return cfg.days_label_eom || "EOM+%s";
+    }
+    return cfg.days_label || "%s";
+  },
+
+  /**
+   * What "EOM+30" means, spelled out, and empty under standard terms. Opens
+   * with the visible token: WCAG 2.5.3 requires the accessible name to contain
+   * the visible text. An aria-label replaces the whole accessible name, so a
+   * priced chip states its amount too, or the amount inside it is announced
+   * nowhere. Each wording is one translated sentence, never assembled.
+   *
+   * @param {Object} cfg window.twoinc.payment_terms
+   * @param {number} days the term
+   * @param {string} [feeText] the formatted amount, unprefixed and blank unless
+   *     the chip displays one
+   * @returns {string}
+   */
+  explanation: function (cfg, days, feeText) {
+    if (!cfg.eom) {
+      return "";
+    }
+    if (feeText && cfg.eom_explainer_fee) {
+      return cfg.eom_explainer_fee.split("%1$s").join(days).split("%2$s").join(feeText);
+    }
+    if (!cfg.eom_explainer) {
+      return "";
+    }
+    return cfg.eom_explainer.split("%s").join(days);
+  },
+
+  /**
+   * The term the group's single tab stop sits on. The focused chip wins over
+   * the checked one: leaving the tab stop elsewhere would send a Shift-Tab back
+   * into the group to a different chip than the one outlined (ABN-554). A
+   * selection matching no offered term falls back to the first, so the group
+   * cannot leave the tab order altogether.
+   *
+   * @param {number[]} terms offered day counts
+   * @param {number} selected the checked term
+   * @param {number} [focused] the term the focused chip carries, if any
+   * @returns {number|undefined}
+   */
+  focusableTerm: function (terms, selected, focused) {
+    if (focused !== undefined && terms.indexOf(focused) !== -1) {
+      return focused;
+    }
+    return terms.indexOf(selected) === -1 ? terms[0] : selected;
+  },
+
+  /**
+   * The radio-group keyboard contract the chips' roles advertise (ABN-554):
+   * the arrow keys move the checked term and the focus together, Home and End
+   * jump to the ends, and both ends wrap. Modified arrow keys are left to the
+   * browser, or the group swallows shortcuts such as Alt+Left for "back".
+   *
+   * @param {JQuery.KeyDownEvent} event
+   */
+  onKeydown: function (event) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+
+    const $chips = jQuery(event.currentTarget).find(".twoinc-term-chip").not(":disabled");
+    if ($chips.length < 2) return;
+
+    // Focus can sit outside the chips when the group is entered by a click on
+    // its padding, so the tab stop stands in for "where the keyboard is".
+    let current = $chips.index(document.activeElement);
+    if (current === -1) current = Math.max($chips.index($chips.filter('[tabindex="0"]')), 0);
+
+    let next;
+    switch (event.key) {
+      case "ArrowRight":
+      case "ArrowDown":
+        next = (current + 1) % $chips.length;
+        break;
+      case "ArrowLeft":
+      case "ArrowUp":
+        next = (current - 1 + $chips.length) % $chips.length;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = $chips.length - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    twoincTermChips.moveTo($chips.eq(next));
+  },
+
+  /**
+   * Move the checked state, the tab stop and the focus onto one chip, in
+   * place. Re-rendering here would destroy the chip the focus just landed on.
+   *
+   * @param {JQuery} $chip the chip to check
+   */
+  moveTo: function ($chip) {
+    const days = parseInt($chip.attr("data-days"), 10);
+    const $container = $chip.closest(".twoinc-term-chips");
+
+    $container.find(".twoinc-term-chip").each(function () {
+      const isSelected = this === $chip[0];
+      jQuery(this)
+        .toggleClass("twoinc-term-chip--selected", isSelected)
+        .attr({ "aria-checked": isSelected ? "true" : "false", tabindex: isSelected ? 0 : -1 });
+    });
+    $container.find("input[name='two_selected_term']").val(days);
+    $chip[0].focus();
+    twoincTermChips.commit(days);
+  },
+
+  /**
+   * Post the buyer's term once the sweep settles. Selection follows focus, so
+   * every arrow key changes the term, and committing each one would cost a
+   * selection post, a full checkout update and a fresh fee quote per
+   * keystroke. The hidden field is already current and is what the order is
+   * composed on, so the wait costs only the displayed total.
+   *
+   * @param {number} days the term to commit
+   */
+  commit: function (days) {
+    clearTimeout(twoincTermChips.commitTimer);
+    // A sweep that comes back to the term the server already holds has nothing
+    // to commit, and posting it would cost a checkout update for no change.
+    if (days === twoincTermChips.config().selected) {
+      twoincTermChips.pendingTerm = null;
+      return;
+    }
+    twoincTermChips.pendingTerm = days;
+    twoincTermChips.commitTimer = setTimeout(function () {
+      twoincTermChips.select(days);
+    }, twoincTermChips.commitDelayMs);
   },
 
   select: function (days) {
+    // Supersedes a keyboard commit still waiting out its sweep.
+    clearTimeout(twoincTermChips.commitTimer);
+    twoincTermChips.pendingTerm = days;
+
     const cfg = twoincTermChips.config();
     if (!cfg.select_url) return;
     jQuery
       .post(cfg.select_url, { days: days, csrf_token: cfg.csrf_token })
       .done(function (response) {
+        // Only where this response is still the latest word: a newer
+        // selection made mid-flight must survive the older one landing.
+        if (twoincTermChips.pendingTerm === days) twoincTermChips.pendingTerm = null;
         if (response && response.success && response.data) {
           cfg.selected = response.data.selected;
           // Recalculate totals so the offset fee follows the new term;
@@ -3061,9 +3259,22 @@ let twoincTermChips = {
       })
       .fail(function () {
         // Keep the previous selection on failure.
+        if (twoincTermChips.pendingTerm === days) twoincTermChips.pendingTerm = null;
       });
   }
 };
+
+// Delegated because a checkout update replaces the payment fragment, and with
+// it the chip container this listens on. On `document`, not `document.body`:
+// this script is enqueued in the head, where there is no body yet and a
+// binding on it silently attaches to nothing. Namespaced and unbound first so
+// a second evaluation of this script replaces the handler rather than stacking
+// a second one that moves the selection twice per key.
+jQuery(document)
+  .off("keydown.twoincTermChips")
+  .on("keydown.twoincTermChips", ".twoinc-term-chips", function (event) {
+    twoincTermChips.onKeydown(event);
+  });
 
 /**
  * The prefetched autofill answer — the buyer object, or `false` for "nobody
@@ -3460,7 +3671,10 @@ function createSoleTraderController(companySearch) {
           .removeClass("twoinc-sole-trader-toggle--busy");
         if (controller.closeDropdownOnSettle) {
           controller.closeDropdownOnSettle = false;
-          companySearch.closeCompanySearchDropdown();
+          // This path places focus itself, once the popup has gone: the
+          // launcher that held it, or the company field, whose own opener then
+          // brings the picker back (TWO-25658).
+          companySearch.closeCompanySearchDropdown({ returnFocus: false });
         }
       }
       companySearch.syncSoleTraderSurfaces();
@@ -4010,7 +4224,9 @@ function createSoleTraderController(companySearch) {
         // The field counts as inside: it is the popover's own trigger, and its focus opener would otherwise race rule (3) on event order.
         const field = jQuery(companySearch.companyFieldSelector())[0];
         if (target !== field && !(popover && popover.contains(target))) {
-          companySearch.closeCompanySearchDropdown();
+          // This whole handler runs BECAUSE focus landed on `target`; returning
+          // it to the company field would take it straight back off (TWO-25658).
+          companySearch.closeCompanySearchDropdown({ returnFocus: false });
         }
         // Last, so a focus the launch moves finds this controller's popups already closed and nothing left here to relaunch.
         if (relaunch && typeof relaunch.click === "function") relaunch.click();
@@ -5962,8 +6178,9 @@ class Twoinc {
     // wholesale, so `self.getApproval()` at the end of this function finds
     // an incomplete form and retires the in-flight request through its
     // own readiness guard.
-    // The panel drops whatever the outgoing country's search left in it.
-    twoincSelectWooHelper.closeCompanySearchDropdown();
+    // The panel drops whatever the outgoing country's search left in it. Focus
+    // stays where it is: the buyer is in the country select.
+    twoincSelectWooHelper.closeCompanySearchDropdown({ returnFocus: false });
 
     // Skipped entirely while sole-trader mode owns the field: this
     // rebuilds the search widget and wipes the capture pair
@@ -6016,7 +6233,7 @@ class Twoinc {
     // availability answer for the OUTGOING shipping country must not land.
     helper.companySearchSeq += 1;
     Twoinc.getInstance().addressStateFor(twoincAddressRoles.delivery()).lookupSeq += 1;
-    helper.closeCompanySearchDropdown();
+    helper.closeCompanySearchDropdown({ returnFocus: false });
 
     if (helper.soleTrader.mode !== "sole_trader") {
       // Recomputes `customerCompany` itself via `write()`'s own resolver call

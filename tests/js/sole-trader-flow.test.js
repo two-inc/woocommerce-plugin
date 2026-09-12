@@ -2312,7 +2312,8 @@ describe("TWO-40 — sole-trader flow", () => {
         // clicked with nothing open. The close is conditional, so it is a
         // no-op here rather than a second code path.
         harness.openCompanyPanel($, ctx.helper);
-        ctx.helper.closeCompanySearchDropdown();
+        // Setup, not a buyer gesture: focus must stay where the case put it.
+        ctx.helper.closeCompanySearchDropdown({ returnFocus: false });
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
         const win = { closed: false };
@@ -2752,7 +2753,7 @@ describe("TWO-40 — sole-trader flow", () => {
             window.open = jest.fn(() => fakePopup());
             jest.useFakeTimers();
           }
-          if (!popoverOpen) ctx.helper.closeCompanySearchDropdown();
+          if (!popoverOpen) ctx.helper.closeCompanySearchDropdown({ returnFocus: false });
           jest.advanceTimersByTime(0);
           expect(ctx.helper.companySearchDropdownIsOpen()).toBe(popoverOpen);
           const openedBefore = window.open.mock.calls.length;

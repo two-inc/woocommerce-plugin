@@ -154,6 +154,69 @@ describe("company search country gate", () => {
     expect(visibleChipModes()).toEqual(["manual"]);
   });
 
+  function pressKey(node, key) {
+    node.dispatchEvent(new window.KeyboardEvent("keydown", { key: key, bubbles: true }));
+  }
+
+  // A chip is a `<button>`, which swallows typing, so a caret parked on one
+  // loses every character the buyer types (ABN-554).
+  test.each([
+    {
+      key: "f",
+      chipFirst: false,
+      landsOnField: true,
+      description: "a key on the closed field, which opens onto a chip"
+    },
+    {
+      key: "f",
+      chipFirst: true,
+      landsOnField: true,
+      description: "a key while a chip already holds the caret"
+    },
+    {
+      key: " ",
+      chipFirst: true,
+      landsOnField: false,
+      description: "Space, which activates the focused chip instead"
+    }
+  ])(
+    "the caret while the search is withdrawn: $description",
+    ({ key, chipFirst, landsOnField }) => {
+      ctx.helper.syncCompanySearchAvailability();
+      supportedCountriesRequest().succeed({ supported_countries: ["US"] });
+      const field = document.querySelector(ctx.helper.companyFieldSelector());
+      let target = field;
+      if (chipFirst) {
+        ctx.helper.openCompanySearchDropdown();
+        target = document.activeElement;
+      }
+
+      pressKey(target, key);
+
+      expect(document.activeElement).toBe(landsOnField ? field : target);
+    }
+  );
+
+  test("a covered country still puts the caret in the query row", () => {
+    ctx.helper.syncCompanySearchAvailability();
+    supportedCountriesRequest().succeed({ supported_countries: ["GB"] });
+
+    pressKey(document.querySelector(ctx.helper.companyFieldSelector()), "f");
+
+    expect(document.activeElement).toBe(document.querySelector(".two-company-dropdown__query"));
+  });
+
+  test("the field keeps the caret across its own input event, so a space is text and not a chip press", () => {
+    ctx.helper.syncCompanySearchAvailability();
+    supportedCountriesRequest().succeed({ supported_countries: ["US"] });
+    const field = document.querySelector(ctx.helper.companyFieldSelector());
+
+    field.value = "f";
+    field.dispatchEvent(new window.Event("input", { bubbles: true }));
+
+    expect(document.activeElement).toBe(field);
+  });
+
   test("typing in the field while the search is withdrawn queues no search", () => {
     ctx.helper.syncCompanySearchAvailability();
     supportedCountriesRequest().succeed({ supported_countries: ["US"] });
