@@ -36,6 +36,31 @@ msgstr "Introducir manualmente"
 msgid "Search for company"
 msgstr "Buscar empresa"
 
+#: class/WC_Twoinc.php:1168 class/WC_Twoinc.php:1187 class/WC_Twoinc.php:2939
+#: class/WC_Twoinc_Checkout.php:437
+#, php-format
+msgid "%s days"
+msgstr "%s días"
+
+#: class/WC_Twoinc_Checkout.php:444
+msgid "Selected payment terms"
+msgstr "Condiciones de pago seleccionadas"
+
+#: class/WC_Twoinc_Checkout.php:450
+#, php-format
+msgid "EOM+%s"
+msgstr "EOM+%s"
+
+#: class/WC_Twoinc_Checkout.php:453
+#, php-format
+msgid "EOM+%s: pay %s days after the end of the month"
+msgstr "EOM+%s: pague %s días después del final del mes"
+
+#: class/WC_Twoinc_Checkout.php:460
+#, php-format
+msgid "EOM+%1$s: pay %1$s days after the end of the month, plus a %2$s surcharge"
+msgstr "EOM+%1$s: pague %1$s días después del final del mes, más un recargo de %2$s"
+
 #: class/WC_Twoinc_Checkout.php:469
 msgid "Registered company"
 msgstr "Empresa registrada"

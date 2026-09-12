@@ -434,14 +434,28 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 // endpoints in WC_Twoinc_Payment_Terms.
                 'payment_terms' => [
                     'days_label' => __('%s days', 'twoinc-payment-gateway'),
-                    // Chip copy, matching magento-plugin's Luma renderer,
-                    // which the Amasty and Fire checkouts also share.
-                    //
-                    // >1 term  → `heading` sits ABOVE the chips.
-                    // exactly 1 → no heading; `single_label` replaces the bare
-                    //             "N days" text INSIDE the single chip.
+                    // Sits ABOVE the chips whenever any is rendered: a chip's
+                    // text states only the term, so this is what names the
+                    // group, one term or several.
                     'heading' => __('Selected payment terms', 'twoinc-payment-gateway'),
-                    'single_label' => __('Payment Terms %s days', 'twoinc-payment-gateway'),
+                    // An end-of-month term falls due that many days after the end
+                    // of the month, so the bare day count states the wrong due date
+                    // for it (ABN-554). Both placeholders in the explainer are the
+                    // same day count; the chip renderer substitutes every one.
+                    'eom' => WC_Twoinc_Payment_Terms::is_end_of_month($this->wc_twoinc),
+                    'days_label_eom' => __('EOM+%s', 'twoinc-payment-gateway'),
+                    'eom_explainer' => __(
+                        'EOM+%s: pay %s days after the end of the month',
+                        'twoinc-payment-gateway'
+                    ),
+                    // An aria-label replaces the whole accessible name, so a
+                    // chip's own fee is announced nowhere unless the name states
+                    // it. `%1$s` is the day count, `%2$s` the formatted amount
+                    // the browser holds.
+                    'eom_explainer_fee' => __(
+                        'EOM+%1$s: pay %1$s days after the end of the month, plus a %2$s surcharge',
+                        'twoinc-payment-gateway'
+                    ),
                     // Chips render whenever a term is offered, including the
                     // single-term case — Magento shows that one term (and its
                     // surcharge) as a disabled chip rather than hiding it.
