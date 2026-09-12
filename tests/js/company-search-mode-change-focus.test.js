@@ -170,13 +170,20 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
   test.each([
     {
       withdraw: () => clickChip("sole_trader"),
+      focused: () => document.querySelector("#billing_company_display"),
       description: "a mode change that withdraws the query row"
     },
     {
       withdraw: () => helper.panel.setDisabled(true),
+      focused: () => document.querySelector("#billing_company_display"),
       description: "a country the registry search does not cover"
+    },
+    {
+      withdraw: () => {},
+      focused: () => chipNode("manual"),
+      description: "registered company, which has a query row of its own"
     }
-  ])("a printable key on a chip after $description goes to the company field", ({ withdraw }) => {
+  ])("a printable key on a chip in $description", ({ withdraw, focused }) => {
     open();
     withdraw();
     const chip = chipNode("manual");
@@ -184,7 +191,21 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
 
     pressKey(chip, "a");
 
-    expect(document.activeElement).toBe(document.querySelector("#billing_company_display"));
+    expect(document.activeElement).toBe(focused());
+  });
+
+  test("a mode with no query row leaves the buyer's text where they can see it", () => {
+    open();
+    clickChip("sole_trader");
+    helper.panel.restoreFieldFocus();
+    const field = document.querySelector("#billing_company_display");
+    field.value = "ab";
+
+    field.dispatchEvent(new window.Event("input", { bubbles: true }));
+
+    expect(field.value).toBe("ab");
+    expect(document.querySelector(QUERY).value).toBe("ab");
+    expect(document.activeElement).toBe(field);
   });
 
   test("the character the field opener moves across outlives the next chip sync", () => {

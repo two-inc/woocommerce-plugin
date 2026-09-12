@@ -201,7 +201,9 @@
         this.getSearchScope = options.getSearchScope || function () { return self; };
         this.getChips = options.getChips || function () { return []; };
         this.isChipVisible = options.isChipVisible || function () { return true; };
-        this.getSelectedMode = options.getSelectedMode || function () { return ''; };
+        // Registered company, not '': a host with no mode concept still has the
+        // registry search, and every other value withdraws the query row.
+        this.getSelectedMode = options.getSelectedMode || function () { return 'registered'; };
         this.onSelect = options.onSelect || function () {};
         this.getDisplayText = options.getDisplayText || function () { return ''; };
         this.onExitManualEntry = options.onExitManualEntry || function () {};
@@ -711,6 +713,14 @@
             // instead (ABN-525). The open above put the caret on a chip, where
             // the next character would land on a button (ABN-554).
             if (self._disabled) {
+                self.restoreFieldFocus();
+                return;
+            }
+            // A mode can withdraw the query row too, and then the field is the
+            // only box the buyer can see: their text stays in it, and the query
+            // holds a copy for the row the next mode change reveals (ABN-554).
+            if (self._queryRowIsHidden()) {
+                self._query.value = typed;
                 self.restoreFieldFocus();
                 return;
             }
