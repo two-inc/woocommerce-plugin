@@ -131,12 +131,16 @@ Vendored assets
   offered chip where the query row is withdrawn, so no mode opens the panel with
   focus nowhere. Same state a click leaves it in, and the same on every platform
   that carries this control.
-- **With the search withdrawn, a printable key keeps the caret on the company
-  field.** The panel opens onto a chip there and a chip is a `<button>`, which
-  swallows text, so every character the buyer typed was lost with nothing on
-  screen to say so — the field's own `input` handler, which leaves those
-  keystrokes where they were put, never ran at all (ABN-554). Space and Enter are
-  excluded: both activate the focused chip.
+- **Wherever the mode leaves no query row, a printable key keeps the caret on the
+  company field.** The panel opens onto a chip there and a chip is a `<button>`,
+  which swallows text, so the character was lost with nothing on screen to say so
+  (ABN-554). Both routes in are covered: a key pressed on the chip itself, and a
+  key pressed on the field, whose own opener would otherwise park the caret on
+  the chip before the character arrives. Space and Enter are excluded, since both
+  activate the focused chip. The field's `input` handler then leaves the buyer's
+  text where they can see it and, where a MODE withdrew the row, copies it into
+  the query ready for the mode change that reveals it — not where the country
+  gate did, since no search there can ever run.
 - **Closing the panel puts focus back on the company-name field** — Escape, a
   pointer press outside it, a company adopted from the results, manual entry
   taking the field over, and the plugin's own close when a sole-trader signup

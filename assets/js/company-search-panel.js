@@ -201,7 +201,9 @@
         this.getSearchScope = options.getSearchScope || function () { return self; };
         this.getChips = options.getChips || function () { return []; };
         this.isChipVisible = options.isChipVisible || function () { return true; };
-        this.getSelectedMode = options.getSelectedMode || function () { return ''; };
+        // Registered company, not '': a host with no mode concept still has the
+        // registry search, and every other value withdraws the query row.
+        this.getSelectedMode = options.getSelectedMode || function () { return 'registered'; };
         this.onSelect = options.onSelect || function () {};
         this.getDisplayText = options.getDisplayText || function () { return ''; };
         this.onExitManualEntry = options.onExitManualEntry || function () {};
@@ -567,11 +569,11 @@
             self.close();
         });
 
-        // A chip is a `<button>`, which swallows typing, and the withdrawn
-        // search leaves no query row to hold the caret instead — so a printable
-        // key belongs in the company-name field (ABN-554).
+        // A chip is a `<button>`, which swallows typing, and a mode with no
+        // query row leaves nothing else in the panel to hold the caret — so a
+        // printable key belongs in the company-name field (ABN-554).
         this._bindEvent(this._panel, 'keydown', function (event) {
-            if (!self._disabled) return;
+            if (!self._queryRowIsHidden()) return;
             if (event.ctrlKey || event.metaKey || event.altKey) return;
             // Space and Enter activate the focused chip; a single code point is
             // otherwise exactly what produced text.
@@ -696,10 +698,10 @@
             // The buyer is leaving, not searching.
             if (event.key === 'Tab') return;
             self.open();
-            // The open puts the caret on a chip where the withdrawn search
-            // leaves no query row, and the character this keystroke is about to
-            // insert would land on a button (ABN-554).
-            if (self._disabled) self.restoreFieldFocus();
+            // The open puts the caret on a chip wherever the mode leaves no
+            // query row, and the character this keystroke is about to insert
+            // would land on a button (ABN-554).
+            if (self._queryRowIsHidden()) self.restoreFieldFocus();
         });
         this._bindEvent(field, 'input', function () {
             const typed = field.value;
@@ -711,6 +713,14 @@
             // instead (ABN-525). The open above put the caret on a chip, where
             // the next character would land on a button (ABN-554).
             if (self._disabled) {
+                self.restoreFieldFocus();
+                return;
+            }
+            // A mode can withdraw the query row too, and then the field is the
+            // only box the buyer can see: their text stays in it, and the query
+            // holds a copy for the row the next mode change reveals (ABN-554).
+            if (self._queryRowIsHidden()) {
+                self._query.value = typed;
                 self.restoreFieldFocus();
                 return;
             }
@@ -1177,13 +1187,18 @@
         if (!this._query) return;
         const searching = mode === 'registered' && !this._disabled;
         const row = this._query.closest('.' + SEARCH_ROW_CLASS);
+        const wasHidden = !row || row.classList.contains(HIDDEN_CLASS);
         if (row) row.classList.toggle(HIDDEN_CLASS, !searching);
         if (searching) return;
+        this._renderMessage('');
+        // Only on the withdrawal itself: a later sync of an already-hidden row
+        // would also drop the character the field's opener has just moved
+        // across, ahead of the mode change that reveals the row (ABN-554).
+        if (wasHidden) return;
         // Blanking the value fires no event, so the rows the dropped term
         // produced would stay painted and clickable under a search row that is
         // no longer rendered.
         this._query.value = '';
-        this._renderMessage('');
     };
 
     // ------------------------------------------------------------------ field
