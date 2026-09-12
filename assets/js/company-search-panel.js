@@ -70,6 +70,35 @@
     const HIDDEN_CLASS = 'two-hidden';
 
     /**
+     * The controls inside the panel a press is entitled to focus. Deliberately
+     * not `[tabindex]`: a results list carrying one of its own — which jQuery
+     * UI's does on the sibling platform — has padding the buyer means nothing by.
+     */
+    const FOCUS_TARGETS = 'input, button, select, textarea, a[href]';
+
+    /** @returns {boolean} whether focus is on nothing at all */
+    function focusIsUnplaced() {
+        const active = document.activeElement;
+        return !active || active === document.body || active === document.documentElement;
+    }
+
+    /**
+     * @param {object} event mousedown event
+     * @returns {boolean} whether the press is dead space rather than a control
+     *          or a scrollbar
+     */
+    function pressIsDeadSpace(event) {
+        const node = event.target;
+        if (!node || node.nodeType !== 1 || !node.closest) return false;
+        if (node.closest(FOCUS_TARGETS)) return false;
+        const scrollable = node.scrollHeight > node.clientHeight || node.scrollWidth > node.clientWidth;
+        // A press on a native scrollbar lands outside the content box, and
+        // cancelling it would stop the drag scrolling the results.
+        if (scrollable && (event.offsetX >= node.clientWidth || event.offsetY >= node.clientHeight)) return false;
+        return true;
+    }
+
+    /**
      * Every member the injected `search` API must carry. Checked at
      * construction because a host that supplies a partial one fails silently:
      * a missing `abortActiveRequest` throws inside a close, a missing
@@ -504,6 +533,23 @@
         this._bindEvent(this._panel, 'focusout', function () {
             self._scheduleFocusOutClose();
         });
+
+        // On the panel, not the query field: outside registered-company mode
+        // the query row is withdrawn and a chip is what holds focus, and the
+        // panel drawn over the next control left that buyer no way out
+        // (ABN-554).
+        this._bindEvent(this._panel, 'keydown', function (event) {
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            self.close();
+        });
+
+        // A press on the panel's own dead space is not a gesture: its default
+        // action would blur the caret out of the query field and leave the open
+        // popover holding nothing (ABN-554).
+        this._bindEvent(this._panel, 'mousedown', function (event) {
+            if (pressIsDeadSpace(event)) event.preventDefault();
+        });
     };
 
     /** @returns {boolean} whether focus is somewhere inside the panel */
@@ -627,7 +673,8 @@
     };
 
     /**
-     * Arrow keys walk the results, Enter takes the active one, Escape closes.
+     * Arrow keys walk the results and Enter takes the active one. Escape is the
+     * whole panel's, bound where every control inside it is reachable.
      *
      * Tab is deliberately untouched: the next tab stop is the chips, which is
      * the tab order the DOM already describes.
@@ -635,11 +682,6 @@
      * @param {object} event keydown event
      */
     CompanySearchPanel.prototype._onQueryKeydown = function (event) {
-        if (event.key === 'Escape') {
-            event.preventDefault();
-            this.close();
-            return;
-        }
         if (event.key === 'Enter') {
             event.preventDefault();
             if (this._activeIndex >= 0) this._selectIndex(this._activeIndex);
@@ -721,15 +763,19 @@
      * The query field where it is shown, else the first offered chip: a mode
      * that suppresses the query row would otherwise open the panel with focus
      * nowhere (ABN-525).
+     *
+     * @returns {boolean} whether it found anything to focus
      */
     CompanySearchPanel.prototype._focusOnOpen = function () {
         if (this._query && !this._queryRowIsHidden()) {
             this._query.focus();
-            return;
+            return true;
         }
-        if (!this._chips || this._chips.classList.contains(HIDDEN_CLASS)) return;
+        if (!this._chips || this._chips.classList.contains(HIDDEN_CLASS)) return false;
         const chip = this._chips.querySelector('.' + CHIP_CLASS + ':not(.' + HIDDEN_CLASS + ')');
-        if (chip) chip.focus();
+        if (!chip) return false;
+        chip.focus();
+        return true;
     };
 
     /** @returns {boolean} whether `_syncQueryVisibility` has the query row hidden */
@@ -1003,8 +1049,9 @@
         const self = this;
         if (!this._chips) return;
         const selected = this.getSelectedMode();
+        // The node, read before the sync that takes it away (ABN-554).
+        const heldFocus = this._holdsFocus() ? document.activeElement : null;
         this._syncQueryVisibility(selected);
-        const focusedChip = this._chips.contains(document.activeElement) ? document.activeElement : null;
         this._unbind(this._chips);
         this._chips.innerHTML = '';
         let actionable = 0;
@@ -1036,9 +1083,32 @@
             self._chips.appendChild(button);
         });
         this._chips.classList.toggle(HIDDEN_CLASS, actionable === 0);
-        // The rebuild deletes the chip the buyer activated, so without this
-        // focus falls to the body (ABN-561).
-        if (focusedChip && !focusedChip.isConnected) this.restoreFieldFocus();
+        // A mode change takes away whatever held focus, so the control places
+        // focus again rather than leaving the buyer on nothing.
+        if (heldFocus && this._focusHolderIsGone(heldFocus)) {
+            // The field where the open panel has nothing focusable left in it
+            // — a mode whose chips are all withheld offers the buyer nothing.
+            if (!this._open || !this._focusOnOpen()) this.restoreFieldFocus();
+        }
+    };
+
+    /**
+     * Whether the sync has taken away the node that held focus.
+     *
+     * Asks the NODE, not where focus is now: a rebuilt chip row deletes it
+     * (ABN-561), while a withdrawn query row only hides it and the browser's
+     * own blur for that lands after this handler — so `activeElement` still
+     * names an input the buyer can no longer see or type into.
+     *
+     * @param {Element} node the holder as it was before the sync
+     * @returns {boolean}
+     */
+    CompanySearchPanel.prototype._focusHolderIsGone = function (node) {
+        if (!node.isConnected) return true;
+        // Only while the popover is up: a closed panel is not the buyer's
+        // place either way, so a caret still recorded in it is nobody's cue.
+        if (this._open && node === this._query && this._queryRowIsHidden()) return true;
+        return focusIsUnplaced();
     };
 
     /**
