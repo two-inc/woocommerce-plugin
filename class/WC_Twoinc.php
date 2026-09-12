@@ -1707,11 +1707,14 @@ if (!class_exists('WC_Twoinc')) {
             // payment method has just been deselected under the buyer. The
             // approved notice and the retry notice carry role="status":
             // neither deselects anything.
+            // The chip heading is a `span`, not a `label`: it names the chip
+            // radiogroup through aria-labelledby, and a `label` names a single
+            // form control (ABN-554).
             return sprintf(
                 '<div>
                     %s
-                    <label class="twoinc-term-chips-heading hidden"></label>
-                    <div class="twoinc-term-chips hidden" role="radiogroup"></div>
+                    <span class="twoinc-term-chips-heading hidden" id="twoinc-term-chips-heading"></span>
+                    <div class="twoinc-term-chips hidden" role="radiogroup" aria-labelledby="twoinc-term-chips-heading"></div>
                     <div class="twoinc-sole-trader-note-slot hidden"></div>
                     %s
                     %s
