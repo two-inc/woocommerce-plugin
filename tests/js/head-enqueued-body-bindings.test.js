@@ -42,6 +42,22 @@ describe("bindings made while the script evaluates in the head", () => {
     });
   }
 
+  /**
+   * Run one function with no body in the document, which is the state the
+   * script itself evaluated in.
+   *
+   * @param {Function} run
+   */
+  function withoutBody(run) {
+    const body = document.body;
+    document.documentElement.removeChild(body);
+    try {
+      run();
+    } finally {
+      document.documentElement.appendChild(body);
+    }
+  }
+
   test.each([
     [["GB", "US"], false, "a covered country leaves the search offered"],
     [["US"], true, "the late answer still withdraws the search over an uncovered country"]
@@ -51,5 +67,32 @@ describe("bindings made while the script evaluates in the head", () => {
 
     expect(ctx.helper.panel.isDisabled()).toBe(withdrawn);
     expect(description).toBeTruthy();
+  });
+
+  // The announcement and its listener have to be rooted on the same node. A
+  // body-rooted announcement is delivered nowhere whenever the answer lands
+  // before `document.body` exists, and nothing re-checks the controls — and
+  // every case above passes either way, because jQuery bubbles a body-rooted
+  // trigger up to document once a body is there to root it on.
+  test.each([
+    { present: true, case: "a body in the document" },
+    { present: false, case: "none yet, as when the script itself evaluated" }
+  ])("the answer is announced on the document, with $case", ({ present }) => {
+    let heard = 0;
+    ctx.$(document).on("twoinc_supported_search_countries_updated", function () {
+      heard += 1;
+    });
+    ctx.helper.syncCompanySearchAvailability();
+    const land = function () {
+      supportedCountriesRequest().succeed({ supported_countries: ["GB"] });
+    };
+
+    if (present) {
+      land();
+    } else {
+      withoutBody(land);
+    }
+
+    expect(heard).toBe(1);
   });
 });

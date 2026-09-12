@@ -2056,7 +2056,9 @@ let twoincSupportedSearchCountries = {
       // transient failure here must never hide the search control.
       .always(function () {
         self.fetchPromise = null;
-        jQuery(document.body).trigger("twoinc_supported_search_countries_updated");
+        // On `document`, where the listener is: this file evaluates in the HEAD,
+        // so a body-rooted pair can be reached before `document.body` exists.
+        jQuery(document).trigger("twoinc_supported_search_countries_updated");
       });
   },
 
