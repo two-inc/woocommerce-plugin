@@ -147,7 +147,7 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
 
   test.each([
     {
-      withdraw: () => clickChip("sole_trader"),
+      withdraw: () => clickChip("soletrader"),
       description: "a mode change that withdraws the query row"
     },
     {
@@ -169,7 +169,7 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
 
   test.each([
     {
-      withdraw: () => clickChip("sole_trader"),
+      withdraw: () => clickChip("soletrader"),
       focused: () => document.querySelector("#billing_company_display"),
       description: "a mode change that withdraws the query row"
     },
@@ -196,7 +196,7 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
 
   test("a mode with no query row leaves the buyer's text where they can see it", () => {
     open();
-    clickChip("sole_trader");
+    clickChip("soletrader");
     helper.panel.restoreFieldFocus();
     const field = document.querySelector("#billing_company_display");
     field.value = "ab";
@@ -210,7 +210,7 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
 
   test("the character the field opener moves across outlives the next chip sync", () => {
     open();
-    clickChip("sole_trader");
+    clickChip("soletrader");
     helper.panel.restoreFieldFocus();
     const field = document.querySelector("#billing_company_display");
     field.value = "a";
