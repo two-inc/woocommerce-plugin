@@ -757,13 +757,26 @@
         this._items = [];
         this._activeIndex = -1;
         if (this._field) this._field.setAttribute('aria-expanded', 'false');
-        if (options && options.returnFocus && this._field) {
-            // Guards the field's own focus opener against reopening the panel
-            // this call is closing.
-            this._closing = true;
+        if (options && options.returnFocus) {
+            this.restoreFieldFocus();
+        }
+    };
+
+    /**
+     * Put focus back on the company field, leaving the panel's open state as it
+     * was. `_closing` holds off the field's own focus opener, and the pending
+     * focus-out close is cancelled because the field sits OUTSIDE the panel
+     * node, so arriving on it otherwise reads as leaving the control.
+     */
+    CompanySearchPanel.prototype.restoreFieldFocus = function () {
+        if (!this._field) return;
+        this._closing = true;
+        try {
             this._field.focus();
+        } finally {
             this._closing = false;
         }
+        this._cancelFocusOutClose();
     };
 
     /** @returns {boolean} whether the panel is currently open */
@@ -968,6 +981,7 @@
         if (!this._chips) return;
         const selected = this.getSelectedMode();
         this._syncQueryVisibility(selected);
+        const focusedChip = this._chips.contains(document.activeElement) ? document.activeElement : null;
         this._unbind(this._chips);
         this._chips.innerHTML = '';
         let actionable = 0;
@@ -999,6 +1013,9 @@
             self._chips.appendChild(button);
         });
         this._chips.classList.toggle(HIDDEN_CLASS, actionable === 0);
+        // The rebuild deletes the chip the buyer activated, so without this
+        // focus falls to the body (ABN-561).
+        if (focusedChip && !focusedChip.isConnected) this.restoreFieldFocus();
     };
 
     /**
