@@ -3327,6 +3327,8 @@ function createSoleTraderController(companySearch) {
     restoreOnSettle: false,
     /** @type {Element|null} the control a launch took focus from, given it back once the popup settles */
     refocusOnSettle: null,
+    /** @type {Element|null} the company field a launch parked focus on; the focusin rules read it as their own */
+    parkedFocus: null,
     /**
      * How many sole-trader round trips are outstanding (TWO-40).
      *
@@ -4045,6 +4047,7 @@ function createSoleTraderController(companySearch) {
           controller.closeDropdownOnSettle = true;
           // Before the note hides, so a launch from its link records the link.
           controller.dropLaunchFocus(heldFocus);
+          controller.parkLaunchFocus();
           controller.watchPopupClose(win, isReconfirming);
         }
         controller.showNote(!win);
@@ -4145,7 +4148,14 @@ function createSoleTraderController(companySearch) {
 
     /** Give an abandoned launch's focus back — to the adopted launcher or the company field when the holder is gone. */
     restoreLaunchFocus: function (outcomeOwned) {
-      if (!controller.restoreOnSettle || controller.activePopupWatchers.length) return;
+      if (controller.activePopupWatchers.length) return;
+      // The flight's own park is not a place the buyer chose, so it is dropped here and the
+      // rules below read the unplaced focus the launch actually left them (ABN-554).
+      if (controller.parkedFocus && document.activeElement === controller.parkedFocus) {
+        controller.parkedFocus.blur();
+      }
+      controller.parkedFocus = null;
+      if (!controller.restoreOnSettle) return;
       controller.restoreOnSettle = false;
       const node = controller.refocusOnSettle;
       controller.refocusOnSettle = null;
@@ -4173,6 +4183,7 @@ function createSoleTraderController(companySearch) {
         return !!node && node !== document.body && node !== document.documentElement;
       };
       controller.refocusOnSettle = null;
+      controller.parkedFocus = null;
       const active = document.activeElement;
       controller.restoreOnSettle = isControl(active) || isControl(heldFocus);
       if (!isControl(active)) return;
@@ -4180,6 +4191,30 @@ function createSoleTraderController(companySearch) {
       if (companySearch.isOnScreen(jQuery(active))) controller.refocusOnSettle = active;
       // The popup taking the window's focus blurs this node in a browser anyway.
       active.blur();
+    },
+
+    /**
+     * Put the focus the launch just dropped on the company field (ABN-554).
+     *
+     * The popover stays up until the flight settles, and around a document
+     * focusing nothing it reaches no keystroke at all. Deferred a tick so the
+     * launching click's own mode rebuild has settled, and skipped where focus
+     * has landed somewhere the buyer put it.
+     */
+    parkLaunchFocus: function () {
+      window.setTimeout(function () {
+        // A flight already over owns its own focus: the settle reads where focus is.
+        if (!controller.activePopupWatchers.length) return;
+        const active = document.activeElement;
+        if (active && active !== document.body && active !== document.documentElement) return;
+        const panel = companySearch.panel;
+        const field = panel && panel.getField && panel.getField()[0];
+        if (!field || !field.isConnected) return;
+        // Recorded before the focus, which the rules below see synchronously.
+        controller.parkedFocus = field;
+        // Through the panel, so the field's own opener and its pending focus-out close stay off.
+        panel.restoreFieldFocus();
+      }, 0);
     },
 
     /**
@@ -4201,6 +4236,13 @@ function createSoleTraderController(companySearch) {
       if (controller.focusinHandler) return;
       controller.focusinHandler = function (event) {
         const target = event && event.target;
+        // Focus that LEAVES is what tells a window return's re-fire apart from the buyer
+        // arriving on the parked field: the re-fire carries no focusout before it (ABN-554).
+        if (event && event.type === "focusout") {
+          if (target === controller.parkedFocus) controller.parkedFocus = null;
+          return;
+        }
+        if (target && target === controller.parkedFocus) return;
         if (
           !target ||
           typeof target.closest !== "function" ||
@@ -4234,13 +4276,16 @@ function createSoleTraderController(companySearch) {
         if (relaunch && typeof relaunch.click === "function") relaunch.click();
       };
       document.addEventListener("focusin", controller.focusinHandler, true);
+      document.addEventListener("focusout", controller.focusinHandler, true);
     },
 
-    /** Test seam / teardown: drop the `focusin` listener. */
+    /** Test seam / teardown: drop the focus listeners. */
     unbindFocusinListener: function () {
       if (!controller.focusinHandler) return;
       document.removeEventListener("focusin", controller.focusinHandler, true);
+      document.removeEventListener("focusout", controller.focusinHandler, true);
       controller.focusinHandler = null;
+      controller.parkedFocus = null;
     },
 
     /**

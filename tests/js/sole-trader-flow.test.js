@@ -2630,6 +2630,8 @@ describe("TWO-40 — sole-trader flow", () => {
         },
         {
           target: companyField,
+          // The launch parks focus on the company field, so a row whose target is it fires no focusin (ABN-554).
+          beforeGesture: () => document.activeElement.blur(),
           popoverOpen: false,
           popupOpen: true,
           closes: 1,
@@ -2671,6 +2673,8 @@ describe("TWO-40 — sole-trader flow", () => {
           // The field held focus through a pointer chip click (mousedown prevented); the click back into it is a move, not a return.
           arrange: () => ctx.helper.panel.close({ returnFocus: true }),
           target: companyField,
+          // Off the field the launch parked focus on, so focusing it back is an arrival (ABN-554).
+          beforeGesture: () => document.activeElement.blur(),
           popoverOpen: false,
           popupOpen: true,
           closes: 1,
@@ -2735,6 +2739,7 @@ describe("TWO-40 — sole-trader flow", () => {
           arrange,
           target,
           gesture,
+          beforeGesture,
           popoverOpen = true,
           popupOpen,
           closes,
@@ -2758,6 +2763,7 @@ describe("TWO-40 — sole-trader flow", () => {
           expect(ctx.helper.companySearchDropdownIsOpen()).toBe(popoverOpen);
           const openedBefore = window.open.mock.calls.length;
 
+          if (beforeGesture) beforeGesture();
           if (gesture) gesture();
           else focusControl(target());
           // The popover's close is the focusin's own synchronous act, and the
@@ -2780,6 +2786,33 @@ describe("TWO-40 — sole-trader flow", () => {
           jest.useRealTimers();
         }
       );
+
+      /**
+       * The popover stays on screen for the whole flight, and the launch blurs
+       * whatever held focus, so without a park it surrounds a document focusing
+       * nothing and no keystroke reaches any control (ABN-554).
+       */
+      test.each([
+        {
+          refire: false,
+          description: "the launch parks the focus it dropped on the company field"
+        },
+        {
+          refire: true,
+          description: "a window return re-firing focus there is not the buyer coming back"
+        }
+      ])("$description (ABN-554)", ({ refire }) => {
+        const win = launchFromChips();
+        const field = ctx.helper.panel.getField()[0];
+
+        expect(document.activeElement).toBe(field);
+        if (refire) refireFocus();
+
+        expect(win.close).not.toHaveBeenCalled();
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
+        expect(document.activeElement).toBe(field);
+        jest.useRealTimers();
+      });
 
       /** A hand-closed re-signup's record stays until its poll notices; the re-click inside that window is a fresh launch, not a stacked one. */
       test("re-clicking Select a different sole trader inside a hand-closed re-signup's poll window launches again", () => {
@@ -3308,7 +3341,7 @@ describe("TWO-40 — sole-trader flow", () => {
         const relaunch = jest.fn(() => fakePopup());
         window.open = relaunch;
 
-        expect(document.activeElement).toBe(document.body);
+        expect(document.activeElement).toBe(ctx.helper.panel.getField()[0]);
         differentSoleTraderBtn().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 
         expect(first.focus).toHaveBeenCalledTimes(1);
@@ -3471,7 +3504,7 @@ describe("TWO-40 — sole-trader flow", () => {
       });
 
       /** The window and its visibility are deliberately not listened to at all (TWO-25658). */
-      test("binds only the focusin listener", () => {
+      test("binds the focus listeners and nothing on the window", () => {
         soleTrader.unbindFocusinListener();
         const onWindow = jest.spyOn(window, "addEventListener");
         const onDocument = jest.spyOn(document, "addEventListener");
@@ -3479,7 +3512,7 @@ describe("TWO-40 — sole-trader flow", () => {
         soleTrader.bindFocusinListener();
 
         expect(onWindow).not.toHaveBeenCalled();
-        expect(onDocument.mock.calls.map((call) => call[0])).toEqual(["focusin"]);
+        expect(onDocument.mock.calls.map((call) => call[0])).toEqual(["focusin", "focusout"]);
       });
 
       /** Tab to the chip then Enter or Space: the chip's activation raises the popup, no mousedown and no `focusin` raise. */
