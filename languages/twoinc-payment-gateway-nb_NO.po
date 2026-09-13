@@ -81,6 +81,11 @@ msgstr "Telefonnummeret er ugyldig."
 msgid "We could not complete that just now. Please wait a moment and try again."
 msgstr "Dette kunne ikke fullføres akkurat nå. Vent litt og prøv igjen."
 
+#: class/WC_Twoinc.php:1737
+#, php-format
+msgid "To pay with %s, search for your company name and select it from the results."
+msgstr "For å betale med %s, søk opp firmanavnet ditt og velg det fra resultatene."
+
 #: class/WC_Twoinc.php:1168 class/WC_Twoinc.php:1187 class/WC_Twoinc.php:2939
 #: class/WC_Twoinc_Checkout.php:437
 #, php-format

@@ -2446,9 +2446,36 @@ let twoincDomHelper = {
   clearIntentVerdicts: function () {
     // "Every pay-box except the loading state", rather than a list of the
     // verdict classes, so a brand overlay or later ticket adding a fourth
-    // verdict box is still covered.
-    jQuery(".twoinc-pay-box").not(".twoinc-loader").addClass("hidden");
+    // verdict box is still covered. The company-required notice is excluded
+    // too: it states what the form holds, not how some past request was
+    // answered, so nothing about a new request retires it (ABN-554).
+    jQuery(".twoinc-pay-box").not(".twoinc-loader, .twoinc-err-no-company").addClass("hidden");
     twoincDomHelper.setPaymentMethodSelectable(true);
+  },
+  /**
+   * Take the term chips off screen while Two cannot be paid with at all.
+   *
+   * Its own class rather than the `hidden` one `twoincTermChips.refresh()`
+   * owns: the two conditions are independent, and sharing a class would let
+   * either one un-hide what the other is hiding.
+   */
+  setTermChipsWithheld: function (withheld) {
+    jQuery(".twoinc-term-chips, .twoinc-term-chips-heading").toggleClass(
+      "twoinc-withheld",
+      withheld
+    );
+  },
+  /**
+   * Retire the company-required state — its notice and the chip withholding
+   * that goes with it.
+   *
+   * `getApproval()` is the only caller, and the only route in is its own
+   * no-company branch: nothing else paints this state, and nothing else may
+   * take it down while the form still cannot pay.
+   */
+  clearCompanyRequiredNotice: function () {
+    jQuery(".twoinc-pay-box.twoinc-err-no-company").addClass("hidden");
+    twoincDomHelper.setTermChipsWithheld(false);
   },
   /**
    * Bumped by every pay-box paint. A deferred retire captures it at paint time
@@ -2459,13 +2486,29 @@ let twoincDomHelper = {
   payBoxPaintSeq: 0,
   togglePaySubtitleDesc: function (action, errSelector, companyLabel) {
     twoincDomHelper.payBoxPaintSeq += 1;
+    // Read before the blanket hide below, which erases the distinction: only a
+    // NEW company-required state re-announces (see the `no-company` branch).
+    const noCompanyWasShown = !jQuery(".twoinc-pay-box.twoinc-err-no-company").hasClass("hidden");
     jQuery(".twoinc-pay-box").addClass("hidden");
+    // A term the buyer cannot be quoted on is not an offer (ABN-554).
+    twoincDomHelper.setTermChipsWithheld(action === "no-company");
     // TWO-25657: `.twoinc-busy-retry` is the shop's own limiter, not a verdict.
     twoincDomHelper.setPaymentMethodSelectable(
       !(action === "errored" && errSelector !== ".twoinc-busy-retry")
     );
-    if (["checking-intent", "intent-approved", "errored"].includes(action)) {
-      if (action === "checking-intent") {
+    if (["checking-intent", "intent-approved", "errored", "no-company"].includes(action)) {
+      if (action === "no-company") {
+        let $noCompany = jQuery(".twoinc-pay-box.twoinc-err-no-company");
+        if ($noCompany.data("twoincDefaultText") === undefined) {
+          $noCompany.data("twoincDefaultText", $noCompany.text());
+        }
+        // Emptied while still hidden, then filled once revealed, so the live
+        // region sees a real content change. A repeat paint skips the empty and
+        // `setPayBoxText` finds the text unchanged, so nothing re-announces.
+        if (!noCompanyWasShown) $noCompany.empty();
+        $noCompany.removeClass("hidden");
+        twoincDomHelper.setPayBoxText($noCompany, $noCompany.data("twoincDefaultText"));
+      } else if (action === "checking-intent") {
         // Suppressed by the brand => the loader div is absent, so this is a
         // no-op on an empty jQuery set.
         jQuery(".twoinc-pay-box.twoinc-loader").removeClass("hidden");
@@ -5367,6 +5410,33 @@ class Twoinc {
    * Check the company approval status by creating an order intent
    */
   getApproval() {
+    // Order creation refuses an empty company number outright (the same guard
+    // `process_payment` applies), so a checkout holding none can never pay with
+    // Two. Say so here rather than letting the buyer find out at submit —
+    // manual entry captures a name and no number, so it reaches submit looking
+    // complete (ABN-554).
+    // The sole-trader flow mints the number itself, so a checkout mid-flow is
+    // not one with no company — it is one a beat away from having one.
+    const soleTraderPending =
+      twoincSoleTraderLaunching() ||
+      twoincCompanySearchControls.some(function (control) {
+        return control.soleTrader.isDeciding();
+      });
+    if (
+      !twoincUtilHelper.blankToEmpty(this.customerCompany.organization_number) &&
+      !soleTraderPending
+    ) {
+      if (
+        this.orderIntentCheck.inFlightSeq !== null ||
+        this.orderIntentCheck.renderInterval !== null
+      ) {
+        this.abandonOrderIntentCheck();
+      }
+      twoincDomHelper.togglePaySubtitleDesc("no-company");
+      return;
+    }
+    twoincDomHelper.clearCompanyRequiredNotice();
+
     if (!this.isReadyApprovalCheck()) {
       // A form that has become incomplete cannot answer the question a
       // request in flight is asking. Orphan it, and take the loading state

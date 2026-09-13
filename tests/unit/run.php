@@ -11178,6 +11178,7 @@ final class BrandConfigSpec
                 'twoinc-intent-approved' => 'the approved notice',
                 'twoinc-err-payment-default' => 'the "not available" box',
                 'twoinc-err-phone-number' => 'the phone-number box',
+                'twoinc-err-no-company' => 'the company-required notice',
             ] as $class => $label
         ) {
             TinyAssert::same(
@@ -11215,6 +11216,7 @@ final class BrandConfigSpec
                 'twoinc-intent-approved' => 'status',
                 'twoinc-err-payment-default' => 'alert',
                 'twoinc-err-phone-number' => 'alert',
+                'twoinc-err-no-company' => 'status',
             ] as $class => $role
         ) {
             TinyAssert::same(
