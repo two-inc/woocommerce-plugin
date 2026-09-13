@@ -19,8 +19,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * attribute this plugin does not itself emit can reach the page. The
          * href itself is only checked for scheme and userinfo, not vouched for
          * - whoever writes the copy chooses where an http(s) link points.
-         * `target` and `rel` are matched case-insensitively and re-emitted
-         * lowercased, as browsers treat those keywords.
+         * `target` and `rel` are matched case-insensitively, as browsers treat
+         * those keywords; `rel` is read as a token set, and a kept
+         * `target="_blank"` always carries `rel="noopener"`.
          *
          * @return string
          */
@@ -113,11 +114,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 return '';
             }
 
+            $opens_new_tab = isset($attributes['target']) && strtolower(trim($attributes['target'])) === '_blank';
+            $rel_tokens = preg_split('/\s+/', isset($attributes['rel']) ? strtolower(trim($attributes['rel'])) : '', -1, PREG_SPLIT_NO_EMPTY);
+
             $anchor = '<a href="' . htmlspecialchars($href, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"';
-            if (isset($attributes['target']) && strtolower(trim($attributes['target'])) === '_blank') {
+            if ($opens_new_tab) {
                 $anchor .= ' target="_blank"';
             }
-            if (isset($attributes['rel']) && strtolower(trim($attributes['rel'])) === 'noopener') {
+            // A new tab without noopener hands the opener over, so the pair is not the copy's to split.
+            if ($opens_new_tab || in_array('noopener', $rel_tokens, true)) {
                 $anchor .= ' rel="noopener"';
             }
 

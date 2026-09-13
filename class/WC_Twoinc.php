@@ -2978,9 +2978,9 @@ if (!class_exists('WC_Twoinc')) {
             // rest of this plugin's __() strings are made translatable.
             // Tested after escaping, not before: copy that is only markup the
             // escaper drops would otherwise emit an empty subtitle element.
-            $custom_subtitle = WC_Twoinc_Helper::escape_anchor_only_html(
-                trim((string) $this->get_option('payment_subtitle'))
-            );
+            $custom_subtitle = trim(WC_Twoinc_Helper::escape_anchor_only_html(
+                (string) $this->get_option('payment_subtitle')
+            ));
             if ($custom_subtitle !== '') {
                 return sprintf('<div class="twoinc-payment-subtitle">%s</div>', $custom_subtitle);
             }
