@@ -1269,6 +1269,14 @@ msgstr ""
 msgid "Search for company"
 msgstr ""
 
+#: class/WC_Twoinc_Checkout.php:400
+msgid "%d results are available, use up and down arrow keys to navigate."
+msgstr ""
+
+#: class/WC_Twoinc_Checkout.php:401
+msgid "1 result is available, use up and down arrow keys to navigate."
+msgstr ""
+
 #: class/WC_Twoinc_Checkout.php:444
 msgid "Selected payment terms"
 msgstr ""

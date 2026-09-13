@@ -1268,6 +1268,12 @@ msgstr "Ange manuellt"
 msgid "Search for company"
 msgstr "Sök efter företag"
 
+msgid "%d results are available, use up and down arrow keys to navigate."
+msgstr "%d resultat är tillgängliga, använd upp- och nedpilarna för att navigera."
+
+msgid "1 result is available, use up and down arrow keys to navigate."
+msgstr "1 resultat är tillgängligt, använd upp- och nedpilarna för att navigera."
+
 #: class/WC_Twoinc_Checkout.php:444
 msgid "Selected payment terms"
 msgstr "Valda betalningsvillkor"

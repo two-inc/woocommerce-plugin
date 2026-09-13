@@ -36,6 +36,12 @@ msgstr "Introducir manualmente"
 msgid "Search for company"
 msgstr "Buscar empresa"
 
+msgid "%d results are available, use up and down arrow keys to navigate."
+msgstr "%d resultados están disponibles, use las flechas arriba y abajo para navegar."
+
+msgid "1 result is available, use up and down arrow keys to navigate."
+msgstr "1 resultado está disponible, use las flechas arriba y abajo para navegar."
+
 #: class/WC_Twoinc.php:1168 class/WC_Twoinc.php:1187 class/WC_Twoinc.php:2939
 #: class/WC_Twoinc_Checkout.php:437
 #, php-format
