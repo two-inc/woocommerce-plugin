@@ -319,6 +319,7 @@ final class BrandConfigSpec
             'testPaymentSubtitlePrefersMerchantFreeTextOverBrandTagline',
             'testPaymentSubtitleOfOnlyDroppedMarkupEmitsNoElement',
             'testPaymentSubtitleFallsBackToBrandTaglineWhenBlank',
+            'testBrandTaglineIsEscapedAndAnEmptyResultEmitsNoElement',
             'testTaxSubtotalsRequiredWhenMerchantOptsIn',
             'testTaxSubtotalsSettingIsOnByDefaultForNewInstalls',
             'testSeTaxSubtotalsBackfill',
@@ -8190,6 +8191,40 @@ final class BrandConfigSpec
     }
 
     /**
+     * The tagline sentence comes from the runtime gettext catalogue, which a
+     * shop owner can edit with a string-translation plugin, so it is escaped
+     * on the same terms as merchant free text and an all-markup translation
+     * emits no element at all.
+     */
+    private static function testBrandTaglineIsEscapedAndAnEmptyResultEmitsNoElement(): void
+    {
+        $tagline = '<div class="twoinc-payment-subtitle">For all companies, '
+            . '<a href="https://taglinebrand.example/faq" target="_blank" rel="noopener">'
+            . 'read more</a>.</div>';
+
+        // [translation standing in for the tagline msgid, expected subtitle, why].
+        $cases = [
+            [
+                'For all companies, %1$sread more%2$s.<img src=x onerror=alert(1)>',
+                $tagline,
+                'markup appended to the translation never reaches the page',
+            ],
+            ['<img src=x>', '', 'a translation the escaper empties emits no element'],
+        ];
+
+        foreach ($cases as [$translation, $expected, $description]) {
+            self::reset();
+            self::useTaglineBrand();
+            $GLOBALS['__twoinc_test_translations'] = [
+                'For all companies, %1$sread more%2$s.' => $translation,
+            ];
+            TinyAssert::same($expected, self::fulfilmentTriggerGateway([])->get_pay_subtitle(), $description);
+        }
+
+        self::reset();
+    }
+
+    /**
      * TWO-25502: the merchant setting is the only source of truth. A Swedish
      * base country no longer forces it on at read time — the one-time
      * backfill below is what keeps Swedish shops sending subtotals.
@@ -15363,6 +15398,31 @@ final class AnchorOnlyHtmlSpec
                 'a stray < is text and does not swallow the copy up to the next >',
             ],
             ['<img src=x>', '', 'copy that is only a dropped tag escapes to nothing at all'],
+            [
+                '<a href="HTTPS://faq.example.test/x">read more</a>',
+                '<a href="HTTPS://faq.example.test/x">read more</a>',
+                'browsers read the scheme case-insensitively, so an upper-case one is still a link',
+            ],
+            [
+                '<a href="' . $url . '">read more</a  > and on',
+                '<a href="' . $url . '">read more</a> and on',
+                'whitespace inside the closing tag still closes the anchor, which would otherwise swallow the copy after it',
+            ],
+            [
+                '<a href="javascript:alert(1)" href="' . $url . '">read more</a>',
+                'read more',
+                'a repeated attribute is read first-wins, so a second href cannot launder a script URL',
+            ],
+            [
+                '<a href="' . $url . '" rel="nofollow" rel="noopener">read more</a>',
+                '<a href="' . $url . '">read more</a>',
+                'first-wins on rel too, so a second rel cannot add noopener the first did not ask for',
+            ],
+            [
+                '<abbr href="' . $url . '">read more</abbr>',
+                'read more',
+                'a tag whose name merely starts with an a is not an anchor',
+            ],
         ];
     }
 
