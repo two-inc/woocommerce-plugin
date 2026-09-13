@@ -126,6 +126,20 @@ describe("the company-search panel's live region", () => {
       expect(announced()).toBe(expected);
     });
 
+    test.each([
+      [3, "search_results_plural", "%d treffer", "%1 treffer", "the plural sentence"],
+      [1, "search_results_one", "ett treffer", "ett treffer", "the singular sentence"]
+    ])(
+      "%i rows is announced from the site's own catalogue - %s",
+      async (count, key, localised, expected) => {
+        window.twoinc.text[key] = localised;
+
+        await searchReturning(count);
+
+        expect(announced()).toBe(expected.replace("%1", String(count)));
+      }
+    );
+
     test("a repeat of the same answer is announced again", async () => {
       await searchReturning(2);
       announced();
