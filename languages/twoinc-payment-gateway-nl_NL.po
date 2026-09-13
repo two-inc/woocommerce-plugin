@@ -44,7 +44,7 @@ msgstr "%s is een betaaloplossing voor B2B-aankopen online, waarmee u bij uw fav
 msgid "Buy now, receive your goods, pay your invoice later."
 msgstr "Koop nu, ontvang uw goederen, betaal uw factuur later."
 
-#: class/WC_Twoinc.php:1415
+#: class/WC_Twoinc.php:1417
 msgid "Click to find out more"
 msgstr "Klik om meer te weten te komen"
 

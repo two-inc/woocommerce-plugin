@@ -160,6 +160,26 @@
   height: unset;
 }
 
+/* Core prints the control after the method's </label> — the only seam that is
+   outside the label — so the row is laid out here to keep it beside the
+   title, with the payment box still on its own line below. */
+li.wc_payment_method:has(> .abt-twoinc) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+/* Shrinkable, so the icon keeps its place on the title's line in a narrow
+   checkout column rather than wrapping below the tile. */
+li.wc_payment_method:has(> .abt-twoinc) > label {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
+  flex-basis: 100%;
+}
+
 .abt-twoinc {
   position: relative;
   display: inline-flex;
@@ -182,8 +202,9 @@
   position: absolute;
   z-index: 100;
   bottom: 140%;
-  left: 50%;
-  transform: translateX(-50%);
+  /* Right-anchored: the control sits at the end of the method row, so a
+     centred tooltip would overhang the checkout column. */
+  right: 0;
   width: 240px;
   max-width: 80vw;
   padding: 10px;

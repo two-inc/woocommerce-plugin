@@ -85,6 +85,7 @@ function load_twoinc_classes()
     // The option name is resolved inside the callback: reading the brand here would cache it
     // before an overlay loading at this same priority has registered its own.
     add_filter('pre_update_option', ['WC_Twoinc', 'keep_stored_custom_payment_term'], 10, 3);
+    add_filter('woocommerce_locate_template', ['WC_Twoinc', 'locate_payment_method_template'], 10, 2);
 
     // Checkout AJAX endpoints (term-fee chips, term selection, sole-trader
     // availability/tokens). Registered here at plugins_loaded — NOT in the

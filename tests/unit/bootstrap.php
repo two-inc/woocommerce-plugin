@@ -11,6 +11,13 @@ declare(strict_types=1);
 error_reporting(E_ALL);
 
 define('WC_TWOINC_PLUGIN_PATH', dirname(__DIR__, 2) . '/');
+// WordPress' own guard constant — the checkout/payment-method.php override
+// bails without it.
+define('ABSPATH', dirname(__DIR__, 2) . '/');
+
+// Stands in for WooCommerce's own entry point; the template-override filter
+// only replaces a path that resolved inside it.
+define('WC_PLUGIN_FILE', '/srv/plugins/woocommerce/woocommerce.php');
 define('WC_TWOINC_PLUGIN_URL', 'https://shop.example/wp-content/plugins/tillit-payment-gateway/');
 
 // ── Tiny WP hook system ─────────────────────────────────────────────
@@ -556,6 +563,38 @@ class WC_Payment_Gateway
     // Declared rather than left dynamic: get_option() below reads it for the
     // field defaults, and WC_Twoinc::init_form_fields() assigns it.
     public $form_fields = [];
+
+    // Core's own payment-method surface, as checkout/payment-method.php
+    // consumes it.
+    public $chosen = false;
+
+    public $order_button_text = '';
+
+    public $title = '';
+
+    public $description = '';
+
+    public $has_fields = false;
+
+    public function get_title()
+    {
+        return $this->title;
+    }
+
+    public function get_description()
+    {
+        return $this->description;
+    }
+
+    public function has_fields()
+    {
+        return (bool) $this->has_fields;
+    }
+
+    public function payment_fields()
+    {
+        echo $this->get_description();
+    }
 
     // Enough for WC_Twoinc's override to call parent::is_available() safely;
     // core's cart-totals/needs_setup checks aren't reproduced (unused here).

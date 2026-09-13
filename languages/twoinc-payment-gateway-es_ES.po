@@ -87,6 +87,24 @@ msgstr "Seleccionar otro autónomo"
 msgid "Something went wrong setting up sole trader checkout. Please try again."
 msgstr "Se produjo un error al configurar el pago como autónomo. Inténtelo de nuevo."
 
+#: class/WC_Twoinc.php:1408
+#, php-format
+msgid "What is %s?"
+msgstr "¿Qué es %s?"
+
+#: class/WC_Twoinc.php:1414
+#, php-format
+msgid "%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple."
+msgstr "%s es una solución de pago para compras B2B en línea, que le permite comprar a sus comerciantes y proveedores favoritos con crédito comercial. Con %s, puede acceder al instante a crédito comercial flexible para simplificar sus compras."
+
+#: class/WC_Twoinc.php:1415
+msgid "Buy now, receive your goods, pay your invoice later."
+msgstr "Compre ahora, reciba sus productos y pague su factura más tarde."
+
+#: class/WC_Twoinc.php:1417
+msgid "Click to find out more"
+msgstr "Haga clic para saber más"
+
 #. translators: shown beside the spinner while the order-intent availability check runs.
 #: class/WC_Twoinc.php:935
 msgid "Checking availability"

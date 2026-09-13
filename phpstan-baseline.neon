@@ -83,9 +83,3 @@ parameters:
 			identifier: property.notFound
 			count: 23
 			path: tests/unit/run.php
-
-		-
-			message: '#^Constant ABSPATH not found\.$#'
-			identifier: constant.notFound
-			count: 1
-			path: tillit-payment-gateway.php

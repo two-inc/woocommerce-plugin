@@ -1389,16 +1389,18 @@ if (!class_exists('WC_Twoinc')) {
 
         private function get_abt_twoinc_html()
         {
-            $abt_url = WC_Twoinc_Brand::get('about_url');
             // A brand with no about page ('' — e.g. a partner edition whose
             // subtitle already carries its own inline "read more" link) renders nothing
-            // here, regardless of the merchant's show_abt_link setting.
+            // here, regardless of the merchant's show_abt_link setting. Any
+            // non-http(s) value is treated the same way: esc_url would blank
+            // it and leave an icon whose empty href reloads checkout.
+            $abt_url = WC_Twoinc_Helper::http_url_or_empty(WC_Twoinc_Brand::get('about_url'));
             if ($this->get_option('show_abt_link') === 'yes' && $abt_url !== '') {
                 $product_name = WC_Twoinc_Brand::get('product_name');
                 $tooltip_id = 'abt-twoinc-text-' . $this->id;
-                // aria-hidden, yet still announced: core renders this inside the
-                // method's <label for>, so untagged prose would join the radio's
-                // accessible name, while aria-describedby resolves a directly
+                // aria-hidden, yet still announced: the closed tooltip is only
+                // opacity:0, so its prose would otherwise be read as stray text
+                // in document flow, while aria-describedby resolves a directly
                 // referenced node whether or not it is hidden (ABN-554).
                 $icon = sprintf(
                     '<a class="abt-twoinc-icon" href="%s" target="_blank" rel="noopener" aria-label="%s" aria-describedby="%s"><img alt="" src="%s" /></a>',
@@ -1414,7 +1416,7 @@ if (!class_exists('WC_Twoinc')) {
                     // Plain text, not an anchor: the icon is the link.
                     __('Click to find out more', 'twoinc-payment-gateway')
                 );
-                $html = $icon . sprintf('<span class="abt-twoinc-text" role="tooltip" aria-hidden="true" id="%s">%s</span>', esc_attr($tooltip_id), $text);
+                $html = $icon . sprintf('<div class="abt-twoinc-text" role="tooltip" aria-hidden="true" id="%s">%s</div>', esc_attr($tooltip_id), $text);
             } else {
                 $html = '';
             }
@@ -3005,16 +3007,51 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * The about control, wrapped, beside the payment-method title. The
-         * twoinc_about_html filter seam is untouched and still applies inside
-         * get_abt_twoinc_html; an empty result renders no wrapper, so a brand
-         * with no about page contributes nothing at all (ABN-554).
+         * Serve this plugin's copy of checkout/payment-method.php, which
+         * renders the about control between the method's </label> and its
+         * .payment_box — core offers no other seam beside the title that is
+         * outside the label (ABN-554).
+         *
+         * A theme's own override wins: $template still points inside
+         * WooCommerce only when nothing earlier in wc_locate_template's
+         * search order matched.
+         *
+         * @param string $template
+         * @param string $template_name
+         *
+         * @return string
          */
-        private function get_about_block_html()
+        public static function locate_payment_method_template($template, $template_name)
+        {
+            if ($template_name !== 'checkout/payment-method.php') {
+                return $template;
+            }
+            if (!defined('WC_PLUGIN_FILE') || strpos((string) $template, dirname(WC_PLUGIN_FILE)) !== 0) {
+                return $template;
+            }
+            $override = WC_TWOINC_PLUGIN_PATH . 'templates/checkout/payment-method.php';
+
+            return file_exists($override) ? $override : $template;
+        }
+
+        /**
+         * The about control, wrapped, rendered between the payment method's
+         * </label> and its .payment_box by this plugin's copy of core's
+         * checkout/payment-method.php. Public because that template calls it
+         * on the gateway it was handed, and its absence on every other
+         * gateway is what scopes the override to this one (ABN-554).
+         *
+         * The twoinc_about_html filter seam is untouched and still applies
+         * inside get_abt_twoinc_html; an empty result renders no wrapper, so
+         * a brand with no about page contributes nothing at all.
+         */
+        public function get_about_block_html()
         {
             $about = $this->get_abt_twoinc_html();
 
-            return $about === '' ? '' : sprintf('<span class="abt-twoinc">%s</span>', $about);
+            // A div, not a span: the tooltip body holds <p>s, which a span's
+            // phrasing-only content model forbids.
+            return $about === '' ? '' : sprintf('<div class="abt-twoinc">%s</div>', $about);
         }
 
         /**
@@ -7121,13 +7158,7 @@ if (!class_exists('WC_Twoinc')) {
         public function get_icon()
         {
             $icon_html = '<img src="' . esc_url($this->icon) . '" alt="' . esc_attr($this->title) . '" class="mollie-gateway-icon" />';
-
-            // Appended outside the filter so a brand overlay replacing the
-            // gateway icon cannot drop the about control with it. Core renders
-            // get_icon() immediately after the title, which is the only seam
-            // beside it (ABN-554).
-            return apply_filters('woocommerce_gateway_icon', $icon_html, $this->id)
-                . $this->get_about_block_html();
+            return apply_filters('woocommerce_gateway_icon', $icon_html, $this->id);
         }
     }
 }

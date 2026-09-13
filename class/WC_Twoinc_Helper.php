@@ -1087,6 +1087,25 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * A brand-supplied URL, or '' unless it is http(s). Anything else
+         * (javascript:, data:, a bare path) would survive to markup as an
+         * empty href once esc_url blanked it, so it is refused here instead.
+         *
+         * @param mixed $url
+         *
+         * @return string
+         */
+        public static function http_url_or_empty($url)
+        {
+            if (!is_string($url)) {
+                return '';
+            }
+            $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+
+            return in_array($scheme, ['http', 'https'], true) ? $url : '';
+        }
+
+        /**
          * Full-form locale (e.g. en_US) — sent as the invoice PDF `lang`
          * param and the Accept-Language header, both matching `lang`
          * literally against an allow-list (underscore, not hyphen).
