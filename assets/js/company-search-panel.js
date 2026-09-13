@@ -237,6 +237,14 @@
         this._observedSelectors = {};
         /** Suppresses the field's own open-on-focus while the panel closes itself. */
         this._closing = false;
+        /** Suppresses it for a whole signup flight; see `holdFieldOpener()`. */
+        this._openerHeld = false;
+        /** A window-level focus is in hand, so the field focus beside it is that window's. */
+        this._openerReturnPending = false;
+        /** The `focus` half of that pair seen, waiting on the `focusin` that ends it. */
+        this._openerReturnFocusSeen = false;
+        /** The same half of a pair with no window focus beside it: the buyer arriving by Tab. */
+        this._openerArrivalFocusSeen = false;
         /** `observe` cannot be disconnected, so its callbacks read this instead. */
         this._destroyed = false;
         /** Listeners this panel owns, so teardown removes exactly its own. */
@@ -742,6 +750,15 @@
         const self = this;
         this._unbind(field);
 
+        // A press or a click on the field is the buyer asking for the panel, whatever
+        // else is in flight (ABN-554).
+        this._bindEvent(field, 'pointerdown', function () {
+            if (!self._closing) self.holdFieldOpener(false);
+        });
+        this._bindEvent(field, 'click', function () {
+            if (!self._closing) self.holdFieldOpener(false);
+        });
+
         this._bindEvent(field, 'mousedown', function (event) {
             if (self._closing) return;
             // The default action of this mousedown is to focus the field
@@ -754,10 +771,28 @@
         });
         this._bindEvent(field, 'focus', function () {
             if (self._closing) return;
+            if (self._openerHeld) {
+                // A pair with a window focus beside it is that window's return; one without
+                // is the buyer arriving by Tab. The `focusin` below acts on either (ABN-554).
+                if (self._openerReturnPending) self._openerReturnFocusSeen = true;
+                else self._openerArrivalFocusSeen = true;
+                return;
+            }
+            self.open();
+        });
+        this._bindEvent(field, 'focusin', function () {
+            if (!self._openerHeld) return;
+            if (self._openerReturnFocusSeen) {
+                self.holdFieldOpener(false);
+                return;
+            }
+            if (!self._openerArrivalFocusSeen) return;
+            self.holdFieldOpener(false);
             self.open();
         });
         this._bindEvent(field, 'keydown', function (event) {
             if (event.ctrlKey || event.metaKey || event.altKey) return;
+            self.holdFieldOpener(false);
             // Bound here as well: the panel's own Escape sits on a node this
             // field is only a sibling of, and a mode change parks focus here
             // (ABN-554).
@@ -961,6 +996,35 @@
         this._activeIndex = -1;
         this._syncExpanded();
         if (!options || options.returnFocus !== false) this.restoreFieldFocus();
+    };
+
+    /**
+     * A browser re-fires `focus` on the control the opener window still holds
+     * when that window regains focus, and nothing read at that moment tells it
+     * from the buyer (ABN-554).
+     *
+     * The return is bound to the WINDOW's focus, not to the popup's close —
+     * measured a second to a minute after it, however long the buyer stays away
+     * — so the hold is unbounded in time and ends on the pair itself.
+     *
+     * @param {boolean} held
+     */
+    CompanySearchPanel.prototype.holdFieldOpener = function (held) {
+        if (!held && !this._openerHeld) return;
+        this._openerHeld = !!held;
+        this._openerReturnPending = false;
+        this._openerReturnFocusSeen = false;
+        this._openerArrivalFocusSeen = false;
+        const view = this._field && this._field.ownerDocument && this._field.ownerDocument.defaultView;
+        if (!view) return;
+        this._unbind(view);
+        if (!this._openerHeld) return;
+        const self = this;
+        this._bindEvent(view, 'focus', function (event) {
+            // The window's own focus, never a control's reaching it.
+            if (event.target !== view) return;
+            self._openerReturnPending = true;
+        });
     };
 
     /**

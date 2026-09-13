@@ -337,10 +337,10 @@ Launchers are not exempt from rule two — a launch blurs whatever holds focus f
 A popover left on screen for the flight around a document focusing nothing reaches
 no keystroke at all, so the launch parks that focus on the company field one tick
 later, through the panel, which holds off the field's own opener (ABN-554). That one
-control is exempt from the rules above until focus leaves it: a window return re-fires
-`focusin` there with no `focusout` before it, and that is not the buyer arriving. The
-settle drops the park before it decides where focus belongs, so what it reads is the
-unplaced focus the launch actually left.
+control is exempt from the rules above for the whole flight: the window losing focus
+to the popup blurs the field, and a buyer clicking back into the checkout would
+otherwise end their own enrolment. The settle drops the park before it decides where
+focus belongs, so what it reads is the unplaced focus the launch actually left.
 
 **Reaching another role's Sole trader chip by FOCUS closes this popup and launches
 one for that chip** — the exemption is gated on the chip being inside this role's own

@@ -2814,6 +2814,30 @@ describe("TWO-40 — sole-trader flow", () => {
         jest.useRealTimers();
       });
 
+      /** What a browser sends the checkout window when the popup takes focus off it. */
+      function windowBlursToPopup(node) {
+        node.dispatchEvent(new window.FocusEvent("blur"));
+        node.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
+      }
+
+      test.each([
+        ["the parked field", 0, "the buyer came back to an enrolment they have not finished"],
+        ["a control outside the capture", 1, "the buyer left capture, so the signup goes with it"]
+      ])(
+        "after the window blurs to the popup, focus back on %s closes it %d time(s) — %s",
+        (arriveOn, closes) => {
+          const win = launchFromChips();
+          const field = ctx.helper.panel.getField()[0];
+
+          windowBlursToPopup(field);
+          const target = arriveOn === "the parked field" ? field : outsideControl();
+          target.dispatchEvent(new window.FocusEvent("focusin", { bubbles: true }));
+
+          expect(win.close).toHaveBeenCalledTimes(closes);
+          jest.useRealTimers();
+        }
+      );
+
       /** A hand-closed re-signup's record stays until its poll notices; the re-click inside that window is a fresh launch, not a stacked one. */
       test("re-clicking Select a different sole trader inside a hand-closed re-signup's poll window launches again", () => {
         const first = launchFromChips({ autoselect: false });
@@ -3504,7 +3528,7 @@ describe("TWO-40 — sole-trader flow", () => {
       });
 
       /** The window and its visibility are deliberately not listened to at all (TWO-25658). */
-      test("binds the focus listeners and nothing on the window", () => {
+      test("binds the focusin listener and nothing on the window", () => {
         soleTrader.unbindFocusinListener();
         const onWindow = jest.spyOn(window, "addEventListener");
         const onDocument = jest.spyOn(document, "addEventListener");
@@ -3512,7 +3536,7 @@ describe("TWO-40 — sole-trader flow", () => {
         soleTrader.bindFocusinListener();
 
         expect(onWindow).not.toHaveBeenCalled();
-        expect(onDocument.mock.calls.map((call) => call[0])).toEqual(["focusin", "focusout"]);
+        expect(onDocument.mock.calls.map((call) => call[0])).toEqual(["focusin"]);
       });
 
       /** Tab to the chip then Enter or Space: the chip's activation raises the popup, no mousedown and no `focusin` raise. */
