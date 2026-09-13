@@ -742,8 +742,8 @@ msgid "Subtitle"
 msgstr "Underrubrik"
 
 #: class/WC_Twoinc.php:4561
-msgid "Optional free-text subtitle shown directly under the payment method title at checkout. Leave blank to show the default tagline. WooCommerce has no per-language settings model like some other platforms — use a string-translation plugin (e.g. WPML, Loco Translate) if you need this to vary by language."
-msgstr "Valfri fritextunderrubrik som visas direkt under betalningsmetodens titel i kassan. Lämna tomt för att visa standardtexten. WooCommerce har ingen inställningsmodell per språk som vissa andra plattformar — använd ett tillägg för strängöversättning (t.ex. WPML, Loco Translate) om detta behöver variera med språket."
+msgid "Optional subtitle shown beneath the title at checkout. Leave blank to use the default."
+msgstr "Valfri underrubrik som visas under titeln i kassan. Lämna tomt för att använda standardtexten."
 
 #: class/WC_Twoinc.php:4569
 #, php-format

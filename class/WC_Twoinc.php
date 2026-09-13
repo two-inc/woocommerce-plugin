@@ -2980,7 +2980,7 @@ if (!class_exists('WC_Twoinc')) {
             if ($custom_subtitle !== '') {
                 return sprintf(
                     '<div class="twoinc-payment-subtitle">%s</div>',
-                    wp_kses_post($custom_subtitle)
+                    WC_Twoinc_Helper::escape_anchor_only_html($custom_subtitle)
                 );
             }
 
@@ -3001,11 +3001,12 @@ if (!class_exists('WC_Twoinc')) {
                 '</a>'
             );
 
-            // wp_kses_post, not esc_html: the tagline carries an inline link
-            // (the brand FAQ "read more") — esc_html stripped it.
+            // The subtitle is emitted unescaped by its caller, so the
+            // anchor-only escaper is the whole trust boundary on it: the
+            // brand FAQ "read more" link survives and nothing else does.
             return sprintf(
                 '<div class="twoinc-payment-subtitle">%s</div>',
-                wp_kses_post($subtitle)
+                WC_Twoinc_Helper::escape_anchor_only_html($subtitle)
             );
         }
 
@@ -5583,7 +5584,7 @@ if (!class_exists('WC_Twoinc')) {
                 'payment_subtitle' => [
                     'title'       => __('Subtitle', 'twoinc-payment-gateway'),
                     'type'        => 'text',
-                    'description' => __('Optional free-text subtitle shown directly under the payment method title at checkout. Leave blank to show the default tagline. WooCommerce has no per-language settings model like some other platforms — use a string-translation plugin (e.g. WPML, Loco Translate) if you need this to vary by language.', 'twoinc-payment-gateway'),
+                    'description' => __('Optional subtitle shown beneath the title at checkout. Leave blank to use the default.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'default'     => ''
                 ],

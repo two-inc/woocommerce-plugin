@@ -742,8 +742,8 @@ msgid "Subtitle"
 msgstr "Undertittel"
 
 #: class/WC_Twoinc.php:4561
-msgid "Optional free-text subtitle shown directly under the payment method title at checkout. Leave blank to show the default tagline. WooCommerce has no per-language settings model like some other platforms — use a string-translation plugin (e.g. WPML, Loco Translate) if you need this to vary by language."
-msgstr "Valgfri fritekst-undertittel som vises rett under tittelen på betalingsmåten i kassen. La stå tom for å vise standardteksten. WooCommerce har ingen innstillingsmodell per språk slik noen andre plattformer har — bruk en tilleggsmodul for strengoversettelse (f.eks. WPML, Loco Translate) hvis dette må variere med språket."
+msgid "Optional subtitle shown beneath the title at checkout. Leave blank to use the default."
+msgstr "Valgfri undertittel som vises under tittelen i kassen. La feltet stå tomt for å bruke standardteksten."
 
 #: class/WC_Twoinc.php:4569
 #, php-format
