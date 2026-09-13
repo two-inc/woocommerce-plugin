@@ -966,10 +966,9 @@
     };
 
     /**
-     * Hold the field's FOCUS opener off across a whole signup flight. A browser
-     * re-fires `focus` on the control the opener window still holds when a
-     * popup closes, and nothing read at that moment tells it from the buyer
-     * (ABN-554). The pointer and keyboard openers are untouched.
+     * A browser re-fires `focus` on the control the opener window still holds
+     * when a popup closes, and nothing read at that moment tells it from the
+     * buyer (ABN-554).
      *
      * @param {boolean} held
      */
