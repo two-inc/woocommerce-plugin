@@ -307,8 +307,12 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // The clearing sits BELOW the readiness guard on purpose. A buyer who
       // has not finished filling the form has not asked a new question, so
       // whatever is on screen is still the answer to the last one they did.
+      //
+      // Incomplete here means a missing NAME, not a missing number: a missing
+      // organisation number is a state Two can never be paid in, and
+      // `getApproval()` answers that one with its own notice (ABN-554).
       showStaleDecline();
-      instance.customerCompany.organization_number = "";
+      instance.customerCompany.company_name = "";
 
       instance.getApproval();
 

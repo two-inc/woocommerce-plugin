@@ -80,6 +80,11 @@ msgstr "Telefoonnummer is ongeldig."
 msgid "We could not complete that just now. Please wait a moment and try again."
 msgstr "Dit kon niet worden voltooid. Probeer het zo weer opnieuw."
 
+#: class/WC_Twoinc.php:1737
+#, php-format
+msgid "To pay with %s, search for your company name and select it from the results."
+msgstr "Om met %s te betalen, zoek je bedrijfsnaam op en selecteer deze uit de resultaten."
+
 #: class/WC_Twoinc.php:1168 class/WC_Twoinc.php:1187 class/WC_Twoinc.php:2939
 #: class/WC_Twoinc_Checkout.php:437
 #, php-format

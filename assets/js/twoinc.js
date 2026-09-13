@@ -2451,6 +2451,19 @@ let twoincDomHelper = {
     twoincDomHelper.setPaymentMethodSelectable(true);
   },
   /**
+   * Take the term chips off screen while Two cannot be paid with at all.
+   *
+   * Its own class rather than the `hidden` one `twoincTermChips.refresh()`
+   * owns: the two conditions are independent, and sharing a class would let
+   * either one un-hide what the other is hiding.
+   */
+  setTermChipsWithheld: function (withheld) {
+    jQuery(".twoinc-term-chips, .twoinc-term-chips-heading").toggleClass(
+      "twoinc-withheld",
+      withheld
+    );
+  },
+  /**
    * Bumped by every pay-box paint. A deferred retire captures it at paint time
    * and compares before hiding, so it retires only its own notice — the box
    * being visible is not proof it is still the one that was painted, since a
@@ -2459,13 +2472,29 @@ let twoincDomHelper = {
   payBoxPaintSeq: 0,
   togglePaySubtitleDesc: function (action, errSelector, companyLabel) {
     twoincDomHelper.payBoxPaintSeq += 1;
+    // Read before the blanket hide below, which erases the distinction: only a
+    // NEW company-required state re-announces (see the `no-company` branch).
+    const noCompanyWasShown = !jQuery(".twoinc-pay-box.twoinc-err-no-company").hasClass("hidden");
     jQuery(".twoinc-pay-box").addClass("hidden");
+    // A term the buyer cannot be quoted on is not an offer (ABN-554).
+    twoincDomHelper.setTermChipsWithheld(action === "no-company");
     // TWO-25657: `.twoinc-busy-retry` is the shop's own limiter, not a verdict.
     twoincDomHelper.setPaymentMethodSelectable(
       !(action === "errored" && errSelector !== ".twoinc-busy-retry")
     );
-    if (["checking-intent", "intent-approved", "errored"].includes(action)) {
-      if (action === "checking-intent") {
+    if (["checking-intent", "intent-approved", "errored", "no-company"].includes(action)) {
+      if (action === "no-company") {
+        let $noCompany = jQuery(".twoinc-pay-box.twoinc-err-no-company");
+        if ($noCompany.data("twoincDefaultText") === undefined) {
+          $noCompany.data("twoincDefaultText", $noCompany.text());
+        }
+        // Emptied while still hidden, then filled once revealed, so the live
+        // region sees a real content change. A repeat paint skips the empty and
+        // `setPayBoxText` finds the text unchanged, so nothing re-announces.
+        if (!noCompanyWasShown) $noCompany.empty();
+        $noCompany.removeClass("hidden");
+        twoincDomHelper.setPayBoxText($noCompany, $noCompany.data("twoincDefaultText"));
+      } else if (action === "checking-intent") {
         // Suppressed by the brand => the loader div is absent, so this is a
         // no-op on an empty jQuery set.
         jQuery(".twoinc-pay-box.twoinc-loader").removeClass("hidden");
@@ -5367,6 +5396,25 @@ class Twoinc {
    * Check the company approval status by creating an order intent
    */
   getApproval() {
+    // Order creation refuses an empty company number outright (the same guard
+    // `process_payment` applies), so a checkout holding none can never pay with
+    // Two. Say so here rather than letting the buyer find out at submit —
+    // manual entry captures a name and no number, so it reaches submit looking
+    // complete (ABN-554).
+    if (!twoincUtilHelper.blankToEmpty(this.customerCompany.organization_number)) {
+      if (
+        this.orderIntentCheck.inFlightSeq !== null ||
+        this.orderIntentCheck.renderInterval !== null
+      ) {
+        this.abandonOrderIntentCheck();
+      }
+      twoincDomHelper.togglePaySubtitleDesc("no-company");
+      return;
+    }
+    // Not left to `togglePaySubtitleDesc()`: the early return below reaches no
+    // paint at all, and would strand the chips withheld.
+    twoincDomHelper.setTermChipsWithheld(false);
+
     if (!this.isReadyApprovalCheck()) {
       // A form that has become incomplete cannot answer the question a
       // request in flight is asking. Orphan it, and take the loading state

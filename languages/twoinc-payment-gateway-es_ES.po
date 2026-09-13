@@ -90,6 +90,11 @@ msgstr "Comprobando disponibilidad"
 msgid "We could not complete that just now. Please wait a moment and try again."
 msgstr "No se pudo completar esto en este momento. Espere un momento y vuelva a intentarlo."
 
+#: class/WC_Twoinc.php:1737
+#, php-format
+msgid "To pay with %s, search for your company name and select it from the results."
+msgstr "Para pagar con %s, busca el nombre de tu empresa y selecciónalo entre los resultados."
+
 #: class/WC_Twoinc.php:4042
 #, php-format
 msgid "Please select your company before paying with %s."
