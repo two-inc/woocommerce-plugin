@@ -167,6 +167,27 @@ describe("the company-required notice", () => {
     expect(shown(NOTICE)).toBe(true);
   });
 
+  test.each([
+    ["helper", "the billing control is deciding"],
+    ["shippingHelper", "the shipping control is deciding"]
+  ])("no notice while %s", (key, description) => {
+    // The mode mints its own organisation number, so the seconds between the
+    // chip and the mint are not a checkout the buyer has to fix — and telling
+    // a sole trader to search the company registry is the wrong instruction
+    // anyway.
+    captureCompany("");
+    const control = ctx[key];
+    const deciding = jest.spyOn(control.soleTrader, "isDeciding").mockReturnValue(true);
+    try {
+      instance.getApproval();
+
+      expect(shown(NOTICE)).toBe(false);
+      expect(chipsWithheld()).toBe(false);
+    } finally {
+      deciding.mockRestore();
+    }
+  });
+
   test("clearing the intent verdicts leaves the notice standing", () => {
     // Typing a company name fires `#billing_company`'s change handler, which
     // clears the verdicts and arms no check of its own — so a notice this

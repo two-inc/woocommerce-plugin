@@ -5415,7 +5415,17 @@ class Twoinc {
     // Two. Say so here rather than letting the buyer find out at submit —
     // manual entry captures a name and no number, so it reaches submit looking
     // complete (ABN-554).
-    if (!twoincUtilHelper.blankToEmpty(this.customerCompany.organization_number)) {
+    // The sole-trader flow mints the number itself, so a checkout mid-flow is
+    // not one with no company — it is one a beat away from having one.
+    const soleTraderPending =
+      twoincSoleTraderLaunching() ||
+      twoincCompanySearchControls.some(function (control) {
+        return control.soleTrader.isDeciding();
+      });
+    if (
+      !twoincUtilHelper.blankToEmpty(this.customerCompany.organization_number) &&
+      !soleTraderPending
+    ) {
       if (
         this.orderIntentCheck.inFlightSeq !== null ||
         this.orderIntentCheck.renderInterval !== null
