@@ -64,6 +64,14 @@
     const CHIPS_CLASS = 'two-company-mode-chips';
     const CHIP_CLASS = 'two-company-mode-chip';
     const CHIP_SELECTED_CLASS = 'two-company-mode-chip--selected';
+    const LIVE_CLASS = 'two-company-dropdown__status';
+
+    /** Off-screen without `display: none`, which takes a region out of the tree. */
+    const LIVE_STYLE = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;'
+        + 'overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0;';
+
+    /** Matches the reference panel: enough for a keystroke burst to settle first. */
+    const LIVE_DELAY_MS = 100;
 
     // This plugin's own, because a bare `.hidden` is a theme's to define or not
     // — Luma ships one, several one-page checkouts do not, and a chip that
@@ -241,7 +249,71 @@
         this._tabStopHeldOn = null;
         /** @see setDisabled */
         this._disabled = false;
+        /** @see _announce */
+        this._live = null;
+        this._liveTimerId = null;
     }
+
+    // ----------------------------------------------------------- announcing
+
+    /**
+     * The panel's live region, built on first use and parked on `<body>`.
+     *
+     * Outside the panel because the panel carries `hidden` between opens, and a
+     * live region inside a hidden subtree is not in the accessibility tree to
+     * announce from. Styled inline rather than by class: the two checkouts that
+     * mount this file ship separate stylesheets, and a visually-hidden rule
+     * present in only one of them would leave the other reading the text on
+     * screen.
+     *
+     * @returns {Element} the region
+     */
+    CompanySearchPanel.prototype._liveRegion = function () {
+        if (this._live && this._live.parentNode) return this._live;
+        const region = document.createElement('div');
+        region.className = LIVE_CLASS;
+        region.setAttribute('role', 'status');
+        region.setAttribute('aria-live', 'assertive');
+        region.setAttribute('aria-relevant', 'additions');
+        region.style.cssText = LIVE_STYLE;
+        document.body.appendChild(region);
+        this._live = region;
+        return region;
+    };
+
+    /**
+     * Say `text` to assistive technology.
+     *
+     * Written as a fresh child rather than over the existing text, so the same
+     * sentence twice running is still a new addition and is announced again.
+     * Coalesced on one timer because a search paints rows, then a keyboard
+     * buyer moves through them: without it the count and the first row race.
+     *
+     * @param {string} text
+     */
+    CompanySearchPanel.prototype._announce = function (text) {
+        if (this._destroyed || !text) return;
+        const region = this._liveRegion();
+        clearTimeout(this._liveTimerId);
+        this._liveTimerId = setTimeout(function () {
+            const line = document.createElement('div');
+            line.textContent = text;
+            region.innerHTML = '';
+            region.appendChild(line);
+        }, LIVE_DELAY_MS);
+    };
+
+    /**
+     * @param {number} count rows the search returned, at least one
+     * @returns {string} the sentence naming the count and the keys that reach it
+     */
+    CompanySearchPanel.prototype._resultsAnnouncement = function (count) {
+        if (count === 1) {
+            return this.translate('1 result is available, use up and down arrow keys to navigate.');
+        }
+        return this.translate('%1 results are available, use up and down arrow keys to navigate.')
+            .replace('%1', String(count));
+    };
 
     // ------------------------------------------------------------- DOM helpers
 
@@ -504,7 +576,7 @@
         query.setAttribute('aria-label', this.translate('Search for company'));
         query.setAttribute('role', 'combobox');
         query.setAttribute('aria-autocomplete', 'list');
-        query.setAttribute('aria-expanded', 'true');
+        query.setAttribute('aria-expanded', this._open ? 'true' : 'false');
         query.setAttribute('aria-controls', `two-company-results-${this._id}`);
         this._query = query;
 
@@ -786,6 +858,19 @@
     };
 
     /**
+     * Both comboboxes say whether the list is showing.
+     *
+     * The query field is inside the panel and carried a hardcoded `true`, so
+     * while the panel was `hidden` it claimed an expanded list that was not on
+     * screen at all (ABN-554).
+     */
+    CompanySearchPanel.prototype._syncExpanded = function () {
+        const expanded = this._open ? 'true' : 'false';
+        if (this._field) this._field.setAttribute('aria-expanded', expanded);
+        if (this._query) this._query.setAttribute('aria-expanded', expanded);
+    };
+
+    /**
      * Open the panel and put the caret in the query field.
      *
      * An ALREADY-open panel still re-syncs and re-focuses rather than
@@ -816,7 +901,7 @@
             // already carries it, and both says the same thing twice.
             this._renderMessage('');
         }
-        if (this._field) this._field.setAttribute('aria-expanded', 'true');
+        this._syncExpanded();
         this._holdFieldTabStop();
         this._focusOnOpen();
     };
@@ -874,7 +959,7 @@
         this._panel.setAttribute('hidden', 'hidden');
         this._items = [];
         this._activeIndex = -1;
-        if (this._field) this._field.setAttribute('aria-expanded', 'false');
+        this._syncExpanded();
         if (!options || options.returnFocus !== false) this.restoreFieldFocus();
     };
 
@@ -1029,6 +1114,7 @@
             return;
         }
         this._results.innerHTML = '';
+        this._announce(this._resultsAnnouncement(this._items.length));
         this._items.forEach(function (item, index) {
             const row = document.createElement('div');
             row.className = ROW_CLASS;
@@ -1061,6 +1147,7 @@
         if (modifier) message.classList.add(modifier);
         this._results.innerHTML = '';
         this._results.appendChild(message);
+        this._announce(text);
     };
 
     /**
@@ -1078,6 +1165,7 @@
         active.classList.add(ROW_ACTIVE_CLASS);
         active.setAttribute('aria-selected', 'true');
         this._query.setAttribute('aria-activedescendant', active.id || '');
+        this._announce(active.textContent);
         if (active.scrollIntoView) active.scrollIntoView({ block: 'nearest' });
     };
 
@@ -1383,6 +1471,9 @@
      */
     CompanySearchPanel.prototype.destroy = function () {
         this._destroyed = true;
+        clearTimeout(this._liveTimerId);
+        if (this._live && this._live.parentNode) this._live.parentNode.removeChild(this._live);
+        this._live = null;
         this._cancelFocusOutClose();
         this._cancelPendingSearch();
         this.search.abortActiveRequest(this._token);
