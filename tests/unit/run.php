@@ -15289,6 +15289,7 @@ final class AnchorOnlyHtmlSpec
             'testAnchorOnlyEscaperAllowsOnlyTheLinkThisPluginEmits',
             'testEscapingIsIdempotent',
             'testAnEmptyAttributeValueRaisesNoWarning',
+            'testRendersUnchangedIgnoresEntityEncodingOnly',
         ];
         foreach ($tests as $test) {
             self::$test();
@@ -15438,6 +15439,44 @@ final class AnchorOnlyHtmlSpec
     }
 
     /**
+     * The admin save gate (ABN-554). A value is rejected exactly when escaping
+     * would change what the buyer sees - entity-encoding plain text is not a
+     * change, so apostrophes and ampersands are not markup.
+     */
+    private static function testRendersUnchangedIgnoresEntityEncodingOnly(): void
+    {
+        $url = 'https://faq.example.test/x';
+
+        // [input, renders unchanged, why].
+        $cases = [
+            ['', true, 'an empty subtitle is nothing to strip'],
+            ['Pay later, interest free', true, 'plain copy renders verbatim'],
+            ["Don't wait & save", true, 'an apostrophe and an ampersand are text the escaper only encodes'],
+            ['2 < 3', true, 'a stray < is encoded as text, not treated as markup'],
+            ['Tea &amp; coffee', true, 'copy that already carries an entity is left alone'],
+            ['<a href="' . $url . '">read more</a>', true, 'the anchor the tile allows survives verbatim'],
+            [
+                '<a href="' . $url . '" target="_blank" rel="noopener">read more</a>',
+                true,
+                'so does the new-tab form this plugin itself emits',
+            ],
+            ['<b>Pay</b> later', false, 'a dropped tag changes what the buyer reads'],
+            ['<a href="javascript:alert(1)">read more</a>', false, 'a link whose target is refused loses its anchor'],
+            [
+                '<a href="' . $url . '" target="_blank">read more</a>',
+                false,
+                'a new-tab link is rewritten to carry noopener, so it is not what was typed',
+            ],
+            ['<a href="' . $url . '" onclick="steal()">read more</a>', false, 'a dropped attribute is a change too'],
+            ["safe\x00ish", false, 'a control character is removed'],
+        ];
+
+        foreach ($cases as list($input, $expected, $description)) {
+            TinyAssert::same($expected, WC_Twoinc_Helper::renders_unchanged($input), $description);
+        }
+    }
+
+    /**
      * An empty quoted value leaves its capture group absent, and the resulting
      * notice would be written into the middle of the checkout markup on a shop
      * with display_errors on.
@@ -15460,6 +15499,139 @@ final class AnchorOnlyHtmlSpec
     }
 }
 
+/**
+ * The subtitle is emitted through the anchor-only escaper, so copy that escaper
+ * drops used to vanish at checkout with no merchant feedback. The save refuses
+ * it instead (ABN-554).
+ */
+final class SubtitleSaveValidationSpec
+{
+    private const REJECTION = 'Subtitle accepts plain text and a single link only; "%s" would be shown as "%s".';
+
+    public static function runAll(): void
+    {
+        $tests = [
+            'testTheValidatorAcceptsOnlyWhatTheTileRendersUnchanged',
+            'testARejectedSubtitleKeepsTheStoredValueAndReportsWhy',
+            'testTheRejectionIsTranslated',
+        ];
+        foreach ($tests as $test) {
+            self::$test();
+            print("PASS SubtitleSaveValidationSpec::$test\n");
+        }
+    }
+
+    private static function gateway(): WC_Twoinc
+    {
+        return new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+    }
+
+    private static function testTheValidatorAcceptsOnlyWhatTheTileRendersUnchanged(): void
+    {
+        $gateway = self::gateway();
+
+        // [posted value, accepted value or null when refused, why].
+        $cases = [
+            ['Pay later, interest free', 'Pay later, interest free', 'plain copy saves unchanged'],
+            ['  Pay later  ', 'Pay later', 'surrounding whitespace is trimmed, as every other text field is'],
+            ["Don't wait & save", "Don't wait & save", 'an apostrophe and an ampersand are plain text, not markup'],
+            [
+                '<a href="https://faq.example.test/x">read more</a>',
+                '<a href="https://faq.example.test/x">read more</a>',
+                'the one link the tile allows saves unchanged',
+            ],
+            ['<b>Pay</b> later', null, 'a dropped tag is refused'],
+            ['<a href="javascript:alert(1)">go</a>', null, 'so is a link the escaper would strip of its anchor'],
+        ];
+
+        foreach ($cases as list($posted, $expected, $description)) {
+            $refusal = null;
+            $actual = null;
+            try {
+                $actual = $gateway->validate_payment_subtitle_field('payment_subtitle', $posted);
+            } catch (Exception $e) {
+                $refusal = $e->getMessage();
+            }
+
+            if ($expected === null) {
+                TinyAssert::same(
+                    sprintf(
+                        self::REJECTION,
+                        esc_html($posted),
+                        esc_html(WC_Twoinc_Helper::escape_anchor_only_html($posted))
+                    ),
+                    $refusal,
+                    $description
+                );
+                continue;
+            }
+
+            TinyAssert::same(null, $refusal, $description . ' - must not be refused');
+            TinyAssert::same($expected, $actual, $description);
+        }
+    }
+
+    private static function testARejectedSubtitleKeepsTheStoredValueAndReportsWhy(): void
+    {
+        $gateway = self::gateway();
+        $gateway->init_form_fields();
+        $key = $gateway->get_option_key();
+        $GLOBALS['__twoinc_test_options'][$key] = ['payment_subtitle' => 'Pay later, interest free'];
+        $gateway->test_post_data = [
+            $gateway->get_field_key('payment_subtitle') => '<b>Pay</b> later',
+            $gateway->get_field_key('title') => 'Pay by invoice',
+        ];
+        $_POST = [];
+        $GLOBALS['__twoinc_test_admin_errors'] = [];
+
+        try {
+            $gateway->process_admin_options();
+
+            TinyAssert::same(
+                'Pay later, interest free',
+                $GLOBALS['__twoinc_test_options'][$key]['payment_subtitle'],
+                'the refused subtitle must leave the stored one standing'
+            );
+            TinyAssert::same(
+                [sprintf(self::REJECTION, esc_html('<b>Pay</b> later'), 'Pay later')],
+                $GLOBALS['__twoinc_test_admin_errors'],
+                'the merchant must be told why, on the settings page core would otherwise print a success notice on'
+            );
+        } finally {
+            unset($GLOBALS['__twoinc_test_options'][$key]);
+            $_POST = [];
+        }
+    }
+
+    /** A refusal the merchant cannot read is no better than the silent strip it replaces. */
+    private static function testTheRejectionIsTranslated(): void
+    {
+        $languages = dirname(__DIR__, 2) . '/languages/';
+        $msgid = 'Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\".';
+
+        TinyAssert::true(
+            strpos((string) file_get_contents($languages . 'twoinc-payment-gateway.pot'), $msgid) !== false,
+            'the .pot is missing the subtitle rejection - regenerate it'
+        );
+        foreach (['nb_NO', 'nl_NL', 'sv_SE'] as $locale) {
+            TinyAssert::true(
+                strpos((string) file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.po'), $msgid) !== false,
+                "the $locale catalogue is missing the subtitle rejection"
+            );
+            TinyAssert::true(
+                strpos((string) file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.mo'), 'Subtitle accepts plain text') !== false,
+                "the compiled $locale catalogue predates the subtitle rejection - recompile with msgfmt"
+            );
+        }
+    }
+}
+
 BrandConfigSpec::runAll();
 AnchorOnlyHtmlSpec::runAll();
+SubtitleSaveValidationSpec::runAll();
 print("All tests passed.\n");

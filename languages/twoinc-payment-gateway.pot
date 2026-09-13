@@ -975,7 +975,12 @@ msgid "Subtitle"
 msgstr ""
 
 #: class/WC_Twoinc.php:5537
-msgid "Optional subtitle shown beneath the title at checkout. Leave blank to use the default."
+msgid "Optional subtitle shown beneath the title at checkout."
+msgstr ""
+
+#: class/WC_Twoinc.php:4851
+#, php-format
+msgid "Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\"."
 msgstr ""
 
 #: class/WC_Twoinc.php:5545

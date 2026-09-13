@@ -4836,6 +4836,34 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Refuse a subtitle the checkout tile would not render as typed.
+         *
+         * The tile emits it through WC_Twoinc_Helper::escape_anchor_only_html,
+         * so anything that escaper drops used to disappear with no merchant
+         * feedback (ABN-554).
+         *
+         * @param string $key
+         * @param string $value
+         *
+         * @return string
+         * @throws Exception
+         */
+        public function validate_payment_subtitle_field($key, $value)
+        {
+            $value = trim(stripslashes((string) $value));
+            if (!WC_Twoinc_Helper::renders_unchanged($value)) {
+                throw new Exception(sprintf(
+                    /* translators: 1: the subtitle as typed, 2: what the checkout tile would render */
+                    __('Subtitle accepts plain text and a single link only; "%1$s" would be shown as "%2$s".', 'twoinc-payment-gateway'),
+                    esc_html($value),
+                    esc_html(WC_Twoinc_Helper::escape_anchor_only_html($value))
+                ));
+            }
+
+            return $value;
+        }
+
+        /**
          * Validate the merchant minimum on settings save: numeric and
          * non-negative always; strictly above the platform minimum when
          * the brand declares one IN THE STORE CURRENCY. A platform
@@ -5587,7 +5615,7 @@ if (!class_exists('WC_Twoinc')) {
                 'payment_subtitle' => [
                     'title'       => __('Subtitle', 'twoinc-payment-gateway'),
                     'type'        => 'text',
-                    'description' => __('Optional subtitle shown beneath the title at checkout. Leave blank to use the default.', 'twoinc-payment-gateway'),
+                    'description' => __('Optional subtitle shown beneath the title at checkout.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'default'     => ''
                 ],

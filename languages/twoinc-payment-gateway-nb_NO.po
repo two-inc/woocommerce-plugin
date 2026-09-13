@@ -742,8 +742,13 @@ msgid "Subtitle"
 msgstr "Undertittel"
 
 #: class/WC_Twoinc.php:4561
-msgid "Optional subtitle shown beneath the title at checkout. Leave blank to use the default."
-msgstr "Valgfri undertittel som vises under tittelen i kassen. La feltet stå tomt for å bruke standardteksten."
+msgid "Optional subtitle shown beneath the title at checkout."
+msgstr "Valgfri undertittel som vises under tittelen i kassen."
+
+#: class/WC_Twoinc.php:4851
+#, php-format
+msgid "Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\"."
+msgstr "Undertittelen godtar bare ren tekst og én lenke; \"%1$s\" vises som \"%2$s\"."
 
 #: class/WC_Twoinc.php:4569
 #, php-format

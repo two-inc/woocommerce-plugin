@@ -742,8 +742,13 @@ msgid "Subtitle"
 msgstr "Underrubrik"
 
 #: class/WC_Twoinc.php:4561
-msgid "Optional subtitle shown beneath the title at checkout. Leave blank to use the default."
-msgstr "Valfri underrubrik som visas under titeln i kassan. Lämna tomt för att använda standardtexten."
+msgid "Optional subtitle shown beneath the title at checkout."
+msgstr "Valfri underrubrik som visas under titeln i kassan."
+
+#: class/WC_Twoinc.php:4851
+#, php-format
+msgid "Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\"."
+msgstr "Underrubriken accepterar endast oformaterad text och en länk; \"%1$s\" visas som \"%2$s\"."
 
 #: class/WC_Twoinc.php:4569
 #, php-format
