@@ -246,6 +246,9 @@ final class BrandConfigSpec
             'testClientVersionSuffixesShortShaWhenStamped',
             'testClientVersionIsQueryEncodedAsPlus',
             'testPaymentBoxOrdersTaglineChipsThenSoleTrader',
+            'testAboutControlRendersBesideTheTitleNotInThePaymentBox',
+            'testAboutIconIsAnAnchorWrappedIcon',
+            'testAboutControlIsWithheldWholeOrNotAtAll',
             'testTermChipGroupIsNamedByANonLabelHeading',
             'testPaymentBoxRendersCompanySearchTileSlotBetweenSoleTraderAndIntentMessage',
             'testDeclinedBoxCarriesCompanyTemplate',
@@ -10513,16 +10516,93 @@ final class BrandConfigSpec
         $tagline = strpos($html, 'twoinc-payment-subtitle');
         $chips = strpos($html, 'twoinc-term-chips');
         $sole_trader = strpos($html, 'twoinc-sole-trader-note-slot');
-        $about = strpos($html, 'abt-twoinc');
 
         TinyAssert::true($tagline !== false, 'tagline block missing');
         TinyAssert::true($chips !== false, 'chips container missing');
         TinyAssert::true($sole_trader !== false, 'sole-trader note slot missing');
-        TinyAssert::true($about !== false, 'about block missing');
 
         TinyAssert::true($tagline < $chips, 'tagline must precede the chips');
         TinyAssert::true($chips < $sole_trader, 'chips must precede the sole-trader note slot');
-        TinyAssert::true($sole_trader < $about, 'about block must trail the box');
+    }
+
+    /**
+     * The about control is one icon beside the method title, so the payment
+     * box - which core collapses until the method is chosen - must not carry
+     * a second copy of it (ABN-554).
+     */
+    private static function testAboutControlRendersBesideTheTitleNotInThePaymentBox(): void
+    {
+        $gateway = self::aboutGateway();
+
+        TinyAssert::true(
+            strpos($gateway->get_icon(), 'class="abt-twoinc"') !== false,
+            'the about control must render with the gateway icon, which core prints beside the title'
+        );
+        TinyAssert::true(
+            strpos($gateway->build_payment_description(), 'abt-twoinc') === false,
+            'the payment box must carry no about control'
+        );
+    }
+
+    /**
+     * Markup contract of the icon: it IS the link, so the tooltip it
+     * describes holds no anchor of its own (ABN-554).
+     */
+    private static function testAboutIconIsAnAnchorWrappedIcon(): void
+    {
+        $html = self::aboutGateway()->get_icon();
+
+        $rows = [
+            ['href="https://www.two.inc/what-is-two"', 'the icon carries the brand about URL'],
+            ['target="_blank"', 'it leaves checkout in a new tab'],
+            ['rel="noopener"', 'the new tab gets no handle on the checkout window'],
+            ['aria-label="What is Two?"', 'the icon-only link is named for assistive tech'],
+            ['aria-describedby="abt-twoinc-text-woocommerce-gateway-tillit"', 'the link points at the tooltip body'],
+            ['<img alt="" src="https://shop.example/wp-content/plugins/tillit-payment-gateway/assets/images/question.svg" />', 'the image is decorative and server-resolved'],
+            ['role="tooltip"', 'the body declares what it is'],
+            ['id="abt-twoinc-text-woocommerce-gateway-tillit"', 'the body carries the id the link points at'],
+            ['<p>Click to find out more</p>', 'the closing line is plain text'],
+        ];
+        foreach ($rows as [$needle, $description]) {
+            TinyAssert::true(strpos($html, $needle) !== false, $description);
+        }
+
+        TinyAssert::true(strpos($html, 'tabindex') === false, 'the anchor is natively focusable');
+
+        $tooltip = substr($html, (int) strpos($html, '<span class="abt-twoinc-text"'));
+        TinyAssert::true(strpos($tooltip, '<a ') === false, 'the tooltip must hold no second link');
+    }
+
+    /**
+     * A brand with no about page, and a merchant who turned the control off,
+     * both render nothing at all - never a bare icon (ABN-554).
+     */
+    private static function testAboutControlIsWithheldWholeOrNotAtAll(): void
+    {
+        $rows = [
+            ['noabouturlbrand', 'yes', 'a brand with no about page renders no icon'],
+            ['two', 'no', 'the merchant toggle removes the whole control'],
+        ];
+        foreach ($rows as [$brand, $toggle, $description]) {
+            self::reset();
+            if ($brand !== 'two') {
+                add_filter('twoinc_brand_file', static function () use ($brand) {
+                    return __DIR__ . '/fixtures/' . $brand . '.php';
+                });
+            }
+            $gateway = self::aboutGateway($toggle);
+
+            TinyAssert::true(strpos($gateway->get_icon(), 'abt-twoinc') === false, $description);
+        }
+    }
+
+    /** Gateway with the about control's merchant toggle resolved, bypassing init_form_fields. */
+    private static function aboutGateway(string $show_abt_link = 'yes'): WC_Twoinc
+    {
+        $gateway = self::gateway();
+        $gateway->settings['show_abt_link'] = $show_abt_link;
+
+        return $gateway;
     }
 
     /**

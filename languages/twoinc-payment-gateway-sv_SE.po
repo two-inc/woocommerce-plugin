@@ -45,6 +45,10 @@ msgstr "%s är en betalningslösning för B2B-köp online, som låter dig köpa 
 msgid "Buy now, receive your goods, pay your invoice later."
 msgstr "Köp nu, ta emot dina varor, betala din faktura senare."
 
+#: class/WC_Twoinc.php:1415
+msgid "Click to find out more"
+msgstr "Klicka för att läsa mer"
+
 #. translators: shown beside the spinner while the order-intent availability check runs.
 #: class/WC_Twoinc.php:935
 msgid "Checking availability"

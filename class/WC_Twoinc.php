@@ -1395,24 +1395,35 @@ if (!class_exists('WC_Twoinc')) {
             // here, regardless of the merchant's show_abt_link setting.
             if ($this->get_option('show_abt_link') === 'yes' && $abt_url !== '') {
                 $product_name = WC_Twoinc_Brand::get('product_name');
-                $link = '<a href="' . esc_url($abt_url) . '" target="_blank">' . sprintf(__('What is %s?', 'twoinc-payment-gateway'), $product_name) . '</a>';
+                $tooltip_id = 'abt-twoinc-text-' . $this->id;
+                // aria-hidden, yet still announced: core renders this inside the
+                // method's <label for>, so untagged prose would join the radio's
+                // accessible name, while aria-describedby resolves a directly
+                // referenced node whether or not it is hidden (ABN-554).
+                $icon = sprintf(
+                    '<a class="abt-twoinc-icon" href="%s" target="_blank" rel="noopener" aria-label="%s" aria-describedby="%s"><img alt="" src="%s" /></a>',
+                    esc_url($abt_url),
+                    esc_attr(sprintf(__('What is %s?', 'twoinc-payment-gateway'), $product_name)),
+                    esc_attr($tooltip_id),
+                    esc_url(WC_TWOINC_PLUGIN_URL . 'assets/images/question.svg')
+                );
                 $text = sprintf(
-                    '<p>%s</p><p><b>%s</b></p>',
+                    '<p>%s</p><p><b>%s</b></p><p>%s</p>',
                     sprintf(__('%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple.', 'twoinc-payment-gateway'), $product_name, $product_name),
                     __('Buy now, receive your goods, pay your invoice later.', 'twoinc-payment-gateway'),
-                    $abt_url,
+                    // Plain text, not an anchor: the icon is the link.
+                    __('Click to find out more', 'twoinc-payment-gateway')
                 );
-                $html = sprintf('<div class="abt-twoinc-text">%s</div><div class="abt-twoinc-link">%s</div>', $text, $link);
+                $html = $icon . sprintf('<span class="abt-twoinc-text" role="tooltip" aria-hidden="true" id="%s">%s</span>', esc_attr($tooltip_id), $text);
             } else {
                 $html = '';
             }
 
             /**
-             * Filter the "about" block inside the payment-box subtitle —
-             * the piece of the description brand overlays actually
-             * replace (a brand overlay ships its own bullet list).
-             * Register by plugins_loaded (computed at gateway
-             * construction).
+             * Filter the "about" control rendered beside the payment-method
+             * title — the piece brand overlays actually replace (a brand
+             * overlay ships its own bullet list). Register by plugins_loaded
+             * (computed at gateway construction).
              *
              * @param string    $html    Default about-block HTML ('' when
              *                           the merchant disabled the link).
@@ -2922,8 +2933,7 @@ if (!class_exists('WC_Twoinc')) {
          * Assemble the checkout payment-box description.
          *
          * Block order is cross-platform parity: brand tagline directly under
-         * the method title, then the term chips, then the sole-trader toggle,
-         * with the about block trailing.
+         * the method title, then the term chips, then the sole-trader toggle.
          *
          * WooCommerce core renders the method title and the gateway icon
          * together inside the payment method's <label>, and this
@@ -2935,16 +2945,14 @@ if (!class_exists('WC_Twoinc')) {
         public function build_payment_description()
         {
             return $this->get_pay_subtitle()
-                . $this->get_pay_box_description()
-                . $this->get_about_block_html();
+                . $this->get_pay_box_description();
         }
 
         /**
          * Brand tagline shown directly under the payment-method title.
          *
-         * Returns ONLY the tagline; the about block trails separately (see
-         * get_about_block_html and the description assembly in the
-         * constructor).
+         * Returns ONLY the tagline; the about control renders beside the
+         * method title instead (see get_about_block_html and get_icon).
          *
          * The SENTENCE lives here as a literal msgid; the brand supplies only
          * the FAQ link TARGET ('checkout_subtitle_faq_url'). gettext
@@ -2997,13 +3005,16 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * The about block, wrapped, as the trailing element of the payment
-         * box. Split out of get_pay_subtitle; the twoinc_about_html filter
-         * seam is untouched and still applies inside get_abt_twoinc_html.
+         * The about control, wrapped, beside the payment-method title. The
+         * twoinc_about_html filter seam is untouched and still applies inside
+         * get_abt_twoinc_html; an empty result renders no wrapper, so a brand
+         * with no about page contributes nothing at all (ABN-554).
          */
         private function get_about_block_html()
         {
-            return sprintf('<div class="abt-twoinc">%s</div>', $this->get_abt_twoinc_html());
+            $about = $this->get_abt_twoinc_html();
+
+            return $about === '' ? '' : sprintf('<span class="abt-twoinc">%s</span>', $about);
         }
 
         /**
@@ -7110,7 +7121,13 @@ if (!class_exists('WC_Twoinc')) {
         public function get_icon()
         {
             $icon_html = '<img src="' . esc_url($this->icon) . '" alt="' . esc_attr($this->title) . '" class="mollie-gateway-icon" />';
-            return apply_filters('woocommerce_gateway_icon', $icon_html, $this->id);
+
+            // Appended outside the filter so a brand overlay replacing the
+            // gateway icon cannot drop the about control with it. Core renders
+            // get_icon() immediately after the title, which is the only seam
+            // beside it (ABN-554).
+            return apply_filters('woocommerce_gateway_icon', $icon_html, $this->id)
+                . $this->get_about_block_html();
         }
     }
 }
