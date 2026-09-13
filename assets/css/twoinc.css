@@ -442,6 +442,11 @@
 .twoinc-term-chips.hidden {
   display: none;
 }
+/* Two classes, same idiom as `.twoinc-term-chips.hidden` above (ABN-554). */
+.twoinc-term-chips.twoinc-withheld,
+.twoinc-term-chips-heading.twoinc-withheld {
+  display: none;
+}
 /*
  * Chip palette matches the other platforms' checkouts: brand blue
  * text on a white fill for the unselected state, solid brand blue with
