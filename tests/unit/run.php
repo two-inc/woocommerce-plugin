@@ -10696,10 +10696,9 @@ final class BrandConfigSpec
     /**
      * A theme shipping its own checkout/payment-method.php wins the locate
      * race and renders no about control at all, so the gateway description
-     * carries it instead - which is where it travelled before this override
-     * existed. The description renders inside .payment_box, which core hides
-     * until the method is chosen, so on those themes the control degrades to
-     * an icon at the foot of a collapsed box (ABN-554).
+     * carries it instead. The description renders inside .payment_box, which
+     * core hides until the method is chosen, so on those themes the control
+     * degrades to an icon at the foot of a collapsed box (ABN-554).
      */
     private static function testAboutControlFallsBackIntoTheHiddenPaymentBoxWhenATemplateOverrideWins(): void
     {
@@ -10782,8 +10781,8 @@ final class BrandConfigSpec
     {
         $gateway = self::gateway();
         $gateway->settings['show_abt_link'] = $show_abt_link;
-        // Overrides the real constructor's false: core renders the payment box
-        // only for a gateway that declares fields, and these tests assert it.
+        // The stubbed constructor leaves the description empty, so the payment
+        // box the template tests assert on needs the other half of its guard.
         $gateway->has_fields = true;
 
         return $gateway;

@@ -1400,12 +1400,10 @@ if (!class_exists('WC_Twoinc')) {
             if ($this->get_option('show_abt_link') === 'yes' && $abt_url !== '') {
                 $product_name = WC_Twoinc_Brand::get('product_name');
                 $tooltip_id = 'abt-twoinc-text-' . $this->id;
-                // aria-hidden, yet still announced: the closed tooltip is only
-                // opacity:0, so its prose would otherwise be read as stray text
-                // in document flow, while aria-describedby resolves a directly
-                // referenced node whether or not it is hidden (ABN-554).
-                // noopener without noreferrer: the Referer is the attribution
-                // the brand's own about page reads for the visit.
+                // aria-hidden, yet still announced: aria-describedby resolves
+                // a directly referenced node even when hidden (ABN-554).
+                // noopener without noreferrer: the Referer is how the brand's
+                // own about page attributes the visit.
                 $icon = sprintf(
                     '<a class="abt-twoinc-icon" href="%s" target="_blank" rel="noopener" aria-label="%s" aria-describedby="%s"><img alt="" src="%s" /></a>',
                     esc_url($abt_url),

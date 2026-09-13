@@ -162,7 +162,8 @@
 
 /* Core prints the control after the method's </label> — the only seam that is
    outside the label — so the row is laid out here to keep it beside the
-   title, with the payment box still on its own line below. */
+   title, with the payment box still on its own line below.
+   Without :has() support the icon degrades to its own line under the title. */
 li.wc_payment_method:has(> .abt-twoinc) {
   display: flex;
   flex-wrap: wrap;
