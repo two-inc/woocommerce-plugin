@@ -250,7 +250,8 @@ final class BrandConfigSpec
             'testPaymentMethodTemplateOverrideIsScopedToThisGateway',
             'testAboutIconIsAnAnchorWrappedIcon',
             'testAboutControlIsWithheldWholeOrNotAtAll',
-            'testAboutControlFallsBackToTheDescriptionWhenATemplateOverrideWins',
+            'testAboutTooltipEscapesTheBrandProductName',
+            'testAboutControlFallsBackIntoTheHiddenPaymentBoxWhenATemplateOverrideWins',
             'testPaymentMethodTemplateIsStillCoreVerbatim',
             'testTermChipGroupIsNamedByANonLabelHeading',
             'testPaymentBoxRendersCompanySearchTileSlotBetweenSoleTraderAndIntentMessage',
@@ -10670,12 +10671,37 @@ final class BrandConfigSpec
     }
 
     /**
+     * The brand product name reaches the tooltip body as text, the same way
+     * it already reaches the icon's aria-label (ABN-554).
+     */
+    private static function testAboutTooltipEscapesTheBrandProductName(): void
+    {
+        self::reset();
+        add_filter('twoinc_brand_file', static function () {
+            return __DIR__ . '/fixtures/markupproductnamebrand.php';
+        });
+
+        $html = self::aboutGateway()->get_about_block_html();
+
+        TinyAssert::true(
+            strpos($html, '&lt;b&gt;Acme&lt;/b&gt; &amp; Pay is a payment solution') !== false,
+            'the tooltip body must carry the product name escaped'
+        );
+        TinyAssert::true(
+            strpos($html, '<b>Acme</b>') === false,
+            'no brand markup may survive into the tooltip body'
+        );
+    }
+
+    /**
      * A theme shipping its own checkout/payment-method.php wins the locate
      * race and renders no about control at all, so the gateway description
      * carries it instead - which is where it travelled before this override
-     * existed (ABN-554).
+     * existed. The description renders inside .payment_box, which core hides
+     * until the method is chosen, so on those themes the control degrades to
+     * an icon at the foot of a collapsed box (ABN-554).
      */
-    private static function testAboutControlFallsBackToTheDescriptionWhenATemplateOverrideWins(): void
+    private static function testAboutControlFallsBackIntoTheHiddenPaymentBoxWhenATemplateOverrideWins(): void
     {
         add_filter('woocommerce_locate_template', ['WC_Twoinc', 'locate_payment_method_template'], 10, 2);
         $gateway = self::aboutGateway();
@@ -10756,8 +10782,8 @@ final class BrandConfigSpec
     {
         $gateway = self::gateway();
         $gateway->settings['show_abt_link'] = $show_abt_link;
-        // As the real constructor sets it; core renders the payment box only
-        // for a gateway that declares fields.
+        // Overrides the real constructor's false: core renders the payment box
+        // only for a gateway that declares fields, and these tests assert it.
         $gateway->has_fields = true;
 
         return $gateway;

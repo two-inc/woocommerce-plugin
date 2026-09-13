@@ -1404,6 +1404,8 @@ if (!class_exists('WC_Twoinc')) {
                 // opacity:0, so its prose would otherwise be read as stray text
                 // in document flow, while aria-describedby resolves a directly
                 // referenced node whether or not it is hidden (ABN-554).
+                // noopener without noreferrer: the Referer is the attribution
+                // the brand's own about page reads for the visit.
                 $icon = sprintf(
                     '<a class="abt-twoinc-icon" href="%s" target="_blank" rel="noopener" aria-label="%s" aria-describedby="%s"><img alt="" src="%s" /></a>',
                     esc_url($abt_url),
@@ -1411,9 +1413,10 @@ if (!class_exists('WC_Twoinc')) {
                     esc_attr($tooltip_id),
                     esc_url(WC_TWOINC_PLUGIN_URL . 'assets/images/question.svg')
                 );
+                $escaped_product_name = esc_html($product_name);
                 $text = sprintf(
                     '<p>%s</p><p><strong>%s</strong></p><p>%s</p>',
-                    sprintf(__('%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple.', 'twoinc-payment-gateway'), $product_name, $product_name),
+                    sprintf(__('%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple.', 'twoinc-payment-gateway'), $escaped_product_name, $escaped_product_name),
                     __('Buy now, receive your goods, pay your invoice later.', 'twoinc-payment-gateway'),
                     // Plain text, not an anchor: the icon is the link.
                     __('Click to find out more', 'twoinc-payment-gateway')
@@ -3057,6 +3060,14 @@ if (!class_exists('WC_Twoinc')) {
          * theme's rather than this plugin's. Such a theme never renders the
          * control at all, and the premium themes this repo ships checkout CSS
          * for are exactly the ones that override that template (ABN-554).
+         *
+         * The description renders inside .payment_box, which core hides until
+         * the method is chosen, so on those themes the control is an icon at
+         * the foot of a collapsed box rather than one beside the title.
+         *
+         * A Blocks checkout is out of scope for both routes: this gateway
+         * registers no Blocks payment method, so it is absent from that
+         * checkout entirely.
          *
          * @param string $description
          * @param string $gateway_id
