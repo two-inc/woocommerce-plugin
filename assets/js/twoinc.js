@@ -60,7 +60,8 @@ let twoincUtilHelper = {
    *
    * `label` is passed through untouched (not blank-collapsed): callers
    * disagree on contract — intent notices pass plain text for `.text()`,
-   * the search dropdown passes pre-highlighted HTML for innerHTML.
+   * the search dropdown passes the API's pre-highlighted markup, which the
+   * panel rebuilds as nodes.
    */
   composeCompanyLabel: function (label, value) {
     const number = twoincUtilHelper.formatCompanyNumber(value);
