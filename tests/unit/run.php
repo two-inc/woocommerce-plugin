@@ -259,7 +259,6 @@ final class BrandConfigSpec
             'testSelectedTermInputPrecedesChipsContainer',
             'testBrandWithoutTaglineEmitsNoTaglineBlock',
             'testTaglineSentenceIsPlatformCopyWithBrandFaqLink',
-            'testAnchorOnlyEscaperAllowsOnlyTheLinkThisPluginEmits',
             'testRetiredFreeFormSubtitleKeyIsInert',
             'testNonStringBrandFaqUrlEmitsNoTagline',
             'testIntentApprovedNoticeDisabledBrandEmitsNoBlock',
@@ -318,6 +317,7 @@ final class BrandConfigSpec
             'testCancelledOrderNeverMisdispatchesAsFulfilmentEvenIfConfiguredAsTrigger',
             'testShouldDisableSslVerifyFollowsToggleInEveryEnvironment',
             'testPaymentSubtitlePrefersMerchantFreeTextOverBrandTagline',
+            'testPaymentSubtitleOfOnlyDroppedMarkupEmitsNoElement',
             'testPaymentSubtitleFallsBackToBrandTaglineWhenBlank',
             'testTaxSubtotalsRequiredWhenMerchantOptsIn',
             'testTaxSubtotalsSettingIsOnByDefaultForNewInstalls',
@@ -8148,6 +8148,34 @@ final class BrandConfigSpec
         );
     }
 
+    /**
+     * The element is decided on the escaped value, so copy that is only markup
+     * the escaper drops falls through to the brand tagline rather than emitting
+     * an empty styled div.
+     */
+    private static function testPaymentSubtitleOfOnlyDroppedMarkupEmitsNoElement(): void
+    {
+        // [merchant subtitle, why].
+        $cases = [
+            ['<img src=x>', 'a tag the escaper drops leaves nothing to show'],
+            ['<b></b>', 'nor does an empty inline element'],
+            ['   ', 'nor does whitespace'],
+        ];
+
+        foreach ($cases as [$configured, $description]) {
+            self::reset();
+            self::useTaglineBrand();
+            $gateway = self::fulfilmentTriggerGateway(['payment_subtitle' => $configured]);
+            TinyAssert::same(
+                '<div class="twoinc-payment-subtitle">For all companies, '
+                . '<a href="https://taglinebrand.example/faq" target="_blank" rel="noopener">'
+                . 'read more</a>.</div>',
+                $gateway->get_pay_subtitle(),
+                $description
+            );
+        }
+    }
+
     private static function testPaymentSubtitleFallsBackToBrandTaglineWhenBlank(): void
     {
         self::useTaglineBrand();
@@ -11097,44 +11125,6 @@ final class BrandConfigSpec
         // anchor would swallow the payment box. Asserting %1$s/%2$s
         // anywhere in a .mo separately would be vacuous: other msgstrs in
         // these catalogues carry both.
-    }
-
-    /**
-     * The subtitle is emitted unescaped, so this escaper is the whole trust
-     * boundary between brand/merchant copy and the buyer's page.
-     */
-    private static function testAnchorOnlyEscaperAllowsOnlyTheLinkThisPluginEmits(): void
-    {
-        $url = 'https://faq.example.test/x';
-        $cases = [
-            ['For all companies, read more.', 'For all companies, read more.', 'copy with no markup is untouched'],
-            [
-                'For all companies, <a href="' . $url . '" target="_blank" rel="noopener">read more</a>.',
-                'For all companies, <a href="' . $url . '" target="_blank" rel="noopener">read more</a>.',
-                'the anchor this plugin emits survives verbatim',
-            ],
-            ['<a href="' . $url . '" onclick="steal()">read more</a>', '<a href="' . $url . '">read more</a>', 'an event handler never reaches the page'],
-            ['<a href="' . $url . '" style="position:fixed;inset:0">read more</a>', '<a href="' . $url . '">read more</a>', 'styling cannot turn the link into an overlay'],
-            ['<a href="' . $url . '" class="btn">read more</a>', '<a href="' . $url . '">read more</a>', "copy cannot borrow the theme's classes"],
-            ['<a href="' . $url . '" download="invoice.pdf">read more</a>', '<a href="' . $url . '">read more</a>', 'the link cannot be turned into a download'],
-            ['<a href="' . $url . '" target="_top">read more</a>', '<a href="' . $url . '">read more</a>', 'only the _blank this plugin emits is kept'],
-            ['<a href="' . $url . '" rel="me">read more</a>', '<a href="' . $url . '">read more</a>', 'only the noopener this plugin emits is kept'],
-            ['<a href="javascript:alert(1)">read more</a>', 'read more', 'a script URL loses the anchor and keeps the text'],
-            ['<a href="data:text/html,pwned">read more</a>', 'read more', 'a data URL loses the anchor and keeps the text'],
-            ['<b>Bold</b> and <span style="x">span</span>', 'Bold and span', 'every non-anchor tag is dropped and its text kept'],
-            ['<a href="' . $url . '">read more', '<a href="' . $url . '">read more</a>', 'an anchor left open is closed rather than swallowing the page'],
-            ['read <a href="' . $url . '"', 'read &lt;a href=&quot;' . $url . '&quot;', 'a tag with no closing bracket is text, not markup'],
-            ['<script>alert(1)</script>', 'alert(1)', 'a script element is reduced to inert text'],
-            [
-                '<a href="https://a.example.test/1">outer <a href="https://b.example.test/2">inner</a> tail</a>',
-                '<a href="https://a.example.test/1">outer inner</a> tail',
-                'a nested anchor loses its tag, not its text',
-            ],
-        ];
-
-        foreach ($cases as list($input, $expected, $description)) {
-            TinyAssert::same($expected, WC_Twoinc_Helper::escape_anchor_only_html($input), $description);
-        }
     }
 
     /**
@@ -15251,5 +15241,138 @@ final class BrandConfigSpec
     }
 }
 
+/**
+ * WC_Twoinc_Helper::escape_anchor_only_html is the whole trust boundary between
+ * brand/merchant subtitle copy and the buyer's page, which emits it unescaped.
+ */
+final class AnchorOnlyHtmlSpec
+{
+    public static function runAll(): void
+    {
+        $tests = [
+            'testAnchorOnlyEscaperAllowsOnlyTheLinkThisPluginEmits',
+            'testEscapingIsIdempotent',
+            'testAnEmptyAttributeValueRaisesNoWarning',
+        ];
+        foreach ($tests as $test) {
+            self::$test();
+            print("PASS AnchorOnlyHtmlSpec::$test\n");
+        }
+    }
+
+    /**
+     * The subtitle is emitted unescaped, so this escaper is the whole trust
+     * boundary between brand/merchant copy and the buyer's page.
+     */
+    private static function testAnchorOnlyEscaperAllowsOnlyTheLinkThisPluginEmits(): void
+    {
+        foreach (self::cases() as list($input, $expected, $description)) {
+            TinyAssert::same($expected, WC_Twoinc_Helper::escape_anchor_only_html($input), $description);
+        }
+    }
+
+    /** @return array<int, array{0:string,1:string,2:string}> [input, escaped output, why] */
+    private static function cases(): array
+    {
+        $url = 'https://faq.example.test/x';
+
+        return [
+            ['For all companies, read more.', 'For all companies, read more.', 'copy with no markup is untouched'],
+            [
+                'For all companies, <a href="' . $url . '" target="_blank" rel="noopener">read more</a>.',
+                'For all companies, <a href="' . $url . '" target="_blank" rel="noopener">read more</a>.',
+                'the anchor this plugin emits survives verbatim',
+            ],
+            ['<a href="' . $url . '" onclick="steal()">read more</a>', '<a href="' . $url . '">read more</a>', 'an event handler never reaches the page'],
+            ['<a href="' . $url . '" style="position:fixed;inset:0">read more</a>', '<a href="' . $url . '">read more</a>', 'styling cannot turn the link into an overlay'],
+            ['<a href="' . $url . '" class="btn">read more</a>', '<a href="' . $url . '">read more</a>', "copy cannot borrow the theme's classes"],
+            ['<a href="' . $url . '" download="invoice.pdf">read more</a>', '<a href="' . $url . '">read more</a>', 'the link cannot be turned into a download'],
+            ['<a href="' . $url . '" target="_top">read more</a>', '<a href="' . $url . '">read more</a>', 'only the _blank this plugin emits is kept'],
+            ['<a href="' . $url . '" rel="me">read more</a>', '<a href="' . $url . '">read more</a>', 'only the noopener this plugin emits is kept'],
+            ['<a href="javascript:alert(1)">read more</a>', 'read more', 'a script URL loses the anchor and keeps the text'],
+            ['<a href="data:text/html,pwned">read more</a>', 'read more', 'a data URL loses the anchor and keeps the text'],
+            ['<b>Bold</b> and <span style="x">span</span>', 'Bold and span', 'every non-anchor tag is dropped and its text kept'],
+            ['<a href="' . $url . '">read more', '<a href="' . $url . '">read more</a>', 'an anchor left open is closed rather than swallowing the page'],
+            ['read <a href="' . $url . '"', 'read &lt;a href=&quot;' . $url . '&quot;', 'a tag with no closing bracket is text, not markup'],
+            ['<script>alert(1)</script>', 'alert(1)', 'a script element is reduced to inert text'],
+            [
+                '<a href="https://a.example.test/1">outer <a href="https://b.example.test/2">inner</a> tail</a>',
+                '<a href="https://a.example.test/1">outer inner</a> tail',
+                'a nested anchor loses its tag, not its text',
+            ],
+            ['<a href="http://faq.example.test/x">read more</a>', '<a href="http://faq.example.test/x">read more</a>', 'plain http is a reachable page, not only https'],
+            ['<A HREF="' . $url . '">read more</A>', '<a href="' . $url . '">read more</a>', 'an uppercase tag is markup too, not text'],
+            ['<a href="  ' . $url . '  ">read more</a>', '<a href="' . $url . '">read more</a>', 'padding a stored href does not change the target'],
+            ['<a href="&#106;avascript:alert(1)">read more</a>', 'read more', 'entity-encoding a script URL does not smuggle it past the scheme test'],
+            ['Tea &amp; coffee & cake', 'Tea &amp; coffee &amp; cake', 'an entity already in the copy is left alone while a bare ampersand is escaped'],
+            [
+                '<a href="https://faq.example.test/x?a=1&amp;b=2">read more</a>',
+                '<a href="https://faq.example.test/x?a=1&amp;b=2">read more</a>',
+                'a two-parameter query string survives one decode and one re-encode unchanged',
+            ],
+            [
+                "<a href='https://faq.example.test/x?q=\"z\"'>read more</a>",
+                '<a href="https://faq.example.test/x?q=&quot;z&quot;">read more</a>',
+                'a quote inside the href is encoded rather than closing the attribute',
+            ],
+            ['<a href="">read more</a>', 'read more', 'an empty href is no link'],
+            ["<a href=''>read more</a>", 'read more', 'nor is an empty single-quoted one'],
+            ['<a href="https://user:pw@evil.example.test">read more</a>', 'read more', 'userinfo lets the text before the @ pose as the host, so the link is dropped'],
+            [
+                '<a href="https://faq.example.test/x?to=a@b">read more</a>',
+                '<a href="https://faq.example.test/x?to=a@b">read more</a>',
+                'an @ past the authority is ordinary query text',
+            ],
+            [
+                '<a href="' . $url . '" target="_BLANK" rel="NOOPENER">read more</a>',
+                '<a href="' . $url . '" target="_blank" rel="noopener">read more</a>',
+                'browsers read these keywords case-insensitively, so they are matched that way and re-emitted lowercased',
+            ],
+            ["caf\xC3\xA9 \xC0\xAF costs \xE2\x82\xAC5", "caf\u{00E9} \u{FFFD}\u{FFFD} costs \u{20AC}5", 'one malformed byte is substituted, not allowed to blank the whole run'],
+            ["safe\x00ish", 'safeish', 'a control character cannot render and is dropped'],
+            [
+                'Pay in 30 days < see <a href="' . $url . '">terms</a>',
+                'Pay in 30 days &lt; see <a href="' . $url . '">terms</a>',
+                'a stray < is text and does not swallow the copy up to the next >',
+            ],
+            ['<img src=x>', '', 'copy that is only a dropped tag escapes to nothing at all'],
+        ];
+    }
+
+    /**
+     * The subtitle is re-escaped on every render, so a second pass has to be a
+     * no-op - otherwise each render would re-encode the last one's entities.
+     */
+    private static function testEscapingIsIdempotent(): void
+    {
+        foreach (self::cases() as list($input, $expected, $description)) {
+            TinyAssert::same($expected, WC_Twoinc_Helper::escape_anchor_only_html($expected), 'escaping twice changes the output: ' . $description);
+        }
+    }
+
+    /**
+     * An empty quoted value leaves its capture group absent, and the resulting
+     * notice would be written into the middle of the checkout markup on a shop
+     * with display_errors on.
+     */
+    private static function testAnEmptyAttributeValueRaisesNoWarning(): void
+    {
+        $raised = [];
+        set_error_handler(static function ($severity, $message) use (&$raised) {
+            $raised[] = $message;
+
+            return true;
+        });
+        try {
+            WC_Twoinc_Helper::escape_anchor_only_html('<a href="" target="" rel="">read more</a>');
+        } finally {
+            restore_error_handler();
+        }
+
+        TinyAssert::same([], $raised, 'escaping an empty attribute value raised: ' . implode('; ', $raised));
+    }
+}
+
 BrandConfigSpec::runAll();
+AnchorOnlyHtmlSpec::runAll();
 print("All tests passed.\n");

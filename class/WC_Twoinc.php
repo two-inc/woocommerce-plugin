@@ -2976,12 +2976,13 @@ if (!class_exists('WC_Twoinc')) {
             // merchant needing per-language copy should use a string-
             // translation plugin (WPML, Loco Translate) the same way the
             // rest of this plugin's __() strings are made translatable.
-            $custom_subtitle = trim((string) $this->get_option('payment_subtitle'));
+            // Tested after escaping, not before: copy that is only markup the
+            // escaper drops would otherwise emit an empty subtitle element.
+            $custom_subtitle = WC_Twoinc_Helper::escape_anchor_only_html(
+                trim((string) $this->get_option('payment_subtitle'))
+            );
             if ($custom_subtitle !== '') {
-                return sprintf(
-                    '<div class="twoinc-payment-subtitle">%s</div>',
-                    WC_Twoinc_Helper::escape_anchor_only_html($custom_subtitle)
-                );
+                return sprintf('<div class="twoinc-payment-subtitle">%s</div>', $custom_subtitle);
             }
 
             // Escape first, then test: esc_url returns '' for a disallowed
@@ -3004,10 +3005,12 @@ if (!class_exists('WC_Twoinc')) {
             // The subtitle is emitted unescaped by its caller, so the
             // anchor-only escaper is the whole trust boundary on it: the
             // brand FAQ "read more" link survives and nothing else does.
-            return sprintf(
-                '<div class="twoinc-payment-subtitle">%s</div>',
-                WC_Twoinc_Helper::escape_anchor_only_html($subtitle)
-            );
+            $subtitle = WC_Twoinc_Helper::escape_anchor_only_html($subtitle);
+            if ($subtitle === '') {
+                return '';
+            }
+
+            return sprintf('<div class="twoinc-payment-subtitle">%s</div>', $subtitle);
         }
 
         /**

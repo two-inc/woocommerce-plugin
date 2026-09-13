@@ -15,14 +15,25 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * http(s) href survives, every other tag is dropped and its text kept,
          * and all other markup is escaped.
          *
-         * Surviving anchors are rebuilt from scratch rather than filtered, so
-         * no attribute this plugin does not itself emit can reach the page.
+         * Surviving anchors are rebuilt from their allowed attributes, so no
+         * attribute this plugin does not itself emit can reach the page. The
+         * href itself is only checked for scheme and userinfo, not vouched for
+         * - whoever writes the copy chooses where an http(s) link points.
+         * `target` and `rel` are matched case-insensitively and re-emitted
+         * lowercased, as browsers treat those keywords.
          *
          * @return string
          */
         public static function escape_anchor_only_html($html)
         {
-            $parts = preg_split('/(<[^>]*>)/', (string) $html, -1, PREG_SPLIT_DELIM_CAPTURE);
+            // Only a name-like tag opens markup; a stray '<' stays text rather
+            // than swallowing the copy up to the next '>'.
+            $parts = preg_split(
+                '/(<\/?[a-zA-Z][^>]*>)/',
+                self::strip_control_characters((string) $html),
+                -1,
+                PREG_SPLIT_DELIM_CAPTURE
+            );
             if ($parts === false) {
                 return '';
             }
@@ -31,7 +42,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $open_anchors = 0;
             foreach ($parts as $index => $part) {
                 if ($index % 2 === 0) {
-                    $result .= htmlspecialchars($part, ENT_QUOTES, 'UTF-8', false);
+                    // ENT_SUBSTITUTE: without it one malformed byte blanks the whole run.
+                    $result .= htmlspecialchars($part, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false);
                     continue;
                 }
 
@@ -58,8 +70,18 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * @return string
+         */
+        private static function strip_control_characters($text)
+        {
+            $stripped = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
+
+            return $stripped === null ? '' : $stripped;
+        }
+
+        /**
          * @return string the anchor rebuilt from its allowed attributes, or ''
-         *                when the href is not an http(s) URL
+         *                when the href is not a plain http(s) URL
          */
         private static function rebuild_allowed_anchor($tag)
         {
@@ -74,7 +96,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
             foreach ($matches as $match) {
                 $name = strtolower($match[1]);
                 if (!isset($attributes[$name])) {
-                    $attributes[$name] = $match[2] !== '' ? $match[2] : ($match[3] !== '' ? $match[3] : (isset($match[4]) ? $match[4] : ''));
+                    // PREG_SET_ORDER truncates each set at the last participating
+                    // group, so an empty quoted value leaves later groups absent.
+                    $attributes[$name] = $match[2] !== ''
+                        ? $match[2]
+                        : ((isset($match[3]) && $match[3] !== '') ? $match[3] : (isset($match[4]) ? $match[4] : ''));
                 }
             }
 
@@ -82,8 +108,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if (!preg_match('/^https?:\/\//i', $href)) {
                 return '';
             }
+            // Userinfo is the classic spoof: everything before the '@' reads as the host.
+            if (preg_match('/^https?:\/\/[^\/?#]*@/i', $href)) {
+                return '';
+            }
 
-            $anchor = '<a href="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '"';
+            $anchor = '<a href="' . htmlspecialchars($href, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"';
             if (isset($attributes['target']) && strtolower(trim($attributes['target'])) === '_blank') {
                 $anchor .= ' target="_blank"';
             }
