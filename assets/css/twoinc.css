@@ -170,10 +170,10 @@ li.wc_payment_method:has(> .abt-twoinc) {
   align-items: flex-start;
 }
 
-/* Shrinkable, so the icon keeps its place on the title's line in a narrow
-   checkout column rather than wrapping below the tile. */
+/* Shrink-to-fit and explicitly no grow: a growing label would consume the
+   row and strand the icon at the far edge, away from the logo it belongs to. */
 li.wc_payment_method:has(> .abt-twoinc) > label {
-  flex: 1 1 0%;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -185,7 +185,8 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   position: relative;
   display: inline-flex;
   vertical-align: middle;
-  margin-left: 6px;
+  /* 12px: the cross-platform logo-to-icon gap (ABN-554). */
+  margin-left: 12px;
 }
 
 .abt-twoinc-icon {
@@ -203,8 +204,9 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   position: absolute;
   z-index: 100;
   bottom: 140%;
-  /* Right-anchored: the control sits at the end of the method row, so a
-     centred tooltip would overhang the checkout column. */
+  /* Right-anchored: the control sits far enough into the row that the body
+     clears the column's left edge, where centring overhangs its right on a
+     narrow viewport. */
   right: 0;
   width: 240px;
   max-width: 80vw;
