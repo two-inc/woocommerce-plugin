@@ -399,11 +399,9 @@
     const HIGHLIGHT_TAG = /^<(\/?)(mark|b)>$/;
 
     /**
-     * Rebuild a row's server-built label as nodes, keeping only bare `<mark>`
-     * and `<b>` — the pair the search API emits around the matched substring.
-     *
-     * Anything else, attributes included, stays text: company names come from
-     * third-party registries, so this string is not the plugin's to trust.
+     * Rebuild a row's server-built label as nodes: it carries registry-sourced
+     * text, so only bare `<mark>`/`<b>` — what the API marks the match with —
+     * survive as elements.
      *
      * @param {string} html
      * @returns {DocumentFragment}
