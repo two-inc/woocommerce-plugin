@@ -392,11 +392,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // the same translated strings too.
                     'enter_manually' => __('Enter manually', 'twoinc-payment-gateway'),
                     'search_company' => __('Search for company', 'twoinc-payment-gateway'),
-                    // What the company-search panel says to a screen reader
-                    // once a search answers (ABN-554). %d is left unresolved
-                    // for the same reason as the threshold above: the JS holds
-                    // the count.
-                    /* translators: %d: number of companies the search returned. */
+                    // The panel announces this once a search answers (ABN-554).
+                    /* translators: %d: number of companies the search returned, interpolated in JS. */
                     'search_results_plural' => __('%d results are available, use up and down arrow keys to navigate.', 'twoinc-payment-gateway'),
                     'search_results_one' => __('1 result is available, use up and down arrow keys to navigate.', 'twoinc-payment-gateway'),
                 ],

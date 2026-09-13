@@ -1107,8 +1107,7 @@ class TwoCompanySearch {
       "Search for company": this.searchCompanyText(),
       "Company search is unavailable right now. Please try again shortly.":
         this.companySearchUnavailableText(),
-      // The panel interpolates %1; WordPress catalogues carry %d, so the
-      // placeholder is normalised here rather than in the shared panel.
+      // WordPress catalogues carry %d, the shared panel interpolates %1.
       "%1 results are available, use up and down arrow keys to navigate.": this.searchResultsText(
         true
       ).replace("%d", "%1"),
