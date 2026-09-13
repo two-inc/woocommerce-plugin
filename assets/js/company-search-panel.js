@@ -243,6 +243,8 @@
         this._openerReturnPending = false;
         /** The `focus` half of that pair seen, waiting on the `focusin` that ends it. */
         this._openerReturnFocusSeen = false;
+        /** The same half of a pair with no window focus beside it: the buyer arriving by Tab. */
+        this._openerArrivalFocusSeen = false;
         /** `observe` cannot be disconnected, so its callbacks read this instead. */
         this._destroyed = false;
         /** Listeners this panel owns, so teardown removes exactly its own. */
@@ -770,16 +772,23 @@
         this._bindEvent(field, 'focus', function () {
             if (self._closing) return;
             if (self._openerHeld) {
-                // The pair a window return carries is swallowed whole, and the `focusin`
-                // below is what ends the hold (ABN-554).
+                // A pair with a window focus beside it is that window's return; one without
+                // is the buyer arriving by Tab. The `focusin` below acts on either (ABN-554).
                 if (self._openerReturnPending) self._openerReturnFocusSeen = true;
+                else self._openerArrivalFocusSeen = true;
                 return;
             }
             self.open();
         });
         this._bindEvent(field, 'focusin', function () {
-            if (!self._openerHeld || !self._openerReturnFocusSeen) return;
+            if (!self._openerHeld) return;
+            if (self._openerReturnFocusSeen) {
+                self.holdFieldOpener(false);
+                return;
+            }
+            if (!self._openerArrivalFocusSeen) return;
             self.holdFieldOpener(false);
+            self.open();
         });
         this._bindEvent(field, 'keydown', function (event) {
             if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -1005,6 +1014,7 @@
         this._openerHeld = !!held;
         this._openerReturnPending = false;
         this._openerReturnFocusSeen = false;
+        this._openerArrivalFocusSeen = false;
         const view = this._field && this._field.ownerDocument && this._field.ownerDocument.defaultView;
         if (!view) return;
         this._unbind(view);
