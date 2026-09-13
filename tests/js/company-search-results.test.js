@@ -49,7 +49,7 @@ describe("company search results", () => {
   function hit(name, id) {
     return {
       name: name,
-      highlight: "<em>" + name + "</em>",
+      highlight: "<mark><b>" + name + "</b></mark>",
       national_identifier: { id: id },
       lookup_id: "lookup-" + id
     };
@@ -63,7 +63,7 @@ describe("company search results", () => {
         {
           id: "Example Trading Co",
           text: "Example Trading Co",
-          html: "<em>Example Trading Co</em> (11111111)",
+          html: "<mark><b>Example Trading Co</b></mark> (11111111)",
           company_id: "11111111",
           lookup_id: "lookup-11111111",
           approved: false
@@ -107,18 +107,33 @@ describe("company search results", () => {
     // would take the whole result list down with it, so the hit renders with
     // whatever it has instead.
     test.each([
-      ["national_identifier absent", { name: "Example Co", highlight: "<em>Example Co</em>" }],
+      [
+        "national_identifier absent",
+        { name: "Example Co", highlight: "<mark><b>Example Co</b></mark>" }
+      ],
       [
         "national_identifier null",
-        { name: "Example Co", highlight: "<em>Example Co</em>", national_identifier: null }
+        {
+          name: "Example Co",
+          highlight: "<mark><b>Example Co</b></mark>",
+          national_identifier: null
+        }
       ],
       [
         "id null",
-        { name: "Example Co", highlight: "<em>Example Co</em>", national_identifier: { id: null } }
+        {
+          name: "Example Co",
+          highlight: "<mark><b>Example Co</b></mark>",
+          national_identifier: { id: null }
+        }
       ],
       [
         "id empty",
-        { name: "Example Co", highlight: "<em>Example Co</em>", national_identifier: { id: "" } }
+        {
+          name: "Example Co",
+          highlight: "<mark><b>Example Co</b></mark>",
+          national_identifier: { id: "" }
+        }
       ]
     ])("%s renders the company without an identifier suffix", (_label, item) => {
       const run = () => ctx.helper.toResultItems({ items: [item] });
@@ -128,7 +143,7 @@ describe("company search results", () => {
         {
           id: "Example Co",
           text: "Example Co",
-          html: "<em>Example Co</em>",
+          html: "<mark><b>Example Co</b></mark>",
           company_id: "",
           lookup_id: undefined,
           approved: false
@@ -141,7 +156,7 @@ describe("company search results", () => {
       // other company that matched.
       const rows = ctx.helper.toResultItems({
         items: [
-          { name: "Example Co", highlight: "<em>Example Co</em>" },
+          { name: "Example Co", highlight: "<mark><b>Example Co</b></mark>" },
           hit("Other Example Co", "22222222")
         ]
       });
@@ -185,13 +200,79 @@ describe("company search results", () => {
     }
 
     test("the highlighted markup renders as markup in the list", async () => {
-      // The endpoint returns `highlight` as markup built from the buyer's own
-      // query server-side, so the row renders it rather than escaping it.
       await searchYielding("example", [hit("Example Trading Co", "11111111")]);
 
       const row = document.querySelector(".two-company-dropdown__row");
-      expect(row.querySelector("em").textContent).toBe("Example Trading Co");
+      expect(row.querySelector("mark b").textContent).toBe("Example Trading Co");
       expect(row.textContent).toBe("Example Trading Co (11111111)");
+    });
+
+    // ABN-554. `highlight` is registry-sourced and reaches the row as markup,
+    // so the row rebuilds it: the API's own `<mark><b>` pair becomes elements
+    // and every other shape stays text.
+    test.each([
+      [
+        "<mark><b>Ex</b></mark>ample Co",
+        "<mark><b>Ex</b></mark>ample Co (11111111)",
+        "the API's own highlight"
+      ],
+      [
+        "<script>alert(1)</script>Example Co",
+        "&lt;script&gt;alert(1)&lt;/script&gt;Example Co (11111111)",
+        "a script tag"
+      ],
+      [
+        "<img src=x onerror=alert(1)>Example Co",
+        "&lt;img src=x onerror=alert(1)&gt;Example Co (11111111)",
+        "an image with an error handler"
+      ],
+      [
+        '<mark onclick="x()">Ex</mark>ample Co',
+        '&lt;mark onclick="x()"&gt;Ex&lt;/mark&gt;ample Co (11111111)',
+        "an attribute on the permitted tag"
+      ],
+      [
+        "<MARK>Ex</MARK>ample Co",
+        "&lt;MARK&gt;Ex&lt;/MARK&gt;ample Co (11111111)",
+        "an uppercase tag name"
+      ],
+      [
+        "<mark>Ex</mark  >ample Co",
+        "<mark>Ex&lt;/mark  &gt;ample Co (11111111)</mark>",
+        "a padded close tag"
+      ],
+      [
+        "<b onmouseover=x>Ex</b>ample Co",
+        "&lt;b onmouseover=x&gt;Ex&lt;/b&gt;ample Co (11111111)",
+        "an attribute on the bold tag"
+      ],
+      ["</mark>Example Co", "&lt;/mark&gt;Example Co (11111111)", "a close tag that opens nothing"],
+      [
+        "<mark><b>Ex</b>ample Co",
+        "<mark><b>Ex</b>ample Co (11111111)</mark>",
+        "an unbalanced open tag"
+      ],
+      [
+        "<mark><b>Ex</mark></b>ample Co",
+        "<mark><b>Ex&lt;/mark&gt;</b>ample Co (11111111)</mark>",
+        "crossed close tags"
+      ],
+      [
+        "<mark><mark>Ex</mark></mark>ample Co",
+        "<mark><mark>Ex</mark></mark>ample Co (11111111)",
+        "nested marks"
+      ],
+      [
+        "&lt;mark&gt;Ex&lt;/mark&gt;ample Co",
+        "&amp;lt;mark&amp;gt;Ex&amp;lt;/mark&amp;gt;ample Co (11111111)",
+        "an already entity-encoded mark"
+      ]
+    ])("a row renders %s as %s (%s)", async (highlight, rendered) => {
+      await searchYielding("example", [
+        { name: "Example Co", highlight: highlight, national_identifier: { id: "11111111" } }
+      ]);
+
+      expect(document.querySelector(".two-company-dropdown__row").innerHTML).toBe(rendered);
     });
 
     test("the field takes the plain name, never the markup", async () => {

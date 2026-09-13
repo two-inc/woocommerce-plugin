@@ -394,6 +394,44 @@
         });
     }
 
+    /** Exact, lowercase, attribute-free: every other shape is escaped as text. */
+    const HIGHLIGHT_TOKEN = /(<\/?(?:mark|b)>)/;
+    const HIGHLIGHT_TAG = /^<(\/?)(mark|b)>$/;
+
+    /**
+     * Rebuild a row's registry-sourced label as nodes, keeping only the
+     * `<mark>`/`<b>` pair the API marks the match with.
+     *
+     * @param {string} html
+     * @returns {DocumentFragment}
+     */
+    function highlightFragment(html) {
+        const fragment = document.createDocumentFragment();
+        const open = [fragment];
+        const source = (html === null || html === undefined) ? '' : String(html);
+        source.split(HIGHLIGHT_TOKEN).forEach(function (token) {
+            const host = open[open.length - 1];
+            const tag = HIGHLIGHT_TAG.exec(token);
+            if (!tag) {
+                if (token) host.appendChild(document.createTextNode(token));
+                return;
+            }
+            if (!tag[1]) {
+                const element = document.createElement(tag[2]);
+                host.appendChild(element);
+                open.push(element);
+                return;
+            }
+            if (open.length > 1 && host.tagName.toLowerCase() === tag[2]) {
+                open.pop();
+                return;
+            }
+            // A close tag that opens nothing closes nothing, and reads as itself.
+            host.appendChild(document.createTextNode(token));
+        });
+        return fragment;
+    }
+
     /**
      * @param {Element} node
      * @param {string} type
@@ -1188,9 +1226,7 @@
             row.setAttribute('role', 'option');
             row.setAttribute('aria-selected', 'false');
             row.id = `two-company-row-${self._id}-${index}`;
-            // `innerHTML`, not text: the API marks the matched substring, and
-            // it is built from the buyer's own query server-side.
-            row.innerHTML = item.html;
+            row.appendChild(highlightFragment(item.html));
             self._results.appendChild(row);
         });
     };

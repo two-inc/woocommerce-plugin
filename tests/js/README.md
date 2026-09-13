@@ -131,6 +131,9 @@ PrestaShop's (TWO-25503):
 - the endpoint's `highlight` markup renders as markup in the row, while the field takes the
   plain name; picking a row writes `#billing_company_display`, `#billing_company` and
   `#company_id`.
+- a row rebuilds that markup rather than trusting it: bare `<mark>`/`<b>` become elements,
+  and an attribute, an uppercase or padded tag, a stray or crossed close tag, and an
+  entity-encoded one all stay text.
 - the min-chars hint is the query field's own watermark and states a fixed number — core's
   copy counts down the remaining characters, so the same field would say "1 or more" after
   two keystrokes. A below-threshold term is answered inside the panel, not under the field,
