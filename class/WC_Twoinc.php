@@ -2976,12 +2976,13 @@ if (!class_exists('WC_Twoinc')) {
             // merchant needing per-language copy should use a string-
             // translation plugin (WPML, Loco Translate) the same way the
             // rest of this plugin's __() strings are made translatable.
-            $custom_subtitle = trim((string) $this->get_option('payment_subtitle'));
+            // Tested after escaping, not before: copy that is only markup the
+            // escaper drops would otherwise emit an empty subtitle element.
+            $custom_subtitle = trim(WC_Twoinc_Helper::escape_anchor_only_html(
+                (string) $this->get_option('payment_subtitle')
+            ));
             if ($custom_subtitle !== '') {
-                return sprintf(
-                    '<div class="twoinc-payment-subtitle">%s</div>',
-                    wp_kses_post($custom_subtitle)
-                );
+                return sprintf('<div class="twoinc-payment-subtitle">%s</div>', $custom_subtitle);
             }
 
             // Escape first, then test: esc_url returns '' for a disallowed
@@ -3001,12 +3002,15 @@ if (!class_exists('WC_Twoinc')) {
                 '</a>'
             );
 
-            // wp_kses_post, not esc_html: the tagline carries an inline link
-            // (the brand FAQ "read more") — esc_html stripped it.
-            return sprintf(
-                '<div class="twoinc-payment-subtitle">%s</div>',
-                wp_kses_post($subtitle)
-            );
+            // The subtitle is emitted unescaped by its caller, so the
+            // anchor-only escaper is the whole trust boundary on it: the
+            // brand FAQ "read more" link survives and nothing else does.
+            $subtitle = WC_Twoinc_Helper::escape_anchor_only_html($subtitle);
+            if ($subtitle === '') {
+                return '';
+            }
+
+            return sprintf('<div class="twoinc-payment-subtitle">%s</div>', $subtitle);
         }
 
         /**
@@ -5583,7 +5587,7 @@ if (!class_exists('WC_Twoinc')) {
                 'payment_subtitle' => [
                     'title'       => __('Subtitle', 'twoinc-payment-gateway'),
                     'type'        => 'text',
-                    'description' => __('Optional free-text subtitle shown directly under the payment method title at checkout. Leave blank to show the default tagline. WooCommerce has no per-language settings model like some other platforms — use a string-translation plugin (e.g. WPML, Loco Translate) if you need this to vary by language.', 'twoinc-payment-gateway'),
+                    'description' => __('Optional subtitle shown beneath the title at checkout. Leave blank to use the default.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'default'     => ''
                 ],

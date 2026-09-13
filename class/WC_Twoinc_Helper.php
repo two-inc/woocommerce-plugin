@@ -11,6 +11,125 @@ if (!class_exists('WC_Twoinc_Helper')) {
     class WC_Twoinc_Helper
     {
         /**
+         * Reduces buyer-facing copy to text plus links: an `<a>` with an
+         * http(s) href survives, every other tag is dropped and its text kept,
+         * and all other markup is escaped.
+         *
+         * Surviving anchors are rebuilt from their allowed attributes, so no
+         * attribute this plugin does not itself emit can reach the page. The
+         * href itself is only checked for scheme and userinfo, not vouched for
+         * - whoever writes the copy chooses where an http(s) link points.
+         * `target` and `rel` are matched case-insensitively, as browsers treat
+         * those keywords; `rel` is read as a token set, and a kept
+         * `target="_blank"` always carries `rel="noopener"`.
+         *
+         * @return string
+         */
+        public static function escape_anchor_only_html($html)
+        {
+            // Only a name-like tag opens markup; a stray '<' stays text rather
+            // than swallowing the copy up to the next '>'.
+            $parts = preg_split(
+                '/(<\/?[a-zA-Z][^>]*>)/',
+                self::strip_control_characters((string) $html),
+                -1,
+                PREG_SPLIT_DELIM_CAPTURE
+            );
+            if ($parts === false) {
+                return '';
+            }
+
+            $result = '';
+            $open_anchors = 0;
+            foreach ($parts as $index => $part) {
+                if ($index % 2 === 0) {
+                    // ENT_SUBSTITUTE: without it one malformed byte blanks the whole run.
+                    $result .= htmlspecialchars($part, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false);
+                    continue;
+                }
+
+                if (preg_match('/^<\/a\s*>$/i', $part)) {
+                    if ($open_anchors > 0) {
+                        $result .= '</a>';
+                        $open_anchors--;
+                    }
+                    continue;
+                }
+
+                // A nested anchor is invalid HTML the browser would unnest
+                // anyway; its text is kept, its tag is not.
+                if ($open_anchors === 0 && preg_match('/^<a\s[^>]*>$/i', $part)) {
+                    $anchor = self::rebuild_allowed_anchor($part);
+                    if ($anchor !== '') {
+                        $result .= $anchor;
+                        $open_anchors++;
+                    }
+                }
+            }
+
+            return $result . str_repeat('</a>', $open_anchors);
+        }
+
+        /**
+         * @return string
+         */
+        private static function strip_control_characters($text)
+        {
+            $stripped = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
+
+            return $stripped === null ? '' : $stripped;
+        }
+
+        /**
+         * @return string the anchor rebuilt from its allowed attributes, or ''
+         *                when the href is not a plain http(s) URL
+         */
+        private static function rebuild_allowed_anchor($tag)
+        {
+            preg_match_all(
+                '/([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+))/',
+                $tag,
+                $matches,
+                PREG_SET_ORDER
+            );
+
+            $attributes = [];
+            foreach ($matches as $match) {
+                $name = strtolower($match[1]);
+                if (!isset($attributes[$name])) {
+                    // PREG_SET_ORDER truncates each set at the last participating
+                    // group, so an empty quoted value leaves later groups absent.
+                    $attributes[$name] = $match[2] !== ''
+                        ? $match[2]
+                        : ((isset($match[3]) && $match[3] !== '') ? $match[3] : (isset($match[4]) ? $match[4] : ''));
+                }
+            }
+
+            $href = html_entity_decode(trim(isset($attributes['href']) ? $attributes['href'] : ''), ENT_QUOTES, 'UTF-8');
+            if (!preg_match('/^https?:\/\//i', $href)) {
+                return '';
+            }
+            // Userinfo is the classic spoof: everything before the '@' reads as the host.
+            if (preg_match('/^https?:\/\/[^\/?#]*@/i', $href)) {
+                return '';
+            }
+
+            $opens_new_tab = isset($attributes['target']) && strtolower(trim($attributes['target'])) === '_blank';
+            $rel_tokens = preg_split('/\s+/', isset($attributes['rel']) ? strtolower(trim($attributes['rel'])) : '', -1, PREG_SPLIT_NO_EMPTY);
+
+            $anchor = '<a href="' . htmlspecialchars($href, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"';
+            if ($opens_new_tab) {
+                $anchor .= ' target="_blank"';
+            }
+            // A new tab without noopener hands the opener over, so the pair is not the copy's to split.
+            if ($opens_new_tab || in_array('noopener', $rel_tokens, true)) {
+                $anchor .= ' rel="noopener"';
+            }
+
+            return $anchor . '>';
+        }
+
+        /**
          * @return string
          */
         public static function round_amt($amt)
