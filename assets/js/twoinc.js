@@ -2666,12 +2666,6 @@ let twoincDomHelper = {
       document.querySelector("." + priceName + " .woocommerce-Price-amount");
     return twoincDomHelper.getPriceRecursively(node);
   },
-  rearrangeDescription: function () {
-    let twoincPaymentBox = jQuery(".payment_box.payment_method_" + window.twoinc.gateway_id);
-    if (twoincPaymentBox.length > 0) {
-      twoincPaymentBox.after(jQuery(".abt-twoinc"));
-    }
-  },
   saveCheckoutInputs: function () {
     let checkoutInputs = [];
     let checkoutForm = document.querySelector('form[name="checkout"]');
@@ -5284,9 +5278,6 @@ class Twoinc {
 
     // Check approval again
     this.getApproval();
-
-    // Rearrange the DOMs in Twoinc payment
-    twoincDomHelper.rearrangeDescription();
   }
 
   /**
@@ -6138,8 +6129,6 @@ class Twoinc {
     // buyer's first click, rather than re-registered (with no `.off()`, so it
     // duplicated) on every `updated_checkout`. See that binding's own doc
     // comment for the live bug this closes.
-
-    twoincDomHelper.rearrangeDescription();
 
     twoincTermChips.refresh();
     // Retries a mint that hasn't landed yet (network blip, rate limit) —

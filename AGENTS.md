@@ -56,7 +56,8 @@ WordPress and WooCommerce Best Practices
 - Use WooCommerce's Settings API for plugin configuration pages.
 - Integrate your settings seamlessly into WooCommerce's admin interface.
 - Override WooCommerce templates in your plugin for custom layouts.
-- Place overridden templates in `your-plugin/woocommerce/` directory.
+- Place templates the plugin loads itself in `your-plugin/woocommerce/` — that directory name is the `$default_path` the plugin passes to `wc_get_template`.
+- A template WooCommerce core loads has no such seam: replace it through `woocommerce_locate_template`, return any path you like, and record in its header the core version it was copied from.
 - Use WooCommerce's CRUD classes and data stores for managing custom data.
 - Extend existing data stores for custom functionality.
 - Use WooCommerce session handling for storing temporary data.

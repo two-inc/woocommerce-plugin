@@ -246,6 +246,13 @@ final class BrandConfigSpec
             'testClientVersionSuffixesShortShaWhenStamped',
             'testClientVersionIsQueryEncodedAsPlus',
             'testPaymentBoxOrdersTaglineChipsThenSoleTrader',
+            'testAboutControlRendersBetweenTheLabelAndThePaymentBox',
+            'testPaymentMethodTemplateOverrideIsScopedToThisGateway',
+            'testAboutIconIsAnAnchorWrappedIcon',
+            'testAboutControlIsWithheldWholeOrNotAtAll',
+            'testAboutTooltipEscapesTheBrandProductName',
+            'testAboutControlFallsBackIntoTheHiddenPaymentBoxWhenATemplateOverrideWins',
+            'testPaymentMethodTemplateIsStillCoreVerbatim',
             'testTermChipGroupIsNamedByANonLabelHeading',
             'testPaymentBoxRendersCompanySearchTileSlotBetweenSoleTraderAndIntentMessage',
             'testDeclinedBoxCarriesCompanyTemplate',
@@ -1066,6 +1073,8 @@ final class BrandConfigSpec
         WC()->customer = null;
         WC()->session = null;
         unset($GLOBALS['__twoinc_test_tax_classes'], $GLOBALS['__twoinc_test_tax_rates'], $GLOBALS['__twoinc_test_find_rates'], $GLOBALS['__twoinc_test_display_incl_tax']);
+        unset($GLOBALS['__twoinc_test_located_template']);
+        remove_all_filters('woocommerce_locate_template');
         foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'twoinc_payment_validation_error', 'twoinc_sole_trader_signup_url', 'twoinc_shipping_details'] as $tag) {
             remove_all_filters($tag);
         }
@@ -10513,16 +10522,270 @@ final class BrandConfigSpec
         $tagline = strpos($html, 'twoinc-payment-subtitle');
         $chips = strpos($html, 'twoinc-term-chips');
         $sole_trader = strpos($html, 'twoinc-sole-trader-note-slot');
-        $about = strpos($html, 'abt-twoinc');
 
         TinyAssert::true($tagline !== false, 'tagline block missing');
         TinyAssert::true($chips !== false, 'chips container missing');
         TinyAssert::true($sole_trader !== false, 'sole-trader note slot missing');
-        TinyAssert::true($about !== false, 'about block missing');
 
         TinyAssert::true($tagline < $chips, 'tagline must precede the chips');
         TinyAssert::true($chips < $sole_trader, 'chips must precede the sole-trader note slot');
-        TinyAssert::true($sole_trader < $about, 'about block must trail the box');
+    }
+
+    /**
+     * WooCommerce core prints get_icon() inside the method's <label for>,
+     * where an interactive control is invalid markup and joins the radio's
+     * accessible name. The override renders the control between </label>
+     * and the .payment_box instead - in neither (ABN-554).
+     */
+    private static function testAboutControlRendersBetweenTheLabelAndThePaymentBox(): void
+    {
+        $gateway = self::aboutGateway();
+        $html = self::renderPaymentMethodTemplate($gateway);
+
+        $label_end = strpos($html, '</label>');
+        $control = strpos($html, 'class="abt-twoinc"');
+        $box = strpos($html, 'class="payment_box');
+
+        TinyAssert::true($label_end !== false, 'the label must still be rendered');
+        TinyAssert::true($control !== false, 'the about control must be rendered');
+        TinyAssert::true($box !== false, 'the payment box must still be rendered');
+
+        TinyAssert::true($label_end < $control, 'the control must follow the closing label');
+        TinyAssert::true($control < $box, 'the control must precede the payment box');
+
+        TinyAssert::true(strpos($gateway->get_icon(), 'abt-twoinc') === false, 'the gateway icon, which core prints inside the label, must carry no about control');
+        TinyAssert::true(strpos($gateway->build_payment_description(), 'abt-twoinc') === false, 'the payment box must carry no about control');
+    }
+
+    /**
+     * The override replaces one shared template, so it has to leave every
+     * other gateway's markup exactly as core emits it, and leave a theme's
+     * own copy alone (ABN-554).
+     */
+    private static function testPaymentMethodTemplateOverrideIsScopedToThisGateway(): void
+    {
+        $other = new class () {
+            public $id = 'cheque';
+
+            public $chosen = false;
+
+            public $order_button_text = 'Place order';
+
+            public function get_title()
+            {
+                return 'Cheque';
+            }
+
+            public function get_icon()
+            {
+                return '';
+            }
+
+            public function get_description()
+            {
+                return 'Pay by cheque.';
+            }
+
+            public function has_fields()
+            {
+                return false;
+            }
+
+            public function payment_fields()
+            {
+                echo 'Pay by cheque.';
+            }
+        };
+
+        TinyAssert::true(strpos(self::renderPaymentMethodTemplate($other), 'abt-twoinc') === false, 'a gateway with no about control must render core markup untouched');
+
+        $core = dirname(WC_PLUGIN_FILE) . '/templates/checkout/payment-method.php';
+        $ours = WC_TWOINC_PLUGIN_PATH . 'templates/checkout/payment-method.php';
+        $theme = '/srv/themes/storefront/woocommerce/checkout/payment-method.php';
+
+        $rows = [
+            [$core, 'checkout/payment-method.php', $ours, 'core\'s own copy is replaced'],
+            [$theme, 'checkout/payment-method.php', $theme, 'a theme override wins'],
+            [$core, 'checkout/form-checkout.php', $core, 'every other template is untouched'],
+        ];
+        foreach ($rows as [$located, $name, $expected, $description]) {
+            TinyAssert::same($expected, WC_Twoinc::locate_payment_method_template($located, $name), $description);
+        }
+    }
+
+    /**
+     * Markup contract of the icon: it IS the link, so the tooltip it
+     * describes holds no anchor of its own (ABN-554).
+     */
+    private static function testAboutIconIsAnAnchorWrappedIcon(): void
+    {
+        $html = self::aboutGateway()->get_about_block_html();
+
+        $rows = [
+            ['href="https://www.two.inc/what-is-two"', 'the icon carries the brand about URL'],
+            ['target="_blank"', 'it leaves checkout in a new tab'],
+            ['rel="noopener"', 'the new tab gets no handle on the checkout window'],
+            ['aria-label="What is Two?"', 'the icon-only link is named for assistive tech'],
+            ['aria-describedby="abt-twoinc-text-woocommerce-gateway-tillit"', 'the link points at the tooltip body'],
+            ['<img alt="" src="https://shop.example/wp-content/plugins/tillit-payment-gateway/assets/images/question.svg" />', 'the image is decorative and server-resolved'],
+            ['role="tooltip"', 'the body declares what it is'],
+            ['aria-hidden="true"', 'the body is out of document flow, so its prose is read only as the link description'],
+            ['id="abt-twoinc-text-woocommerce-gateway-tillit"', 'the body carries the id the link points at'],
+            ['<p><strong>Buy now, receive your goods, pay your invoice later.</strong></p>', 'the emphasised line is a strong, as it is on the other platforms'],
+            ['<p>Click to find out more</p>', 'the closing line is plain text'],
+        ];
+        foreach ($rows as [$needle, $description]) {
+            TinyAssert::true(strpos($html, $needle) !== false, $description);
+        }
+
+        TinyAssert::true(strpos($html, 'tabindex') === false, 'the anchor is natively focusable');
+
+        $tooltip = substr($html, (int) strpos($html, '<div class="abt-twoinc-text"'));
+        TinyAssert::true(strpos($tooltip, '<a ') === false, 'the tooltip must hold no second link');
+    }
+
+    /**
+     * A brand with no about page, a brand whose about page is not http(s),
+     * and a merchant who turned the control off all render nothing at all -
+     * never a bare icon, never an empty href (ABN-554).
+     */
+    private static function testAboutControlIsWithheldWholeOrNotAtAll(): void
+    {
+        $rows = [
+            ['noabouturlbrand', 'yes', 'a brand with no about page renders no icon'],
+            ['scriptabouturlbrand', 'yes', 'a non-http(s) about page renders no icon'],
+            ['two', 'no', 'the merchant toggle removes the whole control'],
+        ];
+        foreach ($rows as [$brand, $toggle, $description]) {
+            self::reset();
+            if ($brand !== 'two') {
+                add_filter('twoinc_brand_file', static function () use ($brand) {
+                    return __DIR__ . '/fixtures/' . $brand . '.php';
+                });
+            }
+            $html = self::aboutGateway($toggle)->get_about_block_html();
+
+            TinyAssert::true(strpos($html, 'abt-twoinc') === false, $description);
+            TinyAssert::true(strpos($html, 'href') === false, $description . ', so no href at all');
+        }
+    }
+
+    /**
+     * The brand product name reaches the tooltip body as text, the same way
+     * it already reaches the icon's aria-label (ABN-554).
+     */
+    private static function testAboutTooltipEscapesTheBrandProductName(): void
+    {
+        self::reset();
+        add_filter('twoinc_brand_file', static function () {
+            return __DIR__ . '/fixtures/markupproductnamebrand.php';
+        });
+
+        $html = self::aboutGateway()->get_about_block_html();
+
+        TinyAssert::true(
+            strpos($html, '&lt;b&gt;Acme&lt;/b&gt; &amp; Pay is a payment solution') !== false,
+            'the tooltip body must carry the product name escaped'
+        );
+        TinyAssert::true(
+            strpos($html, '<b>Acme</b>') === false,
+            'no brand markup may survive into the tooltip body'
+        );
+    }
+
+    /**
+     * A theme shipping its own checkout/payment-method.php wins the locate
+     * race and renders no about control at all, so the gateway description
+     * carries it instead. The description renders inside .payment_box, which
+     * core hides until the method is chosen, so on those themes the control
+     * degrades to an icon at the foot of a collapsed box (ABN-554).
+     */
+    private static function testAboutControlFallsBackIntoTheHiddenPaymentBoxWhenATemplateOverrideWins(): void
+    {
+        add_filter('woocommerce_locate_template', ['WC_Twoinc', 'locate_payment_method_template'], 10, 2);
+        $gateway = self::aboutGateway();
+        $core = dirname(WC_PLUGIN_FILE) . '/templates/checkout/payment-method.php';
+        $theme = '/srv/themes/storefront/woocommerce/checkout/payment-method.php';
+
+        $rows = [
+            [$core, false, 'this plugin\'s own template renders the control, so the description must not repeat it'],
+            [$theme, true, 'a theme override renders none, so the description carries it'],
+        ];
+        foreach ($rows as [$located, $expected, $description]) {
+            $GLOBALS['__twoinc_test_located_template'] = $located;
+            $html = $gateway->append_about_block_to_description('<p>box</p>', $gateway->id);
+
+            TinyAssert::same($expected, strpos($html, 'class="abt-twoinc"') !== false, $description);
+            TinyAssert::true(strpos($html, '<p>box</p>') !== false, $description . ', with the description itself intact');
+        }
+
+        TinyAssert::same(
+            '<p>box</p>',
+            $gateway->append_about_block_to_description('<p>box</p>', 'cheque'),
+            'no other gateway\'s description is touched'
+        );
+    }
+
+    /**
+     * WooCommerce's own "outdated templates" report scans the active theme
+     * only, so nothing upstream notices this filter-based copy going stale.
+     * The core release it was taken from and the md5 of everything outside
+     * the TWOINC markers are pinned here instead; the support-matrix legs set
+     * WC_CORE_TEMPLATE_PATH and diff against the real installed core, which
+     * is what catches an upgrade that moves the template (ABN-554).
+     */
+    private static function testPaymentMethodTemplateIsStillCoreVerbatim(): void
+    {
+        $copy = (string) file_get_contents(WC_TWOINC_PLUGIN_PATH . 'templates/checkout/payment-method.php');
+        $verbatim = self::withoutTwoincAdditions($copy);
+
+        TinyAssert::true(strpos($copy, ' * @version     3.5.0') !== false, 'the copy must still declare the core template version it was taken from');
+        TinyAssert::same('6ec50712413ce4050c37791f6e746512', md5($verbatim), 'everything outside the TWOINC markers must still be WooCommerce 9.9.5 core byte for byte');
+
+        $core = (string) getenv('WC_CORE_TEMPLATE_PATH');
+        if ($core !== '' && is_readable($core)) {
+            TinyAssert::same(file_get_contents($core), $verbatim, 'the installed WooCommerce moved this template - re-diff the copy and repin');
+        }
+    }
+
+    /** The copy with every TWOINC-marked region removed, leaving core's own text. */
+    private static function withoutTwoincAdditions(string $copy): string
+    {
+        $kept = [];
+        $inside = false;
+        foreach (explode("\n", $copy) as $line) {
+            if (!$inside && strpos($line, 'TWOINC ADDITION') !== false) {
+                $inside = true;
+            }
+            if ($inside) {
+                $inside = strpos($line, 'END TWOINC ADDITION') === false;
+                continue;
+            }
+            $kept[] = $line;
+        }
+
+        return implode("\n", $kept);
+    }
+
+    /** The rendered override, for the gateway handed to it. */
+    private static function renderPaymentMethodTemplate($gateway): string
+    {
+        ob_start();
+        include WC_TWOINC_PLUGIN_PATH . 'templates/checkout/payment-method.php';
+
+        return (string) ob_get_clean();
+    }
+
+    /** Gateway with the about control's merchant toggle resolved, bypassing init_form_fields. */
+    private static function aboutGateway(string $show_abt_link = 'yes'): WC_Twoinc
+    {
+        $gateway = self::gateway();
+        $gateway->settings['show_abt_link'] = $show_abt_link;
+        // The stubbed constructor leaves the description empty, so the payment
+        // box the template tests assert on needs the other half of its guard.
+        $gateway->has_fields = true;
+
+        return $gateway;
     }
 
     /**

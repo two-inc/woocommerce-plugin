@@ -11,6 +11,11 @@
     <exclude-pattern>*/tests/e2e/*</exclude-pattern>
     <!-- Downloaded WP/WC stubs + phars used by phpstan (gitignored) -->
     <exclude-pattern>*/dev/stubs/*</exclude-pattern>
+    <!-- Verbatim copy of a WooCommerce core template plus one marked block;
+         reformatting it to PSR-12 would defeat diffing it against core on
+         each upgrade. Named file by file: a template this plugin writes
+         itself is ordinary source and stays gated. -->
+    <exclude-pattern>*/templates/checkout/payment-method\.php</exclude-pattern>
     <!-- Defensive: this repo has no vendor/ or coverage/ today (no Composer,
          no PHPUnit), but exclude them so a local `composer install` or
          coverage-report run doesn't sweep third-party/generated PHP into

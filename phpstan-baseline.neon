@@ -7,12 +7,6 @@ parameters:
 			path: class/WC_Twoinc.php
 
 		-
-			message: '#^Call to sprintf contains 2 placeholders, 3 values given\.$#'
-			identifier: argument.sprintf
-			count: 1
-			path: class/WC_Twoinc.php
-
-		-
 			message: '#^Comparison operation "\>" between \*NEVER\* and 0 results in an error\.$#'
 			identifier: greater.invalid
 			count: 1
@@ -89,9 +83,3 @@ parameters:
 			identifier: property.notFound
 			count: 23
 			path: tests/unit/run.php
-
-		-
-			message: '#^Constant ABSPATH not found\.$#'
-			identifier: constant.notFound
-			count: 1
-			path: tillit-payment-gateway.php

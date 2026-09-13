@@ -119,6 +119,8 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
+            add_filter('woocommerce_gateway_description', [$this, 'append_about_block_to_description'], 10, 2);
+
             // Brand product constraints (e.g. a minimum order value in a
             // specific currency/market) remove the gateway from checkout
             // when unmet. Config-driven; the Two brand sets no gate.
@@ -1389,30 +1391,44 @@ if (!class_exists('WC_Twoinc')) {
 
         private function get_abt_twoinc_html()
         {
-            $abt_url = WC_Twoinc_Brand::get('about_url');
             // A brand with no about page ('' — e.g. a partner edition whose
             // subtitle already carries its own inline "read more" link) renders nothing
-            // here, regardless of the merchant's show_abt_link setting.
+            // here, regardless of the merchant's show_abt_link setting. Any
+            // non-http(s) value is treated the same way: esc_url would blank
+            // it and leave an icon whose empty href reloads checkout.
+            $abt_url = WC_Twoinc_Helper::http_url_or_empty(WC_Twoinc_Brand::get('about_url'));
             if ($this->get_option('show_abt_link') === 'yes' && $abt_url !== '') {
                 $product_name = WC_Twoinc_Brand::get('product_name');
-                $link = '<a href="' . esc_url($abt_url) . '" target="_blank">' . sprintf(__('What is %s?', 'twoinc-payment-gateway'), $product_name) . '</a>';
-                $text = sprintf(
-                    '<p>%s</p><p><b>%s</b></p>',
-                    sprintf(__('%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple.', 'twoinc-payment-gateway'), $product_name, $product_name),
-                    __('Buy now, receive your goods, pay your invoice later.', 'twoinc-payment-gateway'),
-                    $abt_url,
+                $tooltip_id = 'abt-twoinc-text-' . $this->id;
+                // aria-hidden, yet still announced: aria-describedby resolves
+                // a directly referenced node even when hidden (ABN-554).
+                // noopener without noreferrer: the Referer is how the brand's
+                // own about page attributes the visit.
+                $icon = sprintf(
+                    '<a class="abt-twoinc-icon" href="%s" target="_blank" rel="noopener" aria-label="%s" aria-describedby="%s"><img alt="" src="%s" /></a>',
+                    esc_url($abt_url),
+                    esc_attr(sprintf(__('What is %s?', 'twoinc-payment-gateway'), $product_name)),
+                    esc_attr($tooltip_id),
+                    esc_url(WC_TWOINC_PLUGIN_URL . 'assets/images/question.svg')
                 );
-                $html = sprintf('<div class="abt-twoinc-text">%s</div><div class="abt-twoinc-link">%s</div>', $text, $link);
+                $escaped_product_name = esc_html($product_name);
+                $text = sprintf(
+                    '<p>%s</p><p><strong>%s</strong></p><p>%s</p>',
+                    sprintf(__('%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple.', 'twoinc-payment-gateway'), $escaped_product_name, $escaped_product_name),
+                    __('Buy now, receive your goods, pay your invoice later.', 'twoinc-payment-gateway'),
+                    // Plain text, not an anchor: the icon is the link.
+                    __('Click to find out more', 'twoinc-payment-gateway')
+                );
+                $html = $icon . sprintf('<div class="abt-twoinc-text" role="tooltip" aria-hidden="true" id="%s">%s</div>', esc_attr($tooltip_id), $text);
             } else {
                 $html = '';
             }
 
             /**
-             * Filter the "about" block inside the payment-box subtitle —
-             * the piece of the description brand overlays actually
-             * replace (a brand overlay ships its own bullet list).
-             * Register by plugins_loaded (computed at gateway
-             * construction).
+             * Filter the "about" control rendered beside the payment-method
+             * title — the piece brand overlays actually replace (a brand
+             * overlay ships its own bullet list). Register by plugins_loaded
+             * (computed at gateway construction).
              *
              * @param string    $html    Default about-block HTML ('' when
              *                           the merchant disabled the link).
@@ -2922,8 +2938,7 @@ if (!class_exists('WC_Twoinc')) {
          * Assemble the checkout payment-box description.
          *
          * Block order is cross-platform parity: brand tagline directly under
-         * the method title, then the term chips, then the sole-trader toggle,
-         * with the about block trailing.
+         * the method title, then the term chips, then the sole-trader toggle.
          *
          * WooCommerce core renders the method title and the gateway icon
          * together inside the payment method's <label>, and this
@@ -2935,16 +2950,14 @@ if (!class_exists('WC_Twoinc')) {
         public function build_payment_description()
         {
             return $this->get_pay_subtitle()
-                . $this->get_pay_box_description()
-                . $this->get_about_block_html();
+                . $this->get_pay_box_description();
         }
 
         /**
          * Brand tagline shown directly under the payment-method title.
          *
-         * Returns ONLY the tagline; the about block trails separately (see
-         * get_about_block_html and the description assembly in the
-         * constructor).
+         * Returns ONLY the tagline; the about control renders beside the
+         * method title instead (see locate_payment_method_template).
          *
          * The SENTENCE lives here as a literal msgid; the brand supplies only
          * the FAQ link TARGET ('checkout_subtitle_faq_url'). gettext
@@ -2997,13 +3010,95 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * The about block, wrapped, as the trailing element of the payment
-         * box. Split out of get_pay_subtitle; the twoinc_about_html filter
-         * seam is untouched and still applies inside get_abt_twoinc_html.
+         * Serve this plugin's copy of checkout/payment-method.php, which
+         * renders the about control between the method's </label> and its
+         * .payment_box — core offers no other seam beside the title that is
+         * outside the label (ABN-554).
+         *
+         * A theme's own override wins: $template still points inside
+         * WooCommerce only when nothing earlier in wc_locate_template's
+         * search order matched.
+         *
+         * @param string $template
+         * @param string $template_name
+         *
+         * @return string
          */
-        private function get_about_block_html()
+        public static function locate_payment_method_template($template, $template_name)
         {
-            return sprintf('<div class="abt-twoinc">%s</div>', $this->get_abt_twoinc_html());
+            if ($template_name !== 'checkout/payment-method.php') {
+                return $template;
+            }
+            if (!defined('WC_PLUGIN_FILE') || strpos((string) $template, dirname(WC_PLUGIN_FILE)) !== 0) {
+                return $template;
+            }
+            $override = WC_TWOINC_PLUGIN_PATH . 'templates/checkout/payment-method.php';
+
+            return file_exists($override) ? $override : $template;
+        }
+
+        /**
+         * Whether checkout will load this plugin's copy of
+         * checkout/payment-method.php — asked rather than remembered, because
+         * WooCommerce instantiates its own gateway object for the methods
+         * list and caches the located path (ABN-554).
+         */
+        private static function payment_method_template_is_ours()
+        {
+            if (!function_exists('wc_locate_template')) {
+                return false;
+            }
+
+            return wc_locate_template('checkout/payment-method.php')
+                === WC_TWOINC_PLUGIN_PATH . 'templates/checkout/payment-method.php';
+        }
+
+        /**
+         * The about control for a checkout whose payment-method template is a
+         * theme's rather than this plugin's. Such a theme never renders the
+         * control at all, and the premium themes this repo ships checkout CSS
+         * for are exactly the ones that override that template (ABN-554).
+         *
+         * The description renders inside .payment_box, which core hides until
+         * the method is chosen, so on those themes the control is an icon at
+         * the foot of a collapsed box rather than one beside the title.
+         *
+         * A Blocks checkout is out of scope for both routes: this gateway
+         * registers no Blocks payment method, so it is absent from that
+         * checkout entirely.
+         *
+         * @param string $description
+         * @param string $gateway_id
+         *
+         * @return string
+         */
+        public function append_about_block_to_description($description, $gateway_id)
+        {
+            if ($gateway_id !== $this->id || self::payment_method_template_is_ours()) {
+                return $description;
+            }
+
+            return $description . $this->get_about_block_html();
+        }
+
+        /**
+         * The about control, wrapped, rendered between the payment method's
+         * </label> and its .payment_box by this plugin's copy of core's
+         * checkout/payment-method.php. Public because that template calls it
+         * on the gateway it was handed, and its absence on every other
+         * gateway is what scopes the override to this one (ABN-554).
+         *
+         * The twoinc_about_html filter seam is untouched and still applies
+         * inside get_abt_twoinc_html; an empty result renders no wrapper, so
+         * a brand with no about page contributes nothing at all.
+         */
+        public function get_about_block_html()
+        {
+            $about = $this->get_abt_twoinc_html();
+
+            // A div, not a span: the tooltip body holds <p>s, which a span's
+            // phrasing-only content model forbids.
+            return $about === '' ? '' : sprintf('<div class="abt-twoinc">%s</div>', $about);
         }
 
         /**
