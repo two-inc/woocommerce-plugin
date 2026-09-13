@@ -1267,6 +1267,12 @@ msgstr "Handmatig invoeren"
 msgid "Search for company"
 msgstr "Zoek naar bedrijf"
 
+msgid "%d results are available, use up and down arrow keys to navigate."
+msgstr "%d resultaten zijn beschikbaar, gebruik de pijltoetsen omhoog en omlaag om te navigeren."
+
+msgid "1 result is available, use up and down arrow keys to navigate."
+msgstr "1 resultaat is beschikbaar, gebruik de pijltoetsen omhoog en omlaag om te navigeren."
+
 #: class/WC_Twoinc_Checkout.php:444
 msgid "Selected payment terms"
 msgstr "Gewenste betaaltermijn"

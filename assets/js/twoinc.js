@@ -811,6 +811,21 @@ class TwoCompanySearch {
    */
   lastObservedCountry = null;
 
+  /** What the panel announces once a search answers (ABN-554). */
+  searchResultsText(plural) {
+    const text = window.twoinc && window.twoinc.text;
+    if (plural) {
+      return (
+        (text && text.search_results_plural) ||
+        "%1 results are available, use up and down arrow keys to navigate."
+      );
+    }
+    return (
+      (text && text.search_results_one) ||
+      "1 result is available, use up and down arrow keys to navigate."
+    );
+  }
+
   companySearchUnavailableText() {
     return (
       (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_unavailable) ||
@@ -1091,7 +1106,13 @@ class TwoCompanySearch {
     const map = {
       "Search for company": this.searchCompanyText(),
       "Company search is unavailable right now. Please try again shortly.":
-        this.companySearchUnavailableText()
+        this.companySearchUnavailableText(),
+      // WordPress catalogues carry %d, the shared panel interpolates %1.
+      "%1 results are available, use up and down arrow keys to navigate.": this.searchResultsText(
+        true
+      ).replace("%d", "%1"),
+      "1 result is available, use up and down arrow keys to navigate.":
+        this.searchResultsText(false)
     };
     return map[text] || text;
   }
