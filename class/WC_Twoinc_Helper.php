@@ -71,6 +71,22 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * Whether escaping leaves the value's content alone - the admin
+         * accept/reject boundary, so it is the render boundary (ABN-554).
+         * Entity encoding is not a change; only markup this escaper drops or
+         * rewrites fails.
+         *
+         * @return bool
+         */
+        public static function renders_unchanged($html)
+        {
+            $html = (string) $html;
+
+            return html_entity_decode(self::escape_anchor_only_html($html), ENT_QUOTES, 'UTF-8')
+                === html_entity_decode($html, ENT_QUOTES, 'UTF-8');
+        }
+
+        /**
          * @return string
          */
         private static function strip_control_characters($text)

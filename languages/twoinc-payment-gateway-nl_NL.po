@@ -741,8 +741,13 @@ msgid "Subtitle"
 msgstr "Ondertitel"
 
 #: class/WC_Twoinc.php:4561
-msgid "Optional subtitle shown beneath the title at checkout. Leave blank to use the default."
-msgstr "Optionele ondertitel die bij het afrekenen onder de titel wordt weergegeven. Laat leeg om de standaard te gebruiken."
+msgid "Optional subtitle shown beneath the title at checkout."
+msgstr "Optionele ondertitel die bij het afrekenen onder de titel wordt weergegeven."
+
+#: class/WC_Twoinc.php:4851
+#, php-format
+msgid "Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\"."
+msgstr "De ondertitel accepteert alleen platte tekst en één link; \"%1$s\" wordt weergegeven als \"%2$s\"."
 
 #: class/WC_Twoinc.php:4569
 #, php-format

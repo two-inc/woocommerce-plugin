@@ -81,5 +81,5 @@ parameters:
 		-
 			message: '#^Access to an undefined property WC_Twoinc\:\:\$test_post_data\.$#'
 			identifier: property.notFound
-			count: 23
+			count: 24
 			path: tests/unit/run.php
