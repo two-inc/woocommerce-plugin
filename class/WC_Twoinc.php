@@ -1705,8 +1705,8 @@ if (!class_exists('WC_Twoinc')) {
 
             // The two decline boxes carry role="alert" — assertive, since this
             // payment method has just been deselected under the buyer. The
-            // approved notice and the retry notice carry role="status":
-            // neither deselects anything.
+            // approved notice, the retry notice and the company-required
+            // notice carry role="status": none of them deselects anything.
             // The chip heading is a `span`, not a `label`: it names the chip
             // radiogroup through aria-labelledby, and a `label` names a single
             // form control (ABN-554).
@@ -1722,6 +1722,7 @@ if (!class_exists('WC_Twoinc')) {
                     %s
                     <div class="twoinc-pay-box twoinc-err-phone-number hidden" role="alert">%s</div>
                     <div class="twoinc-pay-box twoinc-busy-retry hidden" role="status">%s</div>
+                    <div class="twoinc-pay-box twoinc-err-no-company hidden" role="status">%s</div>
                 </div>',
                 $term_input,
                 $company_search_tile_slot,
@@ -1729,7 +1730,13 @@ if (!class_exists('WC_Twoinc')) {
                 $this->get_intent_approved_notice($notice_enabled),
                 $this->get_intent_declined_notice($declined_notice_enabled),
                 __('Phone number is invalid.', 'twoinc-payment-gateway'),
-                __('We could not complete that just now. Please wait a moment and try again.', 'twoinc-payment-gateway')
+                __('We could not complete that just now. Please wait a moment and try again.', 'twoinc-payment-gateway'),
+                sprintf(
+                    // Placement-neutral on purpose: the search sits in the billing
+                    // form on some shops and inside this tile on others (ABN-554).
+                    __('To pay with %s, search for your company name and select it from the results.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name')
+                )
             );
         }
 
