@@ -67,6 +67,7 @@ final class BrandConfigSpec
             'testAvailabilityGateJudgesMerchantBuyerCountryAllowlist',
             'testMerchantBuyerCountryAllowlistIntersectsBrandGate',
             'testBuyerCountrySupportJudgesEachAllowlistState',
+            'testProcessPaymentGuardsReturnAFailureArray',
             'testOrderCreationRefusesAnUnsupportedBuyerCountry',
             'testOrderIntentRefusesAnUnsupportedBuyerCountry',
             'testOrderCreationRefusesADeclinedOrderIntent',
@@ -2388,6 +2389,8 @@ final class BrandConfigSpec
     {
         return new class ($allowlist) extends WC_Twoinc {
             public $calls = [];
+            /** Canned make_request() reply; null keeps the bare 200 below. */
+            public $response = null;
             private $allowlist;
 
             public function __construct($allowlist)
@@ -2414,9 +2417,92 @@ final class BrandConfigSpec
             public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
             {
                 $this->calls[] = $endpoint;
-                return ['response' => ['code' => 200], 'body' => '{}'];
+                return $this->response ?? ['response' => ['code' => 200], 'body' => '{}'];
             }
         };
+    }
+
+    /**
+     * Given a guard in process_payment refuses the order; When the Store API
+     * ran it; Then the return must be WooCommerce's failure array.
+     *
+     * ABN-554: the Store API array_merge()s this return into its payment
+     * details, so a null is a fatal TypeError and the buyer sees a critical
+     * error instead of the reason.
+     */
+    private static function testProcessPaymentGuardsReturnAFailureArray(): void
+    {
+        $cases = [
+            ['not_two', [], null, 'order is not a Two order'],
+            ['veto', ['company_id' => '923456789'], null, 'brand overlay vetoed payment'],
+            ['plain', ['company_id' => ''], null, 'no company captured'],
+            ['country', ['company_id' => '923456789', 'billing_country' => 'DE'], null, 'buyer country off the allowlist'],
+            ['declined', ['company_id' => '923456789'], null, 'order intent declined this company'],
+            ['plain', ['company_id' => '923456789'], new WP_Error('http', 'down'), 'transport failed'],
+            ['plain', ['company_id' => '923456789'], ['response' => ['code' => 400], 'body' => '{}'], 'API rejected the payload'],
+            ['plain', ['company_id' => '923456789'], ['response' => ['code' => 200], 'body' => '{"status":"REJECTED"}'], 'API declined the order'],
+        ];
+
+        foreach ($cases as $case) {
+            list($mode, $post, $response, $description) = $case;
+
+            $order = new class extends StubOrder {
+                public $saved_meta = [];
+
+                public function update_meta_data($key, $value)
+                {
+                    $this->saved_meta[$key] = $value;
+                }
+
+                public function save()
+                {
+                }
+
+                public function set_billing_country($value)
+                {
+                }
+
+                public function set_billing_company($value)
+                {
+                }
+
+                public function set_billing_phone($value)
+                {
+                }
+            };
+            $order->payment_method = $mode === 'not_two' ? 'cod' : WC_Twoinc_Brand::get('gateway_id');
+
+            $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+            $GLOBALS['__twoinc_test_notices'] = [];
+            $GLOBALS['__twoinc_test_logs'] = [];
+            WC()->session = new StubSession();
+            if ($mode === 'declined') {
+                WC_Twoinc::record_order_intent_verdict('923456789', false);
+            }
+            if ($mode === 'veto') {
+                add_filter('twoinc_payment_validation_error', static function () {
+                    return 'Brand says no.';
+                });
+            }
+            $_POST = $post;
+
+            $gateway = self::buyerCountryGateway($mode === 'country' ? ['NL'] : null);
+            $gateway->response = $response;
+            $result = $gateway->process_payment(42);
+
+            if ($mode === 'veto') {
+                remove_all_filters('twoinc_payment_validation_error');
+            }
+
+            TinyAssert::true(is_array($result), $description . ': returned no array');
+            TinyAssert::same('failure', $result['result'] ?? null, $description . ': not a failure result');
+            TinyAssert::true(
+                is_string($result['message'] ?? null) && $result['message'] !== '',
+                $description . ': carried no buyer-facing message'
+            );
+        }
+
+        $_POST = [];
     }
 
     private static function testOrderCreationRefusesAnUnsupportedBuyerCountry(): void
