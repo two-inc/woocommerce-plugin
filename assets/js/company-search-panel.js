@@ -1080,10 +1080,11 @@
                     // Styled apart from the other two messages on purpose
                     // (TWO-25326): "the search is down" and "your company is
                     // not here" are different answers and must not read alike.
-                    self._renderMessage(
-                        self.translate('Company search is unavailable right now. Please try again shortly.'),
-                        MESSAGE_CLASS + '--unavailable'
+                    const unavailable = self.translate(
+                        'Company search is unavailable right now. Please try again shortly.'
                     );
+                    self._renderMessage(unavailable, MESSAGE_CLASS + '--unavailable');
+                    self._announce(unavailable);
                     return;
                 }
                 self._renderResults(result.items);
@@ -1110,7 +1111,9 @@
         this._items = items || [];
         this._activeIndex = -1;
         if (!this._items.length) {
-            this._renderMessage(this.search.noResultsMessage());
+            const empty = this.search.noResultsMessage();
+            this._renderMessage(empty);
+            this._announce(empty);
             return;
         }
         this._results.innerHTML = '';
@@ -1133,6 +1136,9 @@
      * matches, or the search being down. Rendered in the results host rather
      * than above it so the chips stay the last thing in the panel.
      *
+     * Silent: only a search's own answer is announced, and this is also the
+     * too-short hint, re-rendered on every keystroke below the threshold.
+     *
      * @param {string} text
      * @param {string} [modifier] extra class, where the state needs its own
      *        treatment rather than the neutral one
@@ -1147,7 +1153,6 @@
         if (modifier) message.classList.add(modifier);
         this._results.innerHTML = '';
         this._results.appendChild(message);
-        this._announce(text);
     };
 
     /**

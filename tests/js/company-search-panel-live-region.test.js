@@ -137,6 +137,16 @@ describe("the company-search panel's live region", () => {
       expect(announced()).toBe("2 results are available, use up and down arrow keys to navigate.");
     });
 
+    test.each([
+      ["k", "one character"],
+      ["ka", "two, still under the threshold"]
+    ])("%s answers nothing, so nothing is announced — %s", (term) => {
+      typeQuery(term);
+
+      expect(ajax.calls).toHaveLength(0);
+      expect(announced()).toBe("");
+    });
+
     test("the search being down says so rather than reporting no matches", async () => {
       typeQuery("kaffe");
       ajax.last().fail("timeout");
