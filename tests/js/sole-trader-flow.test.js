@@ -2821,16 +2821,8 @@ describe("TWO-40 — sole-trader flow", () => {
       }
 
       test.each([
-        [
-          "the parked field",
-          0,
-          "the buyer came back to an enrolment they have not finished"
-        ],
-        [
-          "a control outside the capture",
-          1,
-          "the buyer left capture, so the signup goes with it"
-        ]
+        ["the parked field", 0, "the buyer came back to an enrolment they have not finished"],
+        ["a control outside the capture", 1, "the buyer left capture, so the signup goes with it"]
       ])(
         "after the window blurs to the popup, focus back on %s closes it %d time(s) — %s",
         (arriveOn, closes) => {
