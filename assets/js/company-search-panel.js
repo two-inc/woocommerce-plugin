@@ -237,6 +237,8 @@
         this._observedSelectors = {};
         /** Suppresses the field's own open-on-focus while the panel closes itself. */
         this._closing = false;
+        /** Suppresses it for a whole signup flight; see `holdFieldOpener()`. */
+        this._openerHeld = false;
         /** `observe` cannot be disconnected, so its callbacks read this instead. */
         this._destroyed = false;
         /** Listeners this panel owns, so teardown removes exactly its own. */
@@ -753,7 +755,7 @@
             self.open();
         });
         this._bindEvent(field, 'focus', function () {
-            if (self._closing) return;
+            if (self._closing || self._openerHeld) return;
             self.open();
         });
         this._bindEvent(field, 'keydown', function (event) {
@@ -961,6 +963,18 @@
         this._activeIndex = -1;
         this._syncExpanded();
         if (!options || options.returnFocus !== false) this.restoreFieldFocus();
+    };
+
+    /**
+     * Hold the field's FOCUS opener off across a whole signup flight. A browser
+     * re-fires `focus` on the control the opener window still holds when a
+     * popup closes, and nothing read at that moment tells it from the buyer
+     * (ABN-554). The pointer and keyboard openers are untouched.
+     *
+     * @param {boolean} held
+     */
+    CompanySearchPanel.prototype.holdFieldOpener = function (held) {
+        this._openerHeld = !!held;
     };
 
     /**

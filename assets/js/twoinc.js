@@ -3391,7 +3391,7 @@ function createSoleTraderController(companySearch) {
     restoreOnSettle: false,
     /** @type {Element|null} the control a launch took focus from, given it back once the popup settles */
     refocusOnSettle: null,
-    /** @type {Element|null} the company field a launch parked focus on; the focusin rules read it as their own */
+    /** @type {Element|null} the company field a launch parked focus on, for the flight's whole life; the focusin rules read it as their own */
     parkedFocus: null,
     /**
      * How many sole-trader round trips are outstanding (TWO-40).
@@ -4300,12 +4300,6 @@ function createSoleTraderController(companySearch) {
       if (controller.focusinHandler) return;
       controller.focusinHandler = function (event) {
         const target = event && event.target;
-        // Focus that LEAVES is what tells a window return's re-fire apart from the buyer
-        // arriving on the parked field: the re-fire carries no focusout before it (ABN-554).
-        if (event && event.type === "focusout") {
-          if (target === controller.parkedFocus) controller.parkedFocus = null;
-          return;
-        }
         if (target && target === controller.parkedFocus) return;
         if (
           !target ||
@@ -4340,14 +4334,12 @@ function createSoleTraderController(companySearch) {
         if (relaunch && typeof relaunch.click === "function") relaunch.click();
       };
       document.addEventListener("focusin", controller.focusinHandler, true);
-      document.addEventListener("focusout", controller.focusinHandler, true);
     },
 
     /** Test seam / teardown: drop the focus listeners. */
     unbindFocusinListener: function () {
       if (!controller.focusinHandler) return;
       document.removeEventListener("focusin", controller.focusinHandler, true);
-      document.removeEventListener("focusout", controller.focusinHandler, true);
       controller.focusinHandler = null;
       controller.parkedFocus = null;
     },
