@@ -3082,9 +3082,9 @@ if (!class_exists('WC_Twoinc')) {
          * the method is chosen, so on those themes the control is an icon at
          * the foot of a collapsed box rather than one beside the title.
          *
-         * A Blocks checkout is out of scope for both routes: this gateway
-         * registers no Blocks payment method, so it is absent from that
-         * checkout entirely.
+         * A Blocks checkout takes neither route: its tile is built by
+         * WC_Twoinc_Blocks_Support, which hands the about control to the
+         * client as its own field.
          *
          * @param string $description
          * @param string $gateway_id

@@ -138,6 +138,17 @@ function load_twoinc_classes()
     // host itself, so the merchant's custom headers can be sent server-side.
     add_action('wc_ajax_two_company_search', ['WC_Twoinc_Api_Proxy', 'ajax_company_search']);
     add_action('wc_ajax_two_company_by_id', ['WC_Twoinc_Api_Proxy', 'ajax_company_by_id']);
+
+    // A Blocks checkout builds its payment list from its own registry and
+    // never reads woocommerce_payment_gateways, so the gateway is absent from
+    // it without this (ABN-554). The action only fires where the Blocks
+    // package is present.
+    add_action('woocommerce_blocks_payment_method_type_registration', static function ($registry) {
+        require_once __DIR__ . '/class/WC_Twoinc_Blocks_Support.php';
+        if (class_exists('WC_Twoinc_Blocks_Support')) {
+            $registry->register(new WC_Twoinc_Blocks_Support());
+        }
+    });
     add_action('wc_ajax_two_order_intent', ['WC_Twoinc_Api_Proxy', 'ajax_order_intent']);
     add_action('wc_ajax_two_payment_terms', ['WC_Twoinc_Api_Proxy', 'ajax_payment_terms']);
     add_action('wc_ajax_two_supported_countries', ['WC_Twoinc_Api_Proxy', 'ajax_supported_countries']);

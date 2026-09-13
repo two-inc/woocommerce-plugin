@@ -1,0 +1,75 @@
+<?php
+
+use Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType;
+
+if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMethodType::class)) {
+    class WC_Twoinc_Blocks_Support extends AbstractPaymentMethodType
+    {
+        /** @var string */
+        protected $name;
+
+        public function initialize()
+        {
+            $this->name = WC_Twoinc_Brand::get('gateway_id');
+            $this->settings = get_option('woocommerce_' . $this->name . '_settings', []);
+        }
+
+        /**
+         * Asked of the live gateway rather than read from the settings row, so
+         * the Blocks tile obeys the same availability gates as the classic one
+         * (API-key verdict, brand minimum order) — ABN-554.
+         */
+        public function is_active()
+        {
+            return $this->get_gateway() !== null;
+        }
+
+        public function get_payment_method_script_handles()
+        {
+            $asset = 'assets/js/blocks-checkout.js';
+            $handle = 'twoinc-blocks-checkout';
+            wp_register_script(
+                $handle,
+                WC_TWOINC_PLUGIN_URL . $asset,
+                ['wc-blocks-registry', 'wc-settings', 'wp-element', 'wp-html-entities'],
+                twoinc_get_asset_version($asset),
+                true
+            );
+            // The settings key is the brand's gateway id, which the script
+            // cannot know before reading it.
+            wp_add_inline_script(
+                $handle,
+                sprintf('window.twoincBlocksName = %s;', wp_json_encode($this->name)),
+                'before'
+            );
+
+            return [$handle];
+        }
+
+        public function get_payment_method_data()
+        {
+            $gateway = $this->get_gateway();
+
+            return [
+                'title' => $gateway ? $gateway->get_pay_title() : '',
+                // The subtitle, not get_description(): the rest of the classic
+                // description is scaffold driven by the classic checkout's
+                // jQuery, which never runs here.
+                'subtitle' => $gateway ? $gateway->get_pay_subtitle() : '',
+                'about' => $gateway ? $gateway->get_about_block_html() : '',
+                'iconUrl' => $gateway ? $gateway->icon : '',
+                'supports' => $this->get_supported_features(),
+            ];
+        }
+
+        private function get_gateway(): ?WC_Twoinc
+        {
+            if (!function_exists('WC') || !WC()->payment_gateways()) {
+                return null;
+            }
+            $gateway = WC()->payment_gateways()->get_available_payment_gateways()[$this->name] ?? null;
+
+            return $gateway instanceof WC_Twoinc ? $gateway : null;
+        }
+    }
+}
