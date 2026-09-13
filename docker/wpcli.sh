@@ -41,8 +41,10 @@ wp post update $(wp option get woocommerce_checkout_page_id) --post_content='[wo
 wp post update $(wp option get woocommerce_cart_page_id) --post_content='[woocommerce_cart]'
 blocks_checkout_exists=$(wp post list --post_type=page --name=blocks-checkout --format=count 2>/dev/null || echo 0)
 if [ "$blocks_checkout_exists" -lt 1 ]; then
-  # Second checkout page so both renderers are reachable at once; /checkout/ stays classic (ABN-554).
-  wp post create --post_type=page --post_status=publish --post_title='Blocks Checkout' --post_name=blocks-checkout --post_content='<!-- wp:woocommerce/checkout --><!-- /wp:woocommerce/checkout -->'
+  # Second checkout page so both renderers are reachable at once (ABN-554); the content comes from
+  # WooCommerce because the checkout block renders nothing without its inner blocks.
+  blocks_checkout_content=$(wp eval '$m = new ReflectionMethod( "WC_Install", "get_checkout_block_content" ); $m->setAccessible( true ); echo $m->invoke( null );')
+  wp post create --post_type=page --post_status=publish --post_title='Blocks Checkout' --post_name=blocks-checkout --post_content="$blocks_checkout_content"
 fi
 wp option update woocommerce_coming_soon no
 wp option update woocommerce_currency $WOOCOM_CURRENCY
