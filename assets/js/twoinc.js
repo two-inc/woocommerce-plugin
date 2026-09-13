@@ -2446,8 +2446,10 @@ let twoincDomHelper = {
   clearIntentVerdicts: function () {
     // "Every pay-box except the loading state", rather than a list of the
     // verdict classes, so a brand overlay or later ticket adding a fourth
-    // verdict box is still covered.
-    jQuery(".twoinc-pay-box").not(".twoinc-loader").addClass("hidden");
+    // verdict box is still covered. The company-required notice is excluded
+    // too: it states what the form holds, not how some past request was
+    // answered, so nothing about a new request retires it (ABN-554).
+    jQuery(".twoinc-pay-box").not(".twoinc-loader, .twoinc-err-no-company").addClass("hidden");
     twoincDomHelper.setPaymentMethodSelectable(true);
   },
   /**
@@ -2462,6 +2464,18 @@ let twoincDomHelper = {
       "twoinc-withheld",
       withheld
     );
+  },
+  /**
+   * Retire the company-required state — its notice and the chip withholding
+   * that goes with it.
+   *
+   * `getApproval()` is the only caller, and the only route in is its own
+   * no-company branch: nothing else paints this state, and nothing else may
+   * take it down while the form still cannot pay.
+   */
+  clearCompanyRequiredNotice: function () {
+    jQuery(".twoinc-pay-box.twoinc-err-no-company").addClass("hidden");
+    twoincDomHelper.setTermChipsWithheld(false);
   },
   /**
    * Bumped by every pay-box paint. A deferred retire captures it at paint time
@@ -5411,9 +5425,7 @@ class Twoinc {
       twoincDomHelper.togglePaySubtitleDesc("no-company");
       return;
     }
-    // Not left to `togglePaySubtitleDesc()`: the early return below reaches no
-    // paint at all, and would strand the chips withheld.
-    twoincDomHelper.setTermChipsWithheld(false);
+    twoincDomHelper.clearCompanyRequiredNotice();
 
     if (!this.isReadyApprovalCheck()) {
       // A form that has become incomplete cannot answer the question a

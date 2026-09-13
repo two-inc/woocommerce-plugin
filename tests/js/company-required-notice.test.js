@@ -167,6 +167,20 @@ describe("the company-required notice", () => {
     expect(shown(NOTICE)).toBe(true);
   });
 
+  test("clearing the intent verdicts leaves the notice standing", () => {
+    // Typing a company name fires `#billing_company`'s change handler, which
+    // clears the verdicts and arms no check of its own — so a notice this
+    // cleared would stay gone for the rest of the manual-entry journey, which
+    // is the one journey it exists for.
+    captureCompany("");
+    instance.getApproval();
+    expect(shown(NOTICE)).toBe(true);
+
+    dom.clearIntentVerdicts();
+
+    expect(shown(NOTICE)).toBe(true);
+  });
+
   test("capturing a company takes the notice and the withholding away", () => {
     captureCompany("");
     instance.getApproval();
