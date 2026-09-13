@@ -1440,6 +1440,19 @@ function get_bloginfo($show = '', $filter = 'raw')
     return $show === 'version' ? '6.8' : '';
 }
 
+/**
+ * Core's template locator, reduced to what the about-control fallback asks of
+ * it: the path checkout would load once every override filter has run. The
+ * starting point is core's own copy unless a test names a theme's.
+ */
+function wc_locate_template($template_name, $template_path = '', $default_path = '')
+{
+    $located = $GLOBALS['__twoinc_test_located_template']
+        ?? dirname(WC_PLUGIN_FILE) . '/templates/' . $template_name;
+
+    return apply_filters('woocommerce_locate_template', $located, $template_name, $template_path);
+}
+
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Brand.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Helper.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_FX.php';

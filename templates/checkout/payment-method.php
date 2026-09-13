@@ -13,9 +13,10 @@
  * @see         https://woocommerce.com/document/template-structure/
  * @package     WooCommerce\Templates
  * @version     3.5.0
- *
- * Byte-for-byte WooCommerce 9.9.5 core, plus the one marked block below.
- * Re-diff against core on every WooCommerce upgrade.
+ * TWOINC ADDITION (ABN-554): everything outside the TWOINC markers is
+ * WooCommerce 9.9.5 core byte-for-byte, and tests/unit/run.php pins both that
+ * core version and the md5 of the remainder.
+ * END TWOINC ADDITION
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

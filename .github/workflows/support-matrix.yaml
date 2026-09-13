@@ -78,6 +78,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+
       - name: Boot WordPress + WooCommerce ${{ matrix.woocommerce }}
         run: |
           set -o pipefail
@@ -174,6 +178,18 @@ jobs:
             exit 1
           fi
           docker exec "wp-$SFX" curl -sf "http://localhost/?page_id=$id" -o /dev/null
+
+      # The plugin ships a verbatim copy of core's checkout/payment-method.php,
+      # replaced through woocommerce_locate_template - an override WooCommerce's
+      # own "outdated templates" report cannot see, because it scans the active
+      # theme only. These legs are the one place a real WooCommerce release is
+      # on disk to diff the copy against (ABN-554).
+      - name: Core template drift (WooCommerce ${{ matrix.woocommerce }})
+        run: |
+          set -o pipefail
+          docker cp "cli-$SFX":/var/www/html/wp-content/plugins/woocommerce/templates/checkout/payment-method.php \
+            "$RUNNER_TEMP/wc-payment-method.php"
+          WC_CORE_TEMPLATE_PATH="$RUNNER_TEMP/wc-payment-method.php" php tests/unit/run.php
 
       - name: Tear down
         if: always()

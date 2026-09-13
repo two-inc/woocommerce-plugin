@@ -119,6 +119,8 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
+            add_filter('woocommerce_gateway_description', [$this, 'append_about_block_to_description'], 10, 2);
+
             // Brand product constraints (e.g. a minimum order value in a
             // specific currency/market) remove the gateway from checkout
             // when unmet. Config-driven; the Two brand sets no gate.
@@ -1410,7 +1412,7 @@ if (!class_exists('WC_Twoinc')) {
                     esc_url(WC_TWOINC_PLUGIN_URL . 'assets/images/question.svg')
                 );
                 $text = sprintf(
-                    '<p>%s</p><p><b>%s</b></p><p>%s</p>',
+                    '<p>%s</p><p><strong>%s</strong></p><p>%s</p>',
                     sprintf(__('%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple.', 'twoinc-payment-gateway'), $product_name, $product_name),
                     __('Buy now, receive your goods, pay your invoice later.', 'twoinc-payment-gateway'),
                     // Plain text, not an anchor: the icon is the link.
@@ -2954,7 +2956,7 @@ if (!class_exists('WC_Twoinc')) {
          * Brand tagline shown directly under the payment-method title.
          *
          * Returns ONLY the tagline; the about control renders beside the
-         * method title instead (see get_about_block_html and get_icon).
+         * method title instead (see locate_payment_method_template).
          *
          * The SENTENCE lives here as a literal msgid; the brand supplies only
          * the FAQ link TARGET ('checkout_subtitle_faq_url'). gettext
@@ -3032,6 +3034,42 @@ if (!class_exists('WC_Twoinc')) {
             $override = WC_TWOINC_PLUGIN_PATH . 'templates/checkout/payment-method.php';
 
             return file_exists($override) ? $override : $template;
+        }
+
+        /**
+         * Whether checkout will load this plugin's copy of
+         * checkout/payment-method.php — asked rather than remembered, because
+         * WooCommerce instantiates its own gateway object for the methods
+         * list and caches the located path (ABN-554).
+         */
+        private static function payment_method_template_is_ours()
+        {
+            if (!function_exists('wc_locate_template')) {
+                return false;
+            }
+
+            return wc_locate_template('checkout/payment-method.php')
+                === WC_TWOINC_PLUGIN_PATH . 'templates/checkout/payment-method.php';
+        }
+
+        /**
+         * The about control for a checkout whose payment-method template is a
+         * theme's rather than this plugin's. Such a theme never renders the
+         * control at all, and the premium themes this repo ships checkout CSS
+         * for are exactly the ones that override that template (ABN-554).
+         *
+         * @param string $description
+         * @param string $gateway_id
+         *
+         * @return string
+         */
+        public function append_about_block_to_description($description, $gateway_id)
+        {
+            if ($gateway_id !== $this->id || self::payment_method_template_is_ours()) {
+                return $description;
+            }
+
+            return $description . $this->get_about_block_html();
         }
 
         /**

@@ -250,6 +250,8 @@ final class BrandConfigSpec
             'testPaymentMethodTemplateOverrideIsScopedToThisGateway',
             'testAboutIconIsAnAnchorWrappedIcon',
             'testAboutControlIsWithheldWholeOrNotAtAll',
+            'testAboutControlFallsBackToTheDescriptionWhenATemplateOverrideWins',
+            'testPaymentMethodTemplateIsStillCoreVerbatim',
             'testTermChipGroupIsNamedByANonLabelHeading',
             'testPaymentBoxRendersCompanySearchTileSlotBetweenSoleTraderAndIntentMessage',
             'testDeclinedBoxCarriesCompanyTemplate',
@@ -1070,6 +1072,8 @@ final class BrandConfigSpec
         WC()->customer = null;
         WC()->session = null;
         unset($GLOBALS['__twoinc_test_tax_classes'], $GLOBALS['__twoinc_test_tax_rates'], $GLOBALS['__twoinc_test_find_rates'], $GLOBALS['__twoinc_test_display_incl_tax']);
+        unset($GLOBALS['__twoinc_test_located_template']);
+        remove_all_filters('woocommerce_locate_template');
         foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'twoinc_payment_validation_error', 'twoinc_sole_trader_signup_url', 'twoinc_shipping_details'] as $tag) {
             remove_all_filters($tag);
         }
@@ -10624,7 +10628,9 @@ final class BrandConfigSpec
             ['aria-describedby="abt-twoinc-text-woocommerce-gateway-tillit"', 'the link points at the tooltip body'],
             ['<img alt="" src="https://shop.example/wp-content/plugins/tillit-payment-gateway/assets/images/question.svg" />', 'the image is decorative and server-resolved'],
             ['role="tooltip"', 'the body declares what it is'],
+            ['aria-hidden="true"', 'the body is out of document flow, so its prose is read only as the link description'],
             ['id="abt-twoinc-text-woocommerce-gateway-tillit"', 'the body carries the id the link points at'],
+            ['<p><strong>Buy now, receive your goods, pay your invoice later.</strong></p>', 'the emphasised line is a strong, as it is on the other platforms'],
             ['<p>Click to find out more</p>', 'the closing line is plain text'],
         ];
         foreach ($rows as [$needle, $description]) {
@@ -10661,6 +10667,79 @@ final class BrandConfigSpec
             TinyAssert::true(strpos($html, 'abt-twoinc') === false, $description);
             TinyAssert::true(strpos($html, 'href') === false, $description . ', so no href at all');
         }
+    }
+
+    /**
+     * A theme shipping its own checkout/payment-method.php wins the locate
+     * race and renders no about control at all, so the gateway description
+     * carries it instead - which is where it travelled before this override
+     * existed (ABN-554).
+     */
+    private static function testAboutControlFallsBackToTheDescriptionWhenATemplateOverrideWins(): void
+    {
+        add_filter('woocommerce_locate_template', ['WC_Twoinc', 'locate_payment_method_template'], 10, 2);
+        $gateway = self::aboutGateway();
+        $core = dirname(WC_PLUGIN_FILE) . '/templates/checkout/payment-method.php';
+        $theme = '/srv/themes/storefront/woocommerce/checkout/payment-method.php';
+
+        $rows = [
+            [$core, false, 'this plugin\'s own template renders the control, so the description must not repeat it'],
+            [$theme, true, 'a theme override renders none, so the description carries it'],
+        ];
+        foreach ($rows as [$located, $expected, $description]) {
+            $GLOBALS['__twoinc_test_located_template'] = $located;
+            $html = $gateway->append_about_block_to_description('<p>box</p>', $gateway->id);
+
+            TinyAssert::same($expected, strpos($html, 'class="abt-twoinc"') !== false, $description);
+            TinyAssert::true(strpos($html, '<p>box</p>') !== false, $description . ', with the description itself intact');
+        }
+
+        TinyAssert::same(
+            '<p>box</p>',
+            $gateway->append_about_block_to_description('<p>box</p>', 'cheque'),
+            'no other gateway\'s description is touched'
+        );
+    }
+
+    /**
+     * WooCommerce's own "outdated templates" report scans the active theme
+     * only, so nothing upstream notices this filter-based copy going stale.
+     * The core release it was taken from and the md5 of everything outside
+     * the TWOINC markers are pinned here instead; the support-matrix legs set
+     * WC_CORE_TEMPLATE_PATH and diff against the real installed core, which
+     * is what catches an upgrade that moves the template (ABN-554).
+     */
+    private static function testPaymentMethodTemplateIsStillCoreVerbatim(): void
+    {
+        $copy = (string) file_get_contents(WC_TWOINC_PLUGIN_PATH . 'templates/checkout/payment-method.php');
+        $verbatim = self::withoutTwoincAdditions($copy);
+
+        TinyAssert::true(strpos($copy, ' * @version     3.5.0') !== false, 'the copy must still declare the core template version it was taken from');
+        TinyAssert::same('6ec50712413ce4050c37791f6e746512', md5($verbatim), 'everything outside the TWOINC markers must still be WooCommerce 9.9.5 core byte for byte');
+
+        $core = (string) getenv('WC_CORE_TEMPLATE_PATH');
+        if ($core !== '' && is_readable($core)) {
+            TinyAssert::same(file_get_contents($core), $verbatim, 'the installed WooCommerce moved this template - re-diff the copy and repin');
+        }
+    }
+
+    /** The copy with every TWOINC-marked region removed, leaving core's own text. */
+    private static function withoutTwoincAdditions(string $copy): string
+    {
+        $kept = [];
+        $inside = false;
+        foreach (explode("\n", $copy) as $line) {
+            if (!$inside && strpos($line, 'TWOINC ADDITION') !== false) {
+                $inside = true;
+            }
+            if ($inside) {
+                $inside = strpos($line, 'END TWOINC ADDITION') === false;
+                continue;
+            }
+            $kept[] = $line;
+        }
+
+        return implode("\n", $kept);
     }
 
     /** The rendered override, for the gateway handed to it. */
