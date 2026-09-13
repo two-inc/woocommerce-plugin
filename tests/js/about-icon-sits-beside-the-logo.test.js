@@ -32,7 +32,7 @@ const LABEL_RULE = "li.wc_payment_method:has(> .abt-twoinc) > label";
 describe("the about control's place in the method row", () => {
   test("the title label does not grow, so the control stays against it", () => {
     // Given/When: a flex method row. Then: a zero grow factor.
-    expect(ruleBody(LABEL_RULE)).toMatch(/flex:\s*0\s/);
+    expect(ruleBody(LABEL_RULE)).toMatch(/flex:\s*0\b/);
     expect(ruleBody(LABEL_RULE)).not.toMatch(/flex:\s*(?:[1-9]|auto|none)/);
   });
 
@@ -54,11 +54,10 @@ describe("the about control's place in the method row", () => {
     expect(ruleBody(".abt-twoinc")).toMatch(/margin-left:\s*12px/);
   });
 
-  test("the tooltip is centred on the control, which is no longer at the right edge", () => {
+  test("the tooltip body stays anchored right, which fits the column at every width", () => {
     const tooltip = ruleBody(".abt-twoinc-text");
 
-    expect(tooltip).toMatch(/left:\s*50%/);
-    expect(tooltip).toMatch(/transform:\s*translateX\(-50%\)/);
-    expect(tooltip).not.toMatch(/right:\s*0/);
+    expect(tooltip).toMatch(/right:\s*0/);
+    expect(tooltip).not.toMatch(/left:\s*50%|transform:\s*translateX/);
   });
 });

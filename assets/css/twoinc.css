@@ -204,10 +204,10 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   position: absolute;
   z-index: 100;
   bottom: 140%;
-  /* Centred on the control, which sits near the start of the method row: a
-     right-anchored tooltip would overhang the checkout column's left edge. */
-  left: 50%;
-  transform: translateX(-50%);
+  /* Right-anchored: the control sits far enough into the row that the body
+     clears the column's left edge, where centring overhangs its right on a
+     narrow viewport. */
+  right: 0;
   width: 240px;
   max-width: 80vw;
   padding: 10px;
