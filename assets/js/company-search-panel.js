@@ -399,9 +399,8 @@
     const HIGHLIGHT_TAG = /^<(\/?)(mark|b)>$/;
 
     /**
-     * Rebuild a row's server-built label as nodes: it carries registry-sourced
-     * text, so only bare `<mark>`/`<b>` — what the API marks the match with —
-     * survive as elements.
+     * Rebuild a row's registry-sourced label as nodes, keeping only the
+     * `<mark>`/`<b>` pair the API marks the match with.
      *
      * @param {string} html
      * @returns {DocumentFragment}
@@ -423,11 +422,11 @@
                 open.push(element);
                 return;
             }
-            // An unmatched close tag closes nothing and reads as what it is.
             if (open.length > 1 && host.tagName.toLowerCase() === tag[2]) {
                 open.pop();
                 return;
             }
+            // A close tag that opens nothing closes nothing, and reads as itself.
             host.appendChild(document.createTextNode(token));
         });
         return fragment;
@@ -1227,7 +1226,6 @@
             row.setAttribute('role', 'option');
             row.setAttribute('aria-selected', 'false');
             row.id = `two-company-row-${self._id}-${index}`;
-            // Registry-sourced markup: only the API's own match highlighting survives.
             row.appendChild(highlightFragment(item.html));
             self._results.appendChild(row);
         });

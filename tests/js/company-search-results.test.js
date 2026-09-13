@@ -107,18 +107,33 @@ describe("company search results", () => {
     // would take the whole result list down with it, so the hit renders with
     // whatever it has instead.
     test.each([
-      ["national_identifier absent", { name: "Example Co", highlight: "<mark><b>Example Co</b></mark>" }],
+      [
+        "national_identifier absent",
+        { name: "Example Co", highlight: "<mark><b>Example Co</b></mark>" }
+      ],
       [
         "national_identifier null",
-        { name: "Example Co", highlight: "<mark><b>Example Co</b></mark>", national_identifier: null }
+        {
+          name: "Example Co",
+          highlight: "<mark><b>Example Co</b></mark>",
+          national_identifier: null
+        }
       ],
       [
         "id null",
-        { name: "Example Co", highlight: "<mark><b>Example Co</b></mark>", national_identifier: { id: null } }
+        {
+          name: "Example Co",
+          highlight: "<mark><b>Example Co</b></mark>",
+          national_identifier: { id: null }
+        }
       ],
       [
         "id empty",
-        { name: "Example Co", highlight: "<mark><b>Example Co</b></mark>", national_identifier: { id: "" } }
+        {
+          name: "Example Co",
+          highlight: "<mark><b>Example Co</b></mark>",
+          national_identifier: { id: "" }
+        }
       ]
     ])("%s renders the company without an identifier suffix", (_label, item) => {
       const run = () => ctx.helper.toResultItems({ items: [item] });
@@ -198,75 +213,66 @@ describe("company search results", () => {
     test.each([
       [
         "<mark><b>Ex</b></mark>ample Co",
-        ["MARK", "B"],
-        "Example Co (11111111)",
+        "<mark><b>Ex</b></mark>ample Co (11111111)",
         "the API's own highlight"
       ],
       [
         "<script>alert(1)</script>Example Co",
-        [],
-        "<script>alert(1)</script>Example Co (11111111)",
+        "&lt;script&gt;alert(1)&lt;/script&gt;Example Co (11111111)",
         "a script tag"
       ],
       [
-        '<img src=x onerror=alert(1)>Example Co',
-        [],
-        "<img src=x onerror=alert(1)>Example Co (11111111)",
+        "<img src=x onerror=alert(1)>Example Co",
+        "&lt;img src=x onerror=alert(1)&gt;Example Co (11111111)",
         "an image with an error handler"
       ],
       [
         '<mark onclick="x()">Ex</mark>ample Co',
-        [],
-        '<mark onclick="x()">Ex</mark>ample Co (11111111)',
+        '&lt;mark onclick="x()"&gt;Ex&lt;/mark&gt;ample Co (11111111)',
         "an attribute on the permitted tag"
       ],
       [
         "<MARK>Ex</MARK>ample Co",
-        [],
-        "<MARK>Ex</MARK>ample Co (11111111)",
+        "&lt;MARK&gt;Ex&lt;/MARK&gt;ample Co (11111111)",
         "an uppercase tag name"
       ],
       [
         "<mark>Ex</mark  >ample Co",
-        ["MARK"],
-        "Ex</mark  >ample Co (11111111)",
+        "<mark>Ex&lt;/mark  &gt;ample Co (11111111)</mark>",
         "a padded close tag"
       ],
       [
         "<b onmouseover=x>Ex</b>ample Co",
-        [],
-        "<b onmouseover=x>Ex</b>ample Co (11111111)",
+        "&lt;b onmouseover=x&gt;Ex&lt;/b&gt;ample Co (11111111)",
         "an attribute on the bold tag"
       ],
+      ["</mark>Example Co", "&lt;/mark&gt;Example Co (11111111)", "a close tag that opens nothing"],
       [
         "<mark><b>Ex</b>ample Co",
-        ["MARK", "B"],
-        "Example Co (11111111)",
+        "<mark><b>Ex</b>ample Co (11111111)</mark>",
         "an unbalanced open tag"
       ],
       [
+        "<mark><b>Ex</mark></b>ample Co",
+        "<mark><b>Ex&lt;/mark&gt;</b>ample Co (11111111)</mark>",
+        "crossed close tags"
+      ],
+      [
         "<mark><mark>Ex</mark></mark>ample Co",
-        ["MARK", "MARK"],
-        "Example Co (11111111)",
+        "<mark><mark>Ex</mark></mark>ample Co (11111111)",
         "nested marks"
       ],
       [
         "&lt;mark&gt;Ex&lt;/mark&gt;ample Co",
-        [],
-        "&lt;mark&gt;Ex&lt;/mark&gt;ample Co (11111111)",
+        "&amp;lt;mark&amp;gt;Ex&amp;lt;/mark&amp;gt;ample Co (11111111)",
         "an already entity-encoded mark"
       ]
-    ])("a row keeps %s as %s", async (highlight, tags, text, description) => {
+    ])("a row renders %s as %s (%s)", async (highlight, rendered) => {
       await searchYielding("example", [
         { name: "Example Co", highlight: highlight, national_identifier: { id: "11111111" } }
       ]);
 
-      const row = document.querySelector(".two-company-dropdown__row");
-      expect(Array.from(row.querySelectorAll("*")).map((el) => el.tagName)).toEqual(
-        tags,
-        description
-      );
-      expect(row.textContent).toBe(text, description);
+      expect(document.querySelector(".two-company-dropdown__row").innerHTML).toBe(rendered);
     });
 
     test("the field takes the plain name, never the markup", async () => {
