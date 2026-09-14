@@ -2678,6 +2678,10 @@ let twoincDomHelper = {
       document.querySelector("." + priceName + " .woocommerce-Price-amount");
     return twoincDomHelper.getPriceRecursively(node);
   },
+  /** The pay-for-order surface: no checkout form, and no `updated_checkout` ever (ABN-554). */
+  isPayForOrderPage: function () {
+    return document.querySelector('form[name="checkout"]') === null;
+  },
   saveCheckoutInputs: function () {
     let checkoutInputs = [];
     let checkoutForm = document.querySelector('form[name="checkout"]');
@@ -5268,6 +5272,13 @@ class Twoinc {
     // `updated_checkout` moments later costs nothing extra.
     twoincSelectWooHelper.soleTrader.refresh();
     twoincSelectWooHelperShipping.soleTrader.refresh();
+
+    // `onUpdatedCheckout()` is the chips' only other renderer, so where that
+    // event never comes the tile is empty once the company-required notice
+    // retires (ABN-554).
+    if (twoincDomHelper.isPayForOrderPage()) {
+      twoincTermChips.refresh();
+    }
 
     setTimeout(function () {
       twoincDomHelper.saveCheckoutInputs();
