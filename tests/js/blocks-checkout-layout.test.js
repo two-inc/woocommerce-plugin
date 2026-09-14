@@ -28,11 +28,6 @@ const ruleBody = (selector) => {
 describe("the Blocks checkout's own stylesheet", () => {
   test.each([
     [
-      ".wc-block-components-sidebar-layout.is-large .wc-block-components-main",
-      /padding-left:\s*4\.5283%/,
-      "insets the field column on the left by core's own right-hand value"
-    ],
-    [
       ".twoinc-blocks-label",
       /display:\s*inline-flex/,
       "lays the method label out on one line, in DOM order"
@@ -44,14 +39,6 @@ describe("the Blocks checkout's own stylesheet", () => {
     ]
   ])("%s — it %s", (selector, declaration) => {
     expect(ruleBody(selector)).toMatch(declaration);
-  });
-
-  test("the left inset is scoped to the layout core insets on the right", () => {
-    // Given: core drops its own padding-right below the sidebar-beside-form
-    // breakpoint. Then: an unscoped left inset would make it asymmetric there.
-    expect(STYLESHEET).not.toMatch(
-      /^\.wc-block-components-sidebar-layout \.wc-block-components-main/m
-    );
   });
 
   test("nothing here needs !important, which a brand overlay could not beat", () => {

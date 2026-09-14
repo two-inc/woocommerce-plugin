@@ -16,11 +16,6 @@
   text-align: end;
 }
 
-/* Core insets this column on the right only; the same value left makes it symmetrical (ABN-554). */
-.wc-block-components-sidebar-layout.is-large .wc-block-components-main {
-  padding-left: 4.5283%;
-}
-
 /* Title, logo, about control on one row — the classic checkout's order (ABN-554). */
 .twoinc-blocks-label {
   display: inline-flex;
