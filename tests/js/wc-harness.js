@@ -37,6 +37,9 @@ const PANEL_PATH = "assets/js/company-search-panel.js";
 
 const STYLESHEET_PATH = "assets/css/twoinc.css";
 
+/** The scope `WC_Twoinc_Checkout::capture_scope()` localises for a cart. */
+const CAPTURE_SCOPE = "cart:0123456789abcdef";
+
 /**
  * The `api_proxy` bootstrap WC_Twoinc_Checkout localises, in the shape
  * WC_AJAX::get_endpoint() produces. Company search, company lookup, order
@@ -133,7 +136,8 @@ function loadPluginSource() {
       "\n;({ twoincUtilHelper, twoincAddressRoles," +
       " twoincCompanyCapture," +
       " twoincSelectWooHelper, twoincSelectWooHelperShipping, twoincDomHelper," +
-      " twoincTermChips, twoincSoleTrader, twoincSupportedSearchCountries, Twoinc, TwoCompanySearch });"
+      " twoincTermChips, twoincSoleTrader, twoincSupportedSearchCountries," +
+      " Twoinc, TwoCompanySearch });"
   );
   if (!exported || typeof exported.twoincSelectWooHelper !== "object") {
     throw new Error("harness: twoinc.js did not yield its top-level bindings");
@@ -165,6 +169,11 @@ function loadTwoinc(twoinc) {
   const settings = Object.assign(
     {
       gateway_id: "woocommerce-gateway-tillit",
+      // Every real bootstrap carries these; without them the capture-scope
+      // gate refuses every restore, which is not the state under test here.
+      // A test proving a refusal overrides one of them with a foreign scope.
+      capture_scope: CAPTURE_SCOPE,
+      company_scope: CAPTURE_SCOPE,
       enable_company_search: "yes",
       company_search_location: "address_area",
       twoinc_checkout_host: "https://api.example.test",
@@ -311,6 +320,19 @@ function buildCheckoutForm(options) {
     "  </div>",
     "</form>"
   ].join("\n");
+}
+
+/**
+ * Seed the `checkoutInputs` snapshot the way `saveCheckoutInputs()` does —
+ * stamped with the scope it was taken in, since an unstamped snapshot is
+ * refused (ABN-554).
+ *
+ * @param {Array} inputs the snapshot entries
+ * @param {string} [scope] the scope to stamp, defaulting to this page's
+ */
+function seedCheckoutInputs(inputs, scope) {
+  sessionStorage.setItem("checkoutInputs", JSON.stringify(inputs));
+  sessionStorage.setItem("twoincCaptureScope", scope === undefined ? CAPTURE_SCOPE : scope);
 }
 
 /**
@@ -571,6 +593,7 @@ function countGifFrames(bytes) {
 
 module.exports = {
   REPO_ROOT: REPO_ROOT,
+  CAPTURE_SCOPE: CAPTURE_SCOPE,
   API_PROXY: API_PROXY,
   requestParams: requestParams,
   countGifFrames: countGifFrames,
@@ -579,6 +602,7 @@ module.exports = {
   injectStylesheet: injectStylesheet,
   loadTwoinc: loadTwoinc,
   buildCheckoutForm: buildCheckoutForm,
+  seedCheckoutInputs: seedCheckoutInputs,
   companyRowsMarkup: companyRowsMarkup,
   openCompanyPanel: openCompanyPanel,
   panelStructure: panelStructure,
