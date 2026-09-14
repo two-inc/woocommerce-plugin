@@ -68,6 +68,7 @@ final class BrandConfigSpec
             'testMerchantBuyerCountryAllowlistIntersectsBrandGate',
             'testBuyerCountrySupportJudgesEachAllowlistState',
             'testProcessPaymentGuardsReturnAFailureArray',
+            'testBlocksTileChoiceDrivesTheSurchargeGate',
             'testBlocksCompanyRowRevealedOnlyWhereTheSearchNeedsIt',
             'testOrderCreationRefusesAnUnsupportedBuyerCountry',
             'testOrderIntentRefusesAnUnsupportedBuyerCountry',
@@ -2475,6 +2476,37 @@ final class BrandConfigSpec
         }
 
         unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
+    }
+
+    /**
+     * Given the surcharge cart fee only applies to the chosen payment method;
+     * When a Blocks tile reports its own selection; Then the session follows
+     * it, and never another gateway's (ABN-554).
+     */
+    private static function testBlocksTileChoiceDrivesTheSurchargeGate(): void
+    {
+        $id = WC_Twoinc_Brand::get('gateway_id');
+        $cases = [
+            [['active' => true], '', $id, 'the tile became the buyer\'s choice'],
+            [['active' => true], 'cod', $id, 'switching to the tile from another method'],
+            [['active' => false], $id, '', 'the buyer left the tile'],
+            [['active' => false], 'cod', 'cod', 'another gateway\'s choice is left alone'],
+            [[], $id, '', 'a payload naming no state'],
+        ];
+
+        foreach ($cases as $case) {
+            list($payload, $before, $expected, $description) = $case;
+
+            WC()->session = new StubSession();
+            WC()->session->set('chosen_payment_method', $before);
+            WC_Twoinc::set_blocks_chosen_method($payload);
+
+            TinyAssert::same(
+                $expected,
+                WC()->session->get('chosen_payment_method'),
+                $description
+            );
+        }
     }
 
     private static function testProcessPaymentGuardsReturnAFailureArray(): void

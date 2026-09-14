@@ -143,6 +143,21 @@ function load_twoinc_classes()
     // never reads woocommerce_payment_gateways, so the gateway is absent from
     // it without this (ABN-554). The action only fires where the Blocks
     // package is present.
+    // The buyer surcharge is a cart fee conditional on this gateway being the
+    // chosen method, and a Blocks checkout only tells the server which method
+    // that is at submit — too late for the order summary. This is the Store
+    // API's own route for a client-side choice that changes the cart
+    // (ABN-554); the fee itself stays in apply_cart_fee.
+    add_action('woocommerce_blocks_loaded', static function () {
+        if (!function_exists('woocommerce_store_api_register_update_callback')) {
+            return;
+        }
+        woocommerce_store_api_register_update_callback([
+            'namespace' => 'twoinc-payment-gateway',
+            'callback'  => ['WC_Twoinc', 'set_blocks_chosen_method'],
+        ]);
+    });
+
     add_action('woocommerce_blocks_payment_method_type_registration', static function ($registry) {
         require_once __DIR__ . '/class/WC_Twoinc_Blocks_Support.php';
         if (class_exists('WC_Twoinc_Blocks_Support')) {

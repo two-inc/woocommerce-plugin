@@ -37,6 +37,7 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
                     'wp-element',
                     'wp-html-entities',
                     'wp-data',
+                    'wc-blocks-checkout',
                     // The classic controller this file is a skin over, so its
                     // globals exist before the mount runs (ABN-554).
                     'twoinc-payment-gateway-js',
@@ -61,10 +62,14 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
 
             return [
                 'title' => $gateway ? $gateway->get_pay_title() : '',
-                // The subtitle, not get_description(): the rest of the classic
-                // description is scaffold driven by the classic checkout's
-                // jQuery, which never runs here.
-                'subtitle' => $gateway ? $gateway->get_pay_subtitle() : '',
+                // The gateway's own payment-box description, whole: the
+                // subtitle, the term-chip containers, the sole-trader note
+                // slot, the company-search tile slot, the order-intent boxes
+                // and the term input the submit falls back on. The controller
+                // this file skins fills every one of them (ABN-554). The about
+                // block is left out because the tile's label renders it, the
+                // same split the classic template makes.
+                'description' => $gateway ? $gateway->description : '',
                 'about' => $gateway ? $gateway->get_about_block_html() : '',
                 'iconUrl' => $gateway ? $gateway->icon : '',
                 'supports' => $this->get_supported_features(),

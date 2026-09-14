@@ -130,6 +130,43 @@
     return host;
   }
 
+  /**
+   * The order total and tax, in the markup `twoincDomHelper.getPrice()`
+   * reads. The order-intent check polls for them before it will ask, and
+   * Blocks' own totals carry none of the classic classes.
+   */
+  function priceNodes() {
+    var host = shadow();
+    var nodes = {};
+    ["order-total", "tax-rate"].forEach(function (name) {
+      var node = host.querySelector("." + name.replace(".", ""));
+      if (!node) {
+        node = document.createElement("span");
+        node.className = name;
+        node.innerHTML = '<span class="woocommerce-Price-amount"><bdi></bdi></span>';
+        host.appendChild(node);
+      }
+      nodes[name] = node.querySelector("bdi");
+    });
+    return nodes;
+  }
+
+  function pullTotals() {
+    var store = cartStore();
+    var totals = store && store.getCartTotals && store.getCartTotals();
+    if (!totals) return;
+
+    var unit = Math.pow(10, totals.currency_minor_unit || 2);
+    var nodes = priceNodes();
+    var separator = (window.twoinc && window.twoinc.price_decimal_separator) || ".";
+    nodes["order-total"].textContent = ((totals.total_price || 0) / unit)
+      .toFixed(2)
+      .replace(".", separator);
+    nodes["tax-rate"].textContent = ((totals.total_tax || 0) / unit)
+      .toFixed(2)
+      .replace(".", separator);
+  }
+
   /** The store's address into the fields the controller reads. */
   function pull() {
     var address = billingAddress();
@@ -223,6 +260,19 @@
     search.syncCompanySearchTileLocation();
   }
 
+  /**
+   * Tell the cart this gateway is (or is no longer) the chosen method, so the
+   * term surcharge reaches the order summary before submit.
+   */
+  function announceChoice(active) {
+    var api = wc.blocksCheckout;
+    if (!api || !api.extensionCartUpdate) return null;
+    return api.extensionCartUpdate({
+      namespace: "twoinc-payment-gateway",
+      data: { active: active }
+    });
+  }
+
   function captured() {
     var role = twoincAddressRoles.primary();
     return {
@@ -282,15 +332,24 @@
     element.useEffect(function () {
       mount();
       resync();
+      announceChoice(true);
+
+      // The controller asks for a totals recalculation the classic way after
+      // a term is picked, and re-renders its chips off the answer. This is
+      // that round trip in the Store API's terms.
+      var recalculate = function () {
+        var updated = announceChoice(true);
+        if (updated && updated.then) updated.then(resync);
+      };
+      window.jQuery(document.body).on("update_checkout.twoincBlocks", recalculate);
+
+      return function () {
+        window.jQuery(document.body).off("update_checkout.twoincBlocks", recalculate);
+        announceChoice(false);
+      };
     }, []);
 
-    return element.createElement(
-      "div",
-      { className: "twoinc-blocks-content" },
-      html(data.subtitle, "twoinc-blocks-subtitle"),
-      element.createElement("div", { className: "twoinc-company-search-tile-slot hidden" }),
-      element.createElement("div", { className: "twoinc-sole-trader-note-slot hidden" })
-    );
+    return html(data.description, "twoinc-blocks-content");
   }
 
   // Address-area placement is live whether or not this gateway is the selected
@@ -298,12 +357,14 @@
   // page's business rather than the tile component's.
   function bootstrap() {
     pull();
+    pullTotals();
     mount();
     resync();
     if (!wp.data || !wp.data.subscribe) return;
     wp.data.subscribe(function () {
       // A country change is what the controller re-reads its per-country
       // gates on, the same pass a classic `updated_checkout` triggers.
+      pullTotals();
       if (pull()) resync();
       mount();
     }, "wc/store/cart");

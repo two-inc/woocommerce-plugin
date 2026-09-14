@@ -5011,6 +5011,31 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Record whether this gateway is the buyer's current choice, from the
+         * Blocks tile (ABN-554). The surcharge cart fee is conditional on it,
+         * and a Blocks checkout otherwise names its payment method only at
+         * submit — after the order summary the buyer reads.
+         *
+         * @param array $data
+         *
+         * @return void
+         */
+        public static function set_blocks_chosen_method($data)
+        {
+            $session = function_exists('WC') ? (WC()->session ?? null) : null;
+            if (!$session) {
+                return;
+            }
+            $id = WC_Twoinc_Brand::get('gateway_id');
+            if (!empty($data['active'])) {
+                $session->set('chosen_payment_method', $id);
+            } elseif ($session->get('chosen_payment_method') === $id) {
+                // Never blanks another gateway's choice.
+                $session->set('chosen_payment_method', '');
+            }
+        }
+
+        /**
          * WooCommerce's documented failure result. The Store API merges
          * process_payment()'s return into its payment details unconditionally,
          * so a bare `return;` there is a fatal TypeError rather than the

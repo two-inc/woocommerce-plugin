@@ -14,7 +14,7 @@ const SOURCE = fs.readFileSync(
 
 const METHOD_DATA = {
   title: "Business invoice",
-  subtitle: '<div class="twoinc-payment-subtitle">Read more</div>',
+  description: '<div class="twoinc-payment-subtitle">Read more</div>',
   about: '<div class="abt-twoinc">about</div>',
   iconUrl: "https://example.test/logo.svg",
   supports: ["products", "refunds"]
@@ -25,8 +25,21 @@ function createElement(type, props) {
   return { type, props: props || {}, children };
 }
 
+/** Handlers the skin binds on document.body, keyed by the jQuery event name. */
+const bodyHandlers = {};
+
 function globals(overrides) {
   const registered = [];
+  window.jQuery = () => ({
+    on(event, fn) {
+      bodyHandlers[event] = fn;
+      return this;
+    },
+    off(event) {
+      delete bodyHandlers[event];
+      return this;
+    }
+  });
   const base = {
     wc: {
       wcBlocksRegistry: {
@@ -41,7 +54,13 @@ function globals(overrides) {
       }
     },
     wp: {
-      element: { createElement, useEffect: (fn) => fn() },
+      element: {
+        createElement,
+        useEffect: (fn) => {
+          const cleanup = fn();
+          if (typeof cleanup === "function") globals.lastCleanup = cleanup;
+        }
+      },
       htmlEntities: { decodeEntities: (v) => v }
     },
     twoincBlocksName: "woocommerce-gateway-tillit"
@@ -66,10 +85,12 @@ afterEach(() => {
     "twoincSelectWooHelper",
     "twoincCompanyCapture",
     "twoincAddressRoles",
-    "Twoinc"
+    "Twoinc",
+    "jQuery"
   ].forEach((key) => {
     delete window[key];
   });
+  Object.keys(bodyHandlers).forEach((key) => delete bodyHandlers[key]);
   document.body.innerHTML = "";
 });
 
@@ -129,8 +150,12 @@ function baseGlobals(location, billing) {
     control,
     captureValues,
     address,
+
     data: {
-      select: () => ({ getCustomerData: () => ({ billingAddress: address }) }),
+      select: () => ({
+        getCustomerData: () => ({ billingAddress: address }),
+        getCartTotals: () => ({ total_price: "38600", total_tax: "0", currency_minor_unit: 2 })
+      }),
       dispatch: () => ({
         setBillingAddress(patch) {
           calls.patches.push(patch);
@@ -186,9 +211,9 @@ describe("blocks-checkout.js registration", () => {
       description: "the label carries the about control"
     },
     {
-      slot: (config) => config.content.type().children,
-      expected: METHOD_DATA.subtitle,
-      description: "the content carries the subtitle"
+      slot: (config) => [config.content.type()],
+      expected: METHOD_DATA.description,
+      description: "the content is the gateway's own payment-box description"
     }
   ])("$description", ({ slot, expected }) => {
     const { env, registered } = globals({});
@@ -392,5 +417,75 @@ describe("blocks-checkout.js hands the controller the whole page", () => {
     evaluate(env);
 
     expect(document.querySelector("#billing_company_field")).not.toBeNull();
+  });
+});
+
+describe("blocks-checkout.js reaches the rest of the tile's surfaces", () => {
+  function withCartApi(base) {
+    const updates = [];
+    const { env, registered } = globals({});
+    env.wp.data = base.data;
+    env.wc.blocksCheckout = {
+      extensionCartUpdate(payload) {
+        updates.push(payload);
+        return Promise.resolve();
+      }
+    };
+    return { env, registered, updates };
+  }
+
+  test.each([
+    ["order-total", 386],
+    ["tax-rate", 0]
+  ])("the controller reads %s off the store's cart totals", (name, expected) => {
+    const base = baseGlobals("address_area");
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    const node = document.querySelector("." + name + " .woocommerce-Price-amount bdi");
+    expect(parseFloat(node.textContent)).toBe(expected);
+  });
+
+  test.each([
+    {
+      phase: "mounted",
+      expected: [{ active: true }],
+      description: "the tile names this gateway as the choice"
+    },
+    {
+      phase: "unmounted",
+      expected: [{ active: true }, { active: false }],
+      description: "leaving the tile withdraws it again"
+    }
+  ])("$description", ({ phase, expected }) => {
+    const base = baseGlobals("payment_tile");
+    const { env, registered, updates } = withCartApi(base);
+    evaluate(env);
+
+    registered[0].content.type({});
+    if (phase === "unmounted") {
+      // The effect's own teardown, which React runs on unmount.
+      globals.lastCleanup();
+    }
+
+    expect(updates.map((u) => u.data)).toEqual(expected);
+    updates.forEach((u) => expect(u.namespace).toBe("twoinc-payment-gateway"));
+  });
+
+  test("a term selection recalculates the cart and re-renders off the answer", async () => {
+    const base = baseGlobals("payment_tile");
+    const { env, registered, updates } = withCartApi(base);
+    evaluate(env);
+    registered[0].content.type({});
+    const atMount = base.calls.resyncs;
+    updates.length = 0;
+
+    // What the controller triggers once its term-selection call has landed.
+    await bodyHandlers["update_checkout.twoincBlocks"]();
+    await Promise.resolve();
+
+    expect(updates).toEqual([{ namespace: "twoinc-payment-gateway", data: { active: true } }]);
+    expect(base.calls.resyncs).toBe(atMount + 1);
   });
 });
