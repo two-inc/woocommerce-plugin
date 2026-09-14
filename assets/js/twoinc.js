@@ -2835,6 +2835,14 @@ let twoincDomHelper = {
       }
     }
   },
+  /**
+   * The pay-for-order page's country field, or null on every other surface —
+   * its value is resolved server-side from the order being paid for, so it is
+   * the one country `loadStorageInputs()` must not replay over (ABN-554).
+   */
+  orderPayCountryField: function () {
+    return document.querySelector(".twoinc-order-pay #billing_country");
+  },
   loadUserMetaInputs: function () {
     window.twoinc.user_meta_exists = window.twoinc.billing_company && window.twoinc.company_id;
     if (window.twoinc.user_meta_exists) {
@@ -5221,7 +5229,12 @@ class Twoinc {
     // ran before either of them, against an empty input.
     twoincDomHelper.loadUserMetaInputs();
     if (loadSavedInputs) {
+      const orderPayCountryField = twoincDomHelper.orderPayCountryField();
+      const orderPayCountry = orderPayCountryField ? orderPayCountryField.value : null;
       twoincDomHelper.loadStorageInputs();
+      // A stored country from another checkout in this session would otherwise
+      // stand in for the country of the order being paid for (ABN-554).
+      if (orderPayCountryField) orderPayCountryField.value = orderPayCountry;
       // loadStorageInputs() writes `#company_id`/`#billing_company` with bare
       // `.val()` assignments, so unlike the pass above it re-toggles nothing
       // and captures nothing. For a guest that pass is the only one that ever

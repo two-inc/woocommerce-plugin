@@ -8,7 +8,7 @@
  */
 
 ?>
-<div class="checkout woocommerce-checkout custom-checkout">
+<div class="checkout woocommerce-checkout custom-checkout twoinc-order-pay">
     <div class="twoinc-inp-container">
         <div id="billing_phone_display_field">
             <label for="billing_phone_display"><?php esc_html_e('Phone', 'twoinc-payment-gateway'); ?> <abbr class="required" title="required">*</abbr></label>

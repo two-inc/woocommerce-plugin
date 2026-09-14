@@ -287,6 +287,7 @@ final class BrandConfigSpec
             'testCompanySearchLocationDerivedFromEnableCompanySearchBothDirections',
             'testOrderPayCountryComesFromTheOrderNotTheShop',
             'testTermFeesAreNotQuotedOnThePayForOrderEndpoint',
+            'testOrderPayEndpointSlugComesFromTheStoredSetting',
             'testCompanySearchLocationFallsBackToPaymentTileOnNullOrEmpty',
             'testCompanySearchLocationSettingDroppedFromUpgradedInstalls',
             'testEnableCompanySearchForOthersSettingDroppedFromUpgradedInstalls',
@@ -11240,6 +11241,56 @@ final class BrandConfigSpec
         }
 
         unset($GLOBALS['__twoinc_test_base_country']);
+    }
+
+    /**
+     * ABN-554. WooCommerce registers the Pay endpoint's query var under the
+     * merchant's own slug (WooCommerce > Settings > Advanced), so reading the
+     * literal 'order-pay' finds no order on a renamed endpoint and every order
+     * falls back to the shop's base country.
+     */
+    private static function testOrderPayEndpointSlugComesFromTheStoredSetting(): void
+    {
+        $GLOBALS['__twoinc_test_base_country'] = 'NO';
+        $GLOBALS['__twoinc_test_wc_orders'] = [
+            7 => new class {
+                public function get_billing_country()
+                {
+                    return 'GB';
+                }
+
+                public function get_shipping_country()
+                {
+                    return '';
+                }
+            },
+        ];
+
+        foreach (
+            [
+                ['order-pay', ['order-pay' => 7], 'GB', 'the default slug still resolves'],
+                ['pay-now', ['pay-now' => 7], 'GB', 'a renamed endpoint resolves under its own slug'],
+                ['pay-now', ['order-pay' => 7], 'NO', 'the literal slug is not read once the endpoint is renamed'],
+                ['', ['order-pay' => 7], 'GB', 'a blank setting falls back to the default slug'],
+                ['order-pay', [], 'NO', 'off the endpoint there is no order to read'],
+            ] as [$slug, $query_vars, $expected, $description]
+        ) {
+            $GLOBALS['__twoinc_test_options']['woocommerce_checkout_pay_endpoint'] = $slug;
+            $GLOBALS['__twoinc_test_query_vars'] = $query_vars;
+
+            TinyAssert::same(
+                $expected,
+                WC_Twoinc_Checkout::resolve_order_pay_country(WC_Twoinc_Checkout::get_order_being_paid()),
+                $description
+            );
+        }
+
+        unset(
+            $GLOBALS['__twoinc_test_base_country'],
+            $GLOBALS['__twoinc_test_wc_orders'],
+            $GLOBALS['__twoinc_test_query_vars'],
+            $GLOBALS['__twoinc_test_options']['woocommerce_checkout_pay_endpoint']
+        );
     }
 
     /**

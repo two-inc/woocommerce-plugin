@@ -370,6 +370,47 @@ describe("billing country switch", () => {
       expect(capturedCompany()).toEqual({ name: "Ejemplo SL", id: "B12345678" });
     });
 
+    test.each([
+      {
+        onOrderPay: true,
+        expected: "GB",
+        description: "the pay-for-order page keeps the country resolved from the order"
+      },
+      {
+        onOrderPay: false,
+        expected: "ES",
+        description: "the checkout page still restores the country it stored"
+      }
+    ])("$description", ({ onOrderPay, expected }) => {
+      // The pay-for-order country is the order's, written server-side; the
+      // replay would hand it a country stored by another checkout in the same
+      // session, and the gate on submit would then run against that (ABN-554).
+      window.sessionStorage.setItem(
+        "checkoutInputs",
+        JSON.stringify([
+          {
+            htmlTag: "SELECT",
+            id: "billing_country",
+            name: "billing_country",
+            val: "ES",
+            optionHtml: '<option value="ES">Spain</option>'
+          }
+        ])
+      );
+      if (onOrderPay) {
+        ctx
+          .$("#billing_country_field")
+          .wrap(
+            '<div class="checkout woocommerce-checkout custom-checkout twoinc-order-pay"></div>'
+          );
+      }
+
+      ctx.Twoinc.getInstance().initialize(true);
+
+      expect(ctx.$("#billing_country").val()).toBe(expected);
+      expect(ctx.helper.lastObservedCountry).toBe(expected);
+    });
+
     test("the FIRST country ever seen is adopted, not acted on", () => {
       // The billing fields can render after initialize() does: the gate it
       // returns on is #order_review, and a multi-step or late-rendering theme

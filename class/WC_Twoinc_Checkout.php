@@ -405,13 +405,18 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          *
          * @return WC_Order|null
          */
-        private static function get_order_being_paid()
+        public static function get_order_being_paid()
         {
             if (!function_exists('get_query_var') || !function_exists('wc_get_order')) {
                 return null;
             }
 
-            $order_id = absint(get_query_var('order-pay'));
+            // Merchants can rename the Pay endpoint, and the query var carries
+            // whatever they renamed it to (ABN-554).
+            $slug = function_exists('get_option')
+                ? get_option('woocommerce_checkout_pay_endpoint', 'order-pay')
+                : '';
+            $order_id = absint(get_query_var(is_string($slug) && $slug !== '' ? $slug : 'order-pay'));
             if (!$order_id) {
                 return null;
             }

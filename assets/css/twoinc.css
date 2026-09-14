@@ -310,7 +310,10 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
 }
 
 /*
- * The pay-for-order page's cut-down form (views/woocommerce_order_pay.php).
+ * The pay-for-order page's cut-down form (views/woocommerce_order_pay.php),
+ * keyed on the class only that view emits — `.custom-checkout` alone is also
+ * on the Blocks skin's hidden storage host, which `display: grid` would beat
+ * `[hidden]` on and render (ABN-554).
  *
  * A two-column grid — labels in column 1, controls in column 2 — with the
  * rows themselves flattened into it by `display: contents`, so every field
@@ -324,7 +327,7 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
  * shared 3px side padding mirrors WooCommerce core's `.form-row`, absent
  * here, so it is cancelled for this surface.
  */
-.custom-checkout {
+.twoinc-order-pay {
   display: grid;
   grid-template-columns: max-content 1fr;
   align-items: center;
@@ -332,14 +335,14 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   margin-top: 20px;
   margin-bottom: 20px;
 }
-.custom-checkout .twoinc-inp-container,
-.custom-checkout .twoinc-inp-container > div {
+.twoinc-order-pay .twoinc-inp-container,
+.twoinc-order-pay .twoinc-inp-container > div {
   display: contents;
 }
-.custom-checkout label {
+.twoinc-order-pay label {
   margin: 0;
 }
-.custom-checkout > .twoinc-company-summary {
+.twoinc-order-pay > .twoinc-company-summary {
   grid-column: 2;
   padding-left: 0;
   padding-right: 0;

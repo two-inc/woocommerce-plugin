@@ -6,6 +6,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const harness = require("./wc-harness");
 
 const SOURCE = fs.readFileSync(
   path.join(__dirname, "..", "..", "assets", "js", "blocks-checkout.js"),
@@ -814,6 +815,20 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(document.getElementById("twoinc-blocks-shadow").classList.contains(container)).toBe(
       true
     );
+  });
+
+  test("the storage host stays off screen under the plugin stylesheet", () => {
+    // `.custom-checkout` is on the host only so the snapshot recognises it; an
+    // author `display` keyed on that class alone beats the UA's `[hidden]` and
+    // paints every one of these inputs onto the Blocks checkout (ABN-554).
+    const base = baseGlobals("address_area");
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    harness.injectStylesheet();
+
+    const host = document.getElementById("twoinc-blocks-shadow");
+    expect(window.getComputedStyle(host).display).toBe("none");
   });
 
   test("the control is pointed at this checkout's own company field before the restore paints it", () => {

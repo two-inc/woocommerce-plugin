@@ -287,8 +287,9 @@ call before advancing and 2 after.
   physically move the node when it is already correctly positioned.
 - layout: the box carries core's own form-row padding so the id lines up with the input's
   real edge, the id carries no same-line margin, neither half can overflow on a single
-  unbroken token, and on `.custom-checkout` (pay-for-order) the alignment is overridden back
-  to the leading edge — asserted through the cascade, not by finding the rule in source.
+  unbroken token, and on the pay-for-order page (`.twoinc-order-pay`) the summary resolves into
+  the control column so the same alignment lands on the field's own edge — asserted through
+  the cascade, not by finding the rule in source.
 - the display is genuinely read-only: no `input`, `select`, `textarea` or `contenteditable`,
   nothing tabbable, and no control that would let the buyer delete a captured company.
 - submission is unaffected. `#billing_company` and `#company_id` still carry what WooCommerce
