@@ -462,8 +462,11 @@ describe("company search hints", () => {
       expect(label).not.toBeNull();
       expect(label[0]).not.toMatch(/<abbr/);
       // The phone field still states its own requirement, so this is the
-      // company label alone and not the whole template's markers.
-      expect(markup).toMatch(/<label for="billing_phone_display"[\s\S]*?<abbr/);
+      // company label alone and not the whole template's markers. Bounded to
+      // the label: unbounded, it matched the next label's marker instead.
+      const phone = markup.match(/<label for="billing_phone_display"[\s\S]*?<\/label>/);
+      expect(phone).not.toBeNull();
+      expect(phone[0]).toMatch(/<abbr/);
     });
   });
 

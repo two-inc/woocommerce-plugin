@@ -1349,10 +1349,11 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Carry a legacy `enable_company_name` row over to
-         * `enable_company_search` (ABN-554). The row is rewritten rather than
-         * read through a fallback because the current key's own
-         * `'default' => 'yes'` is what renders the admin checkbox, so only one
-         * stored value can make the screen and every getter agree.
+         * `enable_company_search` (ABN-554). Self-limiting: it writes only
+         * while the legacy key is present and the current one absent. The row is
+         * rewritten rather than read through a fallback because the current
+         * key's own `'default' => 'yes'` is what renders the admin checkbox,
+         * so only one stored value can make the screen and every getter agree.
          *
          * Must run before any get_option() read of that key memoises the
          * default into `$this->settings` — see the constructor.

@@ -29,13 +29,14 @@ function ruleBody(selector) {
 }
 
 /**
- * Every style rule in the injected sheet, at-rule descendants included — a
- * string scan reads an `@media` prelude as the selector and misses what it
- * wraps. Requires injectStylesheet().
+ * The style rules of one sheet, `@media`/`@supports` descendants included — a
+ * string scan reads an at-rule prelude as the selector and misses what it
+ * wraps. `@import` is not followed; nothing in this plugin uses one.
  *
+ * @param {CSSStyleSheet} sheet
  * @returns {CSSStyleRule[]}
  */
-function allStyleRules() {
+function styleRulesOf(sheet) {
   const out = [];
   const walk = (rules) => {
     Array.prototype.forEach.call(rules || [], (rule) => {
@@ -46,21 +47,49 @@ function allStyleRules() {
       }
     });
   };
-  Array.prototype.forEach.call(document.styleSheets, (sheet) => walk(sheet.cssRules));
+  walk(sheet.cssRules);
   return out;
 }
 
+/** The plugin's own sheet, as injected by the active test. */
+let sheet;
+
 /**
- * @param {string} needle a selector fragment
+ * Is `needle` the SUBJECT of one of this rule's selectors, rather than an
+ * ancestor of it or a prefix of a longer id? Padding on a descendant is not
+ * padding on the row.
+ *
+ * @param {string} selectorText
+ * @param {string} needle
+ * @returns {boolean}
+ */
+function targets(selectorText, needle) {
+  return selectorText.split(",").some((part) => {
+    const subject =
+      part
+        .trim()
+        .split(/[\s>+~]+/)
+        .pop() || "";
+    const at = subject.indexOf(needle);
+    if (at < 0) return false;
+    return !/[A-Za-z0-9_-]/.test(subject.charAt(at + needle.length));
+  });
+}
+
+/**
+ * @param {string} needle a whole simple selector — an id or a class
  * @param {RegExp} property what may not be declared
  * @returns {string[]} the selectors of the offending rules
  */
 function rulesDeclaring(needle, property) {
-  return allStyleRules()
-    .filter((rule) => rule.selectorText.includes(needle))
+  return styleRulesOf(sheet)
+    .filter((rule) => targets(rule.selectorText, needle))
     .filter((rule) => property.test(rule.style.cssText))
     .map((rule) => rule.selectorText);
 }
+
+/** Bottom padding, longhand or via the shorthand. Horizontal padding is fine. */
+const BOTTOM_PADDING = /padding-bottom|padding\s*:/;
 
 const ROWS = ["#billing_company_display_field", "#billing_company_field"];
 
@@ -79,7 +108,7 @@ describe("billing company-row spacing", () => {
     helper = ctx.helper;
     harness.buildCheckoutForm();
     $("#billing_company_display_field").removeClass("hidden");
-    harness.injectStylesheet();
+    sheet = harness.injectStylesheet().sheet;
   });
 
   afterEach(() => {
@@ -87,11 +116,61 @@ describe("billing company-row spacing", () => {
     document.body.innerHTML = "";
   });
 
+  // The scan's own contract, against a sheet written for the purpose — the
+  // plugin's sheet carries no at-rule, so nothing else here would notice the
+  // walk stopping at one, or the subject test matching an ancestor.
+  describe("what the stylesheet scan can see", () => {
+    /** @param {string} css @returns {CSSStyleSheet} */
+    function inject(css) {
+      const el = document.createElement("style");
+      el.textContent = css;
+      document.head.appendChild(el);
+      return el.sheet;
+    }
+
+    test.each([
+      {
+        css: "@media (max-width: 600px) { #billing_company_field { padding-bottom: 15px } }",
+        offenders: ["#billing_company_field"],
+        description: "a rule wrapped in an at-rule"
+      },
+      {
+        css: "#billing_company_field { padding: 0 0 15px }",
+        offenders: ["#billing_company_field"],
+        description: "bottom padding via the shorthand"
+      },
+      {
+        css: "#billing_company_field { padding-left: 3px; padding-right: 3px }",
+        offenders: [],
+        description: "horizontal padding, which is deliberate elsewhere"
+      },
+      {
+        css: "#billing_company_field .child { padding-bottom: 15px }",
+        offenders: [],
+        description: "padding on a descendant, not the row"
+      },
+      {
+        css: "#billing_company_field_extra { padding-bottom: 15px }",
+        offenders: [],
+        description: "a longer id the row's name is a prefix of"
+      },
+      {
+        css: "#other, #billing_company_field { padding-bottom: 15px }",
+        offenders: ["#other, #billing_company_field"],
+        description: "the row as one of a grouped selector's subjects"
+      }
+    ])("$description", ({ css, offenders }) => {
+      sheet = inject(css);
+
+      expect(rulesDeclaring("#billing_company_field", BOTTOM_PADDING)).toEqual(offenders);
+    });
+  });
+
   test("no rule anywhere gives .billing_company_search bottom padding", () => {
     // Requirement 3.1's third name. It is the CLASS on the search row on the
     // checkout page and on the input itself on the pay-for-order view, so a
     // rule reaching it from either shape has to be absent.
-    expect(rulesDeclaring(".billing_company_search", /padding/)).toEqual([]);
+    expect(rulesDeclaring(".billing_company_search", BOTTOM_PADDING)).toEqual([]);
   });
 
   test.each([
@@ -101,17 +180,17 @@ describe("billing company-row spacing", () => {
     // A renamed or deleted rule reads as null here and fails the match, so
     // this also pins the rule still existing.
     expect(ruleBody(selector)).toMatch(/position:\s*relative/);
-    expect(rulesDeclaring(selector, /padding/)).toEqual([]);
+    expect(rulesDeclaring(selector, BOTTOM_PADDING)).toEqual([]);
   });
 
   test("the number label pulls nothing up over the row above it", () => {
     // A negative top margin here is what the deleted row padding needed
     // cancelling; with the padding gone it would pull the number into the input.
-    const named = allStyleRules().filter((rule) =>
-      rule.selectorText.includes(".twoinc-company-summary")
+    const named = styleRulesOf(sheet).filter((rule) =>
+      targets(rule.selectorText, ".twoinc-company-summary")
     );
     expect(named.length).toBeGreaterThan(0);
-    // Read off cssText: this jsdom leaves the typed `style.marginTop` null.
+    // Read off cssText: the typed `style.marginTop` is undefined in this jsdom.
     expect(
       named.filter((rule) => /margin-top:\s*-/.test(rule.style.cssText)).map((r) => r.selectorText)
     ).toEqual([]);
