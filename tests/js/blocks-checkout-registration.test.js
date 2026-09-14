@@ -292,8 +292,8 @@ describe("blocks-checkout.js registration", () => {
     const { env, registered } = globals({});
     evaluate(env);
 
-    const order = registered[0]
-      .label.type()
+    const order = registered[0].label
+      .type()
       .children.filter(Boolean)
       .map((node) => node.props.className);
     expect(order).toEqual(["twoinc-blocks-title", "twoinc-blocks-icon", "twoinc-blocks-about"]);
