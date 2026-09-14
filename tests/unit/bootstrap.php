@@ -1290,6 +1290,11 @@ function wp_die($message = '', $title = '', $args = [])
     throw new RuntimeException(is_string($message) ? $message : 'wp_die');
 }
 
+function get_query_var($var, $default = '')
+{
+    return $GLOBALS['__twoinc_test_query_vars'][$var] ?? $default;
+}
+
 function wc_get_order($order_id)
 {
     return $GLOBALS['__twoinc_test_wc_orders'][$order_id] ?? false;

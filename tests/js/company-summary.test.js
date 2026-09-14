@@ -361,23 +361,23 @@ describe("read-only captured-company summary", () => {
     // input's own edge rather than the whole form's (ABN-554).
     test.each([
       {
-        selector: ".custom-checkout",
+        selector: ".twoinc-order-pay",
         declares: /display:\s*grid/,
         description: "the form is a grid"
       },
       {
-        selector: ".custom-checkout",
+        selector: ".twoinc-order-pay",
         declares: /grid-template-columns:\s*max-content\s+1fr/,
         description: "labels sit in column 1 and controls in column 2"
       },
       {
         selector:
-          ".custom-checkout .twoinc-inp-container,\n.custom-checkout .twoinc-inp-container > div",
+          ".twoinc-order-pay .twoinc-inp-container,\n.twoinc-order-pay .twoinc-inp-container > div",
         declares: /display:\s*contents/,
         description: "every row flattens into that grid"
       },
       {
-        selector: ".custom-checkout > .twoinc-company-summary",
+        selector: ".twoinc-order-pay > .twoinc-company-summary",
         declares: /grid-column:\s*2/,
         description: "the summary joins the control column"
       }
@@ -389,14 +389,17 @@ describe("read-only captured-company summary", () => {
       expect(m[1]).toMatch(declares);
     });
 
-    test("the id keeps the shared end alignment inside .custom-checkout", () => {
+    test("the summary resolves into the control column, right-aligned as everywhere else", () => {
       // The number right-aligns to the company field on this page exactly as
       // it does on the checkout page and in the Blocks tile — no third
-      // variant, and nothing overriding it back to the leading edge.
+      // variant, and nothing overriding it back to the leading edge. The
+      // alignment only lands on the field's own edge while the summary
+      // resolves into column 2, so both are read off the cascade here.
       harness.injectStylesheet();
       pickCompany("ACME Widgets Ltd", "12345678");
-      summary().wrap('<div class="custom-checkout"></div>');
+      summary().wrap('<div class="custom-checkout twoinc-order-pay"></div>');
 
+      expect(window.getComputedStyle(summary()[0]).gridColumn).toBe("2");
       const idStyle = window.getComputedStyle(summary().find(".twoinc-company-summary-id")[0]);
       expect(idStyle.textAlign).toBe("end");
     });
