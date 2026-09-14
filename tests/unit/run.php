@@ -284,6 +284,7 @@ final class BrandConfigSpec
             'testCompanySearchLocationFallsBackToPaymentTileOnNullOrEmpty',
             'testCompanySearchLocationSettingDroppedFromUpgradedInstalls',
             'testEnableCompanySearchForOthersSettingDroppedFromUpgradedInstalls',
+            'testAddressLookupIsOffWhereverCompanySearchIsOff',
             'testCategorizeVerificationResultDistinguishesFailureReasons',
             'testVerifyApiKeyDistinguishesUnreachableFromNotConfigured',
             'testOnlyARejectedApiKeyRevertsOnSave',
@@ -10930,13 +10931,12 @@ final class BrandConfigSpec
     }
 
     /**
-     * get_enable_company_search() can return null (both the current and the
-     * legacy `enable_company_name` option keys unset) or '' (WooCommerce's
-     * WC_Settings_API::get_option empty-string convention) — neither is
-     * "yes", so both must land on the safe side: relocated into the payment
-     * tile, never silently missing from the checkout entirely — the
-     * regression the fallback in get_enable_company_search() exists to
-     * prevent.
+     * derive_company_search_location() is handed whatever
+     * get_enable_company_search() returns, and a stored '' (WooCommerce's
+     * WC_Settings_API::get_option empty-string convention) or a null from a
+     * caller that never loaded settings is not "yes" — both must land on the
+     * safe side: relocated into the payment tile, never silently missing from
+     * the checkout entirely.
      */
     private static function testCompanySearchLocationFallsBackToPaymentTileOnNullOrEmpty(): void
     {
@@ -10974,6 +10974,130 @@ final class BrandConfigSpec
         $gateway->init_settings();
         $drop->invoke($gateway);
         TinyAssert::same(['api_key' => 'keep-me'], $GLOBALS['__twoinc_test_options'][$key]);
+    }
+
+    /**
+     * ABN-554: the admin screen withdraws and unticks "Autofill company
+     * address" while "Enable company search in address entry" is off, so the
+     * effective getter has to agree — a `yes` saved before company search was
+     * switched off must not keep autofilling until the merchant next saves.
+     */
+    private static function testAddressLookupIsOffWhereverCompanySearchIsOff(): void
+    {
+        $cases = [
+            ['yes', 'yes', 'yes', 'company search on, autofill on'],
+            ['yes', 'no', 'no', 'company search on, autofill off'],
+            ['no', 'yes', 'no', 'company search off overrides a stored yes'],
+            ['no', 'no', 'no', 'company search off, autofill off'],
+            [null, 'yes', 'yes', 'company search absent takes the field default, which is on'],
+            ['', 'yes', 'no', 'company search empty reads as off'],
+        ];
+
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        // Through init_form_fields(), so `enable_company_search`'s own
+        // 'default' => 'yes' is in play exactly as it is in production.
+        $gateway->init_form_fields();
+        $key = $gateway->get_option_key();
+
+        $bootstrap = new ReflectionMethod(WC_Twoinc_Checkout::class, 'prepare_twoinc_object');
+        $bootstrap->setAccessible(true);
+
+        foreach ($cases as [$search, $lookup, $expected, $description]) {
+            $settings = ['enable_address_lookup' => $lookup];
+            // An absent key, not a null one: the field's own default is what
+            // WC_Settings_API substitutes, and that is the case under test.
+            if ($search !== null) {
+                $settings['enable_company_search'] = $search;
+            }
+            $GLOBALS['__twoinc_test_options'][$key] = $settings;
+            $gateway->init_settings();
+            TinyAssert::same($expected, $gateway->get_enable_address_lookup(), $description);
+            // The bootstrap is what reaches the browser, so the effective
+            // getter has to be what the checkout localizes.
+            $params = $bootstrap->invoke(new WC_Twoinc_Checkout($gateway), []);
+            TinyAssert::same($expected, $params['enable_address_lookup'], $description . ' (bootstrap)');
+        }
+
+        // A legacy install stores only `enable_company_name`. The migration
+        // rewrites the row, so the rendered checkbox and every getter read
+        // one value — a read-time fallback left them disagreeing, with the
+        // current key's own 'default' => 'yes' rendering the box ticked.
+        $migrate = new ReflectionMethod(WC_Twoinc::class, 'migrate_legacy_company_search_key');
+        $migrate->setAccessible(true);
+        $legacyCases = [
+            ['no', 'no', 'legacy company search off gates autofill off'],
+            ['yes', 'yes', 'legacy company search on leaves autofill on'],
+        ];
+        foreach ($legacyCases as [$legacy, $expected, $description]) {
+            $GLOBALS['__twoinc_test_options'][$key] = [
+                'enable_company_name' => $legacy,
+                'enable_address_lookup' => 'yes',
+            ];
+            $gateway->init_settings();
+            $migrate->invoke($gateway);
+
+            // The stored row, so the admin checkbox renders the same answer.
+            TinyAssert::same(
+                $legacy,
+                $GLOBALS['__twoinc_test_options'][$key]['enable_company_search'] ?? null,
+                $description . ' (stored)'
+            );
+            TinyAssert::same(
+                false,
+                array_key_exists('enable_company_name', $GLOBALS['__twoinc_test_options'][$key]),
+                $description . ' (legacy key retired)'
+            );
+            TinyAssert::same($legacy, $gateway->get_enable_company_search(), $description . ' (search)');
+            TinyAssert::same($expected, $gateway->get_enable_address_lookup(), $description);
+        }
+
+        // Wired into the constructor, and reached before any get_option() read
+        // memoises the current key's default into the settings blob.
+        $GLOBALS['__twoinc_test_options'][$key] = [
+            'enable_company_name' => 'no',
+            'enable_address_lookup' => 'yes',
+        ];
+        $built = new WC_Twoinc();
+        TinyAssert::same(
+            'no',
+            $GLOBALS['__twoinc_test_options'][$key]['enable_company_search'] ?? null,
+            'the constructor carries a legacy row over'
+        );
+        TinyAssert::same('no', $built->get_enable_address_lookup(), 'and the gate follows it');
+
+        // Already migrated, or never legacy: nothing is rewritten.
+        $untouched = [
+            [['enable_company_search' => 'yes', 'enable_company_name' => 'no'], 'a present current key wins'],
+            [['enable_address_lookup' => 'yes'], 'no legacy row to carry over'],
+        ];
+        foreach ($untouched as [$stored, $description]) {
+            $GLOBALS['__twoinc_test_options'][$key] = $stored;
+            $gateway->init_settings();
+            $migrate->invoke($gateway);
+            TinyAssert::same($stored, $GLOBALS['__twoinc_test_options'][$key], $description);
+        }
+
+        // A blob holding both keys is the common pre-rename install that hit
+        // Save afterwards; the migration leaves it alone, so the cleanup is
+        // what retires the dead key.
+        $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
+        $drop->setAccessible(true);
+        $GLOBALS['__twoinc_test_options'][$key] = [
+            'enable_company_search' => 'yes',
+            'enable_company_name' => 'no',
+        ];
+        $gateway->init_settings();
+        $drop->invoke($gateway);
+        TinyAssert::same(
+            ['enable_company_search' => 'yes'],
+            $GLOBALS['__twoinc_test_options'][$key],
+            'the dead legacy key is dropped from an install that carries both'
+        );
     }
 
     /**

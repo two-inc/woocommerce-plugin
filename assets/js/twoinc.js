@@ -2231,7 +2231,6 @@ let twoincDomHelper = {
       "#project_field",
       "#department_field"
     ];
-    let requiredBusinessTargets = [];
     let visibleTargets = [
       ".woocommerce-company-fields",
       ".woocommerce-representative-fields",
@@ -2277,11 +2276,10 @@ let twoincDomHelper = {
       visibleTargets.push("#billing_company_field");
     }
 
-    // The shipping company row, same shown-for-every-country rule as
-    // billing's above, minus the tile relocation (shipping has no tile mount
-    // — TWO-40) and minus the required-cue logic below (shipping's company
-    // was never a required checkout field). Independent capture mode: the
-    // buyer can be in manual entry on one address and search on the other.
+    // The shipping company row, same shown-for-every-country rule as billing's
+    // above, minus the tile relocation (shipping has no tile mount — TWO-40).
+    // Independent capture mode: the buyer can be in manual entry on one
+    // address and search on the other.
     // Gated on the shipping form actually existing at all (no country field
     // means a virtual/no-shipping cart), so this is a no-op on a checkout that
     // never renders a shipping address in the first place.
@@ -2304,12 +2302,6 @@ let twoincDomHelper = {
         "#department_field"
       );
       requiredTargets.push("#billing_phone_field");
-
-      const companyRows = ["#billing_company_display_field", "#billing_company_field"];
-      const visibleCompanyRow = visibleTargets.filter(function (target) {
-        return companyRows.indexOf(target) >= 0;
-      })[0];
-      if (visibleCompanyRow) requiredTargets.push(visibleCompanyRow);
     }
 
     allTargets = jQuery(allTargets.join(","));
@@ -2337,6 +2329,8 @@ let twoincDomHelper = {
     // whichever company-NAME field this function just decided to show.
     twoincSelectWooHelper.soleTrader.syncDifferentSoleTraderLink();
 
+    twoincDomHelper.syncCompanyAffordanceSpacing();
+
     if (hasShippingAddress) {
       // Before renderCompanySummary() for the same reason billing's re-bind is
       // (above): the summary anchors against the field this control mounts on.
@@ -2360,6 +2354,23 @@ let twoincDomHelper = {
       const $wrapper = $field.closest(".twoinc-inp-container");
       if (!$wrapper.length) return;
       $wrapper.toggleClass("hidden", $field.hasClass("hidden"));
+    });
+  },
+  /**
+   * Runs after every show/hide of either affordance link (ABN-554). Marked per
+   * row, not from "is either link visible": in payment-tile placement the
+   * sole-trader link hangs in the tile row, and marking the address rows from
+   * that closes the visible one's bottom margin under nothing.
+   */
+  syncCompanyAffordanceSpacing: function () {
+    const rows = "#billing_company_field, #billing_company_display_field";
+    const $hosts = jQuery(["#search_company_btn", "#select_different_sole_trader_btn"].join(","))
+      .filter(function () {
+        return jQuery(this).css("display") !== "none";
+      })
+      .closest(rows);
+    jQuery(rows).each(function () {
+      jQuery(this).toggleClass("twoinc-affordance-shown", $hosts.index(this) >= 0);
     });
   },
   deselectPaymentMethod: function () {
@@ -3564,6 +3575,7 @@ function createSoleTraderController(companySearch) {
         .addClass("hidden")
         .empty();
       jQuery("#" + companySearch.differentSoleTraderBtnId).hide();
+      twoincDomHelper.syncCompanyAffordanceSpacing();
       // Refused while `isBusy()`, same as the Business chip: this runs from
       // `refresh()` on every `updated_checkout` (coupon, shipping, quantity —
       // not only country), so an unconditional revert would drop a signup
@@ -3839,6 +3851,7 @@ function createSoleTraderController(companySearch) {
       // the address form of every merchant who never sees this feature.
       if (!show && !jQuery("#" + companySearch.differentSoleTraderBtnId).length) return;
       controller.getDifferentSoleTraderBtnNode().toggle(show);
+      twoincDomHelper.syncCompanyAffordanceSpacing();
     },
 
     /**
@@ -3957,6 +3970,7 @@ function createSoleTraderController(companySearch) {
         // to search stays hidden with no other route back to the picker.
         if (twoincCompanyCapture.mode === "manual") {
           companySearch.getSearchCompanyBtnNode().show();
+          twoincDomHelper.syncCompanyAffordanceSpacing();
         }
       }
     },
@@ -4026,6 +4040,7 @@ function createSoleTraderController(companySearch) {
       companySearch.setDisplayName(companyName);
 
       jQuery("#" + companySearch.searchCompanyBtnId).hide();
+      twoincDomHelper.syncCompanyAffordanceSpacing();
       twoincCompanyCapture
         .nameField(companySearch.role)
         .add(twoincCompanyCapture.numberFieldSelector(companySearch.role))

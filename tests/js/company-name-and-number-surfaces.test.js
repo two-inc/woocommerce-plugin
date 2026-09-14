@@ -377,7 +377,7 @@ describe("the company name and number surfaces", () => {
     });
   });
 
-  describe("the required cue lands on whichever company-name row is on screen", () => {
+  describe("no company-name row ever carries a required cue (ABN-554)", () => {
     /**
      * @param {string} rowSelector
      * @returns {{required: boolean, asterisks: number}}
@@ -390,7 +390,6 @@ describe("the company name and number surfaces", () => {
       };
     }
 
-    const CUED = { required: true, asterisks: 1 };
     const UNCUED = { required: false, asterisks: 0 };
 
     test.each([
@@ -398,43 +397,33 @@ describe("the company name and number surfaces", () => {
         location: "address_area",
         capture: false,
         twoSelected: true,
-        display: CUED,
-        native: UNCUED,
-        description: "address area: the search row"
+        description: "address area, nothing captured"
       },
       {
         location: "address_area",
         capture: true,
         twoSelected: true,
-        display: CUED,
-        native: UNCUED,
-        description: "address area with a capture: still the search row"
+        description: "address area with a capture"
       },
       {
         location: "payment_tile",
         capture: false,
         twoSelected: true,
-        display: UNCUED,
-        native: CUED,
-        description: "tile placement: the native row core still renders"
+        description: "tile placement, nothing captured"
       },
       {
         location: "payment_tile",
         capture: true,
         twoSelected: true,
-        display: UNCUED,
-        native: CUED,
-        description: "tile placement showing the capture: the native row still stands"
+        description: "tile placement showing the capture"
       },
       {
         location: "address_area",
         capture: true,
         twoSelected: false,
-        display: UNCUED,
-        native: UNCUED,
-        description: "another method selected: nothing of Two's is required"
+        description: "another method selected"
       }
-    ])("$description", ({ location, capture, twoSelected, display, native }) => {
+    ])("$description", ({ location, capture, twoSelected }) => {
       load("GB");
       ctx.twoinc.company_search_location = location;
       if (capture) ctx.capture.write("ACME Widgets Ltd", "12345678");
@@ -442,8 +431,39 @@ describe("the company name and number surfaces", () => {
 
       ctx.dom.toggleBusinessFields();
 
-      expect(cue("#billing_company_display_field")).toEqual(display);
-      expect(cue("#billing_company_field")).toEqual(native);
+      expect(cue("#billing_company_display_field")).toEqual(UNCUED);
+      expect(cue("#billing_company_field")).toEqual(UNCUED);
+      // No asterisk of any kind, and core's own "(optional)" marker is left
+      // showing rather than hidden behind one.
+      expect($("#billing_company_display_field, #billing_company_field").find("abbr").length).toBe(
+        0
+      );
+      $("#billing_company_display_field, #billing_company_field")
+        .find("label .optional")
+        .each(function () {
+          expect($(this).css("display")).not.toBe("none");
+        });
+    });
+
+    // The cue mechanism still serves the phone field, so the removal above is
+    // the company path and not the whole helper.
+    test("the phone row is still cued when Two is selected", () => {
+      load("GB");
+      // The shared fixture renders no phone row; this is the only case here
+      // that needs one.
+      $("form[name='checkout']").append(
+        [
+          '<p id="billing_phone_field" class="form-row">',
+          '<label for="billing_phone">Phone <span class="optional">(optional)</span></label>',
+          '<input type="tel" id="billing_phone" name="billing_phone" />',
+          "</p>"
+        ].join("")
+      );
+
+      ctx.dom.toggleBusinessFields();
+
+      expect($("#billing_phone").attr("required")).toBe("required");
+      expect($("#billing_phone_field").find("label .twoinc-required").length).toBe(1);
     });
   });
 });

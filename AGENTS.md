@@ -200,6 +200,22 @@ Vendored assets
   the control it hits (ABN-510). The popover that closes gives its own field's tab
   stop back before the newly opened one takes its. A pointer press outside the open
   popover closes it too, with the company field counted as inside the control.
+- **No company field carries a required cue.** Neither the search control nor
+  WooCommerce's native company row takes the `required` attribute or an
+  asterisk, in any capture mode, placement or country: the payment tile's own
+  guidance message is the whole signal (ABN-554). `toggleRequiredCues()` still
+  serves the phone row.
+- **"Autofill company address" is offered only while "Enable company search in
+  address entry" is on.** That checkbox still only relocates the search control
+  (see `get_enable_company_search()`); what it additionally gates is autofill.
+  Off withdraws the autofill row from the admin screen AND unticks it, and
+  `get_enable_address_lookup()` reads as `no` regardless of what is stored, so a
+  `yes` saved before the switch went off cannot keep autofilling (ABN-554).
+  Ticking company search on switches autofill on with it, edge-triggered
+  (ABN-562). A legacy `enable_company_name` row is REWRITTEN to the current key
+  at construction, not read through a fallback: the current key's own
+  `'default' => 'yes'` is what renders the admin checkbox, so a read-time
+  fallback left the screen and the server disagreeing.
 
 The payment-term chips are a radio group
 
