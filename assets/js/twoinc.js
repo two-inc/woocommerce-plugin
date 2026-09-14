@@ -3575,6 +3575,7 @@ function createSoleTraderController(companySearch) {
         .addClass("hidden")
         .empty();
       jQuery("#" + companySearch.differentSoleTraderBtnId).hide();
+      twoincDomHelper.syncCompanyAffordanceSpacing();
       // Refused while `isBusy()`, same as the Business chip: this runs from
       // `refresh()` on every `updated_checkout` (coupon, shipping, quantity —
       // not only country), so an unconditional revert would drop a signup

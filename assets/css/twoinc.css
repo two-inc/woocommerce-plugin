@@ -244,13 +244,7 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   position: relative;
 }
 
-/*
- * The affordance link below the input ("Search for a company", "Select a
- * different sole trader") is the row's own bottom spacing while it is shown,
- * so the row margin under it reads as a gap (ABN-554). Class synced by
- * `twoincDomHelper.syncCompanyAffordanceSpacing()` — the links are shown and
- * hidden with inline `display`, which no selector can read.
- */
+/* Class-driven because the links are shown with inline `display`, which no selector can read (ABN-554). */
 #billing_company_display_field.twoinc-affordance-shown,
 #billing_company_field.twoinc-affordance-shown {
   margin-bottom: 0;

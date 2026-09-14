@@ -67,11 +67,9 @@ jQuery(function ($) {
         .open();
   });
 
-  // "Autofill company address" follows "Enable company search in address entry":
-  // off means off AND withdrawn, unticked so the next save stores it off rather
-  // than leaving a stale `yes` behind (ABN-554). Ticking company search by hand
-  // switches autofill on with it (ABN-562) — that half stays edge-triggered, since
-  // driving an ON from the level showed a stored off as on and saved it back.
+  // Autofill off and withdrawn while company search is off; unticked so the next
+  // save stores it off (ABN-554). The ON is edge-triggered only — driving it from
+  // the level showed a stored off as on and saved that back (ABN-562).
   const $companySearchToggle = $(
     "#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search"
   );

@@ -66,7 +66,11 @@ describe("billing company-row spacing", () => {
   test("the number label pulls nothing up over the row above it", () => {
     // A negative top margin here is what the deleted row padding needed
     // cancelling; with the padding gone it would pull the number into the input.
-    expect(stylesheetSource()).not.toMatch(/margin-top:\s*-/);
+    const summaryRules = stylesheetSource()
+      .split("}")
+      .filter((block) => /\.twoinc-company-summary\b/.test(block.split("{")[0] || ""));
+    expect(summaryRules.length).toBeGreaterThan(0);
+    summaryRules.forEach((block) => expect(block).not.toMatch(/margin-top:\s*-/));
   });
 
   describe("the row's bottom margin gives way to the affordance link", () => {
@@ -89,6 +93,8 @@ describe("billing company-row spacing", () => {
 
     test("leaving manual entry unmarks them again", () => {
       helper.enterManualCompanyEntry();
+      expect(marked()).toBe(true);
+
       helper.exitManualCompanyEntry();
 
       expect(marked()).toBe(false);
@@ -104,6 +110,24 @@ describe("billing company-row spacing", () => {
 
       expect($("#select_different_sole_trader_btn").css("display")).not.toBe("none");
       expect(marked()).toBe(true);
+    });
+
+    // A teardown mid-flight skips the mode revert that would otherwise re-sync,
+    // so this is the one path that needs the mark cleared where it hides the link.
+    test("a sole-trader teardown mid-flight unmarks the rows", () => {
+      const soleTrader = helper.soleTrader;
+      soleTrader.mode = "sole_trader";
+      soleTrader.soleTraderAdopted = true;
+      soleTrader.tokens = { delegation_token: "d", autofill_token: "a" };
+      soleTrader.syncDifferentSoleTraderLink();
+      expect(marked()).toBe(true);
+      soleTrader.flightDepth = 1;
+
+      soleTrader.hide();
+
+      expect(soleTrader.mode).toBe("sole_trader");
+      expect($("#select_different_sole_trader_btn").css("display")).toBe("none");
+      expect(marked()).toBe(false);
     });
 
     test("the stylesheet drops the bottom margin for a marked row", () => {

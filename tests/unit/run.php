@@ -11002,6 +11002,9 @@ final class BrandConfigSpec
         };
         $key = $gateway->get_option_key();
 
+        $bootstrap = new ReflectionMethod(WC_Twoinc_Checkout::class, 'prepare_twoinc_object');
+        $bootstrap->setAccessible(true);
+
         foreach ($cases as [$search, $lookup, $expected, $description]) {
             $GLOBALS['__twoinc_test_options'][$key] = [
                 'enable_company_search' => $search,
@@ -11009,6 +11012,10 @@ final class BrandConfigSpec
             ];
             $gateway->init_settings();
             TinyAssert::same($expected, $gateway->get_enable_address_lookup(), $description);
+            // The bootstrap is what reaches the browser, so the effective
+            // getter has to be what the checkout localizes.
+            $params = $bootstrap->invoke(new WC_Twoinc_Checkout($gateway), []);
+            TinyAssert::same($expected, $params['enable_address_lookup'], $description . ' (bootstrap)');
         }
     }
 
