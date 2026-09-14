@@ -124,6 +124,8 @@ function baseGlobals(location, billing, shipping) {
   const activeMethod = { name: null };
   const resolution = { finished: true, customerData: true };
   const captureValues = { company: "", company_id: "", mode: "search" };
+  const shippingCaptureValues = { company: "", company_id: "" };
+  const valuesFor = (role) => (role === "shipping" ? shippingCaptureValues : captureValues);
   const makeControl = (role) => ({
     role,
     addressFieldSelector: "#" + role + "_company_display",
@@ -151,8 +153,8 @@ function baseGlobals(location, billing, shipping) {
     },
     fieldWrapClass: "two-company-field-wrap",
     readCapturedCompany: () => ({
-      company_name: captureValues.company,
-      organization_number: captureValues.company_id
+      company_name: valuesFor(role).company,
+      organization_number: valuesFor(role).company_id
     })
   });
   const control = makeControl("billing");
@@ -170,12 +172,19 @@ function baseGlobals(location, billing, shipping) {
   window.twoincAddressRoles = {
     primary: () => "billing",
     invoice: () => "billing",
-    delivery: () => "shipping"
+    delivery: () => "shipping",
+    field: (role, name) => "#" + role + "_" + name
   };
   window.twoincCompanyCapture = {
-    numberField: () => ({ val: () => captureValues.company_id }),
-    nameField: () => ({ val: () => captureValues.company }),
-    modeFor: () => captureValues.mode
+    numberField: (role) => ({ val: () => valuesFor(role).company_id }),
+    nameField: (role) => ({ val: () => valuesFor(role).company }),
+    modeFor: () => captureValues.mode,
+    numberFieldSelector: (role) =>
+      role === twoincAddressRoles.invoice() ? "#company_id" : "#" + role + "_company_id",
+    nameFieldSelector: (role) =>
+      control.isTileLocation() && role === twoincAddressRoles.primary()
+        ? "#company_name"
+        : twoincAddressRoles.field(role, "company")
   };
   window.twoincCompanySearchControls = [control, shippingControl];
   window.twoincDomHelper = {
@@ -224,6 +233,7 @@ function baseGlobals(location, billing, shipping) {
     control,
     shippingControl,
     captureValues,
+    shippingCaptureValues,
     address,
     shippingAddress,
     activeMethod,
@@ -551,8 +561,57 @@ describe("blocks-checkout.js reuses the classic controller", () => {
     expect(base.calls.mounts).toBe(atBootstrap + 1);
   });
 
-  test("the Store API is handed the controller's own captured company", () => {
-    const base = baseGlobals("payment_tile");
+  test.each([
+    {
+      location: "payment_tile",
+      billing: { company: "EXAMPLE TRADING LIMITED", company_id: "12345678" },
+      shipping: { company: "", company_id: "" },
+      expected: {
+        company_id: "12345678",
+        company_name: "EXAMPLE TRADING LIMITED",
+        shipping_company_id: "",
+        shipping_company: ""
+      },
+      description: "the invoice capture travels in the tile's own carriers"
+    },
+    {
+      location: "address_area",
+      billing: { company: "", company_id: "" },
+      shipping: { company: "DELIVERY DEPOT LIMITED", company_id: "87654321" },
+      expected: {
+        company_id: "",
+        billing_company: "",
+        shipping_company_id: "87654321",
+        shipping_company: "DELIVERY DEPOT LIMITED"
+      },
+      description: "a delivery-only capture, all a same-address checkout ever has, still travels"
+    },
+    {
+      location: "address_area",
+      billing: { company: "INVOICE HOLDINGS LIMITED", company_id: "12345678" },
+      shipping: { company: "DELIVERY DEPOT LIMITED", company_id: "87654321" },
+      expected: {
+        company_id: "12345678",
+        billing_company: "INVOICE HOLDINGS LIMITED",
+        shipping_company_id: "87654321",
+        shipping_company: "DELIVERY DEPOT LIMITED"
+      },
+      description: "both roles travel unresolved, for the server to prefer the invoice one"
+    },
+    {
+      location: "address_area",
+      billing: { company: "", company_id: "" },
+      shipping: { company: "", company_id: "" },
+      expected: {
+        company_id: "",
+        billing_company: "",
+        shipping_company_id: "",
+        shipping_company: ""
+      },
+      description: "no capture at all leaves the server's own guard to refuse the order"
+    }
+  ])("$description", ({ location, billing, shipping, expected }) => {
+    const base = baseGlobals(location);
     const { env, registered } = globals({});
     env.wp.data = base.data;
     evaluate(env);
@@ -568,17 +627,12 @@ describe("blocks-checkout.js reuses the classic controller", () => {
       emitResponse: { responseTypes: { SUCCESS: "success" } }
     });
 
-    base.captureValues.company = "EXAMPLE TRADING LIMITED";
-    base.captureValues.company_id = "12345678";
+    Object.assign(base.captureValues, billing);
+    Object.assign(base.shippingCaptureValues, shipping);
 
     expect(handler()).toEqual({
       type: "success",
-      meta: {
-        paymentMethodData: {
-          company_id: "12345678",
-          company_name: "EXAMPLE TRADING LIMITED"
-        }
-      }
+      meta: { paymentMethodData: expected }
     });
   });
 });

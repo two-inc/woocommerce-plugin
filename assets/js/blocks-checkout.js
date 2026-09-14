@@ -359,13 +359,24 @@
     });
   }
 
+  /**
+   * Every role's capture carriers, unresolved and under the ids the classic
+   * checkout posts them as — `process_payment()` owns the invoice-first,
+   * delivery-fallback precedence, and Blocks serialises no hidden input of its
+   * own for it to read (ABN-554).
+   */
   function captured() {
-    var search = control();
-    var company = search ? search.readCapturedCompany() : {};
-    return {
-      company_id: company.organization_number || "",
-      company_name: company.company_name || ""
-    };
+    if (!control()) return {};
+    var payload = {};
+    twoincCompanySearchControls.forEach(function (search) {
+      var company = search.readCapturedCompany();
+      // A carrier's selector minus its "#" is the POST key the server reads.
+      payload[twoincCompanyCapture.numberFieldSelector(search.role).slice(1)] =
+        company.organization_number || "";
+      payload[twoincCompanyCapture.nameFieldSelector(search.role).slice(1)] =
+        company.company_name || "";
+    });
+    return payload;
   }
 
   // ----------------------------------------------------------- tile markup
