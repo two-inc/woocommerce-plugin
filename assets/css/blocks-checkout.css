@@ -1,0 +1,17 @@
+/*
+ * Blocks checkout only. Loaded by WC_Twoinc_Blocks_Support, so none of this
+ * reaches the classic checkout.
+ */
+
+/*
+ * The Blocks address form is a wrapping flex container, so the summary lands
+ * as an item sized to its own text — 70px against the company field's 475px —
+ * and the right-aligned number inside it never reaches the field's right edge.
+ */
+#twoinc_company_summary {
+  width: 100%;
+}
+
+.twoinc-company-summary-id {
+  text-align: end;
+}

@@ -72,6 +72,8 @@
   /** True while the store's own values are being written into the shadow. */
   var applying = false;
   var pushScheduled = false;
+  var saveScheduled = false;
+  var restored = false;
 
   function cartStore() {
     return wp.data && wp.data.select && wp.data.select("wc/store/cart");
@@ -91,7 +93,7 @@
    * over the prototype's is what turns a capture or a registry autofill into
    * something this file can react to rather than sample.
    */
-  function announceWrites(input) {
+  function announceWrites(input, announce) {
     var native = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
     Object.defineProperty(input, "value", {
       configurable: true,
@@ -100,7 +102,7 @@
       },
       set: function (value) {
         native.set.call(this, value);
-        if (!applying) schedulePush();
+        if (!applying) announce();
       }
     });
   }
@@ -115,6 +117,19 @@
     });
   }
 
+  /**
+   * Snapshot the capture the way the classic checkout does on its own 3s
+   * timer — on the write instead, so nothing here runs on a clock.
+   */
+  function scheduleSave() {
+    if (saveScheduled) return;
+    saveScheduled = true;
+    Promise.resolve().then(function () {
+      saveScheduled = false;
+      twoincDomHelper.saveCheckoutInputs();
+    });
+  }
+
   function shadow() {
     var host = document.getElementById(SHADOW_ID);
     if (host) return host;
@@ -122,11 +137,17 @@
     host = document.createElement("div");
     host.id = SHADOW_ID;
     host.hidden = true;
+    // The shape `twoincDomHelper.saveCheckoutInputs()`/`loadStorageInputs()`
+    // look for. Without a container they recognise, the capture has no
+    // persistence across a page load here at all (ABN-554): the company NAME
+    // comes back with the cart's own customer data, the NUMBER does not.
+    host.className = "checkout woocommerce-checkout custom-checkout";
     ADDRESS_KEYS.concat(CAPTURE_IDS).forEach(function (key) {
+      var address = ADDRESS_KEYS.indexOf(key) !== -1;
       var input = document.createElement("input");
       input.type = "text";
-      input.id = ADDRESS_KEYS.indexOf(key) === -1 ? key : "billing_" + key;
-      if (ADDRESS_KEYS.indexOf(key) !== -1) announceWrites(input);
+      input.id = address ? "billing_" + key : key;
+      announceWrites(input, address ? schedulePush : scheduleSave);
       host.appendChild(input);
     });
     document.body.appendChild(host);
@@ -254,19 +275,20 @@
 
   /**
    * And the native row itself, which carries no field here — only the link
-   * back out of manual entry, which the controller hangs on this id. Replaced
-   * only once React has orphaned it.
+   * back out of manual entry, which the controller hangs on this id.
+   *
+   * A CHILD of the company row, not its sibling: the controller re-inserts the
+   * company-number summary directly after that row on every render, so a
+   * sibling here competes for the same slot and the two swap places forever.
    */
-  function nativeRow(after) {
-    var row = document.getElementById(NATIVE_ROW_ID);
-    if (!row) {
-      row = document.createElement("div");
-      row.id = NATIVE_ROW_ID;
-      row.className = "hidden";
+  function nativeRow(row) {
+    var native = document.getElementById(NATIVE_ROW_ID);
+    if (!native) {
+      native = document.createElement("div");
+      native.id = NATIVE_ROW_ID;
+      native.className = "hidden";
     }
-    if (row.parentElement !== after.parentElement) {
-      after.insertAdjacentElement("afterend", row);
-    }
+    if (native.parentElement !== row) row.appendChild(native);
   }
 
   function mount() {
@@ -278,13 +300,15 @@
     // control; the tile mount the controller builds itself.
     search.addressFieldSelector = "#billing-company";
     anchorRow(search);
-    if (isMounted(search)) return;
-    if (!search.isTileLocation() && !document.querySelector(search.addressFieldSelector)) {
-      return;
+    if (!isMounted(search)) {
+      if (!search.isTileLocation() && !document.querySelector(search.addressFieldSelector)) {
+        return;
+      }
+      search.syncCompanySearchTileLocation();
     }
-    search.syncCompanySearchTileLocation();
-    // The summary anchors against the row the control mounts on, and a
-    // rebuilt row is a new anchor.
+    // Outside the mount guard: the summary anchors against the row the control
+    // mounts on, so it has no anchor until that row exists — and a restored
+    // capture can land before it does.
     search.renderCompanySummary();
   }
 
@@ -383,9 +407,32 @@
   // Address-area placement is live whether or not this gateway is the selected
   // one, exactly as on a classic checkout, so the mirror and the mount are the
   // page's business rather than the tile component's.
+  /**
+   * The controller's own restore pass, which `initialize(true)` runs on a
+   * classic checkout and nothing runs here. The country tracker is seeded
+   * after it, for the reason that call documents: seeded first, the next
+   * re-render reads the restored country as a change and destroys what the
+   * restore just put back.
+   */
+  function restore() {
+    if (restored || !control() || !window.twoinc || typeof twoincDomHelper === "undefined") return;
+    // Not before the cart's own customer data is in: the restore writes
+    // through the shadow, and a pull arriving afterwards would overwrite it
+    // with the address the store did not have yet.
+    if (!billingAddress()) return;
+    restored = true;
+    shadow();
+    twoincDomHelper.loadStorageInputs();
+    twoincDomHelper.restoreCapturedCompany();
+    twoincCompanySearchControls.forEach(function (search) {
+      search.countryDidChange(search.currentCountry());
+    });
+  }
+
   function bootstrap() {
     pull();
     pullTotals();
+    restore();
     mount();
     resync();
     if (!wp.data || !wp.data.subscribe) return;
@@ -393,7 +440,9 @@
       // A country change is what the controller re-reads its per-country
       // gates on, the same pass a classic `updated_checkout` triggers.
       pullTotals();
-      if (pull()) resync();
+      var moved = pull();
+      restore();
+      if (moved) resync();
       mount();
     }, "wc/store/cart");
     observeCheckout();
@@ -408,9 +457,17 @@
   function observeCheckout() {
     var root = document.querySelector(".wp-block-woocommerce-checkout");
     if (!root || typeof window.MutationObserver !== "function") return;
-    new window.MutationObserver(function () {
+    var watched = { childList: true, subtree: true };
+    var observer = new window.MutationObserver(function () {
+      // Mounting writes into this same subtree, and the controller re-inserts
+      // its own affordances on every render — so an observer left connected
+      // through the handler feeds itself forever.
+      observer.disconnect();
       mount();
-    }).observe(root, { childList: true, subtree: true });
+      observer.takeRecords();
+      observer.observe(root, watched);
+    });
+    observer.observe(root, watched);
   }
 
   if (document.readyState === "loading") {

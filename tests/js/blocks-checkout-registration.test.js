@@ -86,7 +86,9 @@ afterEach(() => {
     "twoincCompanyCapture",
     "twoincAddressRoles",
     "Twoinc",
-    "jQuery"
+    "jQuery",
+    "twoincDomHelper",
+    "twoincCompanySearchControls"
   ].forEach((key) => {
     delete window[key];
   });
@@ -100,7 +102,15 @@ afterEach(() => {
  * controller's accessors and call its mount.
  */
 function baseGlobals(location, billing) {
-  const calls = { mounts: 0, patches: [], resyncs: 0, summaries: 0 };
+  const calls = {
+    mounts: 0,
+    patches: [],
+    resyncs: 0,
+    summaries: 0,
+    saves: 0,
+    restores: [],
+    order: []
+  };
   const captureValues = { company: "", company_id: "" };
   const control = {
     addressFieldSelector: "#billing_company_display",
@@ -108,6 +118,11 @@ function baseGlobals(location, billing) {
     companyFieldSelector() {
       return this.isTileLocation() ? "#twoinc_tile_company_name" : this.addressFieldSelector;
     },
+    countryDidChange() {
+      calls.order.push("seed");
+      return false;
+    },
+    currentCountry: () => "GB",
     syncCompanySearchTileLocation() {
       calls.mounts += 1;
     },
@@ -129,6 +144,22 @@ function baseGlobals(location, billing) {
   window.twoincCompanyCapture = {
     numberField: () => ({ val: () => captureValues.company_id }),
     nameField: () => ({ val: () => captureValues.company })
+  };
+  window.twoincCompanySearchControls = [control];
+  window.twoincDomHelper = {
+    saveCheckoutInputs() {
+      calls.saves += 1;
+    },
+    loadStorageInputs() {
+      calls.loads += 1;
+      // What the controller's own restore does: a bare value assignment.
+      var input = document.getElementById("company_id");
+      if (input && !input.value) input.value = "12345678";
+    },
+    restoreCapturedCompany() {
+      calls.order.push("restore");
+      calls.restores.push((document.getElementById("company_id") || {}).value);
+    }
   };
 
   const address = Object.assign(
@@ -469,7 +500,9 @@ describe("blocks-checkout.js hands the controller the whole page", () => {
     const row = document.getElementById("billing-company_field");
     expect(row).not.toBeNull();
     expect(row.contains(document.getElementById("billing-company"))).toBe(true);
-    expect(document.getElementById("billing_company_field").parentElement).toBe(row.parentElement);
+    // A child, never a sibling: the controller re-inserts the summary into the
+    // slot directly after this row on every render.
+    expect(document.getElementById("billing_company_field").parentElement).toBe(row);
     expect(base.calls.mounts).toBe(mountsAtFirstAnchor + 1);
     expect(base.calls.summaries).toBe(summariesAtFirstAnchor + 1);
   });
@@ -542,5 +575,65 @@ describe("blocks-checkout.js reaches the rest of the tile's surfaces", () => {
 
     expect(updates).toEqual([{ namespace: "twoinc-payment-gateway", data: { active: true } }]);
     expect(base.calls.resyncs).toBe(atMount + 1);
+  });
+});
+
+describe("blocks-checkout.js persists the capture across a page load", () => {
+  test.each([
+    {
+      container: "checkout",
+      description: "the shadow carries the container the controller's snapshot looks for"
+    },
+    {
+      container: "woocommerce-checkout",
+      description: "and the second class of that container"
+    },
+    { container: "custom-checkout", description: "and the third" }
+  ])("$description", ({ container }) => {
+    const base = baseGlobals("address_area");
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    expect(document.getElementById("twoinc-blocks-shadow").classList.contains(container)).toBe(
+      true
+    );
+  });
+
+  test("the controller's own restore pass runs, then its country tracker is seeded", () => {
+    const base = baseGlobals("address_area");
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    // Restored before the tracker is seeded, or the next re-render reads the
+    // restored country as a change and clears the capture again.
+    expect(base.calls.restores).toEqual(["12345678"]);
+    expect(base.calls.order).toEqual(["restore", "seed"]);
+  });
+
+  test.each([
+    { id: "company_id", saves: 1, patches: 0, description: "a captured number is snapshotted" },
+    {
+      id: "billing_company",
+      saves: 0,
+      patches: 1,
+      description: "an address field goes to the store instead"
+    }
+  ])("$description", async ({ id, saves, patches }) => {
+    const base = baseGlobals("address_area");
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    // The restore pass queues its own write; let it settle before counting.
+    await Promise.resolve();
+    base.calls.saves = 0;
+    base.calls.patches.length = 0;
+
+    document.getElementById(id).value = "07918059";
+    await Promise.resolve();
+
+    expect(base.calls.saves).toBe(saves);
+    expect(base.calls.patches.length).toBe(patches);
   });
 });

@@ -53,6 +53,18 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
                 'before'
             );
 
+            // Gated: WooCommerce asks for a payment method's handles on the
+            // classic checkout too, and these rules are Blocks-shaped.
+            if (WC_Twoinc_Checkout::is_blocks_checkout_request()) {
+                $style = 'assets/css/blocks-checkout.css';
+                wp_enqueue_style(
+                    'twoinc-blocks-checkout',
+                    WC_TWOINC_PLUGIN_URL . $style,
+                    ['twoinc-payment-gateway-css'],
+                    twoinc_get_asset_version($style)
+                );
+            }
+
             return [$handle];
         }
 
