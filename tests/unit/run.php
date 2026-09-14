@@ -10835,9 +10835,9 @@ final class BrandConfigSpec
     }
 
     /**
-     * Given the payment-method description — the one surface the classic
-     * checkout, the Blocks tile and the pay-for-order page all render; When it
-     * is built; Then it carries Two's own terms consent (ABN-554).
+     * Given the payment-method description — the one string both the classic
+     * checkout and the Blocks tile render; When it is built; Then it carries
+     * Two's own terms consent (ABN-554).
      */
     private static function testTermsConsentRendersInTheGatewayDescription(): void
     {

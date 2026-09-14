@@ -5204,22 +5204,13 @@ class Twoinc {
         twoincDomHelper.toggleBusinessFields();
       });
 
-    // Bound on the forms themselves, not delegated: `checkout_place_order` is
-    // fired with `triggerHandler`, which does not bubble, and a delegated
-    // `submit` would run after WooCommerce's own directly-bound one has
-    // already posted the order.
+    // Bound on the form itself, not delegated: `checkout_place_order` is fired
+    // with `triggerHandler`, which does not bubble.
     jQuery("form.checkout")
       .off("checkout_place_order.twoincTerms")
       .on("checkout_place_order.twoincTerms", function () {
         if (!twoincDomHelper.isTwoincSelected()) return;
         return twoincTermsConsent.validate() === null;
-      });
-    // The pay-for-order form submits natively and fires no `checkout_place_order`.
-    jQuery("form#order_review")
-      .off("submit.twoincTerms")
-      .on("submit.twoincTerms", function (event) {
-        if (!twoincDomHelper.isTwoincSelected()) return;
-        if (twoincTermsConsent.validate() !== null) event.preventDefault();
       });
 
     $body.on("change", 'input[name="' + twoincTermsConsent.FIELD + '"]', function () {

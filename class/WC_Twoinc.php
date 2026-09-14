@@ -3056,8 +3056,8 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * The consent checkbox, rendered inside the payment-method
-         * description — which is the one surface the classic checkout, the
-         * Blocks tile and the pay-for-order page all render (ABN-554).
+         * description — the one string both the classic checkout and the
+         * Blocks tile render, so neither owns a copy of this (ABN-554).
          *
          * No HTML5 `required`: core hides the payment box of an unselected
          * method, and a required control inside a hidden box blocks the whole
