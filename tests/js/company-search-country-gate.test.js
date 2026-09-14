@@ -45,6 +45,7 @@ describe("company search country gate", () => {
   afterEach(() => {
     ajax.restore();
     harness.releasePanel(ctx.helper);
+    harness.releasePanel(ctx.shippingHelper);
     document.body.innerHTML = "";
   });
 
@@ -67,11 +68,12 @@ describe("company search country gate", () => {
     return !row || row.classList.contains("two-hidden");
   }
 
-  function wrapHasUnsupportedClass() {
+  function wrapHasUnsupportedClass(control) {
+    const helper = control || ctx.helper;
     return ctx
-      .$(ctx.helper.companyFieldSelector())
-      .closest("." + ctx.helper.fieldWrapClass)
-      .hasClass(ctx.helper.companySearchUnsupportedCountryClass);
+      .$(helper.companyFieldSelector())
+      .closest("." + helper.fieldWrapClass)
+      .hasClass(helper.companySearchUnsupportedCountryClass);
   }
 
   /**
@@ -234,6 +236,13 @@ describe("company search country gate", () => {
       allowlist: ["GB"],
       row: "shipping_company_field",
       description: "the plain field on a country the merchant does not sell to"
+    },
+    {
+      country: "JP",
+      registry: ["GB", "JP"],
+      allowlist: [],
+      row: "shipping_company_field",
+      description: "the plain field under an allowlist naming nothing"
     }
   ])("the shipping role in $country gets $description", ({ country, registry, allowlist, row }) => {
     addShippingForm(country);
@@ -243,6 +252,26 @@ describe("company search country gate", () => {
     ctx.Twoinc.getInstance().syncBillingCountry();
 
     expect(visibleShippingRow()).toEqual([row]);
+  });
+
+  test("the shipping control comes back whole on a return to a covered country", () => {
+    // `updated_checkout` is what a shipping-country change fires, and it is
+    // where the shipping control re-binds and re-reads its own gate.
+    addShippingForm("JP");
+    ctx.shippingHelper.attach();
+    settleGates(["GB"], undefined);
+    ctx.Twoinc.getInstance().onUpdatedCheckout();
+    expect(visibleShippingRow()).toEqual(["shipping_company_field"]);
+    expect(ctx.shippingHelper.panel.isBound()).toBe(false);
+
+    ctx.$("#shipping_country").append('<option value="GB"></option>');
+    ctx.$("#shipping_country").val("GB");
+    ctx.Twoinc.getInstance().onUpdatedCheckout();
+
+    expect(visibleShippingRow()).toEqual(["shipping_company_display_field"]);
+    expect(ctx.shippingHelper.panel.isBound()).toBe(true);
+    expect(ctx.shippingHelper.panel.isDisabled()).toBe(false);
+    expect(wrapHasUnsupportedClass(ctx.shippingHelper)).toBe(false);
   });
 
   test("a pending fetch fails open: the field stays enabled and usable", () => {

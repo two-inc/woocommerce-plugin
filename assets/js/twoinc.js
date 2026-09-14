@@ -2230,11 +2230,16 @@ let twoincSupportedSearchCountries = {
 //
 // Rooted on `document`: this file is enqueued into the HEAD, where
 // `document.body` is still null and a binding on it reaches nothing (ABN-554).
-jQuery(document).on("twoinc_supported_search_countries_updated", function () {
-  twoincCompanySearchControls.forEach(function (control) {
-    control.syncCompanySearchAvailability();
+// Namespaced and unbound first so a second evaluation of this script replaces
+// the handler rather than stacking a second one bound to the first
+// evaluation's controls.
+jQuery(document)
+  .off("twoinc_supported_search_countries_updated.twoincSupportedCountries")
+  .on("twoinc_supported_search_countries_updated.twoincSupportedCountries", function () {
+    twoincCompanySearchControls.forEach(function (control) {
+      control.syncCompanySearchAvailability();
+    });
   });
-});
 
 // Back-compat alias: every flow that predates the shipping instance and is
 // genuinely invoice-scoped by design (order-intent, order restore from user

@@ -36,6 +36,28 @@ describe("bindings made while the script evaluates in the head", () => {
     document.body.innerHTML = "";
   });
 
+  test("a second evaluation replaces the document listener rather than stacking one", () => {
+    // The stacked copy would be bound to the FIRST evaluation's controls, and
+    // would act on them for the rest of the page.
+    let outside = 0;
+    const count = function () {
+      outside += 1;
+    };
+    ctx.$(document).on("twoinc_supported_search_countries_updated", count);
+
+    // Nothing unbinds between evaluations in a browser, so neither does this.
+    harness.loadTwoinc(undefined, { keepDocumentListeners: true });
+
+    const handlers = ctx.$._data(document, "events")["twoinc_supported_search_countries_updated"];
+    expect(
+      handlers.filter((handler) => handler.namespace === "twoincSupportedCountries").length
+    ).toBe(1);
+    // And the guard is narrow enough to leave anyone else's listener alone.
+    ctx.$(document).trigger("twoinc_supported_search_countries_updated");
+    expect(outside).toBe(1);
+    ctx.$(document).off("twoinc_supported_search_countries_updated", count);
+  });
+
   function supportedCountriesRequest() {
     return ajax.calls.find(function (call) {
       return call.url === harness.API_PROXY.supported_countries_url;

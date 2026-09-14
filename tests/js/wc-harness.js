@@ -158,18 +158,24 @@ function loadPluginSource() {
  * bootstrap is left to no-op and `window.twoinc` is installed afterwards.
  *
  * @param {Object} [twoinc] value for `window.twoinc`, installed post-load
+ * @param {Object} [options] `keepDocumentListeners: true` leaves a previous
+ *        load's document listeners in place, as a browser does — for the one
+ *        suite that tests what a second evaluation of the script does
  * @returns {{helper: Object, util: Object, roles: Object,
  *   capture: Object, dom: Object, termChips: Object, soleTrader: Object,
  *   Twoinc: Function, TwoCompanySearch: Function, $: Function, twoinc: Object}}
  */
-function loadTwoinc(twoinc) {
+function loadTwoinc(twoinc, options) {
   const $ = installJQuery();
   installWcParams();
   installCompanySearchPanel();
-  // Each load leaves its own document-level listener for the
-  // supported-countries answer, bound to that load's controls; left in place
-  // they stack up and act on the next test's DOM.
-  $(document).off("twoinc_supported_search_countries_updated");
+  // Belt and braces over the source's own off-then-on guard: each load leaves
+  // a document-level listener bound to that load's controls, and left in place
+  // they stack up and act on the next test's DOM. Namespaced, so a listener a
+  // test bound itself survives.
+  if (!(options && options.keepDocumentListeners)) {
+    $(document).off("twoinc_supported_search_countries_updated.twoincSupportedCountries");
+  }
   const exported = loadPluginSource();
   const settings = Object.assign(
     {
