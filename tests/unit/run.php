@@ -16010,9 +16010,16 @@ final class CaptureScopeSpec
     {
         $tests = [
             'testCaptureScopeNamesTheOrderBeingPaidOtherwiseTheCart',
+            'testTheStampPathNeverMintsACartToken',
             'testTheRememberedCompanyIsStampedWithTheOrderItWasCapturedOn',
+            'testAnOrderWithNoLiveCartIsStampedWithTheOrderAlone',
             'testASecondOrderWithAnotherCompanyLeavesTheRememberedOneReplayableNowhere',
-            'testACompanyTypedIntoTheAdminProfileCarriesNoStamp',
+            'testACompanyTypedIntoTheAdminProfileIsStampedAdminSet',
+            'testAProfileSaveLeavingTheCompanyAloneKeepsItsScope',
+            'testOrderingOnAnAdminSetCompanyLeavesItAdminSet',
+            'testACompanyRememberedBeforeTheStampReplaysNowhere',
+            'testTheCartRotationOutlivesTheGatewayInstance',
+            'testTheBrowserFixtureCarriesWhatTheServerEmits',
         ];
         foreach ($tests as $test) {
             self::$test();
@@ -16080,25 +16087,85 @@ final class CaptureScopeSpec
             $gateway->process_payment(42);
 
             $meta = $GLOBALS['__twoinc_test_user_meta'][7] ?? [];
-            $scopes = explode(' ', (string) ($meta[WC_Twoinc_Brand::prefixed_name('company_scope')] ?? ''));
+            $stamp = (string) ($meta[WC_Twoinc_Brand::prefixed_name('company_scope')] ?? '');
             TinyAssert::same(
                 '923456789',
                 $meta[WC_Twoinc_Brand::prefixed_name('company_id')] ?? null,
                 'the company must still be remembered'
             );
             TinyAssert::true(
-                in_array('order:42', $scopes, true),
+                strpos($stamp, 'order:42') !== false,
                 'the remembered company must carry the order it was captured on'
             );
             TinyAssert::true(
-                in_array($cart, $scopes, true),
+                strpos($stamp, $cart) !== false,
                 'the cart that became the order must still replay the capture, so a signed-in buyer returning to it is prefilled'
             );
 
             WC_Twoinc_Checkout::rotate_cart_scope();
             TinyAssert::true(
-                !in_array(WC_Twoinc_Checkout::capture_scope(), $scopes, true),
+                strpos($stamp, WC_Twoinc_Checkout::capture_scope()) === false,
                 'the next cart in the same session must not replay the capture'
+            );
+        } finally {
+            $_POST = [];
+            $GLOBALS['__twoinc_test_user_id'] = 0;
+            $GLOBALS['__twoinc_test_user_meta'] = [];
+        }
+    }
+
+    /**
+     * Given a checkout that has rendered no page for this cart; When the
+     * stamp path asks which cart a capture belongs to; Then it names none,
+     * rather than minting a token the next cart would inherit.
+     */
+    private static function testTheStampPathNeverMintsACartToken(): void
+    {
+        $GLOBALS['__twoinc_test_query_vars'] = [];
+        WC()->session = new StubSession();
+
+        TinyAssert::same('', WC_Twoinc_Checkout::capture_scope(false), 'the stamp path must name no cart');
+        TinyAssert::same(
+            '',
+            (string) WC()->session->get(WC_Twoinc_Checkout::CART_SCOPE_SESSION_KEY, ''),
+            'the stamp path must leave the session without a token'
+        );
+
+        $rendered = WC_Twoinc_Checkout::capture_scope();
+        TinyAssert::true(strpos($rendered, 'cart:') === 0, 'a rendering page still mints the cart it shows');
+        TinyAssert::same(
+            $rendered,
+            WC_Twoinc_Checkout::capture_scope(false),
+            'once a page has minted one, the stamp path names it'
+        );
+    }
+
+    /**
+     * Given an order placed on a session that has rendered no checkout page,
+     * so no cart token exists; When the capture is stamped; Then it names the
+     * order alone, rather than minting a cart the next one would inherit.
+     */
+    private static function testAnOrderWithNoLiveCartIsStampedWithTheOrderAlone(): void
+    {
+        $GLOBALS['__twoinc_test_wc_orders'] = [42 => self::stampableOrder()];
+        $GLOBALS['__twoinc_test_notices'] = [];
+        $GLOBALS['__twoinc_test_logs'] = [];
+        $GLOBALS['__twoinc_test_user_meta'] = [];
+        $GLOBALS['__twoinc_test_user_id'] = 7;
+        $GLOBALS['__twoinc_test_query_vars'] = [];
+        WC()->session = new StubSession();
+        $_POST = ['company_id' => '923456789', 'company_name' => 'Invoice Holdings AS'];
+
+        try {
+            $gateway = self::stampingGateway();
+            $gateway->response = new WP_Error('http', 'down');
+            $gateway->process_payment(42);
+
+            $stamp = (string) ($GLOBALS['__twoinc_test_user_meta'][7][WC_Twoinc_Brand::prefixed_name('company_scope')] ?? '');
+            TinyAssert::same('order:42', $stamp, 'no page showed this cart, so the stamp may name no cart');
+            TinyAssert::true(
+                strpos($stamp, WC_Twoinc_Checkout::capture_scope()) === false,
+                'the next cart to render must not inherit a token the stamp path minted'
             );
         } finally {
             $_POST = [];
@@ -16142,7 +16209,7 @@ final class CaptureScopeSpec
             );
             TinyAssert::same(WC_Twoinc_Checkout::SCOPE_NONE, $scope, 'the stale stamp must be cleared, not left standing');
             TinyAssert::true(
-                !in_array(WC_Twoinc_Checkout::capture_scope(), explode(' ', $scope), true),
+                strpos($scope, WC_Twoinc_Checkout::capture_scope()) === false,
                 'a company this order does not carry may replay nowhere'
             );
         } finally {
@@ -16154,10 +16221,9 @@ final class CaptureScopeSpec
 
     /**
      * Given a merchant typing a company into a user profile; When the profile
-     * is saved; Then the value carries no capture stamp, so every page
-     * prefills it.
+     * is saved; Then the value is marked admin-set, so every page prefills it.
      */
-    private static function testACompanyTypedIntoTheAdminProfileCarriesNoStamp(): void
+    private static function testACompanyTypedIntoTheAdminProfileIsStampedAdminSet(): void
     {
         $GLOBALS['__twoinc_test_user_meta'] = [7 => [
             WC_Twoinc_Brand::prefixed_name('company_id') => '923456789',
@@ -16182,15 +16248,207 @@ final class CaptureScopeSpec
                 'the admin-set company must be stored'
             );
             TinyAssert::same(
-                null,
+                WC_Twoinc_Checkout::SCOPE_ADMIN,
                 $meta[WC_Twoinc_Brand::prefixed_name('company_scope')] ?? null,
-                'an admin-set company must carry no stamp from the capture it replaces'
+                'an admin-set company must be marked as such, not left carrying the stamp of the capture it replaces'
             );
         } finally {
             $_POST = [];
             $GLOBALS['__twoinc_test_object_caps'] = [];
             $GLOBALS['__twoinc_test_user_meta'] = [];
         }
+    }
+
+    /**
+     * Given a buyer whose captured company is prefilled into the profile form;
+     * When an unrelated field is saved (a password change posts the company
+     * back unchanged); Then the capture keeps the scopes it was captured in.
+     */
+    private static function testAProfileSaveLeavingTheCompanyAloneKeepsItsScope(): void
+    {
+        $captured = 'order:42 cart:0123456789abcdef';
+        $GLOBALS['__twoinc_test_user_meta'] = [7 => [
+            WC_Twoinc_Brand::prefixed_name('company_id') => '923456789',
+            WC_Twoinc_Brand::prefixed_name('billing_company') => 'Invoice Holdings AS',
+            WC_Twoinc_Brand::prefixed_name('company_scope') => $captured,
+        ]];
+        $GLOBALS['__twoinc_test_object_caps'] = ['edit_user:7'];
+        $_POST = [
+            '_wpnonce' => wp_create_nonce('update-user_7'),
+            'twoinc_company_id' => '923456789',
+            'twoinc_billing_company' => 'Invoice Holdings AS',
+            'twoinc_department' => '',
+            'twoinc_project' => '',
+        ];
+
+        try {
+            WC_Twoinc::save_user_meta(7);
+
+            TinyAssert::same(
+                $captured,
+                $GLOBALS['__twoinc_test_user_meta'][7][WC_Twoinc_Brand::prefixed_name('company_scope')] ?? null,
+                'a save that changed no company must not promote the capture to prefill everywhere'
+            );
+        } finally {
+            $_POST = [];
+            $GLOBALS['__twoinc_test_object_caps'] = [];
+            $GLOBALS['__twoinc_test_user_meta'] = [];
+        }
+    }
+
+    /**
+     * Given a company a merchant set by hand; When the buyer orders with it;
+     * Then it stays admin-set rather than becoming a capture of that cart.
+     */
+    private static function testOrderingOnAnAdminSetCompanyLeavesItAdminSet(): void
+    {
+        $GLOBALS['__twoinc_test_wc_orders'] = [42 => self::stampableOrder()];
+        $GLOBALS['__twoinc_test_notices'] = [];
+        $GLOBALS['__twoinc_test_logs'] = [];
+        $GLOBALS['__twoinc_test_user_id'] = 7;
+        $GLOBALS['__twoinc_test_query_vars'] = [];
+        WC()->session = new StubSession();
+        $GLOBALS['__twoinc_test_user_meta'] = [7 => [
+            WC_Twoinc_Brand::prefixed_name('company_id') => '923456789',
+            WC_Twoinc_Brand::prefixed_name('billing_company') => 'Invoice Holdings AS',
+            WC_Twoinc_Brand::prefixed_name('company_scope') => WC_Twoinc_Checkout::SCOPE_ADMIN,
+        ]];
+        $_POST = ['company_id' => '923456789', 'company_name' => 'Invoice Holdings AS'];
+
+        try {
+            $gateway = self::stampingGateway();
+            $gateway->response = new WP_Error('http', 'down');
+            $gateway->process_payment(42);
+
+            TinyAssert::same(
+                WC_Twoinc_Checkout::SCOPE_ADMIN,
+                $GLOBALS['__twoinc_test_user_meta'][7][WC_Twoinc_Brand::prefixed_name('company_scope')] ?? null,
+                'an admin-set company must survive the buyer ordering with it'
+            );
+        } finally {
+            $_POST = [];
+            $GLOBALS['__twoinc_test_user_id'] = 0;
+            $GLOBALS['__twoinc_test_user_meta'] = [];
+        }
+    }
+
+    /**
+     * Given a buyer who ordered before the stamp existed, so they carry a
+     * company and no scope row; When the checkout bootstraps; Then the record
+     * is marked replayable nowhere rather than read as admin-set.
+     */
+    private static function testACompanyRememberedBeforeTheStampReplaysNowhere(): void
+    {
+        $GLOBALS['__twoinc_test_user_id'] = 7;
+        $GLOBALS['__twoinc_test_query_vars'] = [];
+        WC()->session = new StubSession();
+        $GLOBALS['__twoinc_test_user_meta'] = [7 => [
+            WC_Twoinc_Brand::prefixed_name('company_id') => '923456789',
+            WC_Twoinc_Brand::prefixed_name('billing_company') => 'Invoice Holdings AS',
+        ]];
+
+        try {
+            $checkout = new WC_Twoinc_Checkout(self::stampingGateway());
+            $bootstrap = new ReflectionMethod(WC_Twoinc_Checkout::class, 'prepare_twoinc_object');
+            $bootstrap->setAccessible(true);
+            $properties = $bootstrap->invoke($checkout, []);
+
+            TinyAssert::same(
+                WC_Twoinc_Checkout::SCOPE_NONE,
+                $properties['company_scope'] ?? null,
+                'a legacy record must reach the browser refused, not blank'
+            );
+            TinyAssert::same(
+                WC_Twoinc_Checkout::SCOPE_NONE,
+                $GLOBALS['__twoinc_test_user_meta'][7][WC_Twoinc_Brand::prefixed_name('company_scope')] ?? null,
+                'the refusal must be written down, so no later read has to infer it from a missing row'
+            );
+
+            $GLOBALS['__twoinc_test_user_meta'] = [7 => []];
+            $bootstrap->invoke($checkout, []);
+            TinyAssert::same(
+                null,
+                $GLOBALS['__twoinc_test_user_meta'][7][WC_Twoinc_Brand::prefixed_name('company_scope')] ?? null,
+                'a buyer with no remembered company must gain no row'
+            );
+        } finally {
+            $GLOBALS['__twoinc_test_user_id'] = 0;
+            $GLOBALS['__twoinc_test_user_meta'] = [];
+        }
+    }
+
+    /**
+     * Given a request that empties the cart without loading a payment gateway
+     * (the Store API's own cart routes); When the rotation is registered;
+     * Then it is registered from the plugin bootstrap, not the gateway.
+     */
+    private static function testTheCartRotationOutlivesTheGatewayInstance(): void
+    {
+        $hook = 'woocommerce_cart_emptied';
+        unset($GLOBALS['__twoinc_test_filters'][$hook]);
+
+        new WC_Twoinc_Checkout(self::stampingGateway());
+        TinyAssert::same(
+            0,
+            count($GLOBALS['__twoinc_test_filters'][$hook] ?? []),
+            'the gateway constructor must not own the rotation: it never runs on a Store API cart request'
+        );
+
+        // Read rather than run: the bootstrap file redeclares functions this
+        // harness stubs, so it cannot be loaded here.
+        $bootstrap = (string) file_get_contents(dirname(__DIR__, 2) . '/tillit-payment-gateway.php');
+        $body = substr($bootstrap, (int) strpos($bootstrap, 'function load_twoinc_classes'));
+        TinyAssert::true(
+            strpos($body, "add_action('$hook', ['WC_Twoinc_Checkout', 'rotate_cart_scope']);") !== false,
+            'the plugins_loaded bootstrap must register the cart rotation'
+        );
+    }
+
+    /**
+     * Given the browser suite asserting the stamp format; When it reads one;
+     * Then it reads what the server actually emits, so neither side can
+     * assert its own idea of the separator against itself.
+     */
+    private static function testTheBrowserFixtureCarriesWhatTheServerEmits(): void
+    {
+        $GLOBALS['__twoinc_test_wc_orders'] = [42 => new StubOrder()];
+        $GLOBALS['__twoinc_test_query_vars'] = [];
+        WC()->session = new StubSession();
+        // Seeded rather than minted, so the hash below is the same on every run.
+        WC()->session->set(WC_Twoinc_Checkout::CART_SCOPE_SESSION_KEY, 'fixture-cart-token');
+
+        $fields = (new WC_Twoinc_Checkout(self::stampingGateway()))->update_company_fields(['billing' => []]);
+        $company_fields = [];
+        foreach ($fields as $role => $role_fields) {
+            foreach (array_keys($role_fields) as $name) {
+                if (strpos($name, 'company') !== false) {
+                    $company_fields[] = $name;
+                }
+            }
+        }
+        sort($company_fields);
+
+        $fixture = [
+            'cart_scope' => WC_Twoinc_Checkout::capture_scope(),
+            'order_scopes' => WC_Twoinc_Checkout::capture_scopes_for_order(wc_get_order(42)),
+            'scope_admin' => WC_Twoinc_Checkout::SCOPE_ADMIN,
+            'scope_none' => WC_Twoinc_Checkout::SCOPE_NONE,
+            'registered_company_fields' => $company_fields,
+        ];
+
+        $path = dirname(__DIR__) . '/js/fixtures/capture-scope.generated.json';
+        $emitted = json_encode($fixture, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+        $committed = is_readable($path) ? (string) file_get_contents($path) : '';
+        if (!is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
+        file_put_contents($path, $emitted);
+
+        TinyAssert::same(
+            $emitted,
+            $committed,
+            'tests/js/fixtures/capture-scope.generated.json is stale - it has been rewritten, commit it'
+        );
     }
 
     private static function stampableOrder()

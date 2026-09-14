@@ -84,8 +84,6 @@ function wc_add_notice($message, $notice_type = 'success', $data = [])
     $GLOBALS['__twoinc_test_notices'][] = ['message' => (string) $message, 'type' => $notice_type];
 }
 
-// Unique per call like the real thing, so a spec can tell one minted token
-// from the next.
 function wp_generate_password($length = 12, $special_chars = true, $extra_special_chars = false)
 {
     static $calls = 0;
