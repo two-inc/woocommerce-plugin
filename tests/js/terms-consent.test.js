@@ -108,6 +108,25 @@ describe("the classic checkout gate", () => {
     expect(answer === false).toBe(expected === false);
   });
 
+  test("the tick survives the checkout update that re-renders the payment box", () => {
+    ctx = harness.loadTwoinc({
+      gateway_id: GATEWAY_ID,
+      text: { terms_not_accepted: REFUSAL }
+    });
+    buildClassicCheckout(false);
+    const instance = ctx.Twoinc.getInstance();
+    instance.initialize(false);
+
+    document.getElementById("twoinc_terms_accepted").checked = true;
+    ctx.$('input[name="twoinc_terms_accepted"]').trigger("change");
+
+    // What WooCommerce does to the payment box on every checkout update.
+    buildClassicCheckout(false);
+    instance.onUpdatedCheckout();
+
+    expect(document.getElementById("twoinc_terms_accepted").checked).toBe(true);
+  });
+
   test("ticking the box takes the refusal back off screen", () => {
     ctx = harness.loadTwoinc({
       gateway_id: GATEWAY_ID,

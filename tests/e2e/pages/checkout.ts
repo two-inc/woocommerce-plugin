@@ -142,11 +142,12 @@ export async function placeOrder(page: Page): Promise<string> {
   return match?.[1] ?? "";
 }
 
-/** The terms consent gating order placement, when the brand renders one. */
+/** The terms consent gating order placement. */
 export async function acceptTerms(page: Page) {
   const checkbox = page.locator('input[name="twoinc_terms_accepted"]');
-  if ((await checkbox.count()) === 0) return;
+  await checkbox.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
   await checkbox.check();
+  await expect(checkbox).toBeChecked({ timeout: DEFAULT_TIMEOUT });
 }
 
 export async function expectRejection(page: Page) {

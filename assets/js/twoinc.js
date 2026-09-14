@@ -3428,6 +3428,19 @@ let twoincTermsConsent = {
     const box = twoincTermsConsent.checkbox();
     return !!box && box.checked;
   },
+  /**
+   * The tick, held off the DOM: WooCommerce replaces the whole payment box on
+   * every checkout update, which would otherwise silently drop the buyer's
+   * consent between ticking it and placing the order (ABN-554).
+   */
+  accepted: false,
+  remember: function () {
+    twoincTermsConsent.accepted = twoincTermsConsent.isAccepted();
+  },
+  restore: function () {
+    const box = twoincTermsConsent.checkbox();
+    if (box && twoincTermsConsent.accepted) box.checked = true;
+  },
   /** The carrier under the name the classic form posts it as. */
   payload: function () {
     const payload = {};
@@ -5214,6 +5227,7 @@ class Twoinc {
       });
 
     $body.on("change", 'input[name="' + twoincTermsConsent.FIELD + '"]', function () {
+      twoincTermsConsent.remember();
       twoincTermsConsent.showError(false);
     });
 
@@ -6238,6 +6252,10 @@ class Twoinc {
    * Handle the woocommerce updated checkout event
    */
   onUpdatedCheckout() {
+    // Before anything else: the fragment this fires for has just replaced the
+    // consent checkbox with a freshly unticked one.
+    twoincTermsConsent.restore();
+
     // Record the billing country, and nothing else (TWO-24867). A
     // re-render can move the field with no `change` event, and without
     // this the tracker would hold the pre-re-render country for the rest
