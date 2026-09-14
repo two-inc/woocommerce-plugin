@@ -142,3 +142,47 @@ describe("the classic checkout gate", () => {
     expect(document.querySelector(".twoinc-terms-error").classList.contains("hidden")).toBe(true);
   });
 });
+
+/**
+ * ABN-554. jsdom lays nothing out, so this reads the shipped stylesheet rather
+ * than a computed value, the same way the tile row-spacing test does.
+ */
+describe("the consent's sizing", () => {
+  const fs = require("fs");
+  const path = require("path");
+
+  const STYLESHEET = fs.readFileSync(
+    path.join(__dirname, "..", "..", "assets", "css", "twoinc.css"),
+    "utf8"
+  );
+
+  const ruleBody = (selector) => {
+    const match = STYLESHEET.match(
+      new RegExp("(^|\\}|\\*/)\\s*" + selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\{([\\s\\S]*?)\\}")
+    );
+
+    if (!match) {
+      throw new Error("no rule for " + selector);
+    }
+
+    return match[2];
+  };
+
+  test("the sentence is 11.2px on both checkouts, from the stylesheet both load", () => {
+    expect(ruleBody(".twoinc-terms-text")).toMatch(/font-size:\s*11\.2px;/);
+  });
+
+  test("the classic block carries 5px of bottom padding", () => {
+    expect(ruleBody("#payment .twoinc-terms-consent")).toMatch(/padding-bottom:\s*5px;/);
+  });
+
+  test("that padding never reaches the Blocks tile, which shares the class", () => {
+    expect(ruleBody(".twoinc-terms-consent")).not.toMatch(/padding-bottom/);
+    expect(
+      fs.readFileSync(
+        path.join(__dirname, "..", "..", "assets", "css", "blocks-checkout.css"),
+        "utf8"
+      )
+    ).not.toMatch(/padding-bottom/);
+  });
+});

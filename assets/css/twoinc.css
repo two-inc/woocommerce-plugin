@@ -891,6 +891,11 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   margin-top: 3px;
 }
 .twoinc-terms-text {
-  font-size: 14px;
+  font-size: 11.2px;
   line-height: 1.4;
+}
+
+/* Classic only: the Blocks tile carries the same classes and must not gain it. */
+#payment .twoinc-terms-consent {
+  padding-bottom: 5px;
 }
