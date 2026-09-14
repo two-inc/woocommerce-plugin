@@ -53,17 +53,13 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
                 'before'
             );
 
-            // Gated: WooCommerce asks for a payment method's handles on the
-            // classic checkout too, and these rules are Blocks-shaped.
-            if (WC_Twoinc_Checkout::is_blocks_checkout_request()) {
-                $style = 'assets/css/blocks-checkout.css';
-                wp_enqueue_style(
-                    'twoinc-blocks-checkout',
-                    WC_TWOINC_PLUGIN_URL . $style,
-                    ['twoinc-payment-gateway-css'],
-                    twoinc_get_asset_version($style)
-                );
-            }
+            $style = 'assets/css/blocks-checkout.css';
+            wp_enqueue_style(
+                'twoinc-blocks-checkout',
+                WC_TWOINC_PLUGIN_URL . $style,
+                ['twoinc-payment-gateway-css'],
+                twoinc_get_asset_version($style)
+            );
 
             return [$handle];
         }
@@ -74,13 +70,10 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
 
             return [
                 'title' => $gateway ? $gateway->get_pay_title() : '',
-                // The gateway's own payment-box description, whole: the
-                // subtitle, the term-chip containers, the sole-trader note
-                // slot, the company-search tile slot, the order-intent boxes
-                // and the term input the submit falls back on. The controller
-                // this file skins fills every one of them (ABN-554). The about
-                // block is left out because the tile's label renders it, the
-                // same split the classic template makes.
+                // The gateway's own payment-box description, whole — every
+                // slot the controller this file skins fills. Without the about
+                // block, which the tile's label renders instead, the same
+                // split the classic template makes (ABN-554).
                 'description' => $gateway ? $gateway->description : '',
                 'about' => $gateway ? $gateway->get_about_block_html() : '',
                 'iconUrl' => $gateway ? $gateway->icon : '',

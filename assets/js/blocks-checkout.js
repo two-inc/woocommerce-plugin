@@ -74,6 +74,7 @@
   var pushScheduled = false;
   var saveScheduled = false;
   var restored = false;
+  var announcedActive = null;
 
   function cartStore() {
     return wp.data && wp.data.select && wp.data.select("wc/store/cart");
@@ -85,14 +86,7 @@
     return (customer && customer.billingAddress) || null;
   }
 
-  /**
-   * Make one shadow input announce its own writes.
-   *
-   * The controller sets these through jQuery, which assigns `.value` and fires
-   * nothing at all — not even a native event — so an own-property accessor
-   * over the prototype's is what turns a capture or a registry autofill into
-   * something this file can react to rather than sample.
-   */
+  /** jQuery assigns `.value` and fires nothing, so an accessor is the only hook. */
   function announceWrites(input, announce) {
     var native = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
     Object.defineProperty(input, "value", {
@@ -126,7 +120,7 @@
     saveScheduled = true;
     Promise.resolve().then(function () {
       saveScheduled = false;
-      twoincDomHelper.saveCheckoutInputs();
+      if (typeof twoincDomHelper !== "undefined") twoincDomHelper.saveCheckoutInputs();
     });
   }
 
@@ -137,10 +131,8 @@
     host = document.createElement("div");
     host.id = SHADOW_ID;
     host.hidden = true;
-    // The shape `twoincDomHelper.saveCheckoutInputs()`/`loadStorageInputs()`
-    // look for. Without a container they recognise, the capture has no
-    // persistence across a page load here at all (ABN-554): the company NAME
-    // comes back with the cart's own customer data, the NUMBER does not.
+    // The container `saveCheckoutInputs()`/`loadStorageInputs()` look for;
+    // without one they recognise, nothing persists the capture (ABN-554).
     host.className = "checkout woocommerce-checkout custom-checkout";
     ADDRESS_KEYS.concat(CAPTURE_IDS).forEach(function (key) {
       var address = ADDRESS_KEYS.indexOf(key) !== -1;
@@ -163,7 +155,7 @@
     var host = shadow();
     var nodes = {};
     ["order-total", "tax-rate"].forEach(function (name) {
-      var node = host.querySelector("." + name.replace(".", ""));
+      var node = host.querySelector("." + name);
       if (!node) {
         node = document.createElement("span");
         node.className = name;
@@ -180,19 +172,24 @@
     var totals = store && store.getCartTotals && store.getCartTotals();
     if (!totals) return;
 
-    var unit = Math.pow(10, totals.currency_minor_unit || 2);
+    var decimals = totals.currency_minor_unit == null ? 2 : totals.currency_minor_unit;
+    var unit = Math.pow(10, decimals);
     var nodes = priceNodes();
     var separator = (window.twoinc && window.twoinc.price_decimal_separator) || ".";
     nodes["order-total"].textContent = ((totals.total_price || 0) / unit)
-      .toFixed(2)
+      .toFixed(decimals)
       .replace(".", separator);
     nodes["tax-rate"].textContent = ((totals.total_tax || 0) / unit)
-      .toFixed(2)
+      .toFixed(decimals)
       .replace(".", separator);
   }
 
   /** The store's address into the fields the controller reads. */
   function pull() {
+    // Never over a write that has not reached the store yet: the pull would
+    // restore the pre-write value and the queued push would then find nothing
+    // to send.
+    if (pushScheduled) return false;
     var address = billingAddress();
     if (!address) return false;
     shadow();
@@ -239,17 +236,12 @@
 
   /** The control is already anchored to the host it would mount on now. */
   function isMounted(search) {
+    if (search.panel) return search.panel.isBound();
     var field = document.querySelector(search.companyFieldSelector());
-    return !!(field && field.closest(".two-company-field-wrap"));
+    return !!(field && field.closest("." + search.fieldWrapClass));
   }
 
-  /**
-   * The controller's own "the checkout re-rendered" pass — sole-trader
-   * availability and token priming, the search-country gate, term chips and
-   * the mount, in the order it runs them. A Blocks address edit is what a
-   * classic `updated_checkout` is, so it gets the same call rather than a
-   * subset of it.
-   */
+  /** A Blocks address edit is what a classic `updated_checkout` is. */
   function resync() {
     var search = control();
     if (!search || !window.twoinc || typeof Twoinc === "undefined") return;
@@ -326,10 +318,11 @@
   }
 
   function captured() {
-    var role = twoincAddressRoles.primary();
+    var search = control();
+    var company = search ? search.readCapturedCompany() : {};
     return {
-      company_id: twoincCompanyCapture.numberField(role).val() || "",
-      company_name: twoincCompanyCapture.nameField(role).val() || ""
+      company_id: company.organization_number || "",
+      company_name: company.company_name || ""
     };
   }
 
@@ -384,11 +377,9 @@
     element.useEffect(function () {
       mount();
       resync();
-      announceChoice(true);
 
-      // The controller asks for a totals recalculation the classic way after
-      // a term is picked, and re-renders its chips off the answer. This is
-      // that round trip in the Store API's terms.
+      // The controller asks for a totals recalculation the classic way after a
+      // term is picked, and re-renders its chips off the answer.
       var recalculate = function () {
         var updated = announceChoice(true);
         if (updated && updated.then) updated.then(resync);
@@ -397,16 +388,12 @@
 
       return function () {
         window.jQuery(document.body).off("update_checkout.twoincBlocks", recalculate);
-        announceChoice(false);
       };
     }, []);
 
     return html(data.description, "twoinc-blocks-content");
   }
 
-  // Address-area placement is live whether or not this gateway is the selected
-  // one, exactly as on a classic checkout, so the mirror and the mount are the
-  // page's business rather than the tile component's.
   /**
    * The controller's own restore pass, which `initialize(true)` runs on a
    * classic checkout and nothing runs here. The country tracker is seeded
@@ -416,9 +403,13 @@
    */
   function restore() {
     if (restored || !control() || !window.twoinc || typeof twoincDomHelper === "undefined") return;
-    // Not before the cart's own customer data is in: the restore writes
-    // through the shadow, and a pull arriving afterwards would overwrite it
-    // with the address the store did not have yet.
+    // Not before the cart has RESOLVED: until then the store answers with a
+    // blank address, and the snapshot would be written into empty fields and
+    // pushed back over the buyer's real address when it lands. Asked of
+    // `getCartData`, which carries the resolver — `getCustomerData` has none,
+    // so its resolution never finishes.
+    var store = cartStore();
+    if (!store.hasFinishedResolution || !store.hasFinishedResolution("getCartData")) return;
     if (!billingAddress()) return;
     restored = true;
     shadow();
@@ -435,6 +426,7 @@
     restore();
     mount();
     resync();
+    observeCheckout();
     if (!wp.data || !wp.data.subscribe) return;
     wp.data.subscribe(function () {
       // A country change is what the controller re-reads its per-country
@@ -445,7 +437,23 @@
       if (moved) resync();
       mount();
     }, "wc/store/cart");
-    observeCheckout();
+    wp.data.subscribe(announceActiveMethod, "wc/store/payment");
+    announceActiveMethod();
+  }
+
+  /**
+   * The cart's surcharge is gated server-side on the chosen payment method, and
+   * the session keeps whatever was last announced — so a reload with another
+   * method selected would otherwise leave this gateway's fee on that cart.
+   * Announced on change only, since each announcement is a cart request.
+   */
+  function announceActiveMethod() {
+    var store = wp.data.select("wc/store/payment");
+    if (!store || !store.getActivePaymentMethod) return;
+    var active = store.getActivePaymentMethod() === name;
+    if (active === announcedActive) return;
+    announcedActive = active;
+    announceChoice(active);
   }
 
   /**

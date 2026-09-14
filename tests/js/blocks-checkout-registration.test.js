@@ -108,9 +108,13 @@ function baseGlobals(location, billing) {
     resyncs: 0,
     summaries: 0,
     saves: 0,
+    loads: 0,
     restores: [],
     order: []
   };
+  const subscribers = {};
+  const activeMethod = { name: null };
+  const resolution = { finished: true };
   const captureValues = { company: "", company_id: "" };
   const control = {
     addressFieldSelector: "#billing_company_display",
@@ -128,7 +132,12 @@ function baseGlobals(location, billing) {
     },
     renderCompanySummary() {
       calls.summaries += 1;
-    }
+    },
+    fieldWrapClass: "two-company-field-wrap",
+    readCapturedCompany: () => ({
+      company_name: captureValues.company,
+      organization_number: captureValues.company_id
+    })
   };
 
   window.twoinc = { company_search_location: location };
@@ -179,24 +188,44 @@ function baseGlobals(location, billing) {
     billing || {}
   );
 
+  /** Fire the listeners one store's subscription registered. */
+  function publish(store) {
+    (subscribers[store] || []).forEach((fn) => fn());
+  }
+
   return {
     calls,
     control,
     captureValues,
     address,
+    activeMethod,
+    resolution,
+    publish,
 
     data: {
-      select: () => ({
-        getCustomerData: () => ({ billingAddress: address }),
-        getCartTotals: () => ({ total_price: "38600", total_tax: "0", currency_minor_unit: 2 })
-      }),
+      select: (store) =>
+        store === "wc/store/payment"
+          ? { getActivePaymentMethod: () => activeMethod.name }
+          : {
+              getCustomerData: () => ({ billingAddress: address }),
+              getCartTotals: () => ({
+                total_price: "38600",
+                total_tax: "0",
+                currency_minor_unit: 2
+              }),
+              // Only the resolver-backed selector ever finishes.
+              hasFinishedResolution: (selector) => selector === "getCartData" && resolution.finished
+            },
       dispatch: () => ({
         setBillingAddress(patch) {
           calls.patches.push(patch);
           Object.assign(address, patch);
         }
       }),
-      subscribe: () => () => {}
+      subscribe: (fn, store) => {
+        (subscribers[store || "any"] = subscribers[store || "any"] || []).push(fn);
+        return () => {};
+      }
     }
   };
 }
@@ -347,18 +376,22 @@ describe("blocks-checkout.js reuses the classic controller", () => {
     expect(base.calls.patches).toEqual(expectPatches);
   });
 
-  test("a store value moving again mid-pull is never overwritten by the pull", async () => {
+  test("a pull never overwrites a write that has not reached the store yet", async () => {
     const base = baseGlobals("address_area", { city: "Oslo" });
     const { env } = globals({});
     env.wp.data = base.data;
     evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
 
-    // The buyer's own edit, landing between the pull's write and the queued
-    // push: without the suppression, the pull's stale value wins.
-    base.address.city = "Bergen";
+    // The controller's write, then a store notification arriving before the
+    // queued push has dispatched.
+    document.getElementById("billing_city").value = "Bergen";
+    base.publish("wc/store/cart");
     await Promise.resolve();
 
-    expect(base.calls.patches).toEqual([]);
+    expect(document.getElementById("billing_city").value).toBe("Bergen");
+    expect(base.calls.patches).toEqual([{ city: "Bergen" }]);
   });
 
   test("nothing is left running on a timer", () => {
@@ -389,12 +422,13 @@ describe("blocks-checkout.js reuses the classic controller", () => {
     window.MutationObserver.prototype = RealObserver.prototype;
     evaluate(env);
     window.MutationObserver = RealObserver;
+    const atBootstrap = base.calls.mounts;
 
     document.querySelector(".wc-block-components-text-input").innerHTML =
       '<input id="billing-company">';
     observed.forEach((fn) => fn([]));
 
-    expect(base.calls.mounts).toBe(1);
+    expect(base.calls.mounts).toBe(atBootstrap + 1);
   });
 
   test("the Store API is handed the controller's own captured company", () => {
@@ -537,28 +571,36 @@ describe("blocks-checkout.js reaches the rest of the tile's surfaces", () => {
 
   test.each([
     {
-      phase: "mounted",
+      active: "woocommerce-gateway-tillit",
       expected: [{ active: true }],
-      description: "the tile names this gateway as the choice"
+      description: "the chosen method is named to the cart, so the surcharge applies"
     },
     {
-      phase: "unmounted",
-      expected: [{ active: true }, { active: false }],
-      description: "leaving the tile withdraws it again"
+      active: "cod",
+      expected: [{ active: false }],
+      description: "and another gateway being chosen withdraws it, on a reload too"
     }
-  ])("$description", ({ phase, expected }) => {
+  ])("$description", ({ active, expected }) => {
     const base = baseGlobals("payment_tile");
-    const { env, registered, updates } = withCartApi(base);
+    const { env, updates } = withCartApi(base);
+    base.activeMethod.name = active;
     evaluate(env);
-
-    registered[0].content.type({});
-    if (phase === "unmounted") {
-      // The effect's own teardown, which React runs on unmount.
-      globals.lastCleanup();
-    }
 
     expect(updates.map((u) => u.data)).toEqual(expected);
     updates.forEach((u) => expect(u.namespace).toBe("twoinc-payment-gateway"));
+  });
+
+  test("an unchanged choice is not re-announced — each announcement is a cart request", () => {
+    const base = baseGlobals("payment_tile");
+    const { env, updates } = withCartApi(base);
+    base.activeMethod.name = "woocommerce-gateway-tillit";
+    evaluate(env);
+    updates.length = 0;
+
+    base.publish("wc/store/payment");
+    base.publish("wc/store/payment");
+
+    expect(updates).toEqual([]);
   });
 
   test("a term selection recalculates the cart and re-renders off the answer", async () => {
@@ -598,6 +640,23 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(document.getElementById("twoinc-blocks-shadow").classList.contains(container)).toBe(
       true
     );
+  });
+
+  test("the restore waits for the cart's customer data to resolve", () => {
+    const base = baseGlobals("address_area");
+    base.resolution.finished = false;
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    // Restoring against the blank address the store answers with before
+    // resolution would push the snapshot over the buyer's real address.
+    expect(base.calls.restores).toEqual([]);
+
+    base.resolution.finished = true;
+    base.publish("wc/store/cart");
+
+    expect(base.calls.restores).toEqual(["12345678"]);
   });
 
   test("the controller's own restore pass runs, then its country tracker is seeded", () => {

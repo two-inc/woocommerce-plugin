@@ -2512,18 +2512,18 @@ final class BrandConfigSpec
     private static function testProcessPaymentGuardsReturnAFailureArray(): void
     {
         $cases = [
-            ['not_two', [], null, 'order is not a Two order'],
-            ['veto', ['company_id' => '923456789'], null, 'brand overlay vetoed payment'],
-            ['plain', ['company_id' => ''], null, 'no company captured'],
-            ['country', ['company_id' => '923456789', 'billing_country' => 'DE'], null, 'buyer country off the allowlist'],
-            ['declined', ['company_id' => '923456789'], null, 'order intent declined this company'],
-            ['plain', ['company_id' => '923456789'], new WP_Error('http', 'down'), 'transport failed'],
-            ['plain', ['company_id' => '923456789'], ['response' => ['code' => 400], 'body' => '{}'], 'API rejected the payload'],
-            ['plain', ['company_id' => '923456789'], ['response' => ['code' => 200], 'body' => '{"status":"REJECTED"}'], 'API declined the order'],
+            ['not_two', [], null, 'cannot be paid with Two', 'order is not a Two order'],
+            ['veto', ['company_id' => '923456789'], null, 'Brand says no.', 'brand overlay vetoed payment'],
+            ['plain', ['company_id' => ''], null, 'select your company', 'no company captured'],
+            ['country', ['company_id' => '923456789', 'billing_country' => 'DE'], null, 'not available for this order', 'buyer country off the allowlist'],
+            ['declined', ['company_id' => '923456789'], null, 'not available for this order', 'order intent declined this company'],
+            ['plain', ['company_id' => '923456789'], new WP_Error('http', 'down'), 'Failed to request order creation', 'transport failed'],
+            ['plain', ['company_id' => '923456789'], ['response' => ['code' => 400], 'body' => '{}'], 'not available for this order', 'API rejected the payload'],
+            ['plain', ['company_id' => '923456789'], ['response' => ['code' => 200], 'body' => '{"status":"REJECTED"}'], 'not available for this order', 'API declined the order'],
         ];
 
         foreach ($cases as $case) {
-            list($mode, $post, $response, $description) = $case;
+            list($mode, $post, $response, $expected_message, $description) = $case;
 
             $order = new class extends StubOrder {
                 public $saved_meta = [];
@@ -2576,8 +2576,9 @@ final class BrandConfigSpec
             TinyAssert::true(is_array($result), $description . ': returned no array');
             TinyAssert::same('failure', $result['result'] ?? null, $description . ': not a failure result');
             TinyAssert::true(
-                is_string($result['message'] ?? null) && $result['message'] !== '',
-                $description . ': carried no buyer-facing message'
+                is_string($result['message'] ?? null)
+                    && strpos($result['message'], $expected_message) !== false,
+                $description . ': message was "' . ($result['message'] ?? '') . '"'
             );
         }
 

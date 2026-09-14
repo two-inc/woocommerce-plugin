@@ -139,15 +139,22 @@ function load_twoinc_classes()
     add_action('wc_ajax_two_company_search', ['WC_Twoinc_Api_Proxy', 'ajax_company_search']);
     add_action('wc_ajax_two_company_by_id', ['WC_Twoinc_Api_Proxy', 'ajax_company_by_id']);
 
+    add_action('wc_ajax_two_order_intent', ['WC_Twoinc_Api_Proxy', 'ajax_order_intent']);
+    add_action('wc_ajax_two_payment_terms', ['WC_Twoinc_Api_Proxy', 'ajax_payment_terms']);
+    add_action('wc_ajax_two_supported_countries', ['WC_Twoinc_Api_Proxy', 'ajax_supported_countries']);
+
     // A Blocks checkout builds its payment list from its own registry and
-    // never reads woocommerce_payment_gateways, so the gateway is absent from
-    // it without this (ABN-554). The action only fires where the Blocks
-    // package is present.
+    // never reads woocommerce_payment_gateways (ABN-554).
+    add_action('woocommerce_blocks_payment_method_type_registration', static function ($registry) {
+        require_once __DIR__ . '/class/WC_Twoinc_Blocks_Support.php';
+        if (class_exists('WC_Twoinc_Blocks_Support')) {
+            $registry->register(new WC_Twoinc_Blocks_Support());
+        }
+    });
+
     // The buyer surcharge is a cart fee conditional on this gateway being the
-    // chosen method, and a Blocks checkout only tells the server which method
-    // that is at submit — too late for the order summary. This is the Store
-    // API's own route for a client-side choice that changes the cart
-    // (ABN-554); the fee itself stays in apply_cart_fee.
+    // chosen method, which a Blocks checkout otherwise names only at submit —
+    // too late for the order summary. The fee itself stays in apply_cart_fee.
     add_action('woocommerce_blocks_loaded', static function () {
         if (!function_exists('woocommerce_store_api_register_update_callback')) {
             return;
@@ -157,16 +164,6 @@ function load_twoinc_classes()
             'callback'  => ['WC_Twoinc', 'set_blocks_chosen_method'],
         ]);
     });
-
-    add_action('woocommerce_blocks_payment_method_type_registration', static function ($registry) {
-        require_once __DIR__ . '/class/WC_Twoinc_Blocks_Support.php';
-        if (class_exists('WC_Twoinc_Blocks_Support')) {
-            $registry->register(new WC_Twoinc_Blocks_Support());
-        }
-    });
-    add_action('wc_ajax_two_order_intent', ['WC_Twoinc_Api_Proxy', 'ajax_order_intent']);
-    add_action('wc_ajax_two_payment_terms', ['WC_Twoinc_Api_Proxy', 'ajax_payment_terms']);
-    add_action('wc_ajax_two_supported_countries', ['WC_Twoinc_Api_Proxy', 'ajax_supported_countries']);
 
     // Admin invoice / credit-note PDF download from the order edit screen:
     // streams the PDF, or redirects back with a notice after the
