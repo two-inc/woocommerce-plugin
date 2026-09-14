@@ -1349,20 +1349,14 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Carry a legacy `enable_company_name` row over to
-         * `enable_company_search` (ABN-554). Self-limiting: it only writes
-         * while the legacy key is present and the current one absent.
+         * `enable_company_search` (ABN-554). Self-limiting: it writes only
+         * while the legacy key is present and the current one absent. The row is
+         * rewritten rather than read through a fallback because the current
+         * key's own `'default' => 'yes'` is what renders the admin checkbox,
+         * so only one stored value can make the screen and every getter agree.
          *
-         * A read-time fallback cannot do this job. The current key declares
-         * `'default' => 'yes'`, and `WC_Settings_API::get_option()` both
-         * substitutes that default and renders the admin checkbox from it, so
-         * a merchant who switched company search off before the rename saw it
-         * ticked and had it in effect — and after ABN-554, the autofill
-         * setting it gates too. Rewriting the row is what makes the checkbox
-         * and every getter read one value.
-         *
-         * Called straight after init_settings(), while `$this->settings` is
-         * still the stored row: any get_option() read memoises the field
-         * default into it, after which the key is no longer absent.
+         * Must run before any get_option() read of that key memoises the
+         * default into `$this->settings` — see the constructor.
          *
          * @return void
          */

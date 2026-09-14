@@ -28,6 +28,73 @@ function ruleBody(selector) {
   return m === null ? null : m[1];
 }
 
+/**
+ * The style rules of one sheet, `@media`/`@supports` descendants included — a
+ * string scan reads an at-rule prelude as the selector and misses what it
+ * wraps. `@import` is not followed; nothing in this plugin uses one.
+ *
+ * @param {CSSStyleSheet} sheet
+ * @returns {CSSStyleRule[]}
+ */
+function styleRulesOf(sheet) {
+  const out = [];
+  const walk = (rules) => {
+    Array.prototype.forEach.call(rules || [], (rule) => {
+      if (rule.cssRules) {
+        walk(rule.cssRules);
+      } else if (rule.selectorText) {
+        out.push(rule);
+      }
+    });
+  };
+  walk(sheet.cssRules);
+  return out;
+}
+
+/** The plugin's own sheet, as injected by the active test. */
+let sheet;
+
+/**
+ * Does one of this rule's selectors name `needle` — as the subject or as an
+ * ancestor, since bottom padding on a wrapper inside the row adds the same
+ * gap — and not merely prefix a longer id?
+ *
+ * @param {string} selectorText
+ * @param {string} needle
+ * @returns {boolean}
+ */
+function targets(selectorText, needle) {
+  // Attribute values and `:not()` arguments are stripped first: a value can
+  // hold the separators this splits on, and a negated needle is not reached.
+  const cleaned = selectorText.replace(/\[[^\]]*\]/g, "").replace(/:not\([^)]*\)/g, "");
+  return cleaned.split(",").some((part) =>
+    part
+      .trim()
+      .split(/[\s>+~]+/)
+      .some((compound) => {
+        const at = compound.indexOf(needle);
+        if (at < 0) return false;
+        // Not a longer id the needle merely prefixes.
+        return !/[A-Za-z0-9_-]/.test(compound.charAt(at + needle.length));
+      })
+  );
+}
+
+/**
+ * @param {string} needle a whole simple selector — an id or a class
+ * @param {RegExp} property what may not be declared
+ * @returns {string[]} the selectors of the offending rules
+ */
+function rulesDeclaring(needle, property) {
+  return styleRulesOf(sheet)
+    .filter((rule) => targets(rule.selectorText, needle))
+    .filter((rule) => property.test(rule.style.cssText))
+    .map((rule) => rule.selectorText);
+}
+
+/** Bottom padding, longhand or via the shorthand. Horizontal padding is fine. */
+const BOTTOM_PADDING = /padding-bottom|padding\s*:/;
+
 const ROWS = ["#billing_company_display_field", "#billing_company_field"];
 
 describe("billing company-row spacing", () => {
@@ -45,7 +112,7 @@ describe("billing company-row spacing", () => {
     helper = ctx.helper;
     harness.buildCheckoutForm();
     $("#billing_company_display_field").removeClass("hidden");
-    harness.injectStylesheet();
+    sheet = harness.injectStylesheet().sheet;
   });
 
   afterEach(() => {
@@ -53,15 +120,81 @@ describe("billing company-row spacing", () => {
     document.body.innerHTML = "";
   });
 
+  // The scan's own contract, against a sheet written for the purpose — the
+  // plugin's sheet carries no at-rule, so nothing else here would notice the
+  // walk stopping at one, or the needle matching a longer id.
+  describe("what the stylesheet scan can see", () => {
+    let injected;
+
+    afterEach(() => {
+      // Left in <head>, these rules would reach the computed-style cases below.
+      if (injected) injected.remove();
+      injected = null;
+    });
+
+    /** @param {string} css @returns {CSSStyleSheet} */
+    function inject(css) {
+      injected = document.createElement("style");
+      injected.textContent = css;
+      document.head.appendChild(injected);
+      return injected.sheet;
+    }
+
+    test.each([
+      {
+        css: "@media (max-width: 600px) { #billing_company_field { padding-bottom: 15px } }",
+        offenders: ["#billing_company_field"],
+        description: "a rule wrapped in an at-rule"
+      },
+      {
+        css: "#billing_company_field { padding: 0 0 15px }",
+        offenders: ["#billing_company_field"],
+        description: "bottom padding via the shorthand"
+      },
+      {
+        css: "#billing_company_field { padding-left: 3px; padding-right: 3px }",
+        offenders: [],
+        description: "horizontal padding, which is deliberate elsewhere"
+      },
+      {
+        // `#billing_company_field .woocommerce-input-wrapper` is a live rule;
+        // bottom padding there is the gap this file forbids.
+        css: "#billing_company_field .child { padding-bottom: 15px }",
+        offenders: ["#billing_company_field .child"],
+        description: "bottom padding on a wrapper inside the row"
+      },
+      {
+        css: '#billing_company_field[data-x="a b"] { padding-bottom: 15px }',
+        offenders: ['#billing_company_field[data-x="a b"]'],
+        description: "an attribute value holding a space"
+      },
+      {
+        css: ".other:not(#billing_company_field) { padding-bottom: 15px }",
+        offenders: [],
+        description: "a selector that negates the row"
+      },
+      {
+        css: "#billing_company_field_extra { padding-bottom: 15px }",
+        offenders: [],
+        description: "a longer id the row's name is a prefix of"
+      },
+      {
+        css: "#other, #billing_company_field { padding-bottom: 15px }",
+        offenders: ["#other, #billing_company_field"],
+        description: "the row as one of a grouped selector's subjects"
+      }
+    ])("$description", ({ css, offenders }) => {
+      sheet = inject(css);
+
+      expect(rulesDeclaring("#billing_company_field", BOTTOM_PADDING)).toEqual(offenders);
+    });
+  });
+
   test("no rule anywhere gives .billing_company_search bottom padding", () => {
     // Requirement 3.1's third name. It is the CLASS on the search row on the
     // checkout page and on the input itself on the pay-for-order view, so a
     // rule reaching it from either shape has to be absent.
-    const offenders = stylesheetSource()
-      .split("}")
-      .filter((block) => /\.billing_company_search\b/.test(block.split("{")[0] || ""))
-      .filter((block) => /padding-bottom|padding:/.test(block));
-    expect(offenders).toEqual([]);
+    expect(rulesDeclaring(".billing_company_search", BOTTOM_PADDING)).toEqual([]);
   });
 
   test.each([
@@ -71,22 +204,20 @@ describe("billing company-row spacing", () => {
     // A renamed or deleted rule reads as null here and fails the match, so
     // this also pins the rule still existing.
     expect(ruleBody(selector)).toMatch(/position:\s*relative/);
-    // Every rule reaching the row, and the `padding` shorthand too.
-    const offenders = stylesheetSource()
-      .split("}")
-      .filter((block) => block.split("{")[0].includes(selector))
-      .filter((block) => /padding-bottom|padding:/.test(block));
-    expect(offenders).toEqual([]);
+    expect(rulesDeclaring(selector, BOTTOM_PADDING)).toEqual([]);
   });
 
   test("the number label pulls nothing up over the row above it", () => {
     // A negative top margin here is what the deleted row padding needed
     // cancelling; with the padding gone it would pull the number into the input.
-    const summaryRules = stylesheetSource()
-      .split("}")
-      .filter((block) => /\.twoinc-company-summary\b/.test(block.split("{")[0] || ""));
-    expect(summaryRules.length).toBeGreaterThan(0);
-    summaryRules.forEach((block) => expect(block).not.toMatch(/margin-top:\s*-/));
+    const named = styleRulesOf(sheet).filter((rule) =>
+      targets(rule.selectorText, ".twoinc-company-summary")
+    );
+    expect(named.length).toBeGreaterThan(0);
+    // Read off cssText: the typed `style.marginTop` is undefined in this jsdom.
+    expect(
+      named.filter((rule) => /margin-top:\s*-/.test(rule.style.cssText)).map((r) => r.selectorText)
+    ).toEqual([]);
   });
 
   describe("the row's bottom margin gives way to the affordance link", () => {
