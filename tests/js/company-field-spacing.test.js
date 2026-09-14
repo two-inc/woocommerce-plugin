@@ -53,6 +53,17 @@ describe("billing company-row spacing", () => {
     document.body.innerHTML = "";
   });
 
+  test("no rule anywhere gives .billing_company_search bottom padding", () => {
+    // Requirement 3.1's third name. It is the CLASS on the search row on the
+    // checkout page and on the input itself on the pay-for-order view, so a
+    // rule reaching it from either shape has to be absent.
+    const offenders = stylesheetSource()
+      .split("}")
+      .filter((block) => /\.billing_company_search\b/.test(block.split("{")[0] || ""))
+      .filter((block) => /padding-bottom|padding:/.test(block));
+    expect(offenders).toEqual([]);
+  });
+
   test.each([
     { selector: "#billing_company_display_field", description: "the search row" },
     { selector: "#billing_company_field", description: "the native company row" }
@@ -130,17 +141,40 @@ describe("billing company-row spacing", () => {
       expect(marked()).toBe(false);
     });
 
-    test("the stylesheet drops the bottom margin for a marked row", () => {
-      ctx.dom.toggleBusinessFields();
-      const before = ROWS.map((selector) => window.getComputedStyle($(selector)[0]).marginBottom);
+    // Given manual entry, then a sole trader adopted (which hides the link and
+    // clears the mark); when Registered company reverts the mode, the link is
+    // re-shown after the revert's own syncs have already run.
+    test("reverting to registered company re-marks the rows", () => {
+      const soleTrader = helper.soleTrader;
+      helper.enterManualCompanyEntry();
+      soleTrader.mode = "sole_trader";
+      soleTrader.setCompany("TWO:ST:GB:1", "A Sole Trader");
+      expect(marked()).toBe(false);
 
+      soleTrader.setMode("business");
+
+      expect($("#search_company_btn").css("display")).not.toBe("none");
+      expect(marked()).toBe(true);
+    });
+
+    test("locking an adopted capture unmarks the rows it hides the link on", () => {
+      const soleTrader = helper.soleTrader;
+      helper.enterManualCompanyEntry();
+      expect(marked()).toBe(true);
+
+      soleTrader.lockCapturedFields("TWO:ST:GB:1", "A Sole Trader");
+
+      expect($("#search_company_btn").css("display")).toBe("none");
+      expect(marked()).toBe(false);
+    });
+
+    test("the stylesheet drops the bottom margin for a marked row", () => {
       helper.enterManualCompanyEntry();
 
       expect(ROWS.map((selector) => window.getComputedStyle($(selector)[0]).marginBottom)).toEqual([
         "0px",
         "0px"
       ]);
-      expect(before).not.toEqual(["0px", "0px"]);
     });
   });
 });

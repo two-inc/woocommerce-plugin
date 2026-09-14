@@ -206,11 +206,14 @@ Vendored assets
   guidance message is the whole signal (ABN-554). `toggleRequiredCues()` still
   serves the phone row.
 - **"Autofill company address" is offered only while "Enable company search in
-  address entry" is on.** Company search off withdraws the autofill row from
-  the admin screen AND unticks it, and `get_enable_address_lookup()` reads as
-  `no` regardless of what is stored, so a `yes` saved before the switch went
-  off cannot keep autofilling (ABN-554). Ticking company search on switches
-  autofill on with it, edge-triggered (ABN-562).
+  address entry" is on.** That checkbox still only relocates the search control
+  (see `get_enable_company_search()`); what it additionally gates is autofill.
+  Off withdraws the autofill row from the admin screen AND unticks it, and
+  `get_enable_address_lookup()` reads as `no` regardless of what is stored, so a
+  `yes` saved before the switch went off cannot keep autofilling (ABN-554).
+  Ticking company search on switches autofill on with it, edge-triggered
+  (ABN-562). The legacy `enable_company_name` key is read off the stored blob,
+  since the current key's own `'default' => 'yes'` would otherwise mask it.
 
 The payment-term chips are a radio group
 

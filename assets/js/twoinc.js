@@ -2357,12 +2357,7 @@ let twoincDomHelper = {
       $wrapper.toggleClass("hidden", $field.hasClass("hidden"));
     });
   },
-  /**
-   * Mark the billing company rows while an affordance link is shown below the
-   * input, so the stylesheet can drop the row's bottom margin (ABN-554). The
-   * links carry no state of their own — jQuery show/hide writes inline
-   * `display` — so the class is what CSS can read.
-   */
+  /** Runs after every show/hide of either affordance link (ABN-554). */
   syncCompanyAffordanceSpacing: function () {
     const shown = ["#search_company_btn", "#select_different_sole_trader_btn"].some(function (id) {
       const $btn = jQuery(id);
@@ -3970,6 +3965,7 @@ function createSoleTraderController(companySearch) {
         // to search stays hidden with no other route back to the picker.
         if (twoincCompanyCapture.mode === "manual") {
           companySearch.getSearchCompanyBtnNode().show();
+          twoincDomHelper.syncCompanyAffordanceSpacing();
         }
       }
     },
@@ -4039,6 +4035,7 @@ function createSoleTraderController(companySearch) {
       companySearch.setDisplayName(companyName);
 
       jQuery("#" + companySearch.searchCompanyBtnId).hide();
+      twoincDomHelper.syncCompanyAffordanceSpacing();
       twoincCompanyCapture
         .nameField(companySearch.role)
         .add(twoincCompanyCapture.numberFieldSelector(companySearch.role))

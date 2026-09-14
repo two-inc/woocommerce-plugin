@@ -254,19 +254,30 @@ if (!class_exists('WC_Twoinc')) {
          * Get enable company search. Falls back to the older
          * `enable_company_name` option key for back-compat — merchants
          * configured before the field was renamed keep working unchanged.
+         * Read off the stored blob, not `get_option()`: the current key
+         * declares `'default' => 'yes'`, which `WC_Settings_API::get_option()`
+         * substitutes for an absent key, so a legacy `no` was never reached.
          *
          * Per TWO-25326, this ALSO decides WHERE the one company-search
          * control renders — see WC_Twoinc_Checkout::prepare_twoinc_object(),
          * which derives `window.twoinc.company_search_location` from this
          * same value. This setting is never "on vs off" in the sense of
          * removing the control: the control always exists, this only
-         * decides its location.
+         * decides its location. It does gate the address autofill setting —
+         * see get_enable_address_lookup().
          *
          * @return string
          */
         public function get_enable_company_search()
         {
-            return $this->get_option('enable_company_search') ?? $this->get_option('enable_company_name');
+            $stored = is_array($this->settings) ? $this->settings : [];
+            if (!array_key_exists('enable_company_search', $stored)) {
+                $legacy = $stored['enable_company_name'] ?? null;
+                if ($legacy !== null && $legacy !== '') {
+                    return $legacy;
+                }
+            }
+            return $this->get_option('enable_company_search');
         }
 
         /**

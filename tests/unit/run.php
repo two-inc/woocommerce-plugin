@@ -10990,7 +10990,7 @@ final class BrandConfigSpec
             ['yes', 'no', 'no', 'company search on, autofill off'],
             ['no', 'yes', 'no', 'company search off overrides a stored yes'],
             ['no', 'no', 'no', 'company search off, autofill off'],
-            [null, 'yes', 'no', 'company search unset reads as off'],
+            [null, 'yes', 'yes', 'company search absent takes the field default, which is on'],
             ['', 'yes', 'no', 'company search empty reads as off'],
         ];
 
@@ -11000,22 +11000,45 @@ final class BrandConfigSpec
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
             }
         };
+        // Through init_form_fields(), so `enable_company_search`'s own
+        // 'default' => 'yes' is in play exactly as it is in production.
+        $gateway->init_form_fields();
         $key = $gateway->get_option_key();
 
         $bootstrap = new ReflectionMethod(WC_Twoinc_Checkout::class, 'prepare_twoinc_object');
         $bootstrap->setAccessible(true);
 
         foreach ($cases as [$search, $lookup, $expected, $description]) {
-            $GLOBALS['__twoinc_test_options'][$key] = [
-                'enable_company_search' => $search,
-                'enable_address_lookup' => $lookup,
-            ];
+            $settings = ['enable_address_lookup' => $lookup];
+            // An absent key, not a null one: the field's own default is what
+            // WC_Settings_API substitutes, and that is the case under test.
+            if ($search !== null) {
+                $settings['enable_company_search'] = $search;
+            }
+            $GLOBALS['__twoinc_test_options'][$key] = $settings;
             $gateway->init_settings();
             TinyAssert::same($expected, $gateway->get_enable_address_lookup(), $description);
             // The bootstrap is what reaches the browser, so the effective
             // getter has to be what the checkout localizes.
             $params = $bootstrap->invoke(new WC_Twoinc_Checkout($gateway), []);
             TinyAssert::same($expected, $params['enable_address_lookup'], $description . ' (bootstrap)');
+        }
+
+        // A legacy install stores only `enable_company_name`. The current
+        // key's own 'default' => 'yes' would otherwise mask it, leaving
+        // autofill on screen and active for a merchant who switched it off.
+        $legacyCases = [
+            ['no', 'no', 'legacy company search off gates autofill off'],
+            ['yes', 'yes', 'legacy company search on leaves autofill on'],
+        ];
+        foreach ($legacyCases as [$legacy, $expected, $description]) {
+            $GLOBALS['__twoinc_test_options'][$key] = [
+                'enable_company_name' => $legacy,
+                'enable_address_lookup' => 'yes',
+            ];
+            $gateway->init_settings();
+            TinyAssert::same($legacy, $gateway->get_enable_company_search(), $description . ' (search)');
+            TinyAssert::same($expected, $gateway->get_enable_address_lookup(), $description);
         }
     }
 
