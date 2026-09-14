@@ -11024,9 +11024,12 @@ final class BrandConfigSpec
             TinyAssert::same($expected, $params['enable_address_lookup'], $description . ' (bootstrap)');
         }
 
-        // A legacy install stores only `enable_company_name`. The current
-        // key's own 'default' => 'yes' would otherwise mask it, leaving
-        // autofill on screen and active for a merchant who switched it off.
+        // A legacy install stores only `enable_company_name`. The migration
+        // rewrites the row, so the rendered checkbox and every getter read
+        // one value — a read-time fallback left them disagreeing, with the
+        // current key's own 'default' => 'yes' rendering the box ticked.
+        $migrate = new ReflectionMethod(WC_Twoinc::class, 'migrate_legacy_company_search_key');
+        $migrate->setAccessible(true);
         $legacyCases = [
             ['no', 'no', 'legacy company search off gates autofill off'],
             ['yes', 'yes', 'legacy company search on leaves autofill on'],
@@ -11037,8 +11040,47 @@ final class BrandConfigSpec
                 'enable_address_lookup' => 'yes',
             ];
             $gateway->init_settings();
+            $migrate->invoke($gateway);
+
+            // The stored row, so the admin checkbox renders the same answer.
+            TinyAssert::same(
+                $legacy,
+                $GLOBALS['__twoinc_test_options'][$key]['enable_company_search'] ?? null,
+                $description . ' (stored)'
+            );
+            TinyAssert::same(
+                false,
+                array_key_exists('enable_company_name', $GLOBALS['__twoinc_test_options'][$key]),
+                $description . ' (legacy key retired)'
+            );
             TinyAssert::same($legacy, $gateway->get_enable_company_search(), $description . ' (search)');
             TinyAssert::same($expected, $gateway->get_enable_address_lookup(), $description);
+        }
+
+        // Wired into the constructor, and reached before any get_option() read
+        // memoises the current key's default into the settings blob.
+        $GLOBALS['__twoinc_test_options'][$key] = [
+            'enable_company_name' => 'no',
+            'enable_address_lookup' => 'yes',
+        ];
+        $built = new WC_Twoinc();
+        TinyAssert::same(
+            'no',
+            $GLOBALS['__twoinc_test_options'][$key]['enable_company_search'] ?? null,
+            'the constructor carries a legacy row over'
+        );
+        TinyAssert::same('no', $built->get_enable_address_lookup(), 'and the gate follows it');
+
+        // Already migrated, or never legacy: nothing is rewritten.
+        $untouched = [
+            [['enable_company_search' => 'yes', 'enable_company_name' => 'no'], 'a present current key wins'],
+            [['enable_address_lookup' => 'yes'], 'no legacy row to carry over'],
+        ];
+        foreach ($untouched as [$stored, $description]) {
+            $GLOBALS['__twoinc_test_options'][$key] = $stored;
+            $gateway->init_settings();
+            $migrate->invoke($gateway);
+            TinyAssert::same($stored, $GLOBALS['__twoinc_test_options'][$key], $description);
         }
     }
 

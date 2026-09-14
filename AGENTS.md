@@ -212,8 +212,10 @@ Vendored assets
   `get_enable_address_lookup()` reads as `no` regardless of what is stored, so a
   `yes` saved before the switch went off cannot keep autofilling (ABN-554).
   Ticking company search on switches autofill on with it, edge-triggered
-  (ABN-562). The legacy `enable_company_name` key is read off the stored blob,
-  since the current key's own `'default' => 'yes'` would otherwise mask it.
+  (ABN-562). A legacy `enable_company_name` row is REWRITTEN to the current key
+  at construction, not read through a fallback: the current key's own
+  `'default' => 'yes'` is what renders the admin checkbox, so a read-time
+  fallback left the screen and the server disagreeing.
 
 The payment-term chips are a radio group
 

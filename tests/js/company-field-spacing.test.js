@@ -85,33 +85,54 @@ describe("billing company-row spacing", () => {
   });
 
   describe("the row's bottom margin gives way to the affordance link", () => {
-    /** @returns {boolean} whether both rows are marked for the CSS rule */
-    function marked() {
-      return ROWS.every((selector) => $(selector).hasClass("twoinc-affordance-shown"));
+    const LINKS = "#search_company_btn, #select_different_sole_trader_btn";
+
+    /** @returns {string[]} the rows carrying the CSS mark */
+    function markedRows() {
+      return ROWS.filter((selector) => $(selector).hasClass("twoinc-affordance-shown"));
+    }
+
+    /** @returns {string[]} the rows that actually contain a visible link */
+    function hostRows() {
+      return ROWS.filter(
+        (selector) =>
+          $(selector)
+            .find(LINKS)
+            .filter(function () {
+              return $(this).css("display") !== "none";
+            }).length > 0
+      );
+    }
+
+    /** The mark is on exactly the rows hosting a visible link, and nowhere else. */
+    function expectMarkFollowsHosts() {
+      expect(markedRows()).toEqual(hostRows());
     }
 
     test("no link shown leaves the rows unmarked", () => {
       ctx.dom.toggleBusinessFields();
 
-      expect(marked()).toBe(false);
+      expect(markedRows()).toEqual([]);
+      expect(hostRows()).toEqual([]);
     });
 
-    test("the search-for-a-company link marks both rows", () => {
+    test("the search-for-a-company link marks the row it hangs in", () => {
       helper.enterManualCompanyEntry();
 
-      expect(marked()).toBe(true);
+      expect(hostRows()).toEqual(["#billing_company_field"]);
+      expectMarkFollowsHosts();
     });
 
-    test("leaving manual entry unmarks them again", () => {
+    test("leaving manual entry unmarks it again", () => {
       helper.enterManualCompanyEntry();
-      expect(marked()).toBe(true);
+      expect(markedRows()).not.toEqual([]);
 
       helper.exitManualCompanyEntry();
 
-      expect(marked()).toBe(false);
+      expect(markedRows()).toEqual([]);
     });
 
-    test("the select-a-different-sole-trader link marks both rows", () => {
+    test("the select-a-different-sole-trader link marks the row it hangs in", () => {
       const soleTrader = helper.soleTrader;
       soleTrader.mode = "sole_trader";
       soleTrader.soleTraderAdopted = true;
@@ -120,61 +141,77 @@ describe("billing company-row spacing", () => {
       soleTrader.syncDifferentSoleTraderLink();
 
       expect($("#select_different_sole_trader_btn").css("display")).not.toBe("none");
-      expect(marked()).toBe(true);
+      expect(hostRows()).toEqual(["#billing_company_display_field"]);
+      expectMarkFollowsHosts();
     });
 
-    // A teardown mid-flight skips the mode revert that would otherwise re-sync,
-    // so this is the one path that needs the mark cleared where it hides the link.
-    test("a sole-trader teardown mid-flight unmarks the rows", () => {
+    // A link mounted outside both address rows — tile placement hangs the
+    // sole-trader link in the tile row — must mark neither of them.
+    test("a link outside the address rows marks neither", () => {
       const soleTrader = helper.soleTrader;
       soleTrader.mode = "sole_trader";
       soleTrader.soleTraderAdopted = true;
       soleTrader.tokens = { delegation_token: "d", autofill_token: "a" };
       soleTrader.syncDifferentSoleTraderLink();
-      expect(marked()).toBe(true);
+      $("form[name='checkout']").append('<p id="elsewhere"></p>');
+      $("#elsewhere").append($("#select_different_sole_trader_btn"));
+
+      ctx.dom.syncCompanyAffordanceSpacing();
+
+      expect($("#select_different_sole_trader_btn").css("display")).not.toBe("none");
+      expect(markedRows()).toEqual([]);
+    });
+
+    // A teardown mid-flight skips the mode revert that would otherwise re-sync,
+    // so this is the one path that needs the mark cleared where it hides the link.
+    test("a sole-trader teardown mid-flight unmarks the row", () => {
+      const soleTrader = helper.soleTrader;
+      soleTrader.mode = "sole_trader";
+      soleTrader.soleTraderAdopted = true;
+      soleTrader.tokens = { delegation_token: "d", autofill_token: "a" };
+      soleTrader.syncDifferentSoleTraderLink();
+      expect(markedRows()).not.toEqual([]);
       soleTrader.flightDepth = 1;
 
       soleTrader.hide();
 
       expect(soleTrader.mode).toBe("sole_trader");
       expect($("#select_different_sole_trader_btn").css("display")).toBe("none");
-      expect(marked()).toBe(false);
+      expect(markedRows()).toEqual([]);
     });
 
     // Given manual entry, then a sole trader adopted (which hides the link and
     // clears the mark); when Registered company reverts the mode, the link is
     // re-shown after the revert's own syncs have already run.
-    test("reverting to registered company re-marks the rows", () => {
+    test("reverting to registered company re-marks the row", () => {
       const soleTrader = helper.soleTrader;
       helper.enterManualCompanyEntry();
       soleTrader.mode = "sole_trader";
       soleTrader.setCompany("TWO:ST:GB:1", "A Sole Trader");
-      expect(marked()).toBe(false);
+      expect(markedRows()).toEqual([]);
 
       soleTrader.setMode("business");
 
       expect($("#search_company_btn").css("display")).not.toBe("none");
-      expect(marked()).toBe(true);
+      expectMarkFollowsHosts();
+      expect(markedRows()).not.toEqual([]);
     });
 
-    test("locking an adopted capture unmarks the rows it hides the link on", () => {
+    test("locking an adopted capture unmarks the row it hides the link in", () => {
       const soleTrader = helper.soleTrader;
       helper.enterManualCompanyEntry();
-      expect(marked()).toBe(true);
+      expect(markedRows()).not.toEqual([]);
 
       soleTrader.lockCapturedFields("TWO:ST:GB:1", "A Sole Trader");
 
       expect($("#search_company_btn").css("display")).toBe("none");
-      expect(marked()).toBe(false);
+      expect(markedRows()).toEqual([]);
     });
 
     test("the stylesheet drops the bottom margin for a marked row", () => {
       helper.enterManualCompanyEntry();
 
-      expect(ROWS.map((selector) => window.getComputedStyle($(selector)[0]).marginBottom)).toEqual([
-        "0px",
-        "0px"
-      ]);
+      expect(window.getComputedStyle($("#billing_company_field")[0]).marginBottom).toBe("0px");
     });
   });
 });

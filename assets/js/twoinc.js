@@ -2231,7 +2231,6 @@ let twoincDomHelper = {
       "#project_field",
       "#department_field"
     ];
-    let requiredBusinessTargets = [];
     let visibleTargets = [
       ".woocommerce-company-fields",
       ".woocommerce-representative-fields",
@@ -2277,10 +2276,10 @@ let twoincDomHelper = {
       visibleTargets.push("#billing_company_field");
     }
 
-    // The shipping company row, same shown-for-every-country rule as
-    // billing's above, minus the tile relocation (shipping has no tile mount
-    // — TWO-40). Independent capture mode: the
-    // buyer can be in manual entry on one address and search on the other.
+    // The shipping company row, same shown-for-every-country rule as billing's
+    // above, minus the tile relocation (shipping has no tile mount — TWO-40).
+    // Independent capture mode: the buyer can be in manual entry on one
+    // address and search on the other.
     // Gated on the shipping form actually existing at all (no country field
     // means a virtual/no-shipping cart), so this is a no-op on a checkout that
     // never renders a shipping address in the first place.
@@ -2357,16 +2356,22 @@ let twoincDomHelper = {
       $wrapper.toggleClass("hidden", $field.hasClass("hidden"));
     });
   },
-  /** Runs after every show/hide of either affordance link (ABN-554). */
+  /**
+   * Runs after every show/hide of either affordance link (ABN-554). Marked per
+   * row, not from "is either link visible": in payment-tile placement the
+   * sole-trader link hangs in the tile row, and marking the address rows from
+   * that closes the visible one's bottom margin under nothing.
+   */
   syncCompanyAffordanceSpacing: function () {
-    const shown = ["#search_company_btn", "#select_different_sole_trader_btn"].some(function (id) {
-      const $btn = jQuery(id);
-      return $btn.length > 0 && $btn.css("display") !== "none";
+    const rows = "#billing_company_field, #billing_company_display_field";
+    const $hosts = jQuery(["#search_company_btn", "#select_different_sole_trader_btn"].join(","))
+      .filter(function () {
+        return jQuery(this).css("display") !== "none";
+      })
+      .closest(rows);
+    jQuery(rows).each(function () {
+      jQuery(this).toggleClass("twoinc-affordance-shown", $hosts.index(this) >= 0);
     });
-    jQuery("#billing_company_field, #billing_company_display_field").toggleClass(
-      "twoinc-affordance-shown",
-      shown
-    );
   },
   deselectPaymentMethod: function () {
     const paymentMethodRadioObj = jQuery(':input[value="' + window.twoinc.gateway_id + '"]');

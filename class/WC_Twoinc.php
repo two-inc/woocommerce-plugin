@@ -90,6 +90,7 @@ if (!class_exists('WC_Twoinc')) {
 
             $this->init_form_fields();
             $this->init_settings();
+            $this->migrate_legacy_company_search_key();
             $this->drop_removed_settings();
             $this->drop_renamed_option_rows();
             $this->drop_fabricated_due_in_days();
@@ -251,12 +252,10 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Get enable company search. Falls back to the older
-         * `enable_company_name` option key for back-compat — merchants
-         * configured before the field was renamed keep working unchanged.
-         * Read off the stored blob, not `get_option()`: the current key
-         * declares `'default' => 'yes'`, which `WC_Settings_API::get_option()`
-         * substitutes for an absent key, so a legacy `no` was never reached.
+         * Get enable company search. A legacy `enable_company_name` row is
+         * carried over to this key at construction — see
+         * migrate_legacy_company_search_key(), which is why there is no
+         * fallback read here.
          *
          * Per TWO-25326, this ALSO decides WHERE the one company-search
          * control renders — see WC_Twoinc_Checkout::prepare_twoinc_object(),
@@ -270,13 +269,6 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function get_enable_company_search()
         {
-            $stored = is_array($this->settings) ? $this->settings : [];
-            if (!array_key_exists('enable_company_search', $stored)) {
-                $legacy = $stored['enable_company_name'] ?? null;
-                if ($legacy !== null && $legacy !== '') {
-                    return $legacy;
-                }
-            }
             return $this->get_option('enable_company_search');
         }
 
@@ -1348,6 +1340,41 @@ if (!class_exists('WC_Twoinc')) {
             foreach ($present as $key) {
                 unset($this->settings[$key]);
             }
+            update_option($this->get_option_key(), $this->settings);
+        }
+
+        /**
+         * Carry a legacy `enable_company_name` row over to
+         * `enable_company_search` (ABN-554). Self-limiting: it only writes
+         * while the legacy key is present and the current one absent.
+         *
+         * A read-time fallback cannot do this job. The current key declares
+         * `'default' => 'yes'`, and `WC_Settings_API::get_option()` both
+         * substitutes that default and renders the admin checkbox from it, so
+         * a merchant who switched company search off before the rename saw it
+         * ticked and had it in effect — and after ABN-554, the autofill
+         * setting it gates too. Rewriting the row is what makes the checkbox
+         * and every getter read one value.
+         *
+         * Called straight after init_settings(), while `$this->settings` is
+         * still the stored row: any get_option() read memoises the field
+         * default into it, after which the key is no longer absent.
+         *
+         * @return void
+         */
+        private function migrate_legacy_company_search_key()
+        {
+            if (!is_array($this->settings)) {
+                return;
+            }
+            if (array_key_exists('enable_company_search', $this->settings)) {
+                return;
+            }
+            if (!array_key_exists('enable_company_name', $this->settings)) {
+                return;
+            }
+            $this->settings['enable_company_search'] = $this->settings['enable_company_name'];
+            unset($this->settings['enable_company_name']);
             update_option($this->get_option_key(), $this->settings);
         }
 
