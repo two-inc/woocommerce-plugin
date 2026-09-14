@@ -286,6 +286,7 @@ final class BrandConfigSpec
             'testAssetVersionFallsBackToPluginVersionWhenFileMissing',
             'testCompanySearchLocationDerivedFromEnableCompanySearchBothDirections',
             'testOrderPayCountryComesFromTheOrderNotTheShop',
+            'testTermFeesAreNotQuotedOnThePayForOrderEndpoint',
             'testCompanySearchLocationFallsBackToPaymentTileOnNullOrEmpty',
             'testCompanySearchLocationSettingDroppedFromUpgradedInstalls',
             'testEnableCompanySearchForOthersSettingDroppedFromUpgradedInstalls',
@@ -11163,6 +11164,29 @@ final class BrandConfigSpec
             $derive->invoke(null, 'no'),
             'checkbox unchecked ("no") must relocate into the payment tile, not disappear'
         );
+    }
+
+    /**
+     * ABN-554. The chips' fee quote is priced on the session cart, which on
+     * the pay-for-order endpoint is not the basket being paid for.
+     */
+    private static function testTermFeesAreNotQuotedOnThePayForOrderEndpoint(): void
+    {
+        foreach (
+            [
+                [true, true, 'the pay-for-order endpoint quotes nothing'],
+                [false, false, 'every other checkout surface quotes as before'],
+            ] as [$is_order_pay, $expected, $description]
+        ) {
+            $GLOBALS['__twoinc_test_is_order_pay'] = $is_order_pay;
+            TinyAssert::same(
+                $expected,
+                WC_Twoinc_Checkout::is_pay_for_order_request(),
+                $description
+            );
+        }
+
+        unset($GLOBALS['__twoinc_test_is_order_pay']);
     }
 
     /**

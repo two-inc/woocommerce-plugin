@@ -462,6 +462,15 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             return $enable_company_search === 'yes' ? 'address_area' : 'payment_tile';
         }
 
+        /**
+         * The pay-for-order endpoint, where the session cart is not the
+         * basket being paid for.
+         */
+        public static function is_pay_for_order_request(): bool
+        {
+            return function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-pay');
+        }
+
         private function prepare_twoinc_object($merchant): array
         {
             $currency = get_woocommerce_currency();
@@ -579,7 +588,11 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'offset_pricing_enabled' => (bool) (
                         WC_Twoinc_Payment_Terms::surcharge_settings_or_null($this->wc_twoinc)['enabled'] ?? false
                     ),
-                    'fees_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_term_fees') : '',
+                    // A quote on the pay-for-order endpoint would price the
+                    // session cart, not the order being paid (ABN-554).
+                    'fees_url' => class_exists('WC_AJAX') && !self::is_pay_for_order_request()
+                        ? WC_AJAX::get_endpoint('two_term_fees')
+                        : '',
                     'select_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_select_term') : '',
                     'csrf_token' => wp_create_nonce('twoinc_checkout'),
                 ],
