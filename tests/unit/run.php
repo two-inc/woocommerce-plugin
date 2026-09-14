@@ -16518,6 +16518,8 @@ final class CaptureMemorySpec
     private static function bootstrap(): array
     {
         $method = new ReflectionMethod(WC_Twoinc_Checkout::class, 'prepare_twoinc_object');
+        // Required below PHP 8.1, where the suite still runs.
+        $method->setAccessible(true);
         $rendered = $method->invoke(new WC_Twoinc_Checkout(self::placingGateway()), []);
 
         // An absent key and a blank one are one state to the browser, which reads both as no company.

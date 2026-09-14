@@ -37,7 +37,9 @@ describe("ABN-554 — the captured company lives in the WC session", () => {
     harness.buildCheckoutForm({ country: "GB" });
     ctx
       .$("#billing_company_field")
-      .after('<p id="billing_phone_field"><input type="tel" id="billing_phone" name="billing_phone" /></p>');
+      .after(
+        '<p id="billing_phone_field"><input type="tel" id="billing_phone" name="billing_phone" /></p>'
+      );
     ctx.helper.attach();
     return ctx;
   }

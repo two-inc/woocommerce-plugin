@@ -599,7 +599,8 @@ let twoincCompanyCapture = {
     const number = twoincUtilHelper.blankToEmpty(companyId);
     if (twoincCompanyCapture.rememberedPair === null) {
       const rendered = twoincDomHelper.rememberedCompany();
-      twoincCompanyCapture.rememberedPair = rendered.billing_company + "\u0000" + rendered.company_id;
+      twoincCompanyCapture.rememberedPair =
+        rendered.billing_company + "\u0000" + rendered.company_id;
     }
     const pair = name + "\u0000" + number;
     if (pair === twoincCompanyCapture.rememberedPair) return;
