@@ -105,7 +105,7 @@ final class BrandConfigSpec
             'testChipFeeAmountCarriesCurrencySymbolNotCode',
             'testTermsConsentRendersInTheGatewayDescription',
             'testTermsConsentIsDrivenByTheBrandDescriptor',
-            'testTermsConsentNeverTravelsInTheDescription',
+            'testTermsConsentReachesTheTileAfterTheDescriptionIsSanitized',
             'testOverlayCanSuppressTheBaseTermsConsent',
             'testTermsGateIsSilentForABrandWithNoTermsPage',
             'testTermsConsentCopyIsTranslatedInEveryLocale',
@@ -10908,13 +10908,16 @@ final class BrandConfigSpec
     }
 
     /**
-     * WooCommerce runs a gateway description through wp_kses_post(), which
-     * drops `<input>` — a consent shipped in the description renders as a
-     * sentence the buyer cannot tick, and every order is then refused by the
-     * server gate. The classic checkout gets it from its own hook instead
-     * (ABN-554).
+     * Given WooCommerce sanitizes a gateway description with wp_kses_post()
+     * and then runs `woocommerce_gateway_description` on the result; When the
+     * classic tile is assembled; Then the consent survives with its checkbox.
+     *
+     * The consent must never be built into the description string itself:
+     * wp_kses_post() drops `<input>`, leaving a sentence the buyer cannot tick
+     * while process_payment() refuses every order (ABN-554). The unit harness
+     * stubs wp_kses_post() as a passthrough, so this models core's strip.
      */
-    private static function testTermsConsentNeverTravelsInTheDescription(): void
+    private static function testTermsConsentReachesTheTileAfterTheDescriptionIsSanitized(): void
     {
         $gateway = self::gateway();
 
@@ -10923,17 +10926,26 @@ final class BrandConfigSpec
             'the consent must not be part of the kses-filtered description'
         );
 
-        $GLOBALS['__twoinc_test_filters'] = [];
-        new class () extends WC_Twoinc {
-            public function __construct()
-            {
-                $this->id = WC_Twoinc_Brand::get('gateway_id');
-                parent::__construct();
-            }
-        };
-        TinyAssert::true(
-            has_filter('woocommerce_review_order_before_submit'),
-            'the classic checkout must emit the consent from its own hook'
+        // What core does to the description before the filter runs.
+        $sanitized = preg_replace('/<input\b[^>]*>/', '', $gateway->description);
+        $rendered = apply_filters('woocommerce_gateway_description', $sanitized, $gateway->id);
+
+        foreach (
+            [
+                ['name="twoinc_terms_accepted"', 'the consent carrier the server reads'],
+                ['type="checkbox"', 'a tickable checkbox, not a sentence kses left behind'],
+            ] as [$needle, $description]
+        ) {
+            TinyAssert::true(
+                strpos($rendered, $needle) !== false,
+                'the classic tile is missing ' . $description
+            );
+        }
+
+        TinyAssert::same(
+            $sanitized,
+            apply_filters('woocommerce_gateway_description', $sanitized, 'some-other-gateway'),
+            'the consent must not be appended to another gateway\'s description'
         );
     }
 

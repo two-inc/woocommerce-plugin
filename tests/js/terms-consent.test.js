@@ -73,12 +73,23 @@ describe("the shared terms consent", () => {
 describe("the classic checkout gate", () => {
   let ctx;
 
-  /** The checkout form, with the gateway selected and the consent rendered. */
+  /**
+   * The checkout form as core renders it: the consent lives in the selected
+   * method's `.payment_box`, which core shows and hides with the selection.
+   */
   function buildClassicCheckout(ticked) {
     document.body.innerHTML = [
       '<form name="checkout" class="checkout woocommerce-checkout">',
-      '  <input type="radio" name="payment_method" value="' + GATEWAY_ID + '" checked />',
+      '  <div id="payment">',
+      '    <ul class="wc_payment_methods">',
+      '      <li class="wc_payment_method payment_method_' + GATEWAY_ID + '">',
+      '        <input type="radio" name="payment_method" value="' + GATEWAY_ID + '" checked />',
+      '        <div class="payment_box payment_method_' + GATEWAY_ID + '">',
       consentMarkup(),
+      "        </div>",
+      "      </li>",
+      "    </ul>",
+      "  </div>",
       // What `initialize()` looks the checkout page up by.
       '  <div id="order_review"></div>',
       "</form>"
@@ -125,6 +136,37 @@ describe("the classic checkout gate", () => {
     instance.onUpdatedCheckout();
 
     expect(document.getElementById("twoinc_terms_accepted").checked).toBe(true);
+  });
+
+  test("the consent is inside the payment box core shows and hides with the method", () => {
+    ctx = harness.loadTwoinc({
+      gateway_id: GATEWAY_ID,
+      text: { terms_not_accepted: REFUSAL }
+    });
+    buildClassicCheckout(false);
+
+    expect(
+      document.querySelectorAll(
+        "#payment li.payment_method_" + GATEWAY_ID + " .payment_box .twoinc-terms-consent"
+      )
+    ).toHaveLength(1);
+    // The selector the 5px classic-only padding rule is written against.
+    expect(document.querySelectorAll("#payment .twoinc-terms-consent")).toHaveLength(1);
+  });
+
+  test("a checkout update leaves one consent block, not two", () => {
+    ctx = harness.loadTwoinc({
+      gateway_id: GATEWAY_ID,
+      text: { terms_not_accepted: REFUSAL }
+    });
+    buildClassicCheckout(false);
+    const instance = ctx.Twoinc.getInstance();
+    instance.initialize(false);
+
+    buildClassicCheckout(false);
+    instance.onUpdatedCheckout();
+
+    expect(document.querySelectorAll(".twoinc-terms-consent")).toHaveLength(1);
   });
 
   test("ticking the box takes the refusal back off screen", () => {
