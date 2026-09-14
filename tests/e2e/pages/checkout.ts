@@ -145,7 +145,24 @@ export async function placeOrder(page: Page): Promise<string> {
 /** The terms consent gating order placement. */
 export async function acceptTerms(page: Page) {
   const checkbox = page.locator('input[name="twoinc_terms_accepted"]');
-  await checkbox.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
+  try {
+    await checkbox.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
+  } catch (error) {
+    const tile = await page.evaluate(() => {
+      const li = document.querySelector(
+        "li.wc_payment_method.payment_method_woocommerce-gateway-tillit"
+      );
+      const box = li?.querySelector(".payment_box") as HTMLElement | null;
+      return {
+        tileFound: !!li,
+        boxFound: !!box,
+        boxDisplay: box ? getComputedStyle(box).display : null,
+        consentInDom: !!document.querySelector('input[name="twoinc_terms_accepted"]'),
+        boxHtml: box ? box.innerHTML.slice(0, 2000) : null
+      };
+    });
+    throw new Error("terms consent not reachable: " + JSON.stringify(tile));
+  }
   await checkbox.check();
   await expect(checkbox).toBeChecked({ timeout: DEFAULT_TIMEOUT });
 }
