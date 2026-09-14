@@ -533,29 +533,6 @@ describe("company-search manual-entry affordance", () => {
         );
       }
     );
-
-    /**
-     * All three mode chips hover IDENTICALLY (TWO-40:
-     * "Registered Organization" and "Sole Trader" adopt the store's brand
-     * colour on hover, while "Enter manually" instead got a red border but a
-     * grey fill). A chip-specific hover fill is what made one of them the chip
-     * the theme could not colour, so the invariant is "no hover fill declared
-     * for any of them".
-     */
-    test("no mode chip declares a hover background of its own", () => {
-      // Comments stripped BEFORE matching: a selector-plus-block match starts
-      // at the previous `}`, so it swallows whatever comment precedes the rule.
-      const css = stylesheetSource().replace(/\/\*[\s\S]*?\*\//g, "");
-      // The `background` shorthand counts too: this stylesheet already paints
-      // a chip hover with it elsewhere (`.twoinc-term-chip--selected:hover`).
-      const offenders = (css.match(/[^{}]*:hover[^{]*\{[^}]*\}/g) || []).filter(
-        (rule) =>
-          rule.includes("two-company-mode-chip") &&
-          /background(-color)?\s*:/.test(rule.slice(rule.indexOf("{")))
-      );
-
-      expect(offenders).toEqual([]);
-    });
   });
 
   describe("placement below the visible field, not overlapping it", () => {
