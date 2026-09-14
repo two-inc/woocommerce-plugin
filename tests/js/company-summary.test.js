@@ -354,68 +354,6 @@ describe("read-only captured-company summary", () => {
     });
   });
 
-  describe("pay-for-order page", () => {
-    // views/woocommerce_order_pay.php lays its cut-down form out as a
-    // two-column grid — labels, then controls — so the summary has to join
-    // the control column for the shared right-alignment to reach the company
-    // input's own edge rather than the whole form's (ABN-554).
-    test.each([
-      {
-        selector: ".twoinc-order-pay",
-        declares: /display:\s*grid/,
-        description: "the form is a grid"
-      },
-      {
-        selector: ".twoinc-order-pay",
-        declares: /grid-template-columns:\s*max-content\s+1fr/,
-        description: "labels sit in column 1 and controls in column 2"
-      },
-      {
-        selector:
-          ".twoinc-order-pay .twoinc-inp-container,\n.twoinc-order-pay .twoinc-inp-container > div",
-        declares: /display:\s*contents/,
-        description: "every row flattens into that grid"
-      },
-      {
-        selector: ".twoinc-order-pay > .twoinc-company-summary",
-        declares: /grid-column:\s*2/,
-        description: "the summary joins the control column"
-      }
-    ])("$description", ({ selector, declares }) => {
-      const m = new RegExp(
-        selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\{([^}]*)\\}"
-      ).exec(stylesheetSource());
-      expect(m).not.toBeNull();
-      expect(m[1]).toMatch(declares);
-    });
-
-    test("the summary resolves into the control column, right-aligned as everywhere else", () => {
-      // Read off the cascade: the shared end alignment only reaches the company
-      // field's own edge while the summary resolves into column 2.
-      harness.injectStylesheet();
-      pickCompany("ACME Widgets Ltd", "12345678");
-      summary().wrap('<div class="twoinc-order-pay"></div>');
-
-      expect(window.getComputedStyle(summary()[0]).gridColumn).toBe("2");
-      const idStyle = window.getComputedStyle(summary().find(".twoinc-company-summary-id")[0]);
-      expect(idStyle.textAlign).toBe("end");
-    });
-
-    test("the template moves its own form, not the class the Blocks skin shares", () => {
-      // `.custom-checkout` is on the Blocks storage host too, which this
-      // prepend would drag into the payment block (ABN-554).
-      const markup = fs.readFileSync(
-        path.join(harness.REPO_ROOT, "views/woocommerce_order_pay.php"),
-        "utf8"
-      );
-      const script = markup.match(/<script>[\s\S]*<\/script>/);
-
-      expect(script).not.toBeNull();
-      expect(script[0]).toContain(".twoinc-order-pay");
-      expect(script[0]).not.toContain(".custom-checkout");
-    });
-  });
-
   describe("manual entry", () => {
     // `toggleBusinessFields` is the re-render entry point, not a test hook: it
     // runs on every payment-method, country and capture-mode switch, and it is

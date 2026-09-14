@@ -700,9 +700,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * has not run, and reading only what it recorded would offer the
          * method and then drop it mid-checkout. Confined to a checkout page
          * carrying the basket the fee would be charged on — the cart page and
-         * the mini-cart render no payment method, and on the order-pay
-         * endpoint the session cart is not the basket being paid for (the
-         * fee that order carries is already a line on it).
+         * the mini-cart render no payment method.
          */
         public static function surcharge_quote_failed($gateway): bool
         {
@@ -717,9 +715,6 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return true;
             }
             if (!function_exists('is_checkout') || !is_checkout() || !function_exists('WC')) {
-                return false;
-            }
-            if (function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-pay')) {
                 return false;
             }
             $cart = WC()->cart ?? null;

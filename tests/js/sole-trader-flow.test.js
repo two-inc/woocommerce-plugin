@@ -1089,11 +1089,10 @@ describe("TWO-40 — sole-trader flow", () => {
       });
 
       /**
-       * The pay-for-order view renders the search row inside a
-       * `.twoinc-inp-container` with none of core's wrapper — the one place the
-       * self-heal actually runs (TWO-25503, R1.1).
+       * A search row inside a `.twoinc-inp-container` with none of core's
+       * wrapper is where the self-heal actually runs (TWO-25503, R1.1).
        */
-      test("self-heals a wrapper around the input on the pay-for-order markup", () => {
+      test("self-heals a wrapper around an input core never wrapped", () => {
         $("#billing_company_display_field").replaceWith(
           '<div class="twoinc-inp-container">' +
             '<div id="billing_company_display_field">' +
@@ -2069,10 +2068,10 @@ describe("TWO-40 — sole-trader flow", () => {
         expect(tokenCalls).toHaveLength(1);
       });
 
-      test("availability is resolved at load too, with no updated_checkout (ABN-554)", () => {
-        // The pay-for-order page never fires `updated_checkout`, so a chip
-        // decided only there is decided on an empty map. Seeded answer
-        // dropped, or `refresh()` reads the cache instead of asking.
+      test("availability is resolved at load, before any updated_checkout", () => {
+        // A chip decided only on `updated_checkout` is decided on an empty map
+        // until one fires. Seeded answer dropped, or `refresh()` reads the
+        // cache instead of asking.
         soleTrader.availabilityByCountry = {};
 
         ctx.Twoinc.getInstance().initialize(false);

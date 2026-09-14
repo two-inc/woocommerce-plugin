@@ -1599,8 +1599,7 @@ class TwoCompanySearch {
 
   /**
    * The affordance slot inside one company field row, self-healing when the
-   * theme's markup lacks core's wrapper — the pay-for-order view renders the
-   * row without one (TWO-25503).
+   * theme's markup lacks core's wrapper (TWO-25503).
    *
    * Falling back to the row itself would append the button as a sibling of both
    * the label and the input rather than right after the input, which is the
@@ -1988,9 +1987,9 @@ class TwoCompanySearch {
 
   /**
    * Move focus to a company field, if it is actually focusable (TWO-25288).
-   * Guarded rather than a bare `.focus()`: the target may be absent on surfaces
-   * like the pay-for-order page, and `.focus()` on an empty set is a silent
-   * no-op that reads as success.
+   * Guarded rather than a bare `.focus()`: the target may be absent on a
+   * surface that renders no company field, and `.focus()` on an empty set is a
+   * silent no-op that reads as success.
    */
   focusVisibleCompanyField(selector) {
     const $field = jQuery(selector);
@@ -2407,10 +2406,9 @@ let twoincDomHelper = {
   },
   /**
    * Mirror each company field's visibility onto its enclosing wrapper
-   * (TWO-25288). The pay-for-order page lays company inputs out in
-   * per-field wrappers with their own hidden state, which the function
-   * above doesn't touch — a no-op on the checkout page, which has no such
-   * wrappers.
+   * (TWO-25288). The payment tile lays its company row out in a
+   * `.twoinc-inp-container` with its own hidden state, which the function
+   * above doesn't touch — a no-op wherever there is no such wrapper.
    */
   syncCompanyFieldWrappers: function () {
     jQuery(
@@ -2744,14 +2742,10 @@ let twoincDomHelper = {
       document.querySelector("." + priceName + " .woocommerce-Price-amount");
     return twoincDomHelper.getPriceRecursively(node);
   },
-  /** The pay-for-order surface: no checkout form, and no `updated_checkout` ever (ABN-554). */
-  isPayForOrderPage: function () {
-    return document.querySelector('form[name="checkout"]') === null;
-  },
   saveCheckoutInputs: function () {
     let checkoutInputs = [];
     let checkoutForm = document.querySelector('form[name="checkout"]');
-    // if page is order-pay
+    // The Blocks skin's hidden storage host, which is a div and not a form.
     if (!checkoutForm)
       checkoutForm = document.querySelector("div.checkout.woocommerce-checkout.custom-checkout");
     // still not found
@@ -2916,9 +2910,6 @@ let twoincDomHelper = {
         }
       }
     }
-  },
-  orderPayCountryField: function () {
-    return document.querySelector(".twoinc-order-pay #billing_country");
   },
   loadUserMetaInputs: function () {
     const remembered = twoincCaptureScope.userMetaCompany();
@@ -5305,17 +5296,7 @@ class Twoinc {
     // ran before either of them, against an empty input.
     twoincDomHelper.loadUserMetaInputs();
     if (loadSavedInputs) {
-      const orderPayCountryField = twoincDomHelper.orderPayCountryField();
-      // The option the VIEW marked, not the field's value: a shop that restricts
-      // its selling countries offers the order's country no option at all, and
-      // the field then reads the browser's own fallback pick (ABN-554).
-      const orderPayCountryOption = orderPayCountryField
-        ? orderPayCountryField.querySelector("option[selected]")
-        : null;
       twoincDomHelper.loadStorageInputs();
-      // Otherwise a country stored by another checkout this session stands in for
-      // the order's own.
-      if (orderPayCountryOption) orderPayCountryField.value = orderPayCountryOption.value;
       // loadStorageInputs() writes `#company_id`/`#billing_company` with bare
       // `.val()` assignments, so unlike the pass above it re-toggles nothing
       // and captures nothing. For a guest that pass is the only one that ever
@@ -5359,20 +5340,10 @@ class Twoinc {
     twoincSelectWooHelper.soleTrader.primeTokens();
     twoincSelectWooHelperShipping.soleTrader.primeTokens();
 
-    // The FIRST per-country availability resolve. `updated_checkout` is what
-    // re-runs it, and the pay-for-order page never fires that event at all, so
-    // without this its Sole trader chip is decided on a map nothing ever
-    // filled (ABN-554). Cached per country, so the checkout page's own
-    // `updated_checkout` moments later costs nothing extra.
+    // The FIRST per-country availability resolve; `updated_checkout` re-runs
+    // it. Cached per country, so that re-run costs nothing extra.
     twoincSelectWooHelper.soleTrader.refresh();
     twoincSelectWooHelperShipping.soleTrader.refresh();
-
-    // `onUpdatedCheckout()` is the chips' only other renderer, so where that
-    // event never comes the tile is empty once the company-required notice
-    // retires (ABN-554).
-    if (twoincDomHelper.isPayForOrderPage()) {
-      twoincTermChips.refresh();
-    }
 
     setTimeout(function () {
       twoincDomHelper.saveCheckoutInputs();

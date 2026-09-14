@@ -142,7 +142,6 @@ PrestaShop's (TWO-25503):
   supplies a string, and is not the buyer's company name: not snapshotted, not restored into
   the field, not reported by `getCompanyName()`/`getCompanyData()`, not posted, and gone once
   a real company is picked.
-- the pay-for-order template renders a field the panel can anchor to.
 
 `company-search-manual-entry.test.js` — the mode chips and the manual-entry route (TWO-25288,
 TWO-40, TWO-25503):
@@ -185,8 +184,8 @@ TWO-40, TWO-25503):
   gesture rather than two: the panel is open, the caret is in its query field, and the buyer
   can type straight away. Opening an already-open panel is a no-op, and both "no panel bound"
   and "no company field at all" report failure rather than lying.
-- the affordance needs no template markup on the page, which is what makes it work on the
-  pay-for-order surface.
+- the affordance needs no template markup on the page, which is what makes it work on a
+  surface that renders none.
 
 `company-search-tab-stop.test.js` — the state the browser derives tab order from, which is
 all jsdom can see. The Tab traversal itself is covered by no automated test in this repo
@@ -287,9 +286,7 @@ call before advancing and 2 after.
   physically move the node when it is already correctly positioned.
 - layout: the box carries core's own form-row padding so the id lines up with the input's
   real edge, the id carries no same-line margin, neither half can overflow on a single
-  unbroken token, and on the pay-for-order page (`.twoinc-order-pay`) the summary resolves into
-  the control column so the same alignment lands on the field's own edge — asserted through
-  the cascade, not by finding the rule in source.
+  unbroken token.
 - the display is genuinely read-only: no `input`, `select`, `textarea` or `contenteditable`,
   nothing tabbable, and no control that would let the buyer delete a captured company.
 - submission is unaffected. `#billing_company` and `#company_id` still carry what WooCommerce

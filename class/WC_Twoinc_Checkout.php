@@ -39,14 +39,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_filter('woocommerce_checkout_fields', [$this, 'apply_brand_checkout_fields'], 25);
 
             add_action('woocommerce_before_checkout_billing_form', [$this, 'render_twoinc_fields'], 21);
-            add_action('woocommerce_pay_order_before_submit', [$this, 'render_twoinc_fields'], 21);
             add_action('woocommerce_before_checkout_billing_form', [$this, 'render_twoinc_representative_fields'], 22);
 
             add_action('woocommerce_before_checkout_billing_form', [$this, 'inject_cart_details'], 23);
-            add_action('woocommerce_pay_order_before_submit', [$this, 'inject_cart_details'], 22);
-
-            add_action('woocommerce_pay_order_before_submit', [$this, 'order_pay_page_customize'], 24);
-
             // The shipping instance's own sole-trader signup note (TWO-40) —
             // the one piece of its markup WC's own field-loop
             // doesn't render for free the way it does the registered fields
@@ -395,21 +390,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
-         * Render this gateway's own capture fields on the pay-for-order page.
-         */
-        public function order_pay_page_customize()
-        {
-            $twoinc_order_pay_country = self::resolve_order_pay_country(self::get_order_being_paid());
-            ob_start();
-            require_once WC_TWOINC_PLUGIN_PATH . '/views/woocommerce_order_pay.php';
-            $content = ob_get_clean();
-            echo $content;
-        }
-
-        /**
          * The order the pay-for-order endpoint is rendering, or null off that
-         * endpoint. `woocommerce_pay_order_before_submit` passes no arguments
-         * and core's own `$order` is local to its template.
+         * endpoint.
          *
          * @return WC_Order|null
          */
@@ -419,12 +401,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 return null;
             }
 
-            // Merchants can rename the Pay endpoint, and the query var carries
-            // whatever they renamed it to (ABN-554).
-            $slug = function_exists('get_option')
-                ? get_option('woocommerce_checkout_pay_endpoint', 'order-pay')
-                : '';
-            $order_id = absint(get_query_var(is_string($slug) && $slug !== '' ? $slug : 'order-pay'));
+            $order_id = absint(get_query_var('order-pay'));
             if (!$order_id) {
                 return null;
             }
@@ -511,31 +488,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
-         * The country the pay-for-order form starts on. The shop's base country
-         * is a last resort, not the default: this value drives company search
-         * and sole-trader availability, which belong to the order being paid
-         * for rather than to the shop (ABN-554).
-         *
-         * @param mixed $order
-         *
-         * @return string
-         */
-        public static function resolve_order_pay_country($order): string
-        {
-            if (is_object($order) && method_exists($order, 'get_billing_country')) {
-                $country = $order->get_billing_country();
-                if (!$country && method_exists($order, 'get_shipping_country')) {
-                    $country = $order->get_shipping_country();
-                }
-                if ($country) {
-                    return $country;
-                }
-            }
-
-            return WC()->countries->get_base_country();
-        }
-
-        /**
          * Where the ONE company-search control renders in the checkout DOM
          * (TWO-25326). Pulled out as a pure function so it can be
          * unit-tested in isolation from prepare_twoinc_object().
@@ -549,15 +501,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         private static function derive_company_search_location(?string $enable_company_search): string
         {
             return $enable_company_search === 'yes' ? 'address_area' : 'payment_tile';
-        }
-
-        /**
-         * The pay-for-order endpoint, where the session cart is not the
-         * basket being paid for.
-         */
-        public static function is_pay_for_order_request(): bool
-        {
-            return function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-pay');
         }
 
         private function prepare_twoinc_object($merchant): array
@@ -678,11 +621,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'offset_pricing_enabled' => (bool) (
                         WC_Twoinc_Payment_Terms::surcharge_settings_or_null($this->wc_twoinc)['enabled'] ?? false
                     ),
-                    // A quote on the pay-for-order endpoint would price the
-                    // session cart, not the order being paid (ABN-554).
-                    'fees_url' => class_exists('WC_AJAX') && !self::is_pay_for_order_request()
-                        ? WC_AJAX::get_endpoint('two_term_fees')
-                        : '',
+                    'fees_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_term_fees') : '',
                     'select_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_select_term') : '',
                     'csrf_token' => wp_create_nonce('twoinc_checkout'),
                 ],

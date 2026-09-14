@@ -902,37 +902,4 @@ describe("payment terms chips", () => {
       ]);
     });
   });
-  /**
-   * `onUpdatedCheckout()` is the chips' other renderer, and the pay-for-order
-   * page never fires `updated_checkout` (ABN-554).
-   */
-  describe("rendered at load where updated_checkout never comes", () => {
-    let ajax;
-
-    afterEach(() => {
-      ajax.restore();
-    });
-
-    test.each([
-      {
-        hasCheckoutForm: false,
-        chips: 4,
-        description: "the pay-for-order page renders them from initialize()"
-      },
-      {
-        hasCheckoutForm: true,
-        chips: 0,
-        description: "the checkout page leaves them to its own updated_checkout"
-      }
-    ])("$description", ({ hasCheckoutForm, chips }) => {
-      mount(Object.assign({ enabled: true, terms: [14, 30, 60, 90], selected: 30 }, COPY));
-      ajax = harness.stubAjax(ctx.$);
-      ctx.$("body").append('<div id="order_review"></div>');
-      if (hasCheckoutForm) ctx.$("body").append('<form name="checkout"></form>');
-
-      ctx.Twoinc.getInstance().initialize(false);
-
-      expect(ctx.$(".twoinc-term-chip")).toHaveLength(chips);
-    });
-  });
 });

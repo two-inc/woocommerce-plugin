@@ -191,9 +191,8 @@ describe("billing company-row spacing", () => {
   });
 
   test("no rule anywhere gives .billing_company_search bottom padding", () => {
-    // Requirement 3.1's third name. It is the CLASS on the search row on the
-    // checkout page and on the input itself on the pay-for-order view, so a
-    // rule reaching it from either shape has to be absent.
+    // Requirement 3.1's third name: the CLASS on the search row, so a rule
+    // reaching it has to be absent.
     expect(rulesDeclaring(".billing_company_search", BOTTOM_PADDING)).toEqual([]);
   });
 

@@ -310,45 +310,6 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
 }
 
 /*
- * The pay-for-order page's cut-down form (views/woocommerce_order_pay.php),
- * keyed on the class only that view emits — `.custom-checkout` alone is also
- * on the Blocks skin's hidden storage host, which `display: grid` would beat
- * `[hidden]` on and render (ABN-554).
- *
- * A two-column grid — labels in column 1, controls in column 2 — with the
- * rows themselves flattened into it by `display: contents`, so every field
- * gets its own line with its label beside it and every control shares one
- * left edge. `.hidden`'s `display: none !important` still wins over
- * `contents`, so the rows this page keeps off screen stay off it.
- *
- * The summary sits in column 2 as well, which is what makes the shared
- * `.twoinc-company-summary-id { text-align: end }` land on the company
- * input's own right edge rather than the full form width (ABN-554). Its
- * shared 3px side padding mirrors WooCommerce core's `.form-row`, absent
- * here, so it is cancelled for this surface.
- */
-.twoinc-order-pay {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  align-items: center;
-  gap: 10px 12px;
-  margin-top: 20px;
-  margin-bottom: 20px;
-}
-.twoinc-order-pay .twoinc-inp-container,
-.twoinc-order-pay .twoinc-inp-container > div {
-  display: contents;
-}
-.twoinc-order-pay label {
-  margin: 0;
-}
-.twoinc-order-pay > .twoinc-company-summary {
-  grid-column: 2;
-  padding-left: 0;
-  padding-right: 0;
-}
-
-/*
  * The link back out of manual entry, in normal block flow as the wrapper's
  * last child so it sits below the input rather than over it.
  *
