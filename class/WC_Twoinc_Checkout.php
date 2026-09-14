@@ -645,6 +645,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'merchant' => $merchant,
                 'merchant_due_in_days' => $this->wc_twoinc->get_merchant_due_in_days(),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),
+                // Mirrored to JS: the buyer moves country without a page load. Null restricts nothing.
+                'supported_buyer_countries' => $this->wc_twoinc->get_supported_buyer_countries(),
                 'currency' => $currency,
                 'price_decimal_separator' => wc_get_price_decimal_separator(),
                 'price_thousand_separator' => wc_get_price_thousand_separator(),

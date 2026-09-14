@@ -137,7 +137,8 @@ function loadPluginSource() {
       " twoincCompanyCapture," +
       " twoincSelectWooHelper, twoincSelectWooHelperShipping, twoincDomHelper," +
       " twoincTermChips, twoincTermsConsent, twoincSoleTrader," +
-      " twoincSupportedSearchCountries, Twoinc, TwoCompanySearch });"
+      " twoincSupportedSearchCountries, twoincCompanySearchControls," +
+      " Twoinc, TwoCompanySearch });"
   );
   if (!exported || typeof exported.twoincSelectWooHelper !== "object") {
     throw new Error("harness: twoinc.js did not yield its top-level bindings");
@@ -197,6 +198,9 @@ function loadTwoinc(twoinc) {
     termsConsent: exported.twoincTermsConsent,
     soleTrader: exported.twoincSoleTrader,
     supportedSearchCountries: exported.twoincSupportedSearchCountries,
+    // The controller's own list of mounted controls, which the Blocks skin
+    // mounts by iterating.
+    controls: exported.twoincCompanySearchControls,
     // The Twoinc class itself, for the code paths that reach the singleton.
     // Safe to construct here: the constructor only initialises fields, and
     // every call re-evaluates the source, so the `instance` a test creates
