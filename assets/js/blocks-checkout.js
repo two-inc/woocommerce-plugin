@@ -445,7 +445,12 @@
       };
     }, []);
 
-    return html(data.description, "twoinc-blocks-content");
+    return element.createElement(
+      "span",
+      { className: "twoinc-blocks-content" },
+      html(data.description, "twoinc-blocks-description"),
+      html(data.terms, "twoinc-blocks-terms")
+    );
   }
 
   /**

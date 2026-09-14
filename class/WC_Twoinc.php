@@ -124,6 +124,7 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             add_filter('woocommerce_gateway_description', [$this, 'append_about_block_to_description'], 10, 2);
+            add_action('woocommerce_review_order_before_submit', [$this, 'render_terms_consent']);
 
             // Brand product constraints (e.g. a minimum order value in a
             // specific currency/market) remove the gateway from checkout
@@ -3004,8 +3005,7 @@ if (!class_exists('WC_Twoinc')) {
         public function build_payment_description()
         {
             return $this->get_pay_subtitle()
-                . $this->get_pay_box_description()
-                . $this->get_terms_consent_html();
+                . $this->get_pay_box_description();
         }
 
         /**
@@ -3055,16 +3055,20 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * The consent checkbox, rendered inside the payment-method
-         * description — the one string both the classic checkout and the
-         * Blocks tile render, so neither owns a copy of this (ABN-554).
+         * The consent block, built once and emitted by both checkouts — the
+         * classic one from `render_terms_consent()`, the Blocks tile from the
+         * payment-method data it is handed (ABN-554).
+         *
+         * NOT part of the gateway description: WooCommerce runs that through
+         * wp_kses_post(), which drops the checkbox and leaves a consent the
+         * buyer cannot give.
          *
          * No HTML5 `required`: core hides the payment box of an unselected
          * method, and a required control inside a hidden box blocks the whole
          * form unfocusably. The gate is twoincTermsConsent plus
          * process_payment().
          */
-        private function get_terms_consent_html()
+        public function get_terms_consent_html()
         {
             if (!$this->renders_terms_consent()) {
                 return '';
@@ -3108,6 +3112,12 @@ if (!class_exists('WC_Twoinc')) {
                 $message,
                 esc_html(self::get_terms_not_accepted_message())
             );
+        }
+
+        /** The classic checkout's emitter: inside the form, so the tick posts. */
+        public function render_terms_consent()
+        {
+            echo $this->get_terms_consent_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
         }
 
         /** @return bool */

@@ -105,6 +105,7 @@ final class BrandConfigSpec
             'testChipFeeAmountCarriesCurrencySymbolNotCode',
             'testTermsConsentRendersInTheGatewayDescription',
             'testTermsConsentIsDrivenByTheBrandDescriptor',
+            'testTermsConsentNeverTravelsInTheDescription',
             'testOverlayCanSuppressTheBaseTermsConsent',
             'testTermsGateIsSilentForABrandWithNoTermsPage',
             'testTermsConsentCopyIsTranslatedInEveryLocale',
@@ -10835,14 +10836,16 @@ final class BrandConfigSpec
     }
 
     /**
-     * Given the payment-method description — the one string both the classic
-     * checkout and the Blocks tile render; When it is built; Then it carries
-     * Two's own terms consent (ABN-554).
+     * Given the consent block both checkouts emit; When it is built; Then it
+     * carries the checkbox, the brand's terms link and the refusal (ABN-554).
+     *
+     * Deliberately NOT asserted against the gateway description: WooCommerce
+     * runs that through wp_kses_post(), which drops the checkbox.
      */
     private static function testTermsConsentRendersInTheGatewayDescription(): void
     {
         $gateway = self::gateway();
-        $html = $gateway->build_payment_description();
+        $html = $gateway->get_terms_consent_html();
 
         $cases = [
             ['name="twoinc_terms_accepted"', 'the consent carrier the server reads'],
@@ -10892,7 +10895,7 @@ final class BrandConfigSpec
             $gateway = self::gateway();
             TinyAssert::same($expected_url, $gateway->get_terms_page_url(), $description . ': wrong URL');
 
-            $html = $gateway->build_payment_description();
+            $html = $gateway->get_terms_consent_html();
             TinyAssert::same(
                 $renders,
                 strpos($html, 'name="twoinc_terms_accepted"') !== false,
@@ -10902,6 +10905,36 @@ final class BrandConfigSpec
                 TinyAssert::true(strpos($html, $expected_copy) !== false, $description . ': wrong copy');
             }
         }
+    }
+
+    /**
+     * WooCommerce runs a gateway description through wp_kses_post(), which
+     * drops `<input>` — a consent shipped in the description renders as a
+     * sentence the buyer cannot tick, and every order is then refused by the
+     * server gate. The classic checkout gets it from its own hook instead
+     * (ABN-554).
+     */
+    private static function testTermsConsentNeverTravelsInTheDescription(): void
+    {
+        $gateway = self::gateway();
+
+        TinyAssert::true(
+            strpos($gateway->build_payment_description(), 'twoinc_terms_accepted') === false,
+            'the consent must not be part of the kses-filtered description'
+        );
+
+        $GLOBALS['__twoinc_test_filters'] = [];
+        new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                parent::__construct();
+            }
+        };
+        TinyAssert::true(
+            has_filter('woocommerce_review_order_before_submit'),
+            'the classic checkout must emit the consent from its own hook'
+        );
     }
 
     /**
@@ -10915,7 +10948,7 @@ final class BrandConfigSpec
         });
 
         TinyAssert::true(
-            strpos(self::gateway()->build_payment_description(), 'twoinc-terms-consent') === false,
+            strpos(self::gateway()->get_terms_consent_html(), 'twoinc-terms-consent') === false,
             'the base consent must be suppressible by an overlay'
         );
     }

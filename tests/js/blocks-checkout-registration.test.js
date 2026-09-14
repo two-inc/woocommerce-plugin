@@ -17,6 +17,7 @@ const METHOD_DATA = {
   title: "Business invoice",
   description: '<div class="twoinc-payment-subtitle">Read more</div>',
   about: '<div class="abt-twoinc">about</div>',
+  terms: '<div class="twoinc-terms-consent"><input name="twoinc_terms_accepted" /></div>',
   iconUrl: "https://example.test/logo.svg",
   supports: ["products", "refunds"]
 };
@@ -344,9 +345,14 @@ describe("blocks-checkout.js registration", () => {
       description: "the label carries the about control"
     },
     {
-      slot: (config) => [config.content.type()],
+      slot: (config) => config.content.type().children,
       expected: METHOD_DATA.description,
       description: "the content is the gateway's own payment-box description"
+    },
+    {
+      slot: (config) => config.content.type().children,
+      expected: METHOD_DATA.terms,
+      description: "the content carries the consent block the classic checkout emits too"
     }
   ])("$description", ({ slot, expected }) => {
     const { env, registered } = globals({});
