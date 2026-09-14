@@ -104,8 +104,10 @@
    */
   function reconcile() {
     var address = billingAddress();
-    if (!address) return;
+    if (!address) return false;
     shadow();
+
+    var moved = false;
 
     var patch = null;
     ADDRESS_KEYS.forEach(function (key) {
@@ -115,7 +117,9 @@
 
       if (stored !== settled[key]) {
         input.value = stored;
+        moved = true;
       } else if (input.value !== settled[key]) {
+        moved = true;
         patch = patch || {};
         patch[key] = input.value;
         stored = input.value;
@@ -124,6 +128,7 @@
     });
 
     if (patch) wp.data.dispatch("wc/store/cart").setBillingAddress(patch);
+    return moved;
   }
 
   // -------------------------------------------------------------- mounting
@@ -138,6 +143,31 @@
     return !!(field && field.closest(".two-company-field-wrap"));
   }
 
+  /**
+   * The controller's own "the checkout re-rendered" pass — sole-trader
+   * availability and token priming, the search-country gate, term chips and
+   * the mount, in the order it runs them. A Blocks address edit is what a
+   * classic `updated_checkout` is, so it gets the same call rather than a
+   * subset of it.
+   */
+  function resync() {
+    var search = control();
+    if (!search || !window.twoinc || typeof Twoinc === "undefined") return;
+    Twoinc.getInstance().onUpdatedCheckout();
+  }
+
+  /**
+   * The controller hangs the read-only company number, the sole-trader
+   * spinner and the link back out of manual entry on the row it knows as
+   * `<field>_field`. Blocks' own company row carries no id, so the skin gives
+   * it the one the controller looks for.
+   */
+  function nameRowId(search) {
+    var field = document.querySelector(search.addressFieldSelector);
+    var row = field && field.closest(".wc-block-components-text-input");
+    if (row && !row.id) row.id = "billing_company_field";
+  }
+
   function mount() {
     var search = control();
     if (!search || !window.twoinc) return;
@@ -146,6 +176,7 @@
     // fields, which is where address-area placement is specified to put the
     // control; the tile mount the controller builds itself.
     search.addressFieldSelector = "#billing-company";
+    nameRowId(search);
     if (isMounted(search)) return;
     if (!search.isTileLocation() && !document.querySelector(search.addressFieldSelector)) {
       return;
@@ -206,9 +237,13 @@
       [events, responses]
     );
 
-    // The tile slot is React's to own, and the controller only builds into it
-    // once it exists.
-    element.useEffect(mount, []);
+    // The tile slot and the sole-trader note slot are React's to own, and the
+    // controller only builds into them — and only asks whether sole trader is
+    // available at all — once they exist.
+    element.useEffect(function () {
+      mount();
+      resync();
+    }, []);
 
     return element.createElement(
       "div",
@@ -225,17 +260,18 @@
   function bootstrap() {
     reconcile();
     mount();
+    resync();
     if (!wp.data || !wp.data.subscribe) return;
-    wp.data.subscribe(function () {
-      reconcile();
-      mount();
-    }, "wc/store/cart");
+    wp.data.subscribe(tick, "wc/store/cart");
     // The store never publishes the controller's own silent writes, and React
     // re-renders the mount out from under it, so both are also polled.
-    window.setInterval(function () {
-      reconcile();
-      mount();
-    }, 300);
+    window.setInterval(tick, 300);
+  }
+
+  function tick() {
+    var moved = reconcile();
+    mount();
+    if (moved) resync();
   }
 
   if (document.readyState === "loading") {

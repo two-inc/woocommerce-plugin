@@ -65,7 +65,8 @@ afterEach(() => {
     "twoinc",
     "twoincSelectWooHelper",
     "twoincCompanyCapture",
-    "twoincAddressRoles"
+    "twoincAddressRoles",
+    "Twoinc"
   ].forEach((key) => {
     delete window[key];
   });
@@ -78,7 +79,7 @@ afterEach(() => {
  * controller's accessors and call its mount.
  */
 function baseGlobals(location, billing) {
-  const calls = { mounts: 0, patches: [] };
+  const calls = { mounts: 0, patches: [], resyncs: 0 };
   const captureValues = { company: "", company_id: "" };
   const control = {
     addressFieldSelector: "#billing_company_display",
@@ -92,6 +93,13 @@ function baseGlobals(location, billing) {
   };
 
   window.twoinc = { company_search_location: location };
+  window.Twoinc = {
+    getInstance: () => ({
+      onUpdatedCheckout() {
+        calls.resyncs += 1;
+      }
+    })
+  };
   window.twoincSelectWooHelper = control;
   window.twoincAddressRoles = { primary: () => "billing" };
   window.twoincCompanyCapture = {
@@ -305,5 +313,30 @@ describe("blocks-checkout.js reuses the classic controller", () => {
         }
       }
     });
+  });
+});
+
+describe("blocks-checkout.js hands the controller the whole page", () => {
+  test("the tile's own slots being ready triggers the controller's full re-render pass", () => {
+    const base = baseGlobals("payment_tile");
+    const { env, registered } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    const atBootstrap = base.calls.resyncs;
+
+    registered[0].content.type({});
+
+    expect(base.calls.resyncs).toBe(atBootstrap + 1);
+  });
+
+  test("Blocks' company row is given the id the controller hangs its affordances on", () => {
+    document.body.innerHTML =
+      '<div class="wc-block-components-text-input"><input id="billing-company"></div>';
+    const base = baseGlobals("address_area");
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    expect(document.querySelector("#billing_company_field")).not.toBeNull();
   });
 });
