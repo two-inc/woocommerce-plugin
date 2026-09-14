@@ -15,3 +15,36 @@
 .twoinc-company-summary-id {
   text-align: end;
 }
+
+/*
+ * Core insets the field column from the order summary with
+ * `padding-right: 4.5283%` and nothing on the left, and only while the sidebar
+ * is beside the form (`is-large`); the same value on the left is what makes
+ * the column symmetrical (ABN-554).
+ */
+.wc-block-components-sidebar-layout.is-large .wc-block-components-main {
+  padding-left: 4.5283%;
+}
+
+/*
+ * The payment-method label: the method title, then the brand logo, then the
+ * about control — the classic checkout's own order, which the tile's label
+ * does not lay out on one line by itself.
+ */
+.twoinc-blocks-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+.twoinc-blocks-label .twoinc-blocks-icon {
+  margin-left: 8px;
+}
+
+/*
+ * Core's `.wc-block-components-text-input` declares `line-height: 0` for its
+ * floating label, and the panel mounts inside that row — so every line box in
+ * the popover, the mode chips included, collapses to nothing.
+ */
+.two-company-dropdown {
+  line-height: normal;
+}
