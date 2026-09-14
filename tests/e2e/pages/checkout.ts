@@ -131,6 +131,7 @@ export async function fillBillingDetails(page: Page, firstName: string, lastName
 }
 
 export async function placeOrder(page: Page): Promise<string> {
+  await acceptTerms(page);
   await page.locator("#place_order").click();
 
   await expect(page).toHaveURL(/\/checkout\/order-received\/(\d+)\//, {
@@ -139,6 +140,13 @@ export async function placeOrder(page: Page): Promise<string> {
 
   const match = page.url().match(/\/order-received\/(\d+)\//);
   return match?.[1] ?? "";
+}
+
+/** The terms consent gating order placement, when the brand renders one. */
+export async function acceptTerms(page: Page) {
+  const checkbox = page.locator('input[name="twoinc_terms_accepted"]');
+  if ((await checkbox.count()) === 0) return;
+  await checkbox.check();
 }
 
 export async function expectRejection(page: Page) {
