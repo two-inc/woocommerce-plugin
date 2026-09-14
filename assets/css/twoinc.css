@@ -436,9 +436,8 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
  * The chosen chip is excluded so neither pointer nor keyboard disturbs it. The
  * padding absorbs the thinner border so the chip does not resize, and the sole
  * chip is disabled, where the affordance would promise a click that does nothing.
- *
- * The label colour is restated here because a host theme's own `button:hover`
- * rule out-specifies the base class rule and would otherwise repaint it.
+ * The label colour is restated because a host theme rule at 0-1-1, such as a
+ * bare `button:hover`, out-specifies the base class rule (ABN-597).
  */
 .twoinc-term-chip:not(.twoinc-term-chip--selected):not(:disabled):hover,
 .twoinc-term-chip:not(.twoinc-term-chip--selected):not(:disabled):focus {
@@ -800,8 +799,8 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
 
 /* The chosen chip is excluded so neither pointer nor keyboard disturbs it; the
    padding absorbs the thinner border so the chip does not resize. The label
-   colour is restated because a host theme's own `button:hover` rule
-   out-specifies the base class rule and would otherwise repaint it. */
+   colour is restated because a host theme rule at 0-1-1, such as a bare
+   `button:hover`, out-specifies the base class rule (ABN-597). */
 .two-company-mode-chip:not(.two-company-mode-chip--selected):hover,
 .two-company-mode-chip:not(.two-company-mode-chip--selected):focus {
   padding: 6px 13px;
