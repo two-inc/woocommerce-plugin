@@ -64,12 +64,7 @@
 
   var SHADOW_ID = "twoinc-blocks-shadow";
 
-  /**
-   * Every address role the base plugin models, with the cart-store keys that
-   * carry it. Blocks renders the delivery form first and the invoice one only
-   * once the buyer unticks "use same address", so a skin mirroring one role
-   * leaves the other role's control with no field to mount on (ABN-554).
-   */
+  /** Both roles: Blocks renders delivery first, so mirroring one strands the other's control (ABN-554). */
   function addressRoles() {
     return [
       { role: twoincAddressRoles.invoice(), store: "billingAddress", setter: "setBillingAddress" },
@@ -227,8 +222,7 @@
 
       applying = true;
       ADDRESS_KEYS.forEach(function (key) {
-        // Skipped while the controller's own write for this key is still
-        // queued; every other key still follows the store.
+        // Skipped while this key's own write is still queued; others still follow the store.
         if (written[key]) return;
         var input = document.getElementById(entry.role + "_" + key);
         var value = address[key] == null ? "" : String(address[key]);
@@ -251,8 +245,7 @@
   function push() {
     addressRoles().forEach(function (entry) {
       var written = Object.keys(dirty[entry.role] || {});
-      // Cleared whatever happens next: a key left pinned here is one `pull()`
-      // would skip for the rest of the page, with no push left to send it.
+      // Cleared unconditionally: a key left pinned is one `pull()` skips forever.
       dirty[entry.role] = {};
       var address = storedAddress(entry.store);
       if (!address) return;
@@ -334,27 +327,21 @@
     if (!control() || !window.twoinc) return;
 
     twoincCompanySearchControls.forEach(function (search) {
-      // WooCommerce's own company row for this role is the one immediately
-      // under that address's name fields, which is where address-area
-      // placement is specified to put the control; the tile mount the
-      // controller builds itself.
+      // Address-area placement mounts on core's own company row; the tile mount the controller builds.
       search.addressFieldSelector = "#" + search.role + "-company";
       anchorRow(search);
       if (!isMounted(search)) {
         if (!search.isTileLocation() && !document.querySelector(search.addressFieldSelector)) {
           return;
         }
-        // The split `toggleBusinessFields()` makes: only the invoice role has
-        // a tile mount to reconsider, the delivery role only ever re-binds.
+        // `toggleBusinessFields()`'s own split: only the invoice role has a tile mount.
         if (search.role === twoincAddressRoles.primary()) {
           search.syncCompanySearchTileLocation();
         } else {
           search.rebindUnlessManual();
         }
       }
-      // Outside the mount guard: the summary anchors against the row the
-      // control mounts on, so it has no anchor until that row exists — and a
-      // restored capture can land before it does.
+      // Outside the mount guard: a restored capture can land before its anchor row exists.
       search.renderCompanySummary();
     });
   }
@@ -481,8 +468,7 @@
   }
 
   function bootstrap() {
-    // The controller this file skins is a declared dependency; absent it there
-    // is nothing to mirror onto and nothing to mount.
+    // The controller this file skins is a declared dependency; absent it, nothing to mount.
     if (!control()) return;
     pull();
     pullTotals();
