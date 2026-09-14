@@ -3437,6 +3437,55 @@ let twoincTermChips = {
   }
 };
 
+/**
+ * Two's own terms consent: the one gate both checkouts call — classic through
+ * `checkout_place_order`, Blocks through `onPaymentSetup` (ABN-554).
+ */
+let twoincTermsConsent = {
+  FIELD: "twoinc_terms_accepted",
+  checkbox: function () {
+    return document.querySelector('input[name="' + twoincTermsConsent.FIELD + '"]');
+  },
+  isAccepted: function () {
+    const box = twoincTermsConsent.checkbox();
+    return !!box && box.checked;
+  },
+  /**
+   * The tick, held off the DOM: WooCommerce replaces the whole payment box on
+   * every checkout update, which would otherwise silently drop the buyer's
+   * consent between ticking it and placing the order (ABN-554).
+   */
+  accepted: false,
+  remember: function () {
+    twoincTermsConsent.accepted = twoincTermsConsent.isAccepted();
+  },
+  restore: function () {
+    const box = twoincTermsConsent.checkbox();
+    if (box && twoincTermsConsent.accepted) box.checked = true;
+  },
+  /** The carrier under the name the classic form posts it as. */
+  payload: function () {
+    const payload = {};
+    if (!twoincTermsConsent.checkbox()) return payload;
+    payload[twoincTermsConsent.FIELD] = twoincTermsConsent.isAccepted() ? "1" : "";
+    return payload;
+  },
+  message: function () {
+    return (window.twoinc && window.twoinc.text && window.twoinc.text.terms_not_accepted) || "";
+  },
+  showError: function (show) {
+    jQuery(".twoinc-terms-error").toggleClass("hidden", !show);
+  },
+  /** null once consent is in hand; the refusal sentence otherwise. */
+  validate: function () {
+    // No box on the page means the brand declared no terms to consent to.
+    if (!twoincTermsConsent.checkbox()) return null;
+    const accepted = twoincTermsConsent.isAccepted();
+    twoincTermsConsent.showError(!accepted);
+    return accepted ? null : twoincTermsConsent.message();
+  }
+};
+
 // Delegated because a checkout update replaces the payment fragment, and with
 // it the chip container this listens on. On `document`, not `document.body`:
 // this script is enqueued in the head, where there is no body yet and a
@@ -5190,6 +5239,20 @@ class Twoinc {
         twoincDomHelper.toggleBusinessFields();
       });
 
+    // Bound on the form itself, not delegated: `checkout_place_order` is fired
+    // with `triggerHandler`, which does not bubble.
+    jQuery("form.checkout")
+      .off("checkout_place_order.twoincTerms")
+      .on("checkout_place_order.twoincTerms", function () {
+        if (!twoincDomHelper.isTwoincSelected()) return;
+        return twoincTermsConsent.validate() === null;
+      });
+
+    $body.on("change", 'input[name="' + twoincTermsConsent.FIELD + '"]', function () {
+      twoincTermsConsent.remember();
+      twoincTermsConsent.showError(false);
+    });
+
     // Handle the representative inputs blur event
     $body.on(
       "blur",
@@ -6211,6 +6274,10 @@ class Twoinc {
    * Handle the woocommerce updated checkout event
    */
   onUpdatedCheckout() {
+    // Before anything else: the fragment this fires for has just replaced the
+    // consent checkbox with a freshly unticked one.
+    twoincTermsConsent.restore();
+
     // Record the billing country, and nothing else (TWO-24867). A
     // re-render can move the field with no `change` event, and without
     // this the tracker would hold the pre-re-render country for the rest

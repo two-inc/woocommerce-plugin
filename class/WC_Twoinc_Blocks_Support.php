@@ -76,6 +76,9 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
                 // split the classic template makes (ABN-554).
                 'description' => $gateway ? $gateway->description : '',
                 'about' => $gateway ? $gateway->get_about_block_html() : '',
+                // Its own field, not part of the description: the classic
+                // checkout emits the same block from its own hook (ABN-554).
+                'terms' => $gateway ? $gateway->get_terms_consent_html() : '',
                 'iconUrl' => $gateway ? $gateway->icon : '',
                 'supports' => $this->get_supported_features(),
             ];

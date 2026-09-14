@@ -576,6 +576,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     /* translators: %d: number of companies the search returned, interpolated in JS. */
                     'search_results_plural' => __('%d results are available, use up and down arrow keys to navigate.', 'twoinc-payment-gateway'),
                     'search_results_one' => __('1 result is available, use up and down arrow keys to navigate.', 'twoinc-payment-gateway'),
+                    // Same sentence process_payment() refuses with, so the
+                    // client gate and the server gate never disagree (ABN-554).
+                    'terms_not_accepted' => WC_Twoinc::get_terms_not_accepted_message(),
                 ],
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),
                 // Query params make_request() attaches server-side, for the

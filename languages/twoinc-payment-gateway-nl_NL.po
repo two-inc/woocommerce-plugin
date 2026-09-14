@@ -1647,3 +1647,17 @@ msgstr "Betaaltermijn toeslag - %s dagen"
 #, php-format
 msgid "Payment terms fee - %s days from end of month"
 msgstr "Betaaltermijn toeslag - %s dagen vanaf het einde van de maand"
+
+#: class/WC_Twoinc.php
+msgid "payment terms"
+msgstr "betaalvoorwaarden"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "You must accept %s to place order."
+msgstr "U moet %s accepteren om de bestelling te plaatsen."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "I accept the %1$s and authorize %2$s to process my data automatically."
+msgstr "Ik accepteer de %1$s en geef toestemming aan %2$s voor automatische verwerking van mijn gegevens."

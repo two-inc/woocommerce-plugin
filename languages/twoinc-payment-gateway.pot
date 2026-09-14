@@ -1790,3 +1790,17 @@ msgstr ""
 #: views/woocommerce_order_pay.php:16
 msgid "Country / Region"
 msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "payment terms"
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "You must accept %s to place order."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "I accept the %1$s and authorize %2$s to process my data automatically."
+msgstr ""

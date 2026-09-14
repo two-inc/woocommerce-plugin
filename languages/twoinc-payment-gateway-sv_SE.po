@@ -1648,3 +1648,17 @@ msgstr "Avgift för betalningsvillkor - %s dagar"
 #, php-format
 msgid "Payment terms fee - %s days from end of month"
 msgstr "Avgift för betalningsvillkor - %s dagar från månadens slut"
+
+#: class/WC_Twoinc.php
+msgid "payment terms"
+msgstr "betalningsvillkor"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "You must accept %s to place order."
+msgstr "Du måste acceptera %s för att göra en beställning."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "I accept the %1$s and authorize %2$s to process my data automatically."
+msgstr "Jag accepterar %1$s och ger %2$s tillstånd att behandla mina uppgifter automatiskt."

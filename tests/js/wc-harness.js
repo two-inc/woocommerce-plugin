@@ -136,8 +136,8 @@ function loadPluginSource() {
       "\n;({ twoincUtilHelper, twoincAddressRoles," +
       " twoincCompanyCapture, twoincCaptureScope," +
       " twoincSelectWooHelper, twoincSelectWooHelperShipping, twoincDomHelper," +
-      " twoincTermChips, twoincSoleTrader, twoincSupportedSearchCountries," +
-      " Twoinc, TwoCompanySearch });"
+      " twoincTermChips, twoincTermsConsent, twoincSoleTrader," +
+      " twoincSupportedSearchCountries, Twoinc, TwoCompanySearch });"
   );
   if (!exported || typeof exported.twoincSelectWooHelper !== "object") {
     throw new Error("harness: twoinc.js did not yield its top-level bindings");
@@ -198,6 +198,7 @@ function loadTwoinc(twoinc) {
     captureScope: exported.twoincCaptureScope,
     dom: exported.twoincDomHelper,
     termChips: exported.twoincTermChips,
+    termsConsent: exported.twoincTermsConsent,
     soleTrader: exported.twoincSoleTrader,
     supportedSearchCountries: exported.twoincSupportedSearchCountries,
     // The Twoinc class itself, for the code paths that reach the singleton.

@@ -103,6 +103,12 @@ final class BrandConfigSpec
             'testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList',
             'testSurchargeGridPreservesRowsNotOnTheForm',
             'testChipFeeAmountCarriesCurrencySymbolNotCode',
+            'testTermsConsentRendersInTheGatewayDescription',
+            'testTermsConsentIsDrivenByTheBrandDescriptor',
+            'testTermsConsentNeverTravelsInTheDescription',
+            'testOverlayCanSuppressTheBaseTermsConsent',
+            'testTermsGateIsSilentForABrandWithNoTermsPage',
+            'testTermsConsentCopyIsTranslatedInEveryLocale',
             'testPaymentTermsDefaultPreferenceOrder',
             'testMerchantDefaultTermStoredValueDistinguishesUnset',
             'testDefaultTermOptionsLeadWithAutomatic',
@@ -2512,16 +2518,18 @@ final class BrandConfigSpec
      */
     private static function testProcessPaymentGuardsReturnAFailureArray(): void
     {
+        $consent = [WC_Twoinc::TERMS_CONSENT_FIELD => '1'];
         $cases = [
             ['not_two', [], null, 'cannot be paid with Two', 'order is not a Two order'],
-            ['veto', ['company_id' => '923456789'], null, 'Brand says no.', 'brand overlay vetoed payment'],
-            ['plain', ['company_id' => ''], null, 'select your company', 'no company captured'],
-            ['country', ['company_id' => '923456789', 'billing_country' => 'DE'], null, 'not available for this order', 'buyer country off the allowlist'],
-            ['declined', ['company_id' => '923456789'], null, 'not available for this order', 'order intent declined this company'],
-            ['plain', ['company_id' => '923456789'], new WP_Error('http', 'down'), 'Failed to request order creation', 'transport failed'],
-            ['plain', ['company_id' => '923456789'], ['response' => ['code' => 400], 'body' => '{}'], 'not available for this order', 'API rejected the payload'],
-            ['plain', ['company_id' => '923456789'], ['response' => ['code' => 200], 'body' => '{"status":"REJECTED"}'], 'not available for this order', 'API declined the order'],
-            ['plain', ['company_id' => '923456789'], ['result' => 'failure', 'message' => 'upstream refused'], 'upstream refused', 'the transport reported its own failure'],
+            ['veto', $consent + ['company_id' => '923456789'], null, 'Brand says no.', 'brand overlay vetoed payment'],
+            ['plain', ['company_id' => '923456789'], null, 'must accept payment terms', 'the terms consent was not given'],
+            ['plain', $consent + ['company_id' => ''], null, 'select your company', 'no company captured'],
+            ['country', $consent + ['company_id' => '923456789', 'billing_country' => 'DE'], null, 'not available for this order', 'buyer country off the allowlist'],
+            ['declined', $consent + ['company_id' => '923456789'], null, 'not available for this order', 'order intent declined this company'],
+            ['plain', $consent + ['company_id' => '923456789'], new WP_Error('http', 'down'), 'Failed to request order creation', 'transport failed'],
+            ['plain', $consent + ['company_id' => '923456789'], ['response' => ['code' => 400], 'body' => '{}'], 'not available for this order', 'API rejected the payload'],
+            ['plain', $consent + ['company_id' => '923456789'], ['response' => ['code' => 200], 'body' => '{"status":"REJECTED"}'], 'not available for this order', 'API declined the order'],
+            ['plain', $consent + ['company_id' => '923456789'], ['result' => 'failure', 'message' => 'upstream refused'], 'upstream refused', 'the transport reported its own failure'],
         ];
 
         foreach ($cases as $case) {
@@ -2638,7 +2646,7 @@ final class BrandConfigSpec
             $GLOBALS['__twoinc_test_notices'] = [];
             $GLOBALS['__twoinc_test_logs'] = [];
             WC()->session = new StubSession();
-            $_POST = $post;
+            $_POST = $post + [WC_Twoinc::TERMS_CONSENT_FIELD => '1'];
 
             $gateway = self::buyerCountryGateway(null);
             // The company meta is written before the order request, so a
@@ -2688,7 +2696,7 @@ final class BrandConfigSpec
             $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
             $GLOBALS['__twoinc_test_logs'] = [];
             $GLOBALS['__twoinc_test_notices'] = [];
-            $_POST = ['company_id' => '923456789', 'billing_country' => $posted_country];
+            $_POST = [WC_Twoinc::TERMS_CONSENT_FIELD => '1', 'company_id' => '923456789', 'billing_country' => $posted_country];
 
             // A fresh record clock, so the only call left is the order create the gate must refuse.
             $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on')] = time();
@@ -2773,7 +2781,7 @@ final class BrandConfigSpec
             foreach ($verdicts as $company_id => $approved) {
                 WC_Twoinc::record_order_intent_verdict((string) $company_id, $approved);
             }
-            $_POST = ['company_id' => $posted_company_id, 'billing_country' => 'NO'];
+            $_POST = [WC_Twoinc::TERMS_CONSENT_FIELD => '1', 'company_id' => $posted_company_id, 'billing_country' => 'NO'];
 
             $gateway = self::buyerCountryGateway(null);
             $proceeded = false;
@@ -8029,6 +8037,7 @@ final class BrandConfigSpec
             'https://checkout.staging.two.inc/soletrader/signup',
             WC_Twoinc_Sole_Trader::get_signup_page_url($gateway)
         );
+        TinyAssert::same('https://checkout.staging.two.inc/terms', $gateway->get_terms_page_url());
 
         // A dev-sniffed shop with an explicit mode follows that mode, not
         // the staging fallback.
@@ -8047,6 +8056,7 @@ final class BrandConfigSpec
             'https://checkout.two.inc',
             WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
         );
+        TinyAssert::same('https://checkout.two.inc/terms', $gateway->get_terms_page_url());
 
         // Brand-agnostic: an overlay's own domains follow the same rule, with
         // no brand-specific branch — the resolution is template-driven.
@@ -10823,6 +10833,214 @@ final class BrandConfigSpec
                 && strpos($html, '<label class="twoinc-term-chips-heading') === false,
             'the chip heading must not be a label element'
         );
+    }
+
+    /**
+     * Given the consent block both checkouts emit; When it is built; Then it
+     * carries the checkbox, the brand's terms link and the refusal (ABN-554).
+     *
+     * Deliberately NOT asserted against the gateway description: WooCommerce
+     * runs that through wp_kses_post(), which drops the checkbox.
+     */
+    private static function testTermsConsentRendersInTheGatewayDescription(): void
+    {
+        $gateway = self::gateway();
+        $html = $gateway->get_terms_consent_html();
+
+        $cases = [
+            ['name="twoinc_terms_accepted"', 'the consent carrier the server reads'],
+            ['type="checkbox"', 'consent is a checkbox, not free text'],
+            ['aria-labelledby="twoinc-terms-text"', 'the box is named by the sentence, not wrapped in a label'],
+            ['href="' . $gateway->get_terms_page_url() . '"', 'the terms link'],
+            ['>payment terms</a>', 'the link text'],
+            ['I accept the', 'the consent sentence'],
+            ['You must accept payment terms to place order.', 'the refusal the gate states'],
+        ];
+
+        foreach ($cases as [$needle, $description]) {
+            TinyAssert::true(strpos($html, $needle) !== false, $description . ' is missing');
+        }
+
+        // No HTML5 `required`: core hides an unselected method's payment box,
+        // and a required control inside it blocks the form unfocusably.
+        TinyAssert::true(
+            strpos($html, 'name="twoinc_terms_accepted" value="1" required') === false,
+            'the consent box must not carry an HTML5 required attribute'
+        );
+    }
+
+    /**
+     * The brand descriptor is the whole configuration surface: it holds the
+     * link and the copy, and its absence is the off switch (ABN-554).
+     */
+    private static function testTermsConsentIsDrivenByTheBrandDescriptor(): void
+    {
+        // [brand fixture or null for Two, expected URL, copy the tile must
+        // carry, whether a consent renders at all, description].
+        $cases = [
+            [null, 'https://checkout.two.inc/terms', 'I accept the', true, 'the Two brand resolves its path against the checkout host'],
+            ['absolutetermsbrand', 'https://absolutetermsbrand.example/legal/terms', 'I agree to', true, "an absolute brand URL is taken verbatim, with the brand's own sentence"],
+            ['notermsbrand', '', '', false, 'a brand declaring no terms page renders no consent'],
+        ];
+
+        foreach ($cases as [$fixture, $expected_url, $expected_copy, $renders, $description]) {
+            self::reset();
+            $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
+            if ($fixture !== null) {
+                add_filter('twoinc_brand_file', static function () use ($fixture) {
+                    return __DIR__ . '/fixtures/' . $fixture . '.php';
+                });
+            }
+
+            $gateway = self::gateway();
+            TinyAssert::same($expected_url, $gateway->get_terms_page_url(), $description . ': wrong URL');
+
+            $html = $gateway->get_terms_consent_html();
+            TinyAssert::same(
+                $renders,
+                strpos($html, 'name="twoinc_terms_accepted"') !== false,
+                $description . ': wrong render decision'
+            );
+            if ($renders) {
+                TinyAssert::true(strpos($html, $expected_copy) !== false, $description . ': wrong copy');
+            }
+        }
+    }
+
+    /**
+     * WooCommerce runs a gateway description through wp_kses_post(), which
+     * drops `<input>` — a consent shipped in the description renders as a
+     * sentence the buyer cannot tick, and every order is then refused by the
+     * server gate. The classic checkout gets it from its own hook instead
+     * (ABN-554).
+     */
+    private static function testTermsConsentNeverTravelsInTheDescription(): void
+    {
+        $gateway = self::gateway();
+
+        TinyAssert::true(
+            strpos($gateway->build_payment_description(), 'twoinc_terms_accepted') === false,
+            'the consent must not be part of the kses-filtered description'
+        );
+
+        $GLOBALS['__twoinc_test_filters'] = [];
+        new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                parent::__construct();
+            }
+        };
+        TinyAssert::true(
+            has_filter('woocommerce_review_order_before_submit'),
+            'the classic checkout must emit the consent from its own hook'
+        );
+    }
+
+    /**
+     * An overlay still rendering its own consent suppresses the base one, so a
+     * staged rollout never shows two checkboxes (ABN-554).
+     */
+    private static function testOverlayCanSuppressTheBaseTermsConsent(): void
+    {
+        add_filter('twoinc_render_terms_consent', static function () {
+            return false;
+        });
+
+        TinyAssert::true(
+            strpos(self::gateway()->get_terms_consent_html(), 'twoinc-terms-consent') === false,
+            'the base consent must be suppressible by an overlay'
+        );
+    }
+
+    /** A brand with no terms page must not be refused a payment for a consent it never asked for. */
+    private static function testTermsGateIsSilentForABrandWithNoTermsPage(): void
+    {
+        add_filter('twoinc_brand_file', static function () {
+            return __DIR__ . '/fixtures/notermsbrand.php';
+        });
+
+        $order = new class extends StubOrder {
+            public function update_meta_data($key, $value)
+            {
+            }
+            public function save()
+            {
+            }
+            public function set_billing_country($value)
+            {
+            }
+            public function set_billing_company($value)
+            {
+            }
+            public function set_billing_phone($value)
+            {
+            }
+        };
+        $order->payment_method = WC_Twoinc_Brand::get('gateway_id');
+        $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+        $GLOBALS['__twoinc_test_notices'] = [];
+        WC()->session = new StubSession();
+        $_POST = ['company_id' => ''];
+
+        $gateway = self::buyerCountryGateway(null);
+        $result = $gateway->process_payment(42);
+        $_POST = [];
+
+        // The company guard, which sits after the consent one: proof the
+        // consent gate let the request through rather than refusing first.
+        TinyAssert::true(
+            strpos($result['message'] ?? '', 'select your company') !== false,
+            'a brand with no terms page must not be refused for consent, got: ' . ($result['message'] ?? '')
+        );
+    }
+
+    /** Every locale the plugin ships a translation for carries the consent copy. */
+    private static function testTermsConsentCopyIsTranslatedInEveryLocale(): void
+    {
+        $languages = dirname(__DIR__, 2) . '/languages/';
+        $cases = [
+            [
+                'payment terms',
+                [
+                    'es_ES' => 'condiciones de pago',
+                    'nb_NO' => 'betalingsvilkår',
+                    'nl_NL' => 'betaalvoorwaarden',
+                    'sv_SE' => 'betalningsvillkor',
+                ],
+                'the terms link text',
+            ],
+            [
+                'You must accept %s to place order.',
+                [
+                    'es_ES' => 'Debe aceptar %s para realizar el pedido.',
+                    'nb_NO' => 'Du må akseptere %s for å legge inn bestillingen.',
+                    'nl_NL' => 'U moet %s accepteren om de bestelling te plaatsen.',
+                    'sv_SE' => 'Du måste acceptera %s för att göra en beställning.',
+                ],
+                'the refusal sentence',
+            ],
+            [
+                'I accept the %1$s and authorize %2$s to process my data automatically.',
+                [
+                    'es_ES' => 'Acepto las %1$s y autorizo a %2$s a tratar mis datos automáticamente.',
+                    'nb_NO' => 'Jeg aksepterer %1$s og gir %2$s tillatelse til å behandle mine data automatisk.',
+                    'nl_NL' => 'Ik accepteer de %1$s en geef toestemming aan %2$s voor automatische verwerking van mijn gegevens.',
+                    'sv_SE' => 'Jag accepterar %1$s och ger %2$s tillstånd att behandla mina uppgifter automatiskt.',
+                ],
+                'the consent sentence',
+            ],
+        ];
+
+        foreach ($cases as [$msgid, $translations, $description]) {
+            foreach ($translations as $locale => $expected) {
+                $po = file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.po');
+                TinyAssert::true(
+                    strpos($po, 'msgid "' . str_replace('"', '\\"', $msgid) . '"' . "\nmsgstr \"" . $expected . '"') !== false,
+                    $description . ' is untranslated in ' . $locale
+                );
+            }
+        }
     }
 
     private static function testPaymentBoxOrdersTaglineChipsThenSoleTrader(): void

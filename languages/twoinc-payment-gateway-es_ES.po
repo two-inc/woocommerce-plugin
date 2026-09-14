@@ -237,3 +237,17 @@ msgstr "Comisión por condiciones de pago - %s días"
 #, php-format
 msgid "Payment terms fee - %s days from end of month"
 msgstr "Comisión por condiciones de pago - %s días desde el final del mes"
+
+#: class/WC_Twoinc.php
+msgid "payment terms"
+msgstr "condiciones de pago"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "You must accept %s to place order."
+msgstr "Debe aceptar %s para realizar el pedido."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "I accept the %1$s and authorize %2$s to process my data automatically."
+msgstr "Acepto las %1$s y autorizo a %2$s a tratar mis datos automáticamente."

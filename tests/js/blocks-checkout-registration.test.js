@@ -17,6 +17,7 @@ const METHOD_DATA = {
   title: "Business invoice",
   description: '<div class="twoinc-payment-subtitle">Read more</div>',
   about: '<div class="abt-twoinc">about</div>',
+  terms: '<div class="twoinc-terms-consent"><input name="twoinc_terms_accepted" /></div>',
   iconUrl: "https://example.test/logo.svg",
   supports: ["products", "refunds"]
 };
@@ -94,11 +95,13 @@ afterEach(() => {
     "Twoinc",
     "jQuery",
     "twoincDomHelper",
-    "twoincCompanySearchControls"
+    "twoincCompanySearchControls",
+    "twoincTermsConsent"
   ].forEach((key) => {
     delete window[key];
   });
   Object.keys(bodyHandlers).forEach((key) => delete bodyHandlers[key]);
+  consentState.accepted = null;
   document.body.innerHTML = "";
 });
 
@@ -107,6 +110,8 @@ afterEach(() => {
  * Nothing here is a reimplementation: the skin is only allowed to read the
  * controller's accessors and call its mount.
  */
+const consentState = { accepted: null };
+
 function baseGlobals(location, billing, shipping) {
   const calls = {
     mounts: 0,
@@ -188,6 +193,16 @@ function baseGlobals(location, billing, shipping) {
         : twoincAddressRoles.field(role, "company")
   };
   window.twoincCompanySearchControls = [control, shippingControl];
+  // twoinc.js's own consent gate, which the skin calls rather than reimplements.
+  window.twoincTermsConsent = {
+    accepted: null,
+    payload: () =>
+      consentState.accepted === null
+        ? {}
+        : { twoinc_terms_accepted: consentState.accepted ? "1" : "" },
+    validate: () =>
+      consentState.accepted === false ? "You must accept payment terms to place order." : null
+  };
   window.twoincDomHelper = {
     saveCheckoutInputs() {
       calls.saves += 1;
@@ -330,9 +345,14 @@ describe("blocks-checkout.js registration", () => {
       description: "the label carries the about control"
     },
     {
-      slot: (config) => [config.content.type()],
+      slot: (config) => config.content.type().children,
       expected: METHOD_DATA.description,
       description: "the content is the gateway's own payment-box description"
+    },
+    {
+      slot: (config) => config.content.type().children,
+      expected: METHOD_DATA.terms,
+      description: "the content carries the consent block the classic checkout emits too"
     }
   ])("$description", ({ slot, expected }) => {
     const { env, registered } = globals({});
@@ -635,6 +655,40 @@ describe("blocks-checkout.js reuses the classic controller", () => {
       type: "success",
       meta: { paymentMethodData: expected }
     });
+  });
+});
+
+describe("blocks-checkout.js gates on the shared terms consent", () => {
+  /** The skin's own payment-setup handler, over the given consent state. */
+  function paymentSetup(accepted) {
+    consentState.accepted = accepted;
+    const base = baseGlobals("address_area");
+    const { env, registered } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    let handler = null;
+    registered[0].content.type({
+      eventRegistration: {
+        onPaymentSetup(fn) {
+          handler = fn;
+          return () => {};
+        }
+      },
+      emitResponse: { responseTypes: { SUCCESS: "success", ERROR: "error" } }
+    });
+    return handler();
+  }
+
+  test("an unticked consent refuses the Store API submit with the shared sentence", () => {
+    expect(paymentSetup(false)).toEqual({
+      type: "error",
+      message: "You must accept payment terms to place order."
+    });
+  });
+
+  test("a ticked consent travels as payment data under the name the server reads", () => {
+    expect(paymentSetup(true).meta.paymentMethodData.twoinc_terms_accepted).toBe("1");
   });
 });
 

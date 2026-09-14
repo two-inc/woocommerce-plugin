@@ -46,6 +46,9 @@ if (!class_exists('WC_Twoinc')) {
          */
         public const NEVER_TAXED_SURCHARGE_TREATMENT = 'always_zero';
 
+        /** Consent carrier, posted by the classic form and by the Blocks payment data alike (ABN-554). */
+        public const TERMS_CONSENT_FIELD = 'twoinc_terms_accepted';
+
         // Order states in which the Two API refuses order edits. Shared by
         // the fulfilment skip-check and the edit gate in
         // process_update_twoinc_order — their identity guarantees the
@@ -121,6 +124,7 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             add_filter('woocommerce_gateway_description', [$this, 'append_about_block_to_description'], 10, 2);
+            add_action('woocommerce_review_order_before_submit', [$this, 'render_terms_consent']);
 
             // Brand product constraints (e.g. a minimum order value in a
             // specific currency/market) remove the gateway from checkout
@@ -3005,6 +3009,128 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * The brand's terms page, or '' when the brand declares none — which
+         * is the consent's only off switch (ABN-554). A declared path is
+         * resolved against the brand's checkout host, so it follows
+         * checkout_env; an absolute URL is taken verbatim.
+         */
+        public function get_terms_page_url()
+        {
+            $declared = WC_Twoinc_Brand::get('payment_terms_link');
+            $declared = is_string($declared) ? trim($declared) : '';
+            if ($declared === '') {
+                return '';
+            }
+
+            $url = parse_url($declared, PHP_URL_SCHEME)
+                ? $declared
+                : WC_Twoinc_Helper::get_environment_host('checkout', $this) . '/' . ltrim($declared, '/');
+
+            return apply_filters('twoinc_terms_page_url', $url);
+        }
+
+        /**
+         * Whether this plugin renders the consent itself. An overlay still
+         * rendering its own returns false here, so the two never both appear
+         * during a staged rollout (ABN-554).
+         */
+        public function renders_terms_consent()
+        {
+            return $this->get_terms_page_url() !== ''
+                && apply_filters('twoinc_render_terms_consent', true) !== false;
+        }
+
+        /**
+         * Refusal shown when the order is placed with the consent unticked —
+         * client-side and by process_payment() alike, so both state the same
+         * sentence.
+         */
+        public static function get_terms_not_accepted_message()
+        {
+            return sprintf(
+                /* translators: %s: the link text naming Two's terms, e.g. "payment terms". */
+                __('You must accept %s to place order.', 'twoinc-payment-gateway'),
+                __('payment terms', 'twoinc-payment-gateway')
+            );
+        }
+
+        /**
+         * The consent block, built once and emitted by both checkouts — the
+         * classic one from `render_terms_consent()`, the Blocks tile from the
+         * payment-method data it is handed (ABN-554).
+         *
+         * NOT part of the gateway description: WooCommerce runs that through
+         * wp_kses_post(), which drops the checkbox and leaves a consent the
+         * buyer cannot give.
+         *
+         * No HTML5 `required`: core hides the payment box of an unselected
+         * method, and a required control inside a hidden box blocks the whole
+         * form unfocusably. The gate is twoincTermsConsent plus
+         * process_payment().
+         */
+        public function get_terms_consent_html()
+        {
+            if (!$this->renders_terms_consent()) {
+                return '';
+            }
+
+            $link = sprintf(
+                '<a href="%s" target="_blank" rel="noopener">%s</a>',
+                esc_url($this->get_terms_page_url()),
+                esc_html(__('payment terms', 'twoinc-payment-gateway'))
+            );
+
+            // The brand's own sentence when it declares one; gettext
+            // extraction is static, so a brand template is never translatable
+            // and the base default is (TWO-25270's rule, same as the tagline).
+            $template = WC_Twoinc_Brand::get('payment_terms_text');
+            $template = is_string($template) && trim($template) !== ''
+                ? $template
+                /* translators: %1$s: a link to the brand's terms page; %2$s: the provider's full name. */
+                : __('I accept the %1$s and authorize %2$s to process my data automatically.', 'twoinc-payment-gateway');
+
+            // Emitted unescaped below, so the anchor-only escaper is the whole
+            // trust boundary on this sentence.
+            $message = WC_Twoinc_Helper::escape_anchor_only_html(sprintf(
+                $template,
+                $link,
+                WC_Twoinc_Brand::get('provider_full_name')
+            ));
+
+            // aria-labelledby rather than a wrapping label: the sentence
+            // carries the terms link, and a link inside a label makes
+            // activation ambiguous.
+            return sprintf(
+                '<div class="twoinc-terms-consent">
+                    <div class="twoinc-terms-row">
+                        <input type="checkbox" id="%1$s" name="%1$s" value="1" aria-labelledby="twoinc-terms-text" aria-required="true" />
+                        <span class="twoinc-terms-text" id="twoinc-terms-text">%2$s</span>
+                    </div>
+                    <div class="twoinc-terms-error hidden" role="alert">%3$s</div>
+                </div>',
+                esc_attr(self::TERMS_CONSENT_FIELD),
+                $message,
+                esc_html(self::get_terms_not_accepted_message())
+            );
+        }
+
+        /** The classic checkout's emitter: inside the form, so the tick posts. */
+        public function render_terms_consent()
+        {
+            echo $this->get_terms_consent_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+        }
+
+        /** @return bool */
+        private static function terms_consent_given()
+        {
+            $posted = array_key_exists(self::TERMS_CONSENT_FIELD, $_POST)
+                ? sanitize_text_field($_POST[self::TERMS_CONSENT_FIELD])
+                : '';
+
+            return in_array($posted, ['1', 'on', 'true'], true);
+        }
+
+        /**
          * Brand tagline shown directly under the payment-method title.
          *
          * Returns ONLY the tagline; the about control renders beside the
@@ -5135,6 +5261,15 @@ if (!class_exists('WC_Twoinc')) {
             if ($brand_validation_error) {
                 WC_Twoinc_Helper::display_ajax_error($brand_validation_error);
                 return self::payment_failure($brand_validation_error);
+            }
+
+            // A client-side tick is not a consent record (ABN-554). Gated on
+            // the same predicate as the render, so a brand with no terms page
+            // is never asked for a consent it never offered.
+            if ($this->renders_terms_consent() && !self::terms_consent_given()) {
+                $terms_error = self::get_terms_not_accepted_message();
+                WC_Twoinc_Helper::display_ajax_error($terms_error);
+                return self::payment_failure($terms_error);
             }
 
             // The backend-sourced term list can change between checkout
