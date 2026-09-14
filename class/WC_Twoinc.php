@@ -5292,6 +5292,17 @@ if (!class_exists('WC_Twoinc')) {
                 if (!get_the_author_meta(WC_Twoinc_Brand::prefixed_name('project'), $user_id)) {
                     update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('project'), $project);
                 }
+                // Stamp the scope only while the remembered company is the one
+                // this order carries, or the stamp would vouch for a pair it
+                // does not describe (ABN-554).
+                $remembered = (string) get_the_author_meta(WC_Twoinc_Brand::prefixed_name('company_id'), $user_id);
+                if ($remembered !== '' && $remembered === (string) $company_id) {
+                    update_user_meta(
+                        $user_id,
+                        WC_Twoinc_Brand::prefixed_name('company_scope'),
+                        'order:' . $order->get_id()
+                    );
+                }
             }
 
             $response = $this->make_request('/v1/order', WC_Twoinc_Helper::compose_twoinc_order(

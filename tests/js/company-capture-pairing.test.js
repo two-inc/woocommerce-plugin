@@ -305,13 +305,10 @@ describe("TWO-40 — captured-company write path", () => {
       // capturing nothing. Driven through initialize() rather than by calling
       // the restore directly, because the whole gap was a restore that ran at
       // the wrong point in that sequence.
-      sessionStorage.setItem(
-        "checkoutInputs",
-        JSON.stringify([
-          { htmlTag: "INPUT", id: "billing_company", type: "text", val: "ACME Widgets Ltd" },
-          { htmlTag: "INPUT", id: "company_id", type: "text", val: "12345678" }
-        ])
-      );
+      harness.seedCheckoutInputs([
+        { htmlTag: "INPUT", id: "billing_company", type: "text", val: "ACME Widgets Ltd" },
+        { htmlTag: "INPUT", id: "company_id", type: "text", val: "12345678" }
+      ]);
 
       ctx.Twoinc.getInstance().initialize(true);
 

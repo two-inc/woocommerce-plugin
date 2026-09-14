@@ -2115,6 +2115,61 @@ jQuery(document).on("twoinc_supported_search_countries_updated", function () {
 // through every one of those call sites.
 let twoincSoleTrader = twoincSelectWooHelper.soleTrader;
 
+/**
+ * The one gate every remembered capture passes through, on every surface
+ * (ABN-554). A capture belongs to the cart it was made in — or, on the
+ * pay-for-order page, to the order being paid — so it survives a reload of
+ * that same cart and is refused anywhere else.
+ */
+let twoincCaptureScope = {
+  /** sessionStorage key holding the scope the `checkoutInputs` snapshot was taken in. */
+  STAMP_KEY: "twoincCaptureScope",
+
+  /** The scope of the page being loaded, server-resolved. */
+  current: function () {
+    return twoincUtilHelper.blankToEmpty(window.twoinc && window.twoinc.capture_scope);
+  },
+
+  /**
+   * A page that cannot name its own scope restores nothing: with no scope to
+   * compare against there is no way to tell a capture of this cart from one
+   * of another.
+   */
+  belongsHere: function (scope) {
+    const here = twoincCaptureScope.current();
+    return here !== "" && twoincUtilHelper.blankToEmpty(scope) === here;
+  },
+
+  stamp: function () {
+    sessionStorage.setItem(twoincCaptureScope.STAMP_KEY, twoincCaptureScope.current());
+  },
+
+  storedScope: function () {
+    return twoincUtilHelper.blankToEmpty(sessionStorage.getItem(twoincCaptureScope.STAMP_KEY));
+  },
+
+  forget: function () {
+    sessionStorage.removeItem("checkoutInputs");
+    sessionStorage.removeItem(twoincCaptureScope.STAMP_KEY);
+  },
+
+  /**
+   * The company the server remembered for this buyer, blank unless it was
+   * captured for the cart or order this page is (ABN-554). The one read of
+   * that bootstrap, so no restore path can reach it past the gate.
+   */
+  userMetaCompany: function () {
+    const meta = window.twoinc || {};
+    if (!twoincCaptureScope.belongsHere(meta.company_scope)) {
+      return { billing_company: "", company_id: "" };
+    }
+    return {
+      billing_company: twoincUtilHelper.blankToEmpty(meta.billing_company),
+      company_id: twoincUtilHelper.blankToEmpty(meta.company_id)
+    };
+  }
+};
+
 let twoincDomHelper = {
   /** Add a placeholder after an input, used for moving fields in the DOM. */
   addPlaceholder: function ($el, name) {
@@ -2756,13 +2811,31 @@ let twoincDomHelper = {
       }
     }
     sessionStorage.setItem("checkoutInputs", JSON.stringify(checkoutInputs));
+    twoincCaptureScope.stamp();
     // Alongside the field snapshot, since the same restore consumes both.
     twoincCompanyCapture.rememberCaptureMode();
   },
+  /**
+   * The snapshot, but only when it was taken in this page's own scope —
+   * otherwise it is dropped rather than left for the next reader (ABN-554).
+   * The one read path, so no caller can reach a snapshot past the gate.
+   */
+  storedCheckoutInputs: function () {
+    const raw = sessionStorage.getItem("checkoutInputs");
+    if (!raw) return null;
+    if (!twoincCaptureScope.belongsHere(twoincCaptureScope.storedScope())) {
+      twoincCaptureScope.forget();
+      return null;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  },
   getCheckoutInput: function (htmlTag, inpType, inpName) {
-    let checkoutInputs = sessionStorage.getItem("checkoutInputs");
+    let checkoutInputs = twoincDomHelper.storedCheckoutInputs();
     if (!checkoutInputs) return;
-    checkoutInputs = JSON.parse(checkoutInputs);
     for (let inp of checkoutInputs) {
       if (inp.htmlTag === htmlTag && inp.type === inpType && inp.name === inpName) {
         return inp;
@@ -2770,9 +2843,8 @@ let twoincDomHelper = {
     }
   },
   loadStorageInputs: function () {
-    let checkoutInputs = sessionStorage.getItem("checkoutInputs");
+    let checkoutInputs = twoincDomHelper.storedCheckoutInputs();
     if (!checkoutInputs) return;
-    checkoutInputs = JSON.parse(checkoutInputs);
     for (let inp of checkoutInputs) {
       // Skip load company id/name if user logged in and has Two meta set
       if (window.twoinc.user_meta_exists) {
@@ -2832,15 +2904,13 @@ let twoincDomHelper = {
     }
   },
   loadUserMetaInputs: function () {
-    window.twoinc.user_meta_exists = window.twoinc.billing_company && window.twoinc.company_id;
+    const remembered = twoincCaptureScope.userMetaCompany();
+    window.twoinc.user_meta_exists = Boolean(remembered.billing_company && remembered.company_id);
     if (window.twoinc.user_meta_exists) {
-      twoincSelectWooHelper.setDisplayName(window.twoinc.billing_company);
+      twoincSelectWooHelper.setDisplayName(remembered.billing_company);
       // Both values passed explicitly: `#company_id` is written further down
       // this function, so reading the DOM here would render an empty number.
-      twoincSelectWooHelper.renderCompanySummary(
-        window.twoinc.billing_company,
-        window.twoinc.company_id
-      );
+      twoincSelectWooHelper.renderCompanySummary(remembered.billing_company, remembered.company_id);
     }
     if (document.querySelector("#department") && window.twoinc.department) {
       document.querySelector("#department").value = window.twoinc.department;
@@ -2865,8 +2935,9 @@ let twoincDomHelper = {
    * later).
    */
   restoreCapturedCompany: function () {
-    const metaName = window.twoinc.billing_company;
-    const metaId = window.twoinc.company_id;
+    const remembered = twoincCaptureScope.userMetaCompany();
+    const metaName = remembered.billing_company;
+    const metaId = remembered.company_id;
     const domName = twoincCompanyCapture.nameField().val();
     const domId = twoincCompanyCapture.numberField().val();
 

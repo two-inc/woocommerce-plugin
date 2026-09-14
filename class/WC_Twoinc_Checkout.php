@@ -422,6 +422,32 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
+         * The cart, or on the pay-for-order page the order, a company capture
+         * belongs to. Restores are refused across scopes, so a capture lives
+         * as long as the cart it was made in and no longer (ABN-554).
+         *
+         * @return string
+         */
+        public static function capture_scope(): string
+        {
+            $order = self::get_order_being_paid();
+            if ($order) {
+                return 'order:' . $order->get_id();
+            }
+
+            $session = function_exists('WC') && WC() ? WC()->session : null;
+            $cart_key = $session && method_exists($session, 'get_customer_id')
+                ? (string) $session->get_customer_id()
+                : '';
+            if ($cart_key === '') {
+                return '';
+            }
+
+            // Hashed so the bootstrap does not echo the session key itself.
+            return 'cart:' . substr(hash('sha256', $cart_key), 0, 16);
+        }
+
+        /**
          * The country the pay-for-order form starts on. The shop's base country
          * is a last resort, not the default: this value drives company search
          * and sole-trader availability, which belong to the order being paid
@@ -524,6 +550,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'merchant' => $merchant,
                 'merchant_due_in_days' => $this->wc_twoinc->get_merchant_due_in_days(),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),
+                'capture_scope' => self::capture_scope(),
                 'currency' => $currency,
                 'price_decimal_separator' => wc_get_price_decimal_separator(),
                 'price_thousand_separator' => wc_get_price_thousand_separator(),
@@ -607,6 +634,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             $user_id = wp_get_current_user()->ID;
             if ($user_id) {
+                // Blank for a record predating the stamp or set by hand in the
+                // admin, which no page then replays (ABN-554).
+                $properties['company_scope'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_scope'), true);
                 $properties['company_id'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), true);
                 $properties['billing_company'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), true);
                 $properties['department'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('department'), true);

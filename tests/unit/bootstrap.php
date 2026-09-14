@@ -211,14 +211,41 @@ function wc_get_price_thousand_separator()
     return ',';
 }
 
-// A logged-out visitor: ID 0, so the checkout bootstrap skips its saved-user
-// prefill. get_user_meta is already stubbed further down.
+// A logged-out visitor by default; a spec that needs the saved-user prefill
+// sets $GLOBALS['__twoinc_test_user_id'].
 
 function wp_get_current_user()
 {
     return new class () {
-        public $ID = 0;
+        public $ID;
+
+        public function __construct()
+        {
+            $this->ID = (int) ($GLOBALS['__twoinc_test_user_id'] ?? 0);
+        }
     };
+}
+
+function get_user_meta($user_id, $key = '', $single = false)
+{
+    return $GLOBALS['__twoinc_test_user_meta'][$user_id][$key] ?? '';
+}
+
+function update_user_meta($user_id, $key, $value, $prev_value = '')
+{
+    $GLOBALS['__twoinc_test_user_meta'][$user_id][$key] = $value;
+    return true;
+}
+
+function get_the_author_meta($key, $user_id = 0)
+{
+    return get_user_meta($user_id, $key, true);
+}
+
+/** The pay-for-order endpoint's order id, when a spec puts one here. */
+function get_query_var($var, $default = '')
+{
+    return $GLOBALS['__twoinc_test_query_vars'][$var] ?? $default;
 }
 
 function determine_locale()
@@ -354,6 +381,11 @@ class StubCart
 class StubSession
 {
     private $data = [];
+
+    public function get_customer_id()
+    {
+        return $GLOBALS['__twoinc_test_session_customer'] ?? '';
+    }
 
     public function get($key, $default = null)
     {

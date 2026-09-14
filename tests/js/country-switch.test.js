@@ -331,32 +331,29 @@ describe("billing country switch", () => {
       // a tracker seeded before it runs reads the restore as a real country
       // change. `initialize(true)` is the bootstrap's own call.
       // The shape saveCheckoutInputs() actually writes.
-      window.sessionStorage.setItem(
-        "checkoutInputs",
-        JSON.stringify([
-          {
-            htmlTag: "SELECT",
-            id: "billing_country",
-            name: "billing_country",
-            val: "ES",
-            optionHtml: '<option value="ES">Spain</option>'
-          },
-          {
-            htmlTag: "INPUT",
-            id: "billing_company",
-            name: "billing_company",
-            type: "text",
-            val: "Ejemplo SL"
-          },
-          {
-            htmlTag: "INPUT",
-            id: "company_id",
-            name: "company_id",
-            type: "text",
-            val: "B12345678"
-          }
-        ])
-      );
+      harness.seedCheckoutInputs([
+        {
+          htmlTag: "SELECT",
+          id: "billing_country",
+          name: "billing_country",
+          val: "ES",
+          optionHtml: '<option value="ES">Spain</option>'
+        },
+        {
+          htmlTag: "INPUT",
+          id: "billing_company",
+          name: "billing_company",
+          type: "text",
+          val: "Ejemplo SL"
+        },
+        {
+          htmlTag: "INPUT",
+          id: "company_id",
+          name: "company_id",
+          type: "text",
+          val: "B12345678"
+        }
+      ]);
 
       ctx.Twoinc.getInstance().initialize(true);
 

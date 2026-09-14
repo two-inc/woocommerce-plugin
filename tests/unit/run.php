@@ -16043,7 +16043,146 @@ final class SubtitleSaveValidationSpec
     }
 }
 
+/**
+ * ABN-554. The scope a remembered company capture is stamped with, and
+ * refused outside: the cart it was made in, or the order being paid for.
+ */
+final class CaptureScopeSpec
+{
+    public static function runAll(): void
+    {
+        $tests = [
+            'testCaptureScopeNamesTheOrderBeingPaidOtherwiseTheCart',
+            'testTheRememberedCompanyIsStampedWithTheOrderItWasCapturedOn',
+        ];
+        foreach ($tests as $test) {
+            self::$test();
+            print("PASS CaptureScopeSpec::$test\n");
+        }
+    }
+
+    /** Given a page; When it bootstraps; Then it names its own scope. */
+    private static function testCaptureScopeNamesTheOrderBeingPaidOtherwiseTheCart(): void
+    {
+        $cases = [
+            [42, 'sess-abc', 'order:42', 'the pay-for-order page names the order being paid'],
+            [0, 'sess-abc', 'cart:' . substr(hash('sha256', 'sess-abc'), 0, 16), 'the checkout names the cart'],
+            [0, '', '', 'no cart to name'],
+        ];
+
+        $GLOBALS['__twoinc_test_wc_orders'] = [42 => new StubOrder()];
+        WC()->session = new StubSession();
+
+        foreach ($cases as $case) {
+            list($order_id, $session_customer, $expected, $description) = $case;
+            $GLOBALS['__twoinc_test_query_vars'] = ['order-pay' => $order_id];
+            $GLOBALS['__twoinc_test_session_customer'] = $session_customer;
+
+            TinyAssert::same($expected, WC_Twoinc_Checkout::capture_scope(), $description);
+        }
+
+        $GLOBALS['__twoinc_test_query_vars'] = [];
+        $GLOBALS['__twoinc_test_session_customer'] = '';
+    }
+
+    /**
+     * Given a signed-in buyer whose company reaches order creation; When the
+     * order is created; Then the remembered pair carries that order's scope,
+     * so no other page replays it.
+     */
+    private static function testTheRememberedCompanyIsStampedWithTheOrderItWasCapturedOn(): void
+    {
+        $order = new class extends StubOrder {
+            public function update_meta_data($key, $value)
+            {
+            }
+
+            public function save()
+            {
+            }
+
+            public function set_billing_country($value)
+            {
+            }
+
+            public function set_billing_company($value)
+            {
+            }
+
+            public function set_billing_phone($value)
+            {
+            }
+        };
+        $order->payment_method = WC_Twoinc_Brand::get('gateway_id');
+
+        $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+        $GLOBALS['__twoinc_test_notices'] = [];
+        $GLOBALS['__twoinc_test_logs'] = [];
+        $GLOBALS['__twoinc_test_user_meta'] = [];
+        $GLOBALS['__twoinc_test_user_id'] = 7;
+        WC()->session = new StubSession();
+        $_POST = ['company_id' => '923456789', 'company_name' => 'Invoice Holdings AS'];
+
+        try {
+            $gateway = self::stampingGateway();
+            // The user meta is written before the order request, so a refused
+            // transport is enough to read the stamp back.
+            $gateway->response = new WP_Error('http', 'down');
+            $gateway->process_payment(42);
+
+            $meta = $GLOBALS['__twoinc_test_user_meta'][7] ?? [];
+            TinyAssert::same(
+                '923456789',
+                $meta[WC_Twoinc_Brand::prefixed_name('company_id')] ?? null,
+                'the company must still be remembered'
+            );
+            TinyAssert::same(
+                'order:42',
+                $meta[WC_Twoinc_Brand::prefixed_name('company_scope')] ?? null,
+                'the remembered company must carry the order it was captured on'
+            );
+        } finally {
+            $_POST = [];
+            $GLOBALS['__twoinc_test_user_id'] = 0;
+            $GLOBALS['__twoinc_test_user_meta'] = [];
+        }
+    }
+
+    private static function stampingGateway()
+    {
+        return new class () extends WC_Twoinc {
+            public $response = null;
+
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_merchant_id()
+            {
+                return 'mid';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'api_key' ? 'key' : ($empty_value ?? '');
+            }
+
+            public function get_supported_buyer_countries()
+            {
+                return null;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                return $this->response;
+            }
+        };
+    }
+}
+
 BrandConfigSpec::runAll();
 AnchorOnlyHtmlSpec::runAll();
 SubtitleSaveValidationSpec::runAll();
+CaptureScopeSpec::runAll();
 print("All tests passed.\n");
