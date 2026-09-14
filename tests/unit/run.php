@@ -11272,10 +11272,17 @@ final class BrandConfigSpec
                 ['pay-now', ['pay-now' => 7], 'GB', 'a renamed endpoint resolves under its own slug'],
                 ['pay-now', ['order-pay' => 7], 'NO', 'the literal slug is not read once the endpoint is renamed'],
                 ['', ['order-pay' => 7], 'GB', 'a blank setting falls back to the default slug'],
+                // What a default WordPress install has: the option row was never
+                // written, so `get_option()` answers with its own default.
+                [null, ['order-pay' => 7], 'GB', 'an unset option falls back to the default slug'],
                 ['order-pay', [], 'NO', 'off the endpoint there is no order to read'],
             ] as [$slug, $query_vars, $expected, $description]
         ) {
-            $GLOBALS['__twoinc_test_options']['woocommerce_checkout_pay_endpoint'] = $slug;
+            if ($slug === null) {
+                unset($GLOBALS['__twoinc_test_options']['woocommerce_checkout_pay_endpoint']);
+            } else {
+                $GLOBALS['__twoinc_test_options']['woocommerce_checkout_pay_endpoint'] = $slug;
+            }
             $GLOBALS['__twoinc_test_query_vars'] = $query_vars;
 
             TinyAssert::same(

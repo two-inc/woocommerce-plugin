@@ -64,6 +64,6 @@
 </div>
 <script>
     jQuery(function(){
-        jQuery('#order_review #payment').prepend(jQuery('.custom-checkout'))
+        jQuery('#order_review #payment').prepend(jQuery('.twoinc-order-pay'))
     })
 </script>

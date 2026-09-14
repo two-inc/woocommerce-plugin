@@ -367,45 +367,91 @@ describe("billing country switch", () => {
       expect(capturedCompany()).toEqual({ name: "Ejemplo SL", id: "B12345678" });
     });
 
+    // views/woocommerce_order_pay.php's own shape — no `form[name="checkout"]`,
+    // and the country marked `selected` server-side.
+    function buildOrderPayForm(offered, orderCountry) {
+      document.body.innerHTML = [
+        '<form id="order_review" method="post">',
+        '  <div id="payment">',
+        '    <div class="checkout woocommerce-checkout custom-checkout twoinc-order-pay">',
+        '      <div class="twoinc-inp-container hidden">',
+        '        <div id="billing_country_field">',
+        '          <select name="billing_country" id="billing_country">',
+        offered
+          .map(function (code) {
+            return (
+              '            <option value="' +
+              code +
+              '"' +
+              (code === orderCountry ? " selected" : "") +
+              ">" +
+              code +
+              "</option>"
+            );
+          })
+          .join("\n"),
+        "          </select>",
+        "        </div>",
+        "      </div>",
+        harness.companyRowsMarkup({}),
+        "    </div>",
+        "    <input type='radio' id='payment_method_woocommerce-gateway-tillit'",
+        "           name='payment_method' value='woocommerce-gateway-tillit' />",
+        "  </div>",
+        "</form>"
+      ].join("\n");
+    }
+
     test.each([
       {
-        onOrderPay: true,
+        offered: ["GB", "ES"],
+        orderCountry: "GB",
         expected: "GB",
         description: "the pay-for-order page keeps the country resolved from the order"
       },
       {
-        onOrderPay: false,
-        expected: "ES",
-        description: "the checkout page still restores the country it stored"
+        offered: ["ES", "FR"],
+        orderCountry: "GB",
+        expected: "FR",
+        description: "a shop not selling to the order's country pins no country at all"
       }
-    ])("$description", ({ onOrderPay, expected }) => {
-      // The pay-for-order country is the order's, written server-side; the
-      // replay would hand it a country stored by another checkout in the same
-      // session, and the gate on submit would then run against that (ABN-554).
-      window.sessionStorage.setItem(
-        "checkoutInputs",
-        JSON.stringify([
-          {
-            htmlTag: "SELECT",
-            id: "billing_country",
-            name: "billing_country",
-            val: "ES",
-            optionHtml: '<option value="ES">Spain</option>'
-          }
-        ])
-      );
-      if (onOrderPay) {
-        ctx
-          .$("#billing_country_field")
-          .wrap(
-            '<div class="checkout woocommerce-checkout custom-checkout twoinc-order-pay"></div>'
-          );
-      }
+    ])("$description", ({ offered, orderCountry, expected }) => {
+      // The replay would otherwise hand the order the country another checkout
+      // stored this session. Unless the shop sells to no such country: nothing
+      // is marked selected then, and the field reads the browser's own first
+      // option, which is no more the order's than the stored one (ABN-554).
+      buildOrderPayForm(offered, orderCountry);
+      harness.seedCheckoutInputs([
+        {
+          htmlTag: "SELECT",
+          id: "billing_country",
+          name: "billing_country",
+          val: "FR",
+          optionHtml: '<option value="FR">France</option>'
+        }
+      ]);
 
       ctx.Twoinc.getInstance().initialize(true);
 
       expect(ctx.$("#billing_country").val()).toBe(expected);
       expect(ctx.helper.lastObservedCountry).toBe(expected);
+    });
+
+    test("the checkout page still restores the country it stored", () => {
+      harness.seedCheckoutInputs([
+        {
+          htmlTag: "SELECT",
+          id: "billing_country",
+          name: "billing_country",
+          val: "ES",
+          optionHtml: '<option value="ES">Spain</option>'
+        }
+      ]);
+
+      ctx.Twoinc.getInstance().initialize(true);
+
+      expect(ctx.$("#billing_country").val()).toBe("ES");
+      expect(ctx.helper.lastObservedCountry).toBe("ES");
     });
 
     test("the FIRST country ever seen is adopted, not acted on", () => {

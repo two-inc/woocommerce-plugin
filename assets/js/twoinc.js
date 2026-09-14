@@ -2907,11 +2907,6 @@ let twoincDomHelper = {
       }
     }
   },
-  /**
-   * The pay-for-order page's country field, or null on every other surface —
-   * its value is resolved server-side from the order being paid for, so it is
-   * the one country `loadStorageInputs()` must not replay over (ABN-554).
-   */
   orderPayCountryField: function () {
     return document.querySelector(".twoinc-order-pay #billing_country");
   },
@@ -5301,11 +5296,16 @@ class Twoinc {
     twoincDomHelper.loadUserMetaInputs();
     if (loadSavedInputs) {
       const orderPayCountryField = twoincDomHelper.orderPayCountryField();
-      const orderPayCountry = orderPayCountryField ? orderPayCountryField.value : null;
+      // The option the VIEW marked, not the field's value: a shop that restricts
+      // its selling countries offers the order's country no option at all, and
+      // the field then reads the browser's own fallback pick (ABN-554).
+      const orderPayCountryOption = orderPayCountryField
+        ? orderPayCountryField.querySelector("option[selected]")
+        : null;
       twoincDomHelper.loadStorageInputs();
-      // A stored country from another checkout in this session would otherwise
-      // stand in for the country of the order being paid for (ABN-554).
-      if (orderPayCountryField) orderPayCountryField.value = orderPayCountry;
+      // Otherwise a country stored by another checkout this session stands in for
+      // the order's own.
+      if (orderPayCountryOption) orderPayCountryField.value = orderPayCountryOption.value;
       // loadStorageInputs() writes `#company_id`/`#billing_company` with bare
       // `.val()` assignments, so unlike the pass above it re-toggles nothing
       // and captures nothing. For a guest that pass is the only one that ever
