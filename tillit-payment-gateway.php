@@ -106,6 +106,12 @@ function load_twoinc_classes()
     // every request is safe.
     add_action('woocommerce_cart_calculate_fees', ['WC_Twoinc_Payment_Terms', 'apply_cart_fee']);
 
+    // Same reason again (ABN-554): the Store API empties the cart on a REST
+    // request that never instantiates a payment gateway, so a rotation
+    // registered in the constructor misses it and the ended cart's token
+    // becomes the next cart's.
+    add_action('woocommerce_cart_emptied', ['WC_Twoinc_Checkout', 'rotate_cart_scope']);
+
     // FX rate cache (TWO-25104): a recurring 6h Action Scheduler refresh
     // keeps the spot table warm so checkout conversions (min-order gates,
     // fixed-surcharge amounts) are served from cache. Both registrations

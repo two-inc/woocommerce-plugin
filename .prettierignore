@@ -2,3 +2,6 @@
 # Formatting it here would break that equality and the edit-lock digest with it.
 # See AGENTS.md.
 assets/js/company-search-panel.js
+
+# Emitted by tests/unit/run.php; reformatting it here would fail that spec's staleness check.
+tests/js/fixtures/capture-scope.generated.json

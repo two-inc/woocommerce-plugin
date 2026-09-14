@@ -4635,12 +4635,27 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
 
-            update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), $_POST['twoinc_company_id']);
-            update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), $_POST['twoinc_billing_company']);
+            $posted_company_id = (string) ($_POST['twoinc_company_id'] ?? '');
+            $posted_company_name = (string) ($_POST['twoinc_billing_company'] ?? '');
+            // Every profile form posts these back prefilled, so a password
+            // change reaches here carrying the buyer's captured company. Only
+            // an actual edit makes it the merchant's own (ABN-554).
+            $company_changed =
+                $posted_company_id !== (string) get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), true)
+                || $posted_company_name !== (string) get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), true);
+
+            update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), $posted_company_id);
+            update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), $posted_company_name);
             update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('department'), $_POST['twoinc_department']);
             update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('project'), $_POST['twoinc_project']);
-            // An admin-set company is no capture, and the stamp one left names a pair that is gone (ABN-554).
-            delete_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_scope'));
+
+            if ($company_changed) {
+                update_user_meta(
+                    $user_id,
+                    WC_Twoinc_Brand::prefixed_name('company_scope'),
+                    WC_Twoinc_Checkout::SCOPE_ADMIN
+                );
+            }
         }
 
         /**
@@ -5296,13 +5311,19 @@ if (!class_exists('WC_Twoinc')) {
                 }
                 // A remembered company this order does not carry may replay nowhere: the scopes it was captured in are not known here (ABN-554).
                 $remembered = (string) get_the_author_meta(WC_Twoinc_Brand::prefixed_name('company_id'), $user_id);
-                update_user_meta(
-                    $user_id,
-                    WC_Twoinc_Brand::prefixed_name('company_scope'),
-                    $remembered !== '' && $remembered === (string) $company_id
-                        ? WC_Twoinc_Checkout::capture_scopes_for_order($order)
-                        : WC_Twoinc_Checkout::SCOPE_NONE
-                );
+                $order_carries_it = $remembered !== '' && $remembered === (string) $company_id;
+                $stamp = (string) get_the_author_meta(WC_Twoinc_Brand::prefixed_name('company_scope'), $user_id);
+                // Ordering on an admin-set company does not turn it into a
+                // capture of this cart, which would end its reach at the order.
+                if (!($order_carries_it && $stamp === WC_Twoinc_Checkout::SCOPE_ADMIN)) {
+                    update_user_meta(
+                        $user_id,
+                        WC_Twoinc_Brand::prefixed_name('company_scope'),
+                        $order_carries_it
+                            ? WC_Twoinc_Checkout::capture_scopes_for_order($order)
+                            : WC_Twoinc_Checkout::SCOPE_NONE
+                    );
+                }
             }
 
             $response = $this->make_request('/v1/order', WC_Twoinc_Helper::compose_twoinc_order(

@@ -263,6 +263,9 @@ let twoincCompanyCapture = {
   /** Attribute marking a value as plugin-written rather than buyer-typed. */
   PROVENANCE_ATTR: "data-two-plugin-written",
 
+  /** The primary role's own hidden name carrier, live only in tile placement. */
+  TILE_NAME_CARRIER: "#company_name",
+
   /**
    * In tile placement `#billing_company` is the buyer's own address line and
    * may hold a different company, so the capture keeps its own hidden carrier.
@@ -271,8 +274,18 @@ let twoincCompanyCapture = {
   nameFieldSelector: function (role) {
     const key = role || twoincAddressRoles.primary();
     return twoincSelectWooHelper.isTileLocation() && key === twoincAddressRoles.primary()
-      ? "#company_name"
+      ? twoincCompanyCapture.TILE_NAME_CARRIER
       : twoincAddressRoles.field(key, "company");
+  },
+
+  /** Both of a role's name carriers, since the placement decides which one is live on this page. */
+  nameFieldSelectors: function (role) {
+    const key = role || twoincAddressRoles.primary();
+    const selectors = [twoincAddressRoles.field(key, "company")];
+    if (key === twoincAddressRoles.primary()) {
+      selectors.push(twoincCompanyCapture.TILE_NAME_CARRIER);
+    }
+    return selectors;
   },
 
   nameField: function (role) {
@@ -2119,15 +2132,28 @@ let twoincCaptureScope = {
   /** sessionStorage key holding the scope the `checkoutInputs` snapshot was taken in. */
   STAMP_KEY: "twoincCaptureScope",
 
-  /** Every field a company capture writes, across both address roles. */
-  COMPANY_FIELD_IDS: [
-    "company_id",
-    "company_name",
-    "billing_company",
-    "billing_company_display",
-    "shipping_company",
-    "shipping_company_id"
-  ],
+  /** The one stamp a company set by hand in a WordPress user profile carries (ABN-554). */
+  SCOPE_ADMIN: "admin",
+
+  /**
+   * Every id a company capture writes, asked of the controls that write them
+   * so a field added to one can never be missed here (ABN-554).
+   */
+  companyFieldIds: function () {
+    const ids = [];
+    const add = function (selector) {
+      const id = twoincUtilHelper.blankToEmpty(selector).replace(/^#/, "");
+      if (id !== "" && ids.indexOf(id) < 0) ids.push(id);
+    };
+    const registry = twoincCompanyCapture.controllerRegistry;
+    Object.keys(registry).forEach(function (role) {
+      add(registry[role].addressFieldSelector);
+      add(registry[role].tileFieldSelector);
+      add(twoincCompanyCapture.numberFieldSelector(role));
+      twoincCompanyCapture.nameFieldSelectors(role).forEach(add);
+    });
+    return ids;
+  },
 
   /** The scope of the page being loaded, server-resolved. */
   current: function () {
@@ -2138,7 +2164,12 @@ let twoincCaptureScope = {
   belongsHere: function (scope) {
     const here = twoincCaptureScope.current();
     if (here === "") return false;
-    return twoincUtilHelper.blankToEmpty(scope).split(" ").indexOf(here) >= 0;
+    return twoincCaptureScope.scopeList(scope).indexOf(here) >= 0;
+  },
+
+  /** Whole elements, so a scope can never match on a prefix or a substring of another. */
+  scopeList: function (scope) {
+    return twoincUtilHelper.blankToEmpty(scope).split(" ");
   },
 
   stamp: function () {
@@ -2150,27 +2181,18 @@ let twoincCaptureScope = {
   },
 
   /** Crossing scopes invalidates the capture, not the address the buyer typed (ABN-554). */
-  forgetCompany: function (inputs) {
-    const kept = (inputs || []).filter(function (inp) {
-      return twoincCaptureScope.COMPANY_FIELD_IDS.indexOf(inp.id) < 0;
+  withoutCompany: function (inputs) {
+    const company = twoincCaptureScope.companyFieldIds();
+    return (inputs || []).filter(function (inp) {
+      return company.indexOf(inp.id) < 0;
     });
-    sessionStorage.setItem("checkoutInputs", JSON.stringify(kept));
-    twoincCaptureScope.stamp();
-    // Written by the same save, so a mode left behind would outlive the capture it describes.
-    for (let i = sessionStorage.length - 1; i >= 0; i--) {
-      const key = sessionStorage.key(i);
-      if (key && key.indexOf(twoincCompanyCapture.CAPTURE_MODE_KEY) === 0) {
-        sessionStorage.removeItem(key);
-      }
-    }
-    return kept;
   },
 
-  /** An unscoped record was set by hand in the admin profile, so it belongs to the buyer rather than to one cart (ABN-554). */
+  /** Only the explicit admin marker belongs to the buyer; every other stamp names the pages it may replay in (ABN-554). */
   userMetaCompany: function () {
     const meta = window.twoinc || {};
     const scope = twoincUtilHelper.blankToEmpty(meta.company_scope);
-    if (scope !== "" && !twoincCaptureScope.belongsHere(scope)) {
+    if (scope !== twoincCaptureScope.SCOPE_ADMIN && !twoincCaptureScope.belongsHere(scope)) {
       return { billing_company: "", company_id: "" };
     }
     return {
@@ -2836,10 +2858,10 @@ let twoincDomHelper = {
     }
     // A page that cannot name its own scope judges nothing, and must leave the snapshot for one that can.
     if (twoincCaptureScope.current() === "") return null;
-    if (!twoincCaptureScope.belongsHere(twoincCaptureScope.storedScope())) {
-      inputs = twoincCaptureScope.forgetCompany(inputs);
-    }
-    return inputs;
+    if (twoincCaptureScope.belongsHere(twoincCaptureScope.storedScope())) return inputs;
+    // Stripped for this reader alone: rewriting the stored snapshot here would
+    // hand another cart's address fields to whichever caller read first.
+    return twoincCaptureScope.withoutCompany(inputs);
   },
   getCheckoutInput: function (htmlTag, inpType, inpName) {
     let checkoutInputs = twoincDomHelper.storedCheckoutInputs();

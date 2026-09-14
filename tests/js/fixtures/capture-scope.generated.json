@@ -1,0 +1,15 @@
+{
+    "cart_scope": "cart:65fdc626e3d80473",
+    "order_scopes": "order:42 cart:65fdc626e3d80473",
+    "scope_admin": "admin",
+    "scope_none": "none",
+    "registered_company_fields": [
+        "billing_company",
+        "billing_company_display",
+        "company_id",
+        "company_name",
+        "shipping_company",
+        "shipping_company_display",
+        "shipping_company_id"
+    ]
+}
