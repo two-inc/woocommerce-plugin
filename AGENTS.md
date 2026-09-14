@@ -113,16 +113,22 @@ Vendored assets
   a Magento-side checkout loads it with no RequireJS, jQuery or Knockout, so a
   framework dependency added to either copy lands in a place that cannot satisfy
   it.
-- **The unsupported-country gate withdraws SEARCH, never manual entry.**
-  `syncCompanySearchAvailability()` in `assets/js/twoinc.js` hands the answer to
-  the panel's `setDisabled()`, which hides the query row; the registered-company
-  chip goes with it. The panel itself still opens and the company field never
-  carries the native `disabled` flag, because the chips inside the panel are the
-  buyer's only route to manual entry and the sole-trader flow. Anything that
-  disables that field, or closes or refuses the panel on an uncovered country,
-  leaves a buyer there with no way to name their company at all (ABN-525). The
-  country the gate reads is the wider company-search coverage, one global list —
-  not the sole-trader chip's own per-country registry lookup, which is a
+- **The country gates withdraw SEARCH while a mode is left, and the whole
+  CONTROL when none is.** `syncCompanySearchAvailability()` in
+  `assets/js/twoinc.js` hands the registry answer to the panel's
+  `setDisabled()`, which hides the query row and the registered-company chip
+  with it; the panel still opens, so the sole-trader route stays reachable
+  (ABN-525). `companySearchIsOffered()` is the other half: false where neither
+  registry search nor sole trader can answer for the country, and false where
+  the merchant record's buyer-country allowlist excludes it. Then the control is
+  unmounted and `toggleBusinessFields()` puts WooCommerce's own company field on
+  screen in its place — the capture mode stays `search`, since the layout
+  changed and the mode did not (ABN-585). The company field never carries the
+  native `disabled` flag, and a company-name field is always on screen —
+  exactly one, except in payment-tile placement, where the tile row and the
+  address area's own `#billing_company_field` are both shown by design. The
+  registry gate reads the wider company-search coverage, one global
+  list — not the sole-trader chip's own per-country registry lookup, which is a
   different and smaller list.
 - **The chip row is shown whenever it offers a mode the buyer is not already
   in**, not merely whenever it holds two chips. A lone chip for the current mode

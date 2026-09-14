@@ -868,6 +868,9 @@ class TwoCompanySearch {
   /** Class toggled on the field wrap while the billing/shipping country falls outside the registry's coverage. */
   companySearchUnsupportedCountryClass = "twoinc-company-search-country-unsupported";
 
+  /** The last `companySearchIsOffered()` answer, so the layout swaps on the change alone. */
+  companySearchOffered = null;
+
   /** `window` is page-wide, so the viewport listener is bound at most once. */
   fieldWrapRefreshBound = false;
   fieldWrapRefreshTimer = null;
@@ -1216,6 +1219,14 @@ class TwoCompanySearch {
     const panel = this.ensurePanel();
     if (!panel) return null;
 
+    // Binding would leave a combobox, every mode inside it withdrawn, over the
+    // only field the buyer can name their company in (ABN-585).
+    if (!this.companySearchIsOffered()) {
+      panel.unmount();
+      this.syncCompanySearchAvailability();
+      return null;
+    }
+
     panel.bind();
     // The gate is answered page-wide and can already be resolved before this
     // control has a panel to carry it, and nothing re-asks without a country
@@ -1343,12 +1354,32 @@ class TwoCompanySearch {
   }
 
   /**
+   * Whether the search control is offered for this role's country at all
+   * (ABN-585). No means no panel rather than a narrower one: the buyer gets
+   * the plain company field, which is the one that posts.
+   */
+  companySearchIsOffered() {
+    if (!twoincSupportedBuyerCountries.isSupported(this.currentCountry())) return false;
+    if (this.companySearchCountryIsSupported()) return true;
+    // Pending reads as offered, as the registry gate's own null does: an
+    // answer that may restore the control is not worth a visible teardown.
+    return this.soleTrader.isAvailable() || this.soleTrader.availabilityIsPending();
+  }
+
+  /** Edge-triggered: the first answer only records itself. */
+  syncCompanySearchOffered() {
+    const offered = this.companySearchIsOffered();
+    const known = this.companySearchOffered !== null;
+    if (this.companySearchOffered === offered) return;
+    this.companySearchOffered = offered;
+    if (known) twoincDomHelper.toggleBusinessFields();
+  }
+
+  /**
    * Withdraw the registry search once the country falls outside the registry's
-   * coverage, and restore it once the country is back inside. The panel itself
-   * stays openable: its chips are the buyer's only route to manual entry and
-   * the sole-trader flow, so disabling the field or closing the panel here
-   * left a buyer in an uncovered country unable to name their company at all
-   * (ABN-525).
+   * coverage, and restore it once the country is back inside. The field never
+   * carries the native `disabled` flag — a buyer must always be able to type a
+   * company name (ABN-525).
    */
   syncCompanySearchAvailability() {
     const available = this.registeredSearchIsAvailable();
@@ -1357,6 +1388,7 @@ class TwoCompanySearch {
       .toggleClass(this.companySearchUnsupportedCountryClass, !available);
     if (this.panel) this.panel.setDisabled(!available);
     this.syncModeChips();
+    this.syncCompanySearchOffered();
   }
 
   /**
@@ -1762,11 +1794,14 @@ class TwoCompanySearch {
       $slot.append($row);
     }
 
-    const show = twoincCompanyCapture.modeFor(this.role) !== "manual";
+    const show =
+      twoincCompanyCapture.modeFor(this.role) !== "manual" && this.companySearchIsOffered();
     $row.toggleClass("hidden", !show);
     $slot.toggleClass("hidden", !show);
 
-    if (show) this.attach();
+    // Called even when the row is withdrawn — that is what unmounts a panel
+    // the tile was carrying before the country moved (ABN-585).
+    this.rebindUnlessManual();
   }
 
   /**
@@ -2127,6 +2162,19 @@ function twoincSoleTraderLaunching() {
 let twoincCompanySearchControls = [twoincSelectWooHelper, twoincSelectWooHelperShipping];
 
 /**
+ * The buyer countries the merchant record allows, mirroring
+ * `WC_Twoinc::is_buyer_country_supported()` (ABN-585). Absent is no allowlist
+ * and restricts nothing; an empty list is a restriction nothing satisfies.
+ */
+let twoincSupportedBuyerCountries = {
+  isSupported: function (country) {
+    const allowlist = window.twoinc && window.twoinc.supported_buyer_countries;
+    if (!Array.isArray(allowlist)) return true;
+    return !!country && allowlist.indexOf(country.toUpperCase()) !== -1;
+  }
+};
+
+/**
  * The ISO country codes the company registry search covers, from Two's API —
  * the ordinary company-search control's own gate, parallel to
  * `twoincSoleTrader.availabilityByCountry` but a single global list rather
@@ -2182,11 +2230,16 @@ let twoincSupportedSearchCountries = {
 //
 // Rooted on `document`: this file is enqueued into the HEAD, where
 // `document.body` is still null and a binding on it reaches nothing (ABN-554).
-jQuery(document).on("twoinc_supported_search_countries_updated", function () {
-  twoincCompanySearchControls.forEach(function (control) {
-    control.syncCompanySearchAvailability();
+// Namespaced and unbound first so a second evaluation of this script replaces
+// the handler rather than stacking a second one bound to the first
+// evaluation's controls.
+jQuery(document)
+  .off("twoinc_supported_search_countries_updated.twoincSupportedCountries")
+  .on("twoinc_supported_search_countries_updated.twoincSupportedCountries", function () {
+    twoincCompanySearchControls.forEach(function (control) {
+      control.syncCompanySearchAvailability();
+    });
   });
-});
 
 // Back-compat alias: every flow that predates the shipping instance and is
 // genuinely invoice-scoped by design (order-intent, order restore from user
@@ -2340,13 +2393,15 @@ let twoincDomHelper = {
     // `adoptSoleTraderBuyer()` never swaps its own search field away). Only
     // manual entry takes it away, handing the name over to the native field,
     // and is reachable only via `enterManualCompanyEntry` — never as a side
-    // effect of Two being unavailable, of the merchant's admin setting, or of
-    // the billing country: the control is mounted for every country
-    // (TWO-25232), and a country the lookup returns nothing for reports that
-    // through the dropdown like any other empty search. WHERE the control
-    // renders is `company_search_location`'s business, below; never whether
-    // it's active.
-    const showCompanySearch = twoincCompanyCapture.mode !== "manual";
+    // effect of Two being unavailable or of the merchant's admin setting:
+    // WHERE the control renders is `company_search_location`'s business,
+    // below, never whether it's active.
+    //
+    // The country takes it away only where no mode is left for it (ABN-585) —
+    // the name-only layout, capture mode still "search". A country the lookup
+    // merely returns nothing for still reports that through the dropdown.
+    const showCompanySearch =
+      twoincCompanyCapture.mode !== "manual" && twoincSelectWooHelper.companySearchIsOffered();
 
     // The capture pair's own rows are hidden but posted; in tile placement the
     // stock address row stays, whatever the tile shows.
@@ -2367,7 +2422,10 @@ let twoincDomHelper = {
       jQuery(twoincAddressRoles.field(twoincAddressRoles.delivery(), "country")).length > 0;
     if (hasShippingAddress) {
       allTargets.push("#shipping_company_display_field", "#shipping_company_field");
-      if (twoincCompanyCapture.modeFor(twoincAddressRoles.delivery()) !== "manual") {
+      if (
+        twoincCompanyCapture.modeFor(twoincAddressRoles.delivery()) !== "manual" &&
+        twoincSelectWooHelperShipping.companySearchIsOffered()
+      ) {
         visibleTargets.push("#shipping_company_display_field");
       } else {
         visibleTargets.push("#shipping_company_field");
@@ -3655,6 +3713,13 @@ function createSoleTraderController(companySearch) {
       return controller.availabilityByCountry[country] === true;
     },
 
+    /** Countries whose availability answer is still on the wire. */
+    pendingAvailability: {},
+
+    availabilityIsPending: function () {
+      return controller.pendingAvailability[controller.currentCountry()] === true;
+    },
+
     /**
      * Re-evaluate the toggle after every checkout update or country change.
      * Availability is decided server-side by the registry answer for the
@@ -3677,8 +3742,14 @@ function createSoleTraderController(companySearch) {
         controller.apply(controller.availabilityByCountry[country]);
         return;
       }
+      controller.pendingAvailability[country] = true;
       jQuery
         .get(cfg.availability_url, { country: country, csrf_token: cfg.csrf_token })
+        // Registered first, so the handlers below run with the flag already
+        // cleared — they are what re-reads it.
+        .always(function () {
+          delete controller.pendingAvailability[country];
+        })
         .done(function (response) {
           const available = !!(
             response &&
@@ -3717,8 +3788,10 @@ function createSoleTraderController(companySearch) {
         controller.hide();
       }
       // The mode chip lives inside the company-search panel, not here —
-      // re-sync so an availability change while it's open adds/removes live.
+      // re-sync so an availability change while it's open adds/removes live,
+      // and so a country left with no mode at all drops the control (ABN-585).
       companySearch.syncModeChips();
+      companySearch.syncCompanySearchOffered();
     },
 
     hide: function () {

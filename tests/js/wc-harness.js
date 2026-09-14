@@ -137,7 +137,8 @@ function loadPluginSource() {
       " twoincCompanyCapture," +
       " twoincSelectWooHelper, twoincSelectWooHelperShipping, twoincDomHelper," +
       " twoincTermChips, twoincTermsConsent, twoincSoleTrader," +
-      " twoincSupportedSearchCountries, Twoinc, TwoCompanySearch });"
+      " twoincSupportedSearchCountries, twoincCompanySearchControls," +
+      " Twoinc, TwoCompanySearch });"
   );
   if (!exported || typeof exported.twoincSelectWooHelper !== "object") {
     throw new Error("harness: twoinc.js did not yield its top-level bindings");
@@ -157,14 +158,24 @@ function loadPluginSource() {
  * bootstrap is left to no-op and `window.twoinc` is installed afterwards.
  *
  * @param {Object} [twoinc] value for `window.twoinc`, installed post-load
+ * @param {Object} [options] `keepDocumentListeners: true` leaves a previous
+ *        load's document listeners in place, as a browser does — for the one
+ *        suite that tests what a second evaluation of the script does
  * @returns {{helper: Object, util: Object, roles: Object,
  *   capture: Object, dom: Object, termChips: Object, soleTrader: Object,
  *   Twoinc: Function, TwoCompanySearch: Function, $: Function, twoinc: Object}}
  */
-function loadTwoinc(twoinc) {
+function loadTwoinc(twoinc, options) {
   const $ = installJQuery();
   installWcParams();
   installCompanySearchPanel();
+  // Belt and braces over the source's own off-then-on guard: each load leaves
+  // a document-level listener bound to that load's controls, and left in place
+  // they stack up and act on the next test's DOM. Namespaced, so a listener a
+  // test bound itself survives.
+  if (!(options && options.keepDocumentListeners)) {
+    $(document).off("twoinc_supported_search_countries_updated.twoincSupportedCountries");
+  }
   const exported = loadPluginSource();
   const settings = Object.assign(
     {
@@ -197,6 +208,9 @@ function loadTwoinc(twoinc) {
     termsConsent: exported.twoincTermsConsent,
     soleTrader: exported.twoincSoleTrader,
     supportedSearchCountries: exported.twoincSupportedSearchCountries,
+    // The controller's own list of mounted controls, which the Blocks skin
+    // mounts by iterating.
+    controls: exported.twoincCompanySearchControls,
     // The Twoinc class itself, for the code paths that reach the singleton.
     // Safe to construct here: the constructor only initialises fields, and
     // every call re-evaluates the source, so the `instance` a test creates

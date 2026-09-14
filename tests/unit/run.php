@@ -368,6 +368,7 @@ final class BrandConfigSpec
             'testApiProxyOrderIntentPostsTheDecodedBodyOrRefuses',
             'testApiProxyOrderIntentResolvesTheMerchantServerSide',
             'testCheckoutBootstrapProxiesEveryCallAndPublishesNoToken',
+            'testCheckoutBootstrapPublishesTheBuyerCountryAllowlist',
             'testRateLimitAllowsTheWholeAllowanceThenRefuses',
             'testRateLimitAllowanceReturnsOnceTheWindowHasPassed',
             'testRateLimitBucketsAreSeparatePerRouteAndPerClient',
@@ -14956,6 +14957,65 @@ final class BrandConfigSpec
         TinyAssert::same('ACME', $payload['buyer']['company']['company_name']);
         // Anything outside the allowlist is dropped rather than relayed.
         TinyAssert::same(false, array_key_exists('invoice_details', $payload));
+    }
+
+    /**
+     * ABN-585: the buyer moves country without a page load, so the company
+     * search control's own gate reads the merchant's allowlist in the browser.
+     * Absent has to arrive as null, which restricts nothing — never as an
+     * empty list, which restricts everything.
+     */
+    private static function testCheckoutBootstrapPublishesTheBuyerCountryAllowlist(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public $responses = [];
+
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_merchant_id()
+            {
+                return 'mid';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'api_key' ? 'key' : ($empty_value ?? '');
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                return array_shift($this->responses) ?: ['response' => ['code' => 200], 'body' => '{}'];
+            }
+        };
+
+        $bootstrap = new ReflectionMethod(WC_Twoinc_Checkout::class, 'prepare_twoinc_object');
+        $bootstrap->setAccessible(true);
+        $checked = WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on');
+        $attempted = WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on');
+
+        // [merchant record, what the browser must be handed, why].
+        $cases = [
+            [[], null, 'no allowlist reaches the browser as null'],
+            [['supported_buyer_countries' => ['NL', 'de']], ['NL', 'DE'], 'a list arrives normalised'],
+            [['supported_buyer_countries' => []], [], 'an empty list arrives as one, not as absent'],
+        ];
+
+        foreach ($cases as [$record, $expected, $description]) {
+            WC_Twoinc::reset_merchant_record_memo();
+            unset($GLOBALS['__twoinc_test_options'][$checked], $GLOBALS['__twoinc_test_options'][$attempted]);
+            $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode($record)]];
+
+            $params = $bootstrap->invoke(new WC_Twoinc_Checkout($gateway), []);
+
+            TinyAssert::true(
+                array_key_exists('supported_buyer_countries', $params),
+                $description . ' (the key must be published at all)'
+            );
+            TinyAssert::same($expected, $params['supported_buyer_countries'], $description);
+        }
     }
 
     private static function testApiProxyRelaysAnEmptyUpstreamBodyAsAnObject(): void
