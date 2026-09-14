@@ -300,15 +300,13 @@ describe("TWO-40 — captured-company write path", () => {
     });
 
     test("a company restored from the SESSION pass survives it too", () => {
-      // A guest has no user-meta echo, so loadStorageInputs() is the pass that
-      // supplies their pair — and it assigns both fields with a bare `.val()`,
-      // capturing nothing. Driven through initialize() rather than by calling
-      // the restore directly, because the whole gap was a restore that ran at
-      // the wrong point in that sequence.
-      harness.seedCheckoutInputs([
-        { htmlTag: "INPUT", id: "billing_company", type: "text", val: "ACME Widgets Ltd" },
-        { htmlTag: "INPUT", id: "company_id", type: "text", val: "12345678" }
-      ]);
+      // A guest's pair reaches the page in the bootstrap, from the WC session
+      // the capture was written to, and the restore assigns both fields with a
+      // bare `.val()`, capturing nothing. Driven through initialize() rather
+      // than by calling the restore directly, because the whole gap was a
+      // restore that ran at the wrong point in that sequence.
+      window.twoinc.billing_company = "ACME Widgets Ltd";
+      window.twoinc.company_id = "12345678";
 
       ctx.Twoinc.getInstance().initialize(true);
 

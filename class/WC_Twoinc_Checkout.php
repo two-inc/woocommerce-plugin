@@ -12,14 +12,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
     {
         private $wc_twoinc;
 
-        /** WC session key holding the token that identifies the current cart (ABN-554). */
-        const CART_SCOPE_SESSION_KEY = 'twoinc_capture_cart';
-
-        /** Stamp for a remembered company no page may replay. */
-        const SCOPE_NONE = 'none';
-
-        /** Stamp for a company typed into a user profile by hand, which belongs to the buyer rather than to one cart. */
-        const SCOPE_ADMIN = 'admin';
+        /** WC session key holding the company captured in the current cart (ABN-554). */
+        const CAPTURED_COMPANY_SESSION_KEY = 'twoinc_captured_company';
 
         public function __construct($wc_twoinc)
         {
@@ -413,112 +407,127 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
-         * The cart, or on the pay-for-order page the order, a company capture
-         * belongs to (ABN-554).
+         * The clearing hooks run on requests that construct no payment
+         * gateway (the Store API's own cart routes), so they are registered
+         * by loading this class rather than by instantiating anything
+         * (ABN-554).
          *
-         * @return string
+         * @return void
          */
-        public static function capture_scope(bool $mint = true): string
+        public static function register_capture_memory_hooks()
         {
-            $order = self::get_order_being_paid();
-            if ($order) {
-                return 'order:' . $order->get_id();
-            }
-
-            $token = self::cart_scope_token($mint);
-            if ($token === '') {
-                return '';
-            }
-
-            // Hashed so the bootstrap does not echo the session token itself.
-            return 'cart:' . substr(hash('sha256', $token), 0, 16);
+            add_action('woocommerce_cart_emptied', ['WC_Twoinc_Checkout', 'forget_captured_company']);
+            add_action('woocommerce_cart_item_removed', ['WC_Twoinc_Checkout', 'forget_captured_company_when_cart_ends']);
         }
 
-        /**
-         * Minted per cart: the session's own customer id outlives the cart, so keying on it replays a capture into every later one (ABN-554).
-         *
-         * @param bool $mint whether a cart with no token yet may be given one.
-         *   Only a rendering page may: minting anywhere else names a cart no
-         *   page ever showed, which the next cart would then inherit.
-         *
-         * @return string
-         */
-        public static function cart_scope_token(bool $mint = true): string
+        /** @return object|null */
+        private static function capture_session()
         {
             $session = function_exists('WC') && WC() ? WC()->session : null;
             if (!$session || !method_exists($session, 'get') || !method_exists($session, 'set')) {
-                return '';
+                return null;
             }
 
-            $token = (string) $session->get(self::CART_SCOPE_SESSION_KEY, '');
-            if ($token === '' && $mint) {
-                $token = function_exists('wp_generate_password')
-                    ? wp_generate_password(32, false)
-                    : uniqid('', true);
-                $session->set(self::CART_SCOPE_SESSION_KEY, $token);
-            }
-
-            return $token;
+            return $session;
         }
 
-        /**
-         * Emptying the cart ends it, so the capture made in it must not reach the next one (ABN-554).
-         *
-         * @return void
-         */
-        public static function rotate_cart_scope()
+        /** @return bool */
+        private static function cart_has_contents()
         {
-            $session = function_exists('WC') && WC() ? WC()->session : null;
-            if ($session && method_exists($session, 'set')) {
-                $session->set(self::CART_SCOPE_SESSION_KEY, '');
-            }
+            $cart = function_exists('WC') && WC() ? WC()->cart : null;
+
+            return $cart && method_exists($cart, 'is_empty') && !$cart->is_empty();
         }
 
-        /**
-         * Every scope a company captured on this order may replay in: the order, and the cart that became it.
-         *
-         * @param mixed $order
-         *
-         * @return string
-         */
-        public static function capture_scopes_for_order($order): string
+        /** @return void */
+        public static function remember_captured_company($company_id, $company_name)
         {
-            $scopes = ['order:' . $order->get_id()];
-            $cart = self::capture_scope(false);
-            if (strpos($cart, 'cart:') === 0) {
-                $scopes[] = $cart;
-            }
-
-            return implode(' ', $scopes);
-        }
-
-        /**
-         * A company remembered before the stamp existed carries no stamp, and
-         * a missing stamp is exactly what an install with no capture at all
-         * looks like. Writing the refusal down settles which of the two it is,
-         * so no later read has to guess (ABN-554).
-         *
-         * Self-limiting in the manner of the plugin's other upgrades (see
-         * WC_Twoinc::drop_renamed_option_rows()): one write per affected
-         * buyer, only while the legacy shape is present, no migration runner.
-         *
-         * @param int $user_id
-         *
-         * @return void
-         */
-        public static function stamp_legacy_company($user_id)
-        {
-            if ((string) get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_scope'), true) !== '') {
+            $session = self::capture_session();
+            if (!$session) {
                 return;
             }
 
-            $remembered = (string) get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), true)
-                . (string) get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), true);
-            if ($remembered === '') {
+            if ((string) $company_id === '' && (string) $company_name === '') {
+                self::forget_captured_company();
                 return;
             }
 
-            update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_scope'), self::SCOPE_NONE);
+            $session->set(self::CAPTURED_COMPANY_SESSION_KEY, [
+                'company_id' => (string) $company_id,
+                'company_name' => (string) $company_name,
+            ]);
+        }
+
+        /** @return void */
+        public static function forget_captured_company()
+        {
+            $session = self::capture_session();
+            if ($session) {
+                $session->set(self::CAPTURED_COMPANY_SESSION_KEY, null);
+            }
+        }
+
+        /** @return void */
+        public static function forget_captured_company_when_cart_ends()
+        {
+            if (!self::cart_has_contents()) {
+                self::forget_captured_company();
+            }
+        }
+
+        /**
+         * The company this page may replay: the one captured in the live
+         * cart, or on the pay-for-order page the one the order carries
+         * (ABN-554).
+         *
+         * @return array{company_id: string, company_name: string}
+         */
+        public static function remembered_company(): array
+        {
+            $order = self::get_order_being_paid();
+            if ($order) {
+                return [
+                    'company_id' => method_exists($order, 'get_meta') ? (string) $order->get_meta('company_id') : '',
+                    'company_name' => method_exists($order, 'get_meta') ? (string) $order->get_meta('company_name') : '',
+                ];
+            }
+
+            $blank = ['company_id' => '', 'company_name' => ''];
+            $session = self::capture_session();
+            if (!$session) {
+                return $blank;
+            }
+
+            // Judged on the read as well as on the hooks above, so a removal
+            // path that reaches neither still cannot replay into a later cart.
+            if (!self::cart_has_contents()) {
+                self::forget_captured_company();
+                return $blank;
+            }
+
+            $remembered = $session->get(self::CAPTURED_COMPANY_SESSION_KEY, null);
+            if (!is_array($remembered)) {
+                return $blank;
+            }
+
+            return [
+                'company_id' => (string) ($remembered['company_id'] ?? ''),
+                'company_name' => (string) ($remembered['company_name'] ?? ''),
+            ];
+        }
+
+        public static function ajax_remember_company(): void
+        {
+            if (!check_ajax_referer('twoinc_checkout', 'csrf_token', false)) {
+                wp_send_json_error('Invalid security token');
+                return;
+            }
+
+            self::remember_captured_company(
+                sanitize_text_field((string) ($_POST['company_id'] ?? '')),
+                sanitize_text_field((string) ($_POST['company_name'] ?? ''))
+            );
+            wp_send_json_success();
         }
 
         /**
@@ -602,7 +611,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'merchant' => $merchant,
                 'merchant_due_in_days' => $this->wc_twoinc->get_merchant_due_in_days(),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),
-                'capture_scope' => self::capture_scope(),
                 'currency' => $currency,
                 'price_decimal_separator' => wc_get_price_decimal_separator(),
                 'price_thousand_separator' => wc_get_price_thousand_separator(),
@@ -617,6 +625,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'supported_countries_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_supported_countries') : '',
                     'csrf_token' => wp_create_nonce('twoinc_checkout'),
                 ],
+                'remember_company_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_remember_company') : '',
                 // Chip selector bootstrap (TWO-24751). JS renders only; the
                 // live data (fees, selection) comes from the wc-ajax
                 // endpoints in WC_Twoinc_Payment_Terms.
@@ -686,12 +695,17 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             $user_id = wp_get_current_user()->ID;
             if ($user_id) {
-                self::stamp_legacy_company($user_id);
-                $properties['company_scope'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_scope'), true);
                 $properties['company_id'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), true);
                 $properties['billing_company'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), true);
                 $properties['department'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('department'), true);
                 $properties['project'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('project'), true);
+            }
+
+            // Overrides the merchant-set company above: what the buyer captured in THIS cart is the more recent answer for it.
+            $captured = self::remembered_company();
+            if ($captured['company_id'] !== '' || $captured['company_name'] !== '') {
+                $properties['company_id'] = $captured['company_id'];
+                $properties['billing_company'] = $captured['company_name'];
             }
 
             return $properties;
@@ -727,4 +741,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             }
         }
     }
+
+    WC_Twoinc_Checkout::register_capture_memory_hooks();
 }

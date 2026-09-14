@@ -343,6 +343,9 @@ let twoincCompanyCapture = {
   write: function (companyName, companyId, options) {
     const opts = options || {};
     const role = opts.role || twoincAddressRoles.primary();
+    if (role === twoincAddressRoles.invoice()) {
+      twoincCompanyCapture.rememberOnServer(companyName, companyId);
+    }
     const name = twoincUtilHelper.blankToEmpty(companyName);
     const number = twoincUtilHelper.blankToEmpty(companyId);
     const $name = twoincCompanyCapture.nameField(role);
@@ -552,6 +555,69 @@ let twoincCompanyCapture = {
    * surfaces, and there is more than one control on the page.
    */
   controllerRegistry: {},
+
+  /**
+   * Every id a company capture writes, asked of the controls that write them:
+   * the payment tile mints its own input, so only the controls know them all.
+   */
+  capturedFieldIds: function () {
+    const ids = [];
+    const add = function (selector) {
+      const id = twoincUtilHelper.blankToEmpty(selector).replace(/^#/, "");
+      if (id !== "" && ids.indexOf(id) < 0) ids.push(id);
+    };
+    const registry = twoincCompanyCapture.controllerRegistry;
+    Object.keys(registry).forEach(function (role) {
+      add(registry[role].addressFieldSelector);
+      add(registry[role].tileFieldSelector);
+      add(twoincCompanyCapture.numberFieldSelector(role));
+      twoincCompanyCapture.nameFieldSelectors(role).forEach(add);
+    });
+    return ids;
+  },
+
+  /** Debounced so an init-time clear followed by a restore sends only the settled pair. */
+  REMEMBER_DEBOUNCE_MS: 300,
+
+  rememberTimer: null,
+
+  /** The pair the session already holds, seeded from what the page rendered. */
+  rememberedPair: null,
+
+  /**
+   * Hand the captured company to the WC session, which is what replays it —
+   * the browser keeps no copy, so no later cart can find one (ABN-554).
+   *
+   * @param {string} companyName
+   * @param {string} companyId
+   * @returns {void}
+   */
+  rememberOnServer: function (companyName, companyId) {
+    const url = twoincUtilHelper.blankToEmpty(window.twoinc && window.twoinc.remember_company_url);
+    if (url === "") return;
+    const name = twoincUtilHelper.blankToEmpty(companyName);
+    const number = twoincUtilHelper.blankToEmpty(companyId);
+    if (twoincCompanyCapture.rememberedPair === null) {
+      const rendered = twoincDomHelper.rememberedCompany();
+      twoincCompanyCapture.rememberedPair =
+        rendered.billing_company + "\u0000" + rendered.company_id;
+    }
+    const pair = name + "\u0000" + number;
+    if (pair === twoincCompanyCapture.rememberedPair) return;
+    twoincCompanyCapture.rememberedPair = pair;
+    window.clearTimeout(twoincCompanyCapture.rememberTimer);
+    twoincCompanyCapture.rememberTimer = window.setTimeout(function () {
+      jQuery.ajax({
+        type: "POST",
+        url: url,
+        data: {
+          csrf_token: twoincUtilHelper.proxyCsrfToken(),
+          company_id: number,
+          company_name: name
+        }
+      });
+    }, twoincCompanyCapture.REMEMBER_DEBOUNCE_MS);
+  },
 
   /** The control owning one role, falling back on the primary role's. */
   controllerFor: function (role) {
@@ -2127,81 +2193,6 @@ jQuery(document).on("twoinc_supported_search_countries_updated", function () {
 // through every one of those call sites.
 let twoincSoleTrader = twoincSelectWooHelper.soleTrader;
 
-/** The one gate every remembered capture passes through, on every surface (ABN-554). */
-let twoincCaptureScope = {
-  /** sessionStorage key holding the scope the `checkoutInputs` snapshot was taken in. */
-  STAMP_KEY: "twoincCaptureScope",
-
-  /** The one stamp a company set by hand in a WordPress user profile carries (ABN-554). */
-  SCOPE_ADMIN: "admin",
-
-  /**
-   * Every id a company capture writes, asked of the controls that write them
-   * so a field added to one can never be missed here (ABN-554).
-   */
-  companyFieldIds: function () {
-    const ids = [];
-    const add = function (selector) {
-      const id = twoincUtilHelper.blankToEmpty(selector).replace(/^#/, "");
-      if (id !== "" && ids.indexOf(id) < 0) ids.push(id);
-    };
-    const registry = twoincCompanyCapture.controllerRegistry;
-    Object.keys(registry).forEach(function (role) {
-      add(registry[role].addressFieldSelector);
-      add(registry[role].tileFieldSelector);
-      add(twoincCompanyCapture.numberFieldSelector(role));
-      twoincCompanyCapture.nameFieldSelectors(role).forEach(add);
-    });
-    return ids;
-  },
-
-  /** The scope of the page being loaded, server-resolved. */
-  current: function () {
-    return twoincUtilHelper.blankToEmpty(window.twoinc && window.twoinc.capture_scope);
-  },
-
-  /** A stamp lists every scope its capture may replay in: the order, and the cart that became it. */
-  belongsHere: function (scope) {
-    const here = twoincCaptureScope.current();
-    if (here === "") return false;
-    return twoincCaptureScope.scopeList(scope).indexOf(here) >= 0;
-  },
-
-  /** Whole elements, so a scope can never match on a prefix or a substring of another. */
-  scopeList: function (scope) {
-    return twoincUtilHelper.blankToEmpty(scope).split(" ");
-  },
-
-  stamp: function () {
-    sessionStorage.setItem(twoincCaptureScope.STAMP_KEY, twoincCaptureScope.current());
-  },
-
-  storedScope: function () {
-    return twoincUtilHelper.blankToEmpty(sessionStorage.getItem(twoincCaptureScope.STAMP_KEY));
-  },
-
-  /** Crossing scopes invalidates the capture, not the address the buyer typed (ABN-554). */
-  withoutCompany: function (inputs) {
-    const company = twoincCaptureScope.companyFieldIds();
-    return (inputs || []).filter(function (inp) {
-      return company.indexOf(inp.id) < 0;
-    });
-  },
-
-  /** Only the explicit admin marker belongs to the buyer; every other stamp names the pages it may replay in (ABN-554). */
-  userMetaCompany: function () {
-    const meta = window.twoinc || {};
-    const scope = twoincUtilHelper.blankToEmpty(meta.company_scope);
-    if (scope !== twoincCaptureScope.SCOPE_ADMIN && !twoincCaptureScope.belongsHere(scope)) {
-      return { billing_company: "", company_id: "" };
-    }
-    return {
-      billing_company: twoincUtilHelper.blankToEmpty(meta.billing_company),
-      company_id: twoincUtilHelper.blankToEmpty(meta.company_id)
-    };
-  }
-};
-
 let twoincDomHelper = {
   /** Add a placeholder after an input, used for moving fields in the DOM. */
   addPlaceholder: function ($el, name) {
@@ -2841,27 +2832,29 @@ let twoincDomHelper = {
         }
       }
     }
-    sessionStorage.setItem("checkoutInputs", JSON.stringify(checkoutInputs));
-    twoincCaptureScope.stamp();
+    // The company is the one field this snapshot may not carry: it outlives
+    // the cart the capture was made in, and the WC session holds it instead (ABN-554).
+    const captured = twoincCompanyCapture.capturedFieldIds();
+    sessionStorage.setItem(
+      "checkoutInputs",
+      JSON.stringify(
+        checkoutInputs.filter(function (inp) {
+          return captured.indexOf(inp.id) < 0;
+        })
+      )
+    );
     // Alongside the field snapshot, since the same restore consumes both.
     twoincCompanyCapture.rememberCaptureMode();
   },
-  /** The one read path for the snapshot, so no caller reaches a capture past the scope gate (ABN-554). */
+  /** The one read path for the snapshot. */
   storedCheckoutInputs: function () {
     const raw = sessionStorage.getItem("checkoutInputs");
     if (!raw) return null;
-    let inputs;
     try {
-      inputs = JSON.parse(raw);
+      return JSON.parse(raw);
     } catch (e) {
       return null;
     }
-    // A page that cannot name its own scope judges nothing, and must leave the snapshot for one that can.
-    if (twoincCaptureScope.current() === "") return null;
-    if (twoincCaptureScope.belongsHere(twoincCaptureScope.storedScope())) return inputs;
-    // Stripped for this reader alone: rewriting the stored snapshot here would
-    // hand another cart's address fields to whichever caller read first.
-    return twoincCaptureScope.withoutCompany(inputs);
   },
   getCheckoutInput: function (htmlTag, inpType, inpName) {
     let checkoutInputs = twoincDomHelper.storedCheckoutInputs();
@@ -2875,12 +2868,11 @@ let twoincDomHelper = {
   loadStorageInputs: function () {
     let checkoutInputs = twoincDomHelper.storedCheckoutInputs();
     if (!checkoutInputs) return;
+    const captured = twoincCompanyCapture.capturedFieldIds();
     for (let inp of checkoutInputs) {
-      // Skip load company id/name if user logged in and has Two meta set
-      if (window.twoinc.user_meta_exists) {
-        let skipIds = ["company_id", "company_name", "billing_company", "billing_company_display"];
-        if (skipIds.includes(inp.id)) continue;
-      }
+      // A snapshot written by the release before this one still carries a
+      // company, and that browser session survives the upgrade (ABN-554).
+      if (captured.indexOf(inp.id) >= 0) continue;
       // Load all other fields
       if (inp.htmlTag === "INPUT") {
         if (inp.val && ["text", "tel", "email", "hidden"].indexOf(inp.type) >= 0) {
@@ -2933,10 +2925,17 @@ let twoincDomHelper = {
       }
     }
   },
+  /** The company the page was rendered with: this cart's capture, this order's, or the merchant's own (ABN-554). */
+  rememberedCompany: function () {
+    const meta = window.twoinc || {};
+    return {
+      billing_company: twoincUtilHelper.blankToEmpty(meta.billing_company),
+      company_id: twoincUtilHelper.blankToEmpty(meta.company_id)
+    };
+  },
   loadUserMetaInputs: function () {
-    const remembered = twoincCaptureScope.userMetaCompany();
-    window.twoinc.user_meta_exists = Boolean(remembered.billing_company && remembered.company_id);
-    if (window.twoinc.user_meta_exists) {
+    const remembered = twoincDomHelper.rememberedCompany();
+    if (remembered.billing_company && remembered.company_id) {
       twoincSelectWooHelper.setDisplayName(remembered.billing_company);
       // Both values passed explicitly: `#company_id` is written further down
       // this function, so reading the DOM here would render an empty number.
@@ -2965,7 +2964,7 @@ let twoincDomHelper = {
    * later).
    */
   restoreCapturedCompany: function () {
-    const remembered = twoincCaptureScope.userMetaCompany();
+    const remembered = twoincDomHelper.rememberedCompany();
     const metaName = remembered.billing_company;
     const metaId = remembered.company_id;
     const domName = twoincCompanyCapture.nameField().val();

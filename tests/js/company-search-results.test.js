@@ -434,10 +434,7 @@ describe("company search hints", () => {
     });
   });
 
-  /**
-   * `#billing_company` is POSTED WITH THE ORDER and `saveCheckoutInputs()`
-   * snapshots it, so an untouched company field has to snapshot as empty.
-   */
+  /** The snapshot carries no company at all — the WC session holds that (ABN-554). */
   describe("the untouched company field and the saved-input snapshot", () => {
     afterEach(() => {
       sessionStorage.clear();
@@ -471,10 +468,7 @@ describe("company search hints", () => {
     }
 
     test("is not snapshotted as the buyer's company name", () => {
-      const entry = snapshotUntouchedField();
-
-      expect(entry).toBeDefined();
-      expect(entry.val).toBe("");
+      expect(snapshotUntouchedField()).toBeUndefined();
     });
 
     test("survives a restore from storage without being written into the field", () => {
