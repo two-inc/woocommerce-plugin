@@ -310,21 +310,39 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
 }
 
 /*
- * The pay-for-order page lays its copy of the company fields out as wrapping
- * flex items, so the summary lands as an item on the same row rather than
- * underneath them, and `flex-basis: 100%` makes it a full-page-width row —
- * unlike the checkout page, where the summary's box is only as wide as the
- * (narrower) field above it. Right-aligning the id against that full-page
- * width detaches it from the field entirely: name at the far left, number at
- * the far right, the actual input floating, centred, in between. Overridden
- * back to the leading edge here, matching this page's pre-existing
- * single-line layout.
+ * The pay-for-order page's cut-down form (views/woocommerce_order_pay.php).
+ *
+ * A two-column grid — labels in column 1, controls in column 2 — with the
+ * rows themselves flattened into it by `display: contents`, so every field
+ * gets its own line with its label beside it and every control shares one
+ * left edge. `.hidden`'s `display: none !important` still wins over
+ * `contents`, so the rows this page keeps off screen stay off it.
+ *
+ * The summary sits in column 2 as well, which is what makes the shared
+ * `.twoinc-company-summary-id { text-align: end }` land on the company
+ * input's own right edge rather than the full form width (ABN-554). Its
+ * shared 3px side padding mirrors WooCommerce core's `.form-row`, absent
+ * here, so it is cancelled for this surface.
  */
-.custom-checkout .twoinc-company-summary {
-  flex-basis: 100%;
+.custom-checkout {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  gap: 10px 12px;
+  margin-top: 20px;
+  margin-bottom: 20px;
 }
-.custom-checkout .twoinc-company-summary-id {
-  text-align: start;
+.custom-checkout .twoinc-inp-container,
+.custom-checkout .twoinc-inp-container > div {
+  display: contents;
+}
+.custom-checkout label {
+  margin: 0;
+}
+.custom-checkout > .twoinc-company-summary {
+  grid-column: 2;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 /*

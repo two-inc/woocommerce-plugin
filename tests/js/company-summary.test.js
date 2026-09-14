@@ -354,31 +354,51 @@ describe("read-only captured-company summary", () => {
     });
   });
 
-  describe("pay-for-order page: number stays aligned with the name, not the full-width row", () => {
-    // That page lays the company fields out as flex-wrap items and gives
-    // the summary `flex-basis: 100%` — a full-page-width row, unlike the
-    // checkout page where the summary is only as wide as the (narrower)
-    // field above it. Right-aligning the id against that full width would
-    // detach it from the actual input, which sits centred between the two.
-    // Assert the override lands.
-    test("the id's alignment is overridden back to the leading edge on .custom-checkout", () => {
-      const m = /\.custom-checkout\s+\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(
-        stylesheetSource()
-      );
+  describe("pay-for-order page", () => {
+    // views/woocommerce_order_pay.php lays its cut-down form out as a
+    // two-column grid — labels, then controls — so the summary has to join
+    // the control column for the shared right-alignment to reach the company
+    // input's own edge rather than the whole form's (ABN-554).
+    test.each([
+      {
+        selector: ".custom-checkout",
+        declares: /display:\s*grid/,
+        description: "the form is a grid"
+      },
+      {
+        selector: ".custom-checkout",
+        declares: /grid-template-columns:\s*max-content\s+1fr/,
+        description: "labels sit in column 1 and controls in column 2"
+      },
+      {
+        selector:
+          ".custom-checkout .twoinc-inp-container,\n.custom-checkout .twoinc-inp-container > div",
+        declares: /display:\s*contents/,
+        description: "every row flattens into that grid"
+      },
+      {
+        selector: ".custom-checkout > .twoinc-company-summary",
+        declares: /grid-column:\s*2/,
+        description: "the summary joins the control column"
+      }
+    ])("$description", ({ selector, declares }) => {
+      const m = new RegExp(
+        selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\{([^}]*)\\}"
+      ).exec(stylesheetSource());
       expect(m).not.toBeNull();
-      expect(m[1]).toMatch(/text-align:\s*start/);
+      expect(m[1]).toMatch(declares);
     });
 
-    test("the override actually wins the cascade, not just exists in source", () => {
-      // Specificity settles the ordering, so what is guarded here is the
-      // override rule silently ceasing to apply at all — a typo'd selector,
-      // which a source-only regex cannot catch.
+    test("the id keeps the shared end alignment inside .custom-checkout", () => {
+      // The number right-aligns to the company field on this page exactly as
+      // it does on the checkout page and in the Blocks tile — no third
+      // variant, and nothing overriding it back to the leading edge.
       harness.injectStylesheet();
       pickCompany("ACME Widgets Ltd", "12345678");
       summary().wrap('<div class="custom-checkout"></div>');
 
       const idStyle = window.getComputedStyle(summary().find(".twoinc-company-summary-id")[0]);
-      expect(idStyle.textAlign).toBe("start");
+      expect(idStyle.textAlign).toBe("end");
     });
   });
 

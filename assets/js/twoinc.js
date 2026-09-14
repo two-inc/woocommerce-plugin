@@ -5261,6 +5261,14 @@ class Twoinc {
     twoincSelectWooHelper.soleTrader.primeTokens();
     twoincSelectWooHelperShipping.soleTrader.primeTokens();
 
+    // The FIRST per-country availability resolve. `updated_checkout` is what
+    // re-runs it, and the pay-for-order page never fires that event at all, so
+    // without this its Sole trader chip is decided on a map nothing ever
+    // filled (ABN-554). Cached per country, so the checkout page's own
+    // `updated_checkout` moments later costs nothing extra.
+    twoincSelectWooHelper.soleTrader.refresh();
+    twoincSelectWooHelperShipping.soleTrader.refresh();
+
     setTimeout(function () {
       twoincDomHelper.saveCheckoutInputs();
       Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();

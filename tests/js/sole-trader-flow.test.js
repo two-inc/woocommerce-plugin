@@ -2068,6 +2068,19 @@ describe("TWO-40 — sole-trader flow", () => {
         const tokenCalls = ajax.calls.filter((call) => call.url.includes("two_sole_trader_tokens"));
         expect(tokenCalls).toHaveLength(1);
       });
+
+      test("availability is resolved at load too, with no updated_checkout (ABN-554)", () => {
+        // The pay-for-order page never fires `updated_checkout`, so a chip
+        // decided only there is decided on an empty map. Seeded answer
+        // dropped, or `refresh()` reads the cache instead of asking.
+        soleTrader.availabilityByCountry = {};
+
+        ctx.Twoinc.getInstance().initialize(false);
+
+        expect(
+          ajax.calls.filter((call) => call.url.includes("two_sole_trader_availability"))
+        ).toHaveLength(1);
+      });
     });
   });
 

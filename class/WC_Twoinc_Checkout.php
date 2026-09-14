@@ -387,14 +387,63 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
-         * Customize for Order Pay page when merchant installed "Phone Orders for WooCommerce" plugin
+         * Render this gateway's own capture fields on the pay-for-order page.
          */
         public function order_pay_page_customize()
         {
+            $twoinc_order_pay_country = self::resolve_order_pay_country(self::get_order_being_paid());
             ob_start();
             require_once WC_TWOINC_PLUGIN_PATH . '/views/woocommerce_order_pay.php';
             $content = ob_get_clean();
             echo $content;
+        }
+
+        /**
+         * The order the pay-for-order endpoint is rendering, or null off that
+         * endpoint. `woocommerce_pay_order_before_submit` passes no arguments
+         * and core's own `$order` is local to its template.
+         *
+         * @return WC_Order|null
+         */
+        private static function get_order_being_paid()
+        {
+            if (!function_exists('get_query_var') || !function_exists('wc_get_order')) {
+                return null;
+            }
+
+            $order_id = absint(get_query_var('order-pay'));
+            if (!$order_id) {
+                return null;
+            }
+
+            $order = wc_get_order($order_id);
+
+            return $order ?: null;
+        }
+
+        /**
+         * The country the pay-for-order form starts on. The shop's base country
+         * is a last resort, not the default: this value drives company search
+         * and sole-trader availability, which belong to the order being paid
+         * for rather than to the shop (ABN-554).
+         *
+         * @param mixed $order
+         *
+         * @return string
+         */
+        public static function resolve_order_pay_country($order): string
+        {
+            if (is_object($order) && method_exists($order, 'get_billing_country')) {
+                $country = $order->get_billing_country();
+                if (!$country && method_exists($order, 'get_shipping_country')) {
+                    $country = $order->get_shipping_country();
+                }
+                if ($country) {
+                    return $country;
+                }
+            }
+
+            return WC()->countries->get_base_country();
         }
 
         /**
