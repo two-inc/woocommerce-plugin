@@ -601,6 +601,13 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
 .twoinc-company-search-tile-slot.hidden {
   display: none;
 }
+
+/* ABN-554: host themes space `.form-row` inside the payment box, so the tile row cancels it. */
+.twoinc-company-search-tile-slot
+  #twoinc_tile_company_row.twoinc-inp-container.form-row.form-row-wide {
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
 /*
  * The company-capture popover (TWO-25503), the structure PrestaShop and
  * Magento already render: one anchored panel whose three children are the
