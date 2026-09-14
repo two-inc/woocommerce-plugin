@@ -68,6 +68,7 @@ final class BrandConfigSpec
             'testMerchantBuyerCountryAllowlistIntersectsBrandGate',
             'testBuyerCountrySupportJudgesEachAllowlistState',
             'testProcessPaymentGuardsReturnAFailureArray',
+            'testOrderCreationResolvesTheCompanyAcrossBothAddressRoles',
             'testBlocksTileChoiceDrivesTheSurchargeGate',
             'testBlocksCompanyRowRevealedOnlyWhereTheSearchNeedsIt',
             'testOrderCreationRefusesAnUnsupportedBuyerCountry',
@@ -2581,6 +2582,72 @@ final class BrandConfigSpec
                     && strpos($result['message'], $expected_message) !== false,
                 $description . ': message was "' . ($result['message'] ?? '') . '"'
             );
+        }
+
+        $_POST = [];
+    }
+
+    /**
+     * Given a company captured on either address role; When the order is
+     * created; Then the invoice role wins and the delivery role is only the
+     * fallback (TWO-40) — the resolution a Blocks checkout relies on entirely,
+     * handing over both roles' carriers and resolving none of them itself
+     * (ABN-554).
+     */
+    private static function testOrderCreationResolvesTheCompanyAcrossBothAddressRoles(): void
+    {
+        $invoice = ['company_id' => '923456789', 'company_name' => 'Invoice Holdings AS'];
+        $delivery = ['shipping_company_id' => '912345678', 'shipping_company' => 'Delivery Depot AS'];
+
+        $cases = [
+            [$invoice, '923456789', 'Invoice Holdings AS', 'the invoice role alone'],
+            [$delivery, '912345678', 'Delivery Depot AS', 'the delivery role alone'],
+            [array_merge($invoice, $delivery), '923456789', 'Invoice Holdings AS', 'both roles captured'],
+        ];
+
+        foreach ($cases as $case) {
+            list($post, $expected_id, $expected_name, $description) = $case;
+
+            $order = new class extends StubOrder {
+                public $saved_meta = [];
+
+                public function update_meta_data($key, $value)
+                {
+                    $this->saved_meta[$key] = $value;
+                }
+
+                public function save()
+                {
+                }
+
+                public function set_billing_country($value)
+                {
+                }
+
+                public function set_billing_company($value)
+                {
+                }
+
+                public function set_billing_phone($value)
+                {
+                }
+            };
+            $order->payment_method = WC_Twoinc_Brand::get('gateway_id');
+
+            $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+            $GLOBALS['__twoinc_test_notices'] = [];
+            $GLOBALS['__twoinc_test_logs'] = [];
+            WC()->session = new StubSession();
+            $_POST = $post;
+
+            $gateway = self::buyerCountryGateway(null);
+            // The company meta is written before the order request, so a
+            // refused transport is enough to read the resolution back.
+            $gateway->response = new WP_Error('http', 'down');
+            $gateway->process_payment(42);
+
+            TinyAssert::same($expected_id, $order->saved_meta['company_id'] ?? null, $description . ': wrong company');
+            TinyAssert::same($expected_name, $order->saved_meta['company_name'] ?? null, $description . ': wrong name');
         }
 
         $_POST = [];

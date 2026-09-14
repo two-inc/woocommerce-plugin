@@ -6,7 +6,8 @@
  * file owns only what a Blocks checkout shapes differently:
  *
  *   1. the hidden classic-shaped address inputs the controller reads and
- *      writes, mirrored both ways against Blocks' own cart data store;
+ *      writes, one set per address role, mirrored both ways against Blocks'
+ *      own cart data store;
  *   2. the two mount points — WooCommerce's own company row, or the payment
  *      tile — which mount the buyer sees is `window.twoinc`'s call, not this
  *      file's;
@@ -44,8 +45,8 @@
   // ------------------------------------------------------- shadow address
 
   /**
-   * Blocks' billing keys. The classic controller addresses the same fields as
-   * `#billing_<key>`, so mirroring them is what lets it run here unchanged.
+   * Blocks' address keys. The classic controller addresses the same fields as
+   * `#<role>_<key>`, so mirroring them is what lets it run here unchanged.
    */
   var ADDRESS_KEYS = [
     "first_name",
@@ -61,18 +62,31 @@
     "email"
   ];
 
-  /** Carriers the controller owns outright, with no Blocks counterpart. */
-  var CAPTURE_IDS = ["company_id", "company_name"];
-
   var SHADOW_ID = "twoinc-blocks-shadow";
 
-  /** The row id the controller addresses as the native company row. */
-  var NATIVE_ROW_ID = "billing_company_field";
+  /** Both roles: Blocks renders delivery first, so mirroring one strands the other's control (ABN-554). */
+  function addressRoles() {
+    return [
+      { role: twoincAddressRoles.invoice(), store: "billingAddress", setter: "setBillingAddress" },
+      {
+        role: twoincAddressRoles.delivery(),
+        store: "shippingAddress",
+        setter: "setShippingAddress"
+      }
+    ];
+  }
+
+  /** Capture carriers the controller owns outright, with no Blocks counterpart. */
+  function captureIds(role) {
+    return role === twoincAddressRoles.invoice()
+      ? ["company_id", "company_name"]
+      : [role + "_company_id"];
+  }
 
   /** True while the store's own values are being written into the shadow. */
   var applying = false;
   var pushScheduled = false;
-  /** Address keys the controller has written and the store has not seen yet. */
+  /** Per role, address keys the controller has written and the store has not seen yet. */
   var dirty = {};
   var saveScheduled = false;
   var restored = false;
@@ -82,10 +96,10 @@
     return wp.data && wp.data.select && wp.data.select("wc/store/cart");
   }
 
-  function billingAddress() {
+  function storedAddress(key) {
     var store = cartStore();
     var customer = store && store.getCustomerData && store.getCustomerData();
-    return (customer && customer.billingAddress) || null;
+    return (customer && customer[key]) || null;
   }
 
   /** jQuery assigns `.value` and fires nothing, so an accessor is the only hook. */
@@ -136,21 +150,23 @@
     // The container `saveCheckoutInputs()`/`loadStorageInputs()` look for;
     // without one they recognise, nothing persists the capture (ABN-554).
     host.className = "checkout woocommerce-checkout custom-checkout";
-    ADDRESS_KEYS.concat(CAPTURE_IDS).forEach(function (key) {
-      var address = ADDRESS_KEYS.indexOf(key) !== -1;
+    var add = function (id, announce) {
       var input = document.createElement("input");
       input.type = "text";
-      input.id = address ? "billing_" + key : key;
-      announceWrites(
-        input,
-        address
-          ? function () {
-              dirty[key] = true;
-              schedulePush();
-            }
-          : scheduleSave
-      );
+      input.id = id;
+      announceWrites(input, announce);
       host.appendChild(input);
+    };
+    addressRoles().forEach(function (entry) {
+      ADDRESS_KEYS.forEach(function (key) {
+        add(entry.role + "_" + key, function () {
+          (dirty[entry.role] = dirty[entry.role] || {})[key] = true;
+          schedulePush();
+        });
+      });
+      captureIds(entry.role).forEach(function (id) {
+        add(id, scheduleSave);
+      });
     });
     document.body.appendChild(host);
     return host;
@@ -194,26 +210,29 @@
       .replace(".", separator);
   }
 
-  /** The store's address into the fields the controller reads. */
+  /** The store's addresses into the fields the controller reads. */
   function pull() {
-    var address = billingAddress();
-    if (!address) return false;
     shadow();
 
     var moved = false;
-    applying = true;
-    ADDRESS_KEYS.forEach(function (key) {
-      // Skipped while the controller's own write for this key is still
-      // queued; every other key still follows the store.
-      if (dirty[key]) return;
-      var input = document.getElementById("billing_" + key);
-      var value = address[key] == null ? "" : String(address[key]);
-      if (input && input.value !== value) {
-        input.value = value;
-        moved = true;
-      }
+    addressRoles().forEach(function (entry) {
+      var address = storedAddress(entry.store);
+      if (!address) return;
+      var written = dirty[entry.role] || {};
+
+      applying = true;
+      ADDRESS_KEYS.forEach(function (key) {
+        // Skipped while this key's own write is still queued; others still follow the store.
+        if (written[key]) return;
+        var input = document.getElementById(entry.role + "_" + key);
+        var value = address[key] == null ? "" : String(address[key]);
+        if (input && input.value !== value) {
+          input.value = value;
+          moved = true;
+        }
+      });
+      applying = false;
     });
-    applying = false;
 
     return moved;
   }
@@ -224,25 +243,26 @@
    * edit back to its previous value.
    */
   function push() {
-    var written = Object.keys(dirty);
-    // Cleared whatever happens next: a key left pinned here is one `pull()`
-    // would skip for the rest of the page, with no push left to send it.
-    dirty = {};
-    var address = billingAddress();
-    if (!address) return;
+    addressRoles().forEach(function (entry) {
+      var written = Object.keys(dirty[entry.role] || {});
+      // Cleared unconditionally: a key left pinned is one `pull()` skips forever.
+      dirty[entry.role] = {};
+      var address = storedAddress(entry.store);
+      if (!address) return;
 
-    var patch = null;
-    written.forEach(function (key) {
-      var input = document.getElementById("billing_" + key);
-      if (!input) return;
-      var stored = address[key] == null ? "" : String(address[key]);
-      if (input.value !== stored) {
-        patch = patch || {};
-        patch[key] = input.value;
-      }
+      var patch = null;
+      written.forEach(function (key) {
+        var input = document.getElementById(entry.role + "_" + key);
+        if (!input) return;
+        var stored = address[key] == null ? "" : String(address[key]);
+        if (input.value !== stored) {
+          patch = patch || {};
+          patch[key] = input.value;
+        }
+      });
+
+      if (patch) wp.data.dispatch("wc/store/cart")[entry.setter](patch);
     });
-
-    if (patch) wp.data.dispatch("wc/store/cart").setBillingAddress(patch);
   }
 
   // -------------------------------------------------------------- mounting
@@ -281,7 +301,7 @@
 
     var id = search.addressFieldSelector.slice(1) + "_field";
     if (row.id !== id) row.id = id;
-    nativeRow(row);
+    nativeRow(search, row);
   }
 
   /**
@@ -292,35 +312,38 @@
    * company-number summary directly after that row on every render, so a
    * sibling here competes for the same slot and the two swap places forever.
    */
-  function nativeRow(row) {
-    var native = document.getElementById(NATIVE_ROW_ID);
+  function nativeRow(search, row) {
+    var id = search.nativeCompanyRowSelector().slice(1);
+    var native = document.getElementById(id);
     if (!native) {
       native = document.createElement("div");
-      native.id = NATIVE_ROW_ID;
+      native.id = id;
       native.className = "hidden";
     }
     if (native.parentElement !== row) row.appendChild(native);
   }
 
   function mount() {
-    var search = control();
-    if (!search || !window.twoinc) return;
+    if (!control() || !window.twoinc) return;
 
-    // WooCommerce's own company row is the one immediately under the name
-    // fields, which is where address-area placement is specified to put the
-    // control; the tile mount the controller builds itself.
-    search.addressFieldSelector = "#billing-company";
-    anchorRow(search);
-    if (!isMounted(search)) {
-      if (!search.isTileLocation() && !document.querySelector(search.addressFieldSelector)) {
-        return;
+    twoincCompanySearchControls.forEach(function (search) {
+      // Address-area placement mounts on core's own company row; the tile mount the controller builds.
+      search.addressFieldSelector = "#" + search.role + "-company";
+      anchorRow(search);
+      if (!isMounted(search)) {
+        if (!search.isTileLocation() && !document.querySelector(search.addressFieldSelector)) {
+          return;
+        }
+        // `toggleBusinessFields()`'s own split: only the invoice role has a tile mount.
+        if (search.role === twoincAddressRoles.primary()) {
+          search.syncCompanySearchTileLocation();
+        } else {
+          search.rebindUnlessManual();
+        }
       }
-      search.syncCompanySearchTileLocation();
-    }
-    // Outside the mount guard: the summary anchors against the row the control
-    // mounts on, so it has no anchor until that row exists — and a restored
-    // capture can land before it does.
-    search.renderCompanySummary();
+      // Outside the mount guard: a restored capture can land before its anchor row exists.
+      search.renderCompanySummary();
+    });
   }
 
   /**
@@ -336,13 +359,24 @@
     });
   }
 
+  /**
+   * Every role's capture carriers, unresolved and under the ids the classic
+   * checkout posts them as — `process_payment()` owns the invoice-first,
+   * delivery-fallback precedence, and Blocks serialises no hidden input of its
+   * own for it to read (ABN-554).
+   */
   function captured() {
-    var search = control();
-    var company = search ? search.readCapturedCompany() : {};
-    return {
-      company_id: company.organization_number || "",
-      company_name: company.company_name || ""
-    };
+    if (!control()) return {};
+    var payload = {};
+    twoincCompanySearchControls.forEach(function (search) {
+      var company = search.readCapturedCompany();
+      // A carrier's selector minus its "#" is the POST key the server reads.
+      payload[twoincCompanyCapture.numberFieldSelector(search.role).slice(1)] =
+        company.organization_number || "";
+      payload[twoincCompanyCapture.nameFieldSelector(search.role).slice(1)] =
+        company.company_name || "";
+    });
+    return payload;
   }
 
   // ----------------------------------------------------------- tile markup
@@ -361,6 +395,7 @@
     return element.createElement(
       "span",
       { className: "twoinc-blocks-label" },
+      element.createElement("span", { className: "twoinc-blocks-title" }, title),
       data.iconUrl
         ? element.createElement("img", {
             src: data.iconUrl,
@@ -368,7 +403,6 @@
             className: "twoinc-blocks-icon"
           })
         : null,
-      element.createElement("span", null, title),
       html(data.about, "twoinc-blocks-about")
     );
   }
@@ -430,7 +464,7 @@
     // so the resolver only ever starts because of this call.
     if (store.getCartData) store.getCartData();
     if (!store.hasFinishedResolution("getCartData")) return;
-    if (!billingAddress()) return;
+    if (!storedAddress("billingAddress")) return;
     restored = true;
     shadow();
     // Before the snapshot, as `initialize()` does: it is what sets the flag
@@ -445,6 +479,8 @@
   }
 
   function bootstrap() {
+    // The controller this file skins is a declared dependency; absent it, nothing to mount.
+    if (!control()) return;
     pull();
     pullTotals();
     // Before the restore: mounting is what points the control at this

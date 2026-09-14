@@ -106,12 +106,15 @@ afterEach(() => {
  * Nothing here is a reimplementation: the skin is only allowed to read the
  * controller's accessors and call its mount.
  */
-function baseGlobals(location, billing) {
+function baseGlobals(location, billing, shipping) {
   const calls = {
     mounts: 0,
     patches: [],
     resyncs: 0,
+    shippingPatches: [],
     summaries: 0,
+    summariesByRole: { billing: 0, shipping: 0 },
+    rebinds: [],
     saves: 0,
     loads: 0,
     restores: [],
@@ -121,14 +124,23 @@ function baseGlobals(location, billing) {
   const activeMethod = { name: null };
   const resolution = { finished: true, customerData: true };
   const captureValues = { company: "", company_id: "", mode: "search" };
-  const control = {
-    addressFieldSelector: "#billing_company_display",
-    isTileLocation: () => location === "payment_tile",
+  const shippingCaptureValues = { company: "", company_id: "" };
+  const valuesFor = (role) => (role === "shipping" ? shippingCaptureValues : captureValues);
+  const makeControl = (role) => ({
+    role,
+    addressFieldSelector: "#" + role + "_company_display",
+    nativeCompanyRowSelector() {
+      return "#" + this.role + "_company_field";
+    },
+    rebindUnlessManual() {
+      calls.rebinds.push(this.role);
+    },
+    isTileLocation: () => role === "billing" && location === "payment_tile",
     companyFieldSelector() {
       return this.isTileLocation() ? "#twoinc_tile_company_name" : this.addressFieldSelector;
     },
     countryDidChange() {
-      calls.order.push("seed");
+      calls.order.push("seed:" + role);
       return false;
     },
     currentCountry: () => "GB",
@@ -136,14 +148,17 @@ function baseGlobals(location, billing) {
       calls.mounts += 1;
     },
     renderCompanySummary() {
-      calls.summaries += 1;
+      calls.summariesByRole[role] += 1;
+      if (role === "billing") calls.summaries += 1;
     },
     fieldWrapClass: "two-company-field-wrap",
     readCapturedCompany: () => ({
-      company_name: captureValues.company,
-      organization_number: captureValues.company_id
+      company_name: valuesFor(role).company,
+      organization_number: valuesFor(role).company_id
     })
-  };
+  });
+  const control = makeControl("billing");
+  const shippingControl = makeControl("shipping");
 
   window.twoinc = { company_search_location: location };
   window.Twoinc = {
@@ -154,13 +169,24 @@ function baseGlobals(location, billing) {
     })
   };
   window.twoincSelectWooHelper = control;
-  window.twoincAddressRoles = { primary: () => "billing" };
-  window.twoincCompanyCapture = {
-    numberField: () => ({ val: () => captureValues.company_id }),
-    nameField: () => ({ val: () => captureValues.company }),
-    modeFor: () => captureValues.mode
+  window.twoincAddressRoles = {
+    primary: () => "billing",
+    invoice: () => "billing",
+    delivery: () => "shipping",
+    field: (role, name) => "#" + role + "_" + name
   };
-  window.twoincCompanySearchControls = [control];
+  window.twoincCompanyCapture = {
+    numberField: (role) => ({ val: () => valuesFor(role).company_id }),
+    nameField: (role) => ({ val: () => valuesFor(role).company }),
+    modeFor: () => captureValues.mode,
+    numberFieldSelector: (role) =>
+      role === twoincAddressRoles.invoice() ? "#company_id" : "#" + role + "_company_id",
+    nameFieldSelector: (role) =>
+      control.isTileLocation() && role === twoincAddressRoles.primary()
+        ? "#company_name"
+        : twoincAddressRoles.field(role, "company")
+  };
+  window.twoincCompanySearchControls = [control, shippingControl];
   window.twoincDomHelper = {
     saveCheckoutInputs() {
       calls.saves += 1;
@@ -181,22 +207,21 @@ function baseGlobals(location, billing) {
     }
   };
 
-  const address = Object.assign(
-    {
-      first_name: "",
-      last_name: "",
-      company: "",
-      address_1: "",
-      address_2: "",
-      city: "",
-      state: "",
-      postcode: "",
-      country: "",
-      phone: "",
-      email: ""
-    },
-    billing || {}
-  );
+  const blank = () => ({
+    first_name: "",
+    last_name: "",
+    company: "",
+    address_1: "",
+    address_2: "",
+    city: "",
+    state: "",
+    postcode: "",
+    country: "",
+    phone: "",
+    email: ""
+  });
+  const address = Object.assign(blank(), billing || {});
+  const shippingAddress = Object.assign(blank(), shipping || {});
 
   /** Fire the listeners one store's subscription registered. */
   function publish(store) {
@@ -206,8 +231,11 @@ function baseGlobals(location, billing) {
   return {
     calls,
     control,
+    shippingControl,
     captureValues,
+    shippingCaptureValues,
     address,
+    shippingAddress,
     activeMethod,
     resolution,
     publish,
@@ -218,7 +246,8 @@ function baseGlobals(location, billing) {
           ? { getActivePaymentMethod: () => activeMethod.name }
           : {
               getCartData: () => ({}),
-              getCustomerData: () => (resolution.customerData ? { billingAddress: address } : {}),
+              getCustomerData: () =>
+                resolution.customerData ? { billingAddress: address, shippingAddress } : {},
               getCartTotals: () => ({
                 total_price: "38600",
                 total_tax: "0",
@@ -231,6 +260,10 @@ function baseGlobals(location, billing) {
         setBillingAddress(patch) {
           calls.patches.push(patch);
           Object.assign(address, patch);
+        },
+        setShippingAddress(patch) {
+          calls.shippingPatches.push(patch);
+          Object.assign(shippingAddress, patch);
         }
       }),
       subscribe: (fn, store) => {
@@ -263,6 +296,17 @@ describe("blocks-checkout.js registration", () => {
     }
     evaluate(env);
     expect(registered.length > 0).toBe(registers);
+  });
+
+  test("the method label reads title, then logo, then the about control", () => {
+    const { env, registered } = globals({});
+    evaluate(env);
+
+    const order = registered[0].label
+      .type()
+      .children.filter(Boolean)
+      .map((node) => node.props.className);
+    expect(order).toEqual(["twoinc-blocks-title", "twoinc-blocks-icon", "twoinc-blocks-about"]);
   });
 
   test("the registered method carries the server-side identity and features", () => {
@@ -331,6 +375,83 @@ describe("blocks-checkout.js reuses the classic controller", () => {
 
     expect(base.control.addressFieldSelector).toBe(anchored);
     expect(base.calls.mounts).toBe(mounts);
+  });
+
+  test.each([
+    {
+      rows: ["shipping"],
+      mounts: 0,
+      rebinds: ["shipping"],
+      description: "the delivery address alone mounts the delivery control"
+    },
+    {
+      rows: ["billing", "shipping"],
+      mounts: 1,
+      rebinds: ["shipping"],
+      description: "both address forms mount both roles' controls"
+    },
+    {
+      rows: ["billing"],
+      mounts: 1,
+      rebinds: [],
+      description: "no delivery form leaves the delivery control unmounted"
+    }
+  ])("$description", ({ rows, mounts, rebinds }) => {
+    document.body.innerHTML = rows
+      .map(
+        (role) =>
+          '<div class="wc-block-components-text-input"><input id="' + role + '-company"></div>'
+      )
+      .join("");
+    const base = baseGlobals("address_area");
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    expect([base.control.addressFieldSelector, base.shippingControl.addressFieldSelector]).toEqual([
+      "#billing-company",
+      "#shipping-company"
+    ]);
+    // The delivery role re-binds; only the invoice role has a tile to weigh.
+    expect(base.calls.mounts).toBe(mounts);
+    expect(base.calls.rebinds).toEqual(rebinds);
+  });
+
+  test("each role's native company row is created inside that role's Blocks row", () => {
+    document.body.innerHTML = ["billing", "shipping"]
+      .map(
+        (role) =>
+          '<div class="wc-block-components-text-input"><input id="' + role + '-company"></div>'
+      )
+      .join("");
+    const base = baseGlobals("address_area");
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    ["billing", "shipping"].forEach((role) => {
+      const row = document.getElementById(role + "-company_field");
+      expect(row).not.toBeNull();
+      expect(document.getElementById(role + "_company_field").parentElement).toBe(row);
+    });
+  });
+
+  test.each([
+    ["billing", "Oslo", "patches"],
+    ["shipping", "Bergen", "shippingPatches"]
+  ])("the %s address mirrors both ways, against its own store key", async (role, seeded, key) => {
+    const base = baseGlobals("address_area", { city: "Oslo" }, { city: "Bergen" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    const input = document.getElementById(role + "_city");
+    expect(input.value).toBe(seeded);
+
+    input.value = "Trondheim";
+    await Promise.resolve();
+
+    expect(base.calls[key]).toEqual([{ city: "Trondheim" }]);
   });
 
   test("an already-anchored control is never re-mounted", () => {
@@ -440,8 +561,57 @@ describe("blocks-checkout.js reuses the classic controller", () => {
     expect(base.calls.mounts).toBe(atBootstrap + 1);
   });
 
-  test("the Store API is handed the controller's own captured company", () => {
-    const base = baseGlobals("payment_tile");
+  test.each([
+    {
+      location: "payment_tile",
+      billing: { company: "EXAMPLE TRADING LIMITED", company_id: "12345678" },
+      shipping: { company: "", company_id: "" },
+      expected: {
+        company_id: "12345678",
+        company_name: "EXAMPLE TRADING LIMITED",
+        shipping_company_id: "",
+        shipping_company: ""
+      },
+      description: "the invoice capture travels in the tile's own carriers"
+    },
+    {
+      location: "address_area",
+      billing: { company: "", company_id: "" },
+      shipping: { company: "DELIVERY DEPOT LIMITED", company_id: "87654321" },
+      expected: {
+        company_id: "",
+        billing_company: "",
+        shipping_company_id: "87654321",
+        shipping_company: "DELIVERY DEPOT LIMITED"
+      },
+      description: "a delivery-only capture, all a same-address checkout ever has, still travels"
+    },
+    {
+      location: "address_area",
+      billing: { company: "INVOICE HOLDINGS LIMITED", company_id: "12345678" },
+      shipping: { company: "DELIVERY DEPOT LIMITED", company_id: "87654321" },
+      expected: {
+        company_id: "12345678",
+        billing_company: "INVOICE HOLDINGS LIMITED",
+        shipping_company_id: "87654321",
+        shipping_company: "DELIVERY DEPOT LIMITED"
+      },
+      description: "both roles travel unresolved, for the server to prefer the invoice one"
+    },
+    {
+      location: "address_area",
+      billing: { company: "", company_id: "" },
+      shipping: { company: "", company_id: "" },
+      expected: {
+        company_id: "",
+        billing_company: "",
+        shipping_company_id: "",
+        shipping_company: ""
+      },
+      description: "no capture at all leaves the server's own guard to refuse the order"
+    }
+  ])("$description", ({ location, billing, shipping, expected }) => {
+    const base = baseGlobals(location);
     const { env, registered } = globals({});
     env.wp.data = base.data;
     evaluate(env);
@@ -457,17 +627,12 @@ describe("blocks-checkout.js reuses the classic controller", () => {
       emitResponse: { responseTypes: { SUCCESS: "success" } }
     });
 
-    base.captureValues.company = "EXAMPLE TRADING LIMITED";
-    base.captureValues.company_id = "12345678";
+    Object.assign(base.captureValues, billing);
+    Object.assign(base.shippingCaptureValues, shipping);
 
     expect(handler()).toEqual({
       type: "success",
-      meta: {
-        paymentMethodData: {
-          company_id: "12345678",
-          company_name: "EXAMPLE TRADING LIMITED"
-        }
-      }
+      meta: { paymentMethodData: expected }
     });
   });
 });
@@ -759,7 +924,7 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(base.calls.restores).toEqual(["12345678"]);
     // The user-meta pass sets the flag the snapshot replay reads, so it has
     // to come first.
-    expect(base.calls.order).toEqual(["user-meta", "restore", "seed"]);
+    expect(base.calls.order).toEqual(["user-meta", "restore", "seed:billing", "seed:shipping"]);
   });
 
   test.each([

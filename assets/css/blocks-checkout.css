@@ -15,3 +15,18 @@
 .twoinc-company-summary-id {
   text-align: end;
 }
+
+/* Title, logo, about control on one row — the classic checkout's order (ABN-554). */
+.twoinc-blocks-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+.twoinc-blocks-label .twoinc-blocks-icon {
+  margin-left: 8px;
+}
+
+/* Core's text-input row declares `line-height: 0`, collapsing every line box in the panel. */
+.two-company-dropdown {
+  line-height: normal;
+}
