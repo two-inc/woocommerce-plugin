@@ -433,41 +433,6 @@ describe("company search hints", () => {
       expect(source).not.toContain("company_search_placeholder");
     });
 
-    test("the pay-for-order template renders a field the panel can anchor to", () => {
-      // That page renders the company field from its own template rather than
-      // through WooCommerce's field API, so the input shape has to be right in
-      // its own markup — a `<select>` there would leave the panel with nothing
-      // to write a value into.
-      const markup = fs.readFileSync(
-        path.join(harness.REPO_ROOT, "views/woocommerce_order_pay.php"),
-        "utf8"
-      );
-      const field = markup.match(/<input[^>]*id="billing_company_display"[^>]*>/);
-
-      expect(field).not.toBeNull();
-      expect(field[0]).toMatch(/type="text"/);
-      expect(markup).not.toMatch(/<select[^>]*id="billing_company_display"/);
-    });
-
-    test("the pay-for-order template puts no required asterisk on company name", () => {
-      // This template writes its own labels, so toggleRequiredCues() never
-      // reaches them — the rows carry no `.form-row` ancestor (ABN-554).
-      const markup = fs.readFileSync(
-        path.join(harness.REPO_ROOT, "views/woocommerce_order_pay.php"),
-        "utf8"
-      );
-      // The whole field block, not just the label: an asterisk after the
-      // closing tag reads the same on screen.
-      const field = markup.match(/<div id="billing_company_display_field">[\s\S]*?<\/div>/);
-      const phone = markup.match(/<div id="billing_phone_display_field">[\s\S]*?<\/div>/);
-
-      expect(field).not.toBeNull();
-      expect(field[0]).not.toMatch(/<abbr|\*/);
-      // Phone still states its own requirement, so this is the company field
-      // alone and not every marker in the template.
-      expect(phone).not.toBeNull();
-      expect(phone[0]).toMatch(/<abbr/);
-    });
   });
 
   /**

@@ -1368,7 +1368,7 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
-  describe("the pay-for-order surface", () => {
+  describe("a surface with no template markup of its own", () => {
     test("the affordance needs no template markup on the page", () => {
       jest.useFakeTimers();
       expect($(".two-company-mode-chip").length).toBe(0);

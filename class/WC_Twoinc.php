@@ -1721,9 +1721,9 @@ if (!class_exists('WC_Twoinc')) {
             // JS maintains its own hidden input INSIDE the chips container
             // (later in the DOM, so it wins the POST when chips render);
             // this server-side one is the fallback for every path where that
-            // JS never runs — JS disabled, a theme that strips the container,
-            // or the pay-for-order page (TWO-24812 — a withdrawn single term
-            // must abort, not silently re-price).
+            // JS never runs — JS disabled, or a theme that strips the
+            // container (TWO-24812 — a withdrawn single term must abort, not
+            // silently re-price).
             $term_input = '';
             if (class_exists('WC_Twoinc_Payment_Terms') && WC_Twoinc_Payment_Terms::is_enabled($this)) {
                 $selected = WC_Twoinc_Payment_Terms::get_selected_term($this);
@@ -4670,8 +4670,7 @@ if (!class_exists('WC_Twoinc')) {
             // OUTSIDE the $basket_is_judgeable guard further down. That
             // guard exists because the minimums judge a basket; whether the
             // store→checkout currency pair has a rate does not depend on
-            // the basket at all, and the order-pay endpoint the guard
-            // excludes is precisely a place a surcharge still gets applied.
+            // the basket at all.
             // It also precedes the "no gate and no minimums configured"
             // early return below: a shop with neither still charges
             // surcharges. Fail CLOSED, the same shape as the minimums' own
@@ -4692,6 +4691,14 @@ if (!class_exists('WC_Twoinc')) {
             // and so applies in admin too — an admin-placed order must not
             // carry a silently absent fee (TWO-25503).
             if (is_admin()) {
+                return $available_gateways;
+            }
+
+            // Withheld outright on the pay-for-order page: a placed order
+            // leaves the buyer nothing left to decide, and a refusal is a
+            // credit or fraud verdict a retry must not reopen (ABN-554).
+            if (function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-pay')) {
+                unset($available_gateways[$this->id]);
                 return $available_gateways;
             }
 
@@ -4730,14 +4737,10 @@ if (!class_exists('WC_Twoinc')) {
                     : (float) WC()->cart->total - (float) WC()->cart->get_total_tax();
             };
 
-            // The minimums judge the basket being purchased. On the
-            // pay-for-order page the session cart is not that basket (it
-            // is usually empty, and anything in it is unrelated to the
-            // order being paid), so only the billing-country gate applies
-            // there and in any other cartless context — the API still
+            // The minimums judge the basket being purchased, so a cartless
+            // context leaves only the billing-country gate — the API still
             // enforces the platform minimum at order creation.
-            $basket_is_judgeable = !WC()->cart->is_empty()
-                && !(function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-pay'));
+            $basket_is_judgeable = !WC()->cart->is_empty();
 
             // A basket in another currency is judged by converting its
             // value into the minimum's currency via the Two FX layer
@@ -5201,10 +5204,7 @@ if (!class_exists('WC_Twoinc')) {
                 return self::payment_failure($company_error);
             }
 
-            // The allowlist can change between checkout render and submit,
-            // and the availability filter never runs on the pay-for-order
-            // page — where $billing_country is the buyer's live selection
-            // rather than anything stored on the order yet.
+            // The allowlist can change between checkout render and submit.
             $buyer_country = $billing_country !== '' ? $billing_country : (string) $order->get_billing_country();
             if ($buyer_country === '') {
                 $buyer_country = (string) $order->get_shipping_country();

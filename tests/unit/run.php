@@ -76,7 +76,7 @@ final class BrandConfigSpec
             'testOrderCreationRefusesADeclinedOrderIntent',
             'testOrderIntentRecordsItsVerdictForOrderCreation',
             'testAvailabilityGateSkipsMinimumsOnEmptyCart',
-            'testAvailabilityGateSkipsMinimumsOnOrderPayPage',
+            'testGatewayIsWithheldOnThePayForOrderPage',
             'testMerchantMinimumRaisesTheBar',
             'testMerchantMinimumValidationRejectsValuesAtOrBelowPlatformMinimum',
             'testMerchantMinimumValidationSkipsFloorCheckAcrossCurrencies',
@@ -217,7 +217,7 @@ final class BrandConfigSpec
             'testGateKeepsMethodWhenSurchargeIsPercentageOnly',
             'testGateKeepsMethodWhenTheOnlyMonetaryComponentIsAZeroCap',
             'testBuyerFeeShareTreatsANegativeStoredCapAsAbsent',
-            'testGateFxCheckAppliesOnOrderPayEndpoint',
+            'testGateFxCheckAppliesWhereTheBasketIsNotJudged',
             'testBuyerFeeShareSameCurrencyNeverTouchesFx',
             'testBuyerFeeShareRelaysAConfiguredZeroCapVerbatim',
             'testBuyerFeeShareRoundsMonetaryValuesToTwoDecimalPlaces',
@@ -285,9 +285,6 @@ final class BrandConfigSpec
             'testAssetVersionTracksFileMtimeNotPluginVersion',
             'testAssetVersionFallsBackToPluginVersionWhenFileMissing',
             'testCompanySearchLocationDerivedFromEnableCompanySearchBothDirections',
-            'testOrderPayCountryComesFromTheOrderNotTheShop',
-            'testTermFeesAreNotQuotedOnThePayForOrderEndpoint',
-            'testOrderPayEndpointSlugComesFromTheStoredSetting',
             'testCompanySearchLocationFallsBackToPaymentTileOnNullOrEmpty',
             'testCompanySearchLocationSettingDroppedFromUpgradedInstalls',
             'testEnableCompanySearchForOthersSettingDroppedFromUpgradedInstalls',
@@ -2658,9 +2655,8 @@ final class BrandConfigSpec
 
     private static function testOrderCreationRefusesAnUnsupportedBuyerCountry(): void
     {
-        // The allowlist can tighten between render and submit, and the
-        // availability filter never runs on the pay-for-order page, so the
-        // submit path judges again rather than trusting the render.
+        // The allowlist can tighten between render and submit, so the submit
+        // path judges again rather than trusting the render.
         $cases = [
             [['NL'], 'DE', 'NO', 'posted country off the allowlist'],
             [['NL'], '', 'DE', 'order country off the allowlist'],
@@ -2890,27 +2886,41 @@ final class BrandConfigSpec
         TinyAssert::same('gw', $result['woocommerce-gateway-testbrand']);
     }
 
-    private static function testAvailabilityGateSkipsMinimumsOnOrderPayPage(): void
+    /**
+     * ABN-554. A placed order leaves the buyer nothing left to decide, and a
+     * refusal is a credit or fraud verdict a retry must not reopen — so the
+     * method is not offered on the pay-for-order page at all. Never in the
+     * merchant's own admin, where an order is being composed rather than paid.
+     */
+    private static function testGatewayIsWithheldOnThePayForOrderPage(): void
     {
-        // Pay-for-order page: the session cart is not the basket being
-        // paid, so an under-minimum (or stale) cart must not hide the
-        // gateway. The billing-country gate still applies there.
         self::useTestbrand();
-        WC()->cart = new StubCart(100.0);
-        WC()->customer = new StubCustomer('NL');
         $GLOBALS['__twoinc_test_currency'] = 'EUR';
-        $GLOBALS['__twoinc_test_is_order_pay'] = true;
 
         try {
-            $gateways = ['woocommerce-gateway-testbrand' => 'gw'];
-            $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate($gateways);
-            TinyAssert::same('gw', $result['woocommerce-gateway-testbrand']);
+            foreach (
+                [
+                    [true, false, false, 'the pay-for-order page is not offered the method'],
+                    [false, false, true, 'the checkout page is unaffected'],
+                    [true, true, true, 'a merchant composing the order in wp-admin is unaffected'],
+                ] as [$is_order_pay, $is_admin, $expected_offered, $description]
+            ) {
+                WC()->cart = new StubCart(1000.0);
+                WC()->customer = new StubCustomer('NL');
+                $GLOBALS['__twoinc_test_is_order_pay'] = $is_order_pay;
+                $GLOBALS['__twoinc_test_is_admin'] = $is_admin;
 
-            WC()->customer = new StubCustomer('DE');
-            $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate($gateways);
-            TinyAssert::true(!isset($result['woocommerce-gateway-testbrand']));
+                $result = self::gateway(self::EUR_250_NET)
+                    ->apply_brand_availability_gate(['woocommerce-gateway-testbrand' => 'gw']);
+
+                TinyAssert::same(
+                    $expected_offered,
+                    isset($result['woocommerce-gateway-testbrand']),
+                    $description
+                );
+            }
         } finally {
-            unset($GLOBALS['__twoinc_test_is_order_pay']);
+            unset($GLOBALS['__twoinc_test_is_order_pay'], $GLOBALS['__twoinc_test_is_admin']);
         }
     }
 
@@ -9617,14 +9627,14 @@ final class BrandConfigSpec
         TinyAssert::same(0, $gateway->fx_requests, 'a percentage-only grid must never consult the FX layer');
     }
 
-    private static function testGateFxCheckAppliesOnOrderPayEndpoint(): void
+    private static function testGateFxCheckAppliesWhereTheBasketIsNotJudged(): void
     {
-        // The minimums skip the order-pay endpoint (the session cart is not
-        // the basket being paid for), but FX resolvability does not depend
-        // on a basket and order-pay is exactly a place a surcharge still
-        // gets applied — so the FX check sits OUTSIDE that guard.
+        // Whether a rate exists does not depend on a basket, so the FX check
+        // sits ahead of every gate that judges one — including the admin
+        // exemption, where an order composed by hand must not carry a
+        // silently absent surcharge.
         $GLOBALS['__twoinc_test_currency'] = 'NOK';
-        $GLOBALS['__twoinc_test_is_order_pay'] = true;
+        $GLOBALS['__twoinc_test_is_admin'] = true;
         try {
             $gateway = self::fxGateway(null, [new WP_Error()], [
                 'payment_terms_days' => [30],
@@ -9632,9 +9642,9 @@ final class BrandConfigSpec
                 'surcharge_grid' => [30 => ['fixed' => 2.5]],
             ]);
             $result = $gateway->apply_brand_availability_gate(['woocommerce-gateway-tillit' => 'gw']);
-            TinyAssert::true(!isset($result['woocommerce-gateway-tillit']), 'order-pay must still be FX-gated');
+            TinyAssert::true(!isset($result['woocommerce-gateway-tillit']), 'wp-admin must still be FX-gated');
         } finally {
-            unset($GLOBALS['__twoinc_test_is_order_pay']);
+            unset($GLOBALS['__twoinc_test_is_admin']);
         }
     }
 
@@ -10250,7 +10260,6 @@ final class BrandConfigSpec
             [$zero_grid, 30, null, [], 'checkout', 'full', true, 'the term is configured to charge nothing'],
             [self::termFeeSettings(), 30, null, [], 'checkout', 'empty', true, 'the basket is empty'],
             [self::termFeeSettings(), 30, null, [], 'cart', 'full', true, 'the request is not the checkout page'],
-            [self::termFeeSettings(), 30, null, [], 'order-pay', 'full', true, 'the basket is not the order being paid for'],
         ];
 
         $key = WC_Twoinc_Brand::get('gateway_id');
@@ -10267,7 +10276,6 @@ final class BrandConfigSpec
                 $GLOBALS['__twoinc_test_transients'] = [];
                 $GLOBALS['__twoinc_test_logs'] = [];
                 $GLOBALS['__twoinc_test_is_checkout'] = $context !== 'cart';
-                $GLOBALS['__twoinc_test_is_order_pay'] = $context === 'order-pay';
                 $gateway = self::quoteGateway($options, $responses);
                 WC()->session = new StubSession();
                 WC()->session->set(WC_Twoinc_Payment_Terms::SESSION_KEY, $term);
@@ -10299,7 +10307,7 @@ final class BrandConfigSpec
             });
             TinyAssert::same(0, $gateway->make_request_calls, 'the cart-fee hook must not quote a term that prices to nothing');
         } finally {
-            unset($GLOBALS['__twoinc_test_is_checkout'], $GLOBALS['__twoinc_test_is_order_pay']);
+            unset($GLOBALS['__twoinc_test_is_checkout']);
             WC()->session = $session;
             WC()->customer = $customer;
             WC()->cart = $cart;
@@ -11164,139 +11172,6 @@ final class BrandConfigSpec
             'payment_tile',
             $derive->invoke(null, 'no'),
             'checkbox unchecked ("no") must relocate into the payment tile, not disappear'
-        );
-    }
-
-    /**
-     * ABN-554. The chips' fee quote is priced on the session cart, which on
-     * the pay-for-order endpoint is not the basket being paid for.
-     */
-    private static function testTermFeesAreNotQuotedOnThePayForOrderEndpoint(): void
-    {
-        foreach (
-            [
-                [true, true, 'the pay-for-order endpoint quotes nothing'],
-                [false, false, 'every other checkout surface quotes as before'],
-            ] as [$is_order_pay, $expected, $description]
-        ) {
-            $GLOBALS['__twoinc_test_is_order_pay'] = $is_order_pay;
-            TinyAssert::same(
-                $expected,
-                WC_Twoinc_Checkout::is_pay_for_order_request(),
-                $description
-            );
-        }
-
-        unset($GLOBALS['__twoinc_test_is_order_pay']);
-    }
-
-    /**
-     * ABN-554. The pay-for-order form's country drives company search and
-     * sole-trader availability, so it has to be the country of the order the
-     * buyer is paying for. The shop's base country is the last resort, not the
-     * default — the bug this replaces marked it `selected` unconditionally.
-     */
-    private static function testOrderPayCountryComesFromTheOrderNotTheShop(): void
-    {
-        $GLOBALS['__twoinc_test_base_country'] = 'NO';
-
-        $order = function ($billing, $shipping) {
-            return new class ($billing, $shipping) {
-                private $billing;
-
-                private $shipping;
-
-                public function __construct($billing, $shipping)
-                {
-                    $this->billing = $billing;
-                    $this->shipping = $shipping;
-                }
-
-                public function get_billing_country()
-                {
-                    return $this->billing;
-                }
-
-                public function get_shipping_country()
-                {
-                    return $this->shipping;
-                }
-            };
-        };
-
-        foreach (
-            [
-                [$order('GB', ''), 'GB', 'the order\'s billing country wins'],
-                [$order('', 'SE'), 'SE', 'shipping covers a billing country the order never captured'],
-                [$order('GB', 'SE'), 'GB', 'billing still wins when both are set'],
-                [$order('', ''), 'NO', 'the shop base country is the last resort'],
-                [null, 'NO', 'off the pay-for-order endpoint there is no order to read'],
-            ] as [$subject, $expected, $description]
-        ) {
-            TinyAssert::same(
-                $expected,
-                WC_Twoinc_Checkout::resolve_order_pay_country($subject),
-                $description
-            );
-        }
-
-        unset($GLOBALS['__twoinc_test_base_country']);
-    }
-
-    /**
-     * ABN-554. WooCommerce registers the Pay endpoint's query var under the
-     * merchant's own slug (WooCommerce > Settings > Advanced), so reading the
-     * literal 'order-pay' finds no order on a renamed endpoint and every order
-     * falls back to the shop's base country.
-     */
-    private static function testOrderPayEndpointSlugComesFromTheStoredSetting(): void
-    {
-        $GLOBALS['__twoinc_test_base_country'] = 'NO';
-        $GLOBALS['__twoinc_test_wc_orders'] = [
-            7 => new class {
-                public function get_billing_country()
-                {
-                    return 'GB';
-                }
-
-                public function get_shipping_country()
-                {
-                    return '';
-                }
-            },
-        ];
-
-        foreach (
-            [
-                ['order-pay', ['order-pay' => 7], 'GB', 'the default slug still resolves'],
-                ['pay-now', ['pay-now' => 7], 'GB', 'a renamed endpoint resolves under its own slug'],
-                ['pay-now', ['order-pay' => 7], 'NO', 'the literal slug is not read once the endpoint is renamed'],
-                ['', ['order-pay' => 7], 'GB', 'a blank setting falls back to the default slug'],
-                // What a default WordPress install has: the option row was never
-                // written, so `get_option()` answers with its own default.
-                [null, ['order-pay' => 7], 'GB', 'an unset option falls back to the default slug'],
-                ['order-pay', [], 'NO', 'off the endpoint there is no order to read'],
-            ] as [$slug, $query_vars, $expected, $description]
-        ) {
-            if ($slug === null) {
-                unset($GLOBALS['__twoinc_test_options']['woocommerce_checkout_pay_endpoint']);
-            } else {
-                $GLOBALS['__twoinc_test_options']['woocommerce_checkout_pay_endpoint'] = $slug;
-            }
-            $GLOBALS['__twoinc_test_query_vars'] = $query_vars;
-
-            TinyAssert::same(
-                $expected,
-                WC_Twoinc_Checkout::resolve_order_pay_country(WC_Twoinc_Checkout::get_order_being_paid()),
-                $description
-            );
-        }
-
-        unset(
-            $GLOBALS['__twoinc_test_base_country'],
-            $GLOBALS['__twoinc_test_wc_orders'],
-            $GLOBALS['__twoinc_test_query_vars'],
-            $GLOBALS['__twoinc_test_options']['woocommerce_checkout_pay_endpoint']
         );
     }
 

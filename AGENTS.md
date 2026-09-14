@@ -480,9 +480,8 @@ prices an order under a configuration nobody chose, and nobody is told.
   through the one quote helper on one ceiling, so the gate can never give up
   sooner than the path that charges; the other plugins use the same ceiling. The judgement runs on a checkout
   page carrying the basket the fee applies to: the cart page renders no payment
-  method, the order-pay endpoint's session cart is not the basket being paid
-  for, an admin request is never judged on it, and the admin's own fee preview
-  reads the merchant rates rather than a basket quote. Off the checkout page
+  method, an admin request is never judged on it, and the admin's own fee
+  preview reads the merchant rates rather than a basket quote. Off the checkout page
   the withhold still fires on a failure the cart-fee hook recorded in the same
   request.
 - A quote answering in another currency is refused, not cached (ABN-546). The

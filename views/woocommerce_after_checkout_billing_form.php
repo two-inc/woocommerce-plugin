@@ -16,10 +16,10 @@
     /*
      * The "Enter manually" mode chip and the link back to search are built
      * in JS from the localised text map, not as markup here (TWO-25288) —
-     * load-bearing, not tidying: the pay-for-order page renders its own
-     * copy of the company inputs and runs the same search binding, so
-     * cloning static markup from this view would leave that page with no
-     * way into manual entry and no way back out.
+     * load-bearing, not tidying: every surface that runs the search binding
+     * renders its own copy of the company inputs, so cloning static markup
+     * from this view would leave those with no way into manual entry and no
+     * way back out.
      *
      * The chip is a real <button>, a sibling of the results list rather than
      * a row inside it (TWO-40), so it stays reachable without scrolling
