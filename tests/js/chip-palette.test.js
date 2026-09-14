@@ -11,6 +11,10 @@
  * are ancestor-independent — not that either checkout renders. The mode chips
  * are moved under those ancestors after the panel has built them, since the
  * harness mounts a classic form either way.
+ *
+ * The cascade audit at the foot of this file covers CONTESTED properties: those
+ * more than one rule matching the chip sets. A property no shipped rule sets is
+ * outside it, so a rule introducing one — a `transform`, say — passes unseen.
  */
 
 "use strict";
@@ -25,10 +29,7 @@ const GREY = "#e3e3e3";
 const ACCENT = "#091030";
 const WHITE = "#ffffff";
 
-/**
- * The furniture each checkout wraps the gateway's own markup in. A chip rule
- * anchored on one checkout's ancestors silently stops matching under the other.
- */
+/** The furniture each checkout wraps the gateway's own markup in. */
 const SURFACES = {
   classic: [
     '<div id="payment"><ul class="payment_methods methods">',
@@ -130,11 +131,7 @@ function mountTermChips(surface, terms, checked) {
   ctx.termChips.render(offered, chosen);
 }
 
-/**
- * The capture-mode chips, rendered by opening the company-search panel, then
- * moved under the checkout's ancestors — the harness builds a classic form
- * either way, so this proves the rules ignore ancestors, not that Blocks mounts.
- */
+/** The capture-mode chips, rendered by opening the company-search panel. */
 function mountModeChips(surface) {
   ctx = harness.loadTwoinc({
     enable_company_search: "yes",
@@ -587,17 +584,27 @@ describe("the cascade over both chip controls", () => {
    * @returns {Object} every property more than one matching rule sets, mapped to
    *   the selector that wins it — or to the tie, spelled out, where none does.
    */
+  /** @returns {string[]} every property named anywhere inside a rule's text */
+  const propertiesIn = (rule) =>
+    (rule.cssText.match(/[-a-z]+(?=\s*:)/g) || []).reduce(
+      (all, property) => all.concat(LONGHANDS[property] || [property]),
+      []
+    );
+
   function cascadeWinners(chip) {
     const setters = {};
+    const styleRules = [];
+    const keyframes = [];
 
     Array.prototype.forEach.call(style.sheet.cssRules, (rule) => {
-      // `@keyframes` cannot paint a chip; anything else unhandled would be
-      // dropped in silence, which is how a rule inside `@media` goes unseen.
-      if (rule.type === CSSRule.KEYFRAMES_RULE) return;
-      if (rule.type !== CSSRule.STYLE_RULE) {
-        throw new Error("the audit cannot read a " + rule.constructor.name);
-      }
+      if (rule.type === CSSRule.KEYFRAMES_RULE) keyframes.push(rule);
+      else if (rule.type === CSSRule.STYLE_RULE) styleRules.push(rule);
+      // Anything else would be dropped in silence, which is how a rule inside
+      // `@media` goes unseen.
+      else throw new Error("the audit cannot read a " + rule.constructor.name);
+    });
 
+    styleRules.forEach((rule) => {
       const matched = arms(rule.selectorText).filter((arm) => chip.matches(arm));
       if (!matched.length) return;
 
@@ -609,6 +616,16 @@ describe("the cascade over both chip controls", () => {
           label: asShipped(rule.selectorText) + (important ? " !important" : "")
         });
       });
+    });
+
+    // An animation outranks every normal author declaration, and
+    // `animation-fill-mode: forwards` keeps its last frame after the run, so a
+    // `@keyframes` block is only harmless while it cannot reach this chip.
+    const animated = setters.animation || setters["animation-name"];
+    keyframes.forEach((rule) => {
+      if (animated && propertiesIn(rule).some((property) => setters[property])) {
+        throw new Error("@keyframes " + rule.name + " can repaint this chip");
+      }
     });
 
     return Object.keys(setters)
