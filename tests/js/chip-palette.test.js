@@ -1,11 +1,16 @@
 /**
- * ABN-589 — the four states of the two chip controls, read as computed style
- * off chips the shipped code rendered, on both checkout surfaces.
+ * ABN-589 — every state of the two chip controls, read as computed style off
+ * chips the shipped code rendered.
  *
  * jsdom has no pointer, so `:hover` never matches. The stylesheet is injected
  * with `:hover` swapped for an attribute selector of the same specificity,
  * which leaves the cascade, the source order and every declaration under test
  * exactly as shipped while letting a test choose the hovered chip.
+ *
+ * The chips are mounted under each checkout's ancestors, which proves the rules
+ * are ancestor-independent — not that either checkout renders. The mode chips
+ * are moved under those ancestors after the panel has built them, since the
+ * harness mounts a classic form either way.
  */
 
 "use strict";
@@ -21,8 +26,8 @@ const ACCENT = "#091030";
 const WHITE = "#ffffff";
 
 /**
- * The furniture each surface wraps the gateway's own markup in. A chip rule
- * anchored on one surface's ancestors silently stops matching on the other.
+ * The furniture each checkout wraps the gateway's own markup in. A chip rule
+ * anchored on one checkout's ancestors silently stops matching under the other.
  */
 const SURFACES = {
   classic: [
@@ -49,6 +54,20 @@ const SOLE_TRADER = {
     enter_manually: "Enter manually"
   }
 };
+
+/** The containers the gateway description emits, read from the source of them. */
+const TERM_CHIP_CONTAINERS = (() => {
+  const php = fs.readFileSync(path.join(harness.REPO_ROOT, "class", "WC_Twoinc.php"), "utf8");
+  const emitted = php.match(
+    /<span class="twoinc-term-chips-heading[^>]*><\/span>\s*<div class="twoinc-term-chips[^>]*><\/div>/
+  );
+
+  if (!emitted) {
+    throw new Error("the gateway description no longer emits the term-chip containers");
+  }
+
+  return emitted[0];
+})();
 
 let ctx;
 let style;
@@ -105,17 +124,17 @@ function mountTermChips(surface, terms, checked) {
       heading: "Selected payment terms"
     }
   });
-  surfaceLeaf(surface).innerHTML =
-    '<span class="twoinc-term-chips-heading hidden" id="twoinc-term-chips-heading"></span>' +
-    '<div class="twoinc-term-chips hidden" role="radiogroup" aria-labelledby="twoinc-term-chips-heading"></div>';
+  surfaceLeaf(surface).innerHTML = TERM_CHIP_CONTAINERS;
   ctx.termChips.fees = {};
   ctx.termChips.feesLoaded = true;
   ctx.termChips.render(offered, chosen);
-
-  return ".twoinc-term-chip";
 }
 
-/** The capture-mode chips, rendered by opening the company-search panel. */
+/**
+ * The capture-mode chips, rendered by opening the company-search panel, then
+ * moved under the checkout's ancestors — the harness builds a classic form
+ * either way, so this proves the rules ignore ancestors, not that Blocks mounts.
+ */
 function mountModeChips(surface) {
   ctx = harness.loadTwoinc({
     enable_company_search: "yes",
@@ -129,13 +148,76 @@ function mountModeChips(surface) {
   ctx.soleTrader.availabilityByCountry = { GB: true };
   harness.openCompanyPanel(ctx.$, ctx.helper);
   surfaceLeaf(surface).appendChild(document.querySelector(".two-company-field-wrap"));
-
-  return ".two-company-mode-chip";
 }
 
+/**
+ * The shipped selectors each control is styled by, spelled as the stylesheet
+ * spells them. The cascade audit names one of these as the winner it expects
+ * for every contested property, so a rule that out-specifies the intended one
+ * fails rather than passing for being unique.
+ */
+const TERM = {
+  base: ".twoinc-term-chip",
+  chosen: ".twoinc-term-chip.twoinc-term-chip--selected",
+  state:
+    ".twoinc-term-chip:not(.twoinc-term-chip--selected):not(:disabled):hover, " +
+    ".twoinc-term-chip:not(.twoinc-term-chip--selected):not(:disabled):focus",
+  sole: ".twoinc-term-chip.twoinc-term-chip--single"
+};
+
+const MODE = {
+  base: ".two-company-mode-chip",
+  chosen: ".two-company-mode-chip.two-company-mode-chip--selected",
+  state:
+    ".two-company-mode-chip:not(.two-company-mode-chip--selected):hover, " +
+    ".two-company-mode-chip:not(.two-company-mode-chip--selected):focus"
+};
+
+/** @returns {Object} every property mapped to the selector expected to win it */
+const winners = (selector, properties) =>
+  properties.reduce((all, property) => Object.assign(all, { [property]: selector }), {});
+
 const CONTROLS = {
-  "payment-term chip": mountTermChips,
-  "company-mode chip": mountModeChips
+  "payment-term chip": {
+    mount: mountTermChips,
+    selector: TERM.base,
+    // The base rule paints with the `background` shorthand, so the chosen rule
+    // has to out-rank it on every longhand that shorthand also sets.
+    chosen: winners(TERM.chosen, [
+      "background-color",
+      "background-image",
+      "background-repeat",
+      "border-color",
+      "color"
+    ]),
+    state: winners(TERM.state, [
+      "background-color",
+      "background-image",
+      "background-repeat",
+      "border-color",
+      "border-style",
+      "border-width",
+      "padding-bottom",
+      "padding-left",
+      "padding-right",
+      "padding-top"
+    ])
+  },
+  "company-mode chip": {
+    mount: mountModeChips,
+    selector: MODE.base,
+    chosen: winners(MODE.chosen, ["background-color", "border-color", "color"]),
+    state: winners(MODE.state, [
+      "background-color",
+      "border-color",
+      "border-style",
+      "border-width",
+      "padding-bottom",
+      "padding-left",
+      "padding-right",
+      "padding-top"
+    ])
+  }
 };
 
 /**
@@ -143,8 +225,10 @@ const CONTROLS = {
  *   guarding against an empty row making every assertion vacuous
  */
 function chips(control, surface) {
-  const selector = CONTROLS[control](surface);
-  const rendered = Array.prototype.slice.call(document.querySelectorAll(selector));
+  CONTROLS[control].mount(surface);
+  const rendered = Array.prototype.slice.call(
+    document.querySelectorAll(CONTROLS[control].selector)
+  );
   expect(rendered.length).toBeGreaterThan(1);
 
   const selected = rendered.filter((chip) => chip.className.indexOf("--selected") !== -1);
@@ -275,7 +359,7 @@ afterEach(() => {
 });
 
 describe.each(Object.keys(CONTROLS))("the %s", (control) => {
-  describe.each(Object.keys(SURFACES))("on the %s checkout", (surface) => {
+  describe.each(Object.keys(SURFACES))("under %s checkout ancestors", (surface) => {
     test.each(STATES)(
       "$case",
       ({ which, hovered, focused, borderWidth, borderColor, background, color }) => {
@@ -367,6 +451,9 @@ describe("the sole payment-term chip", () => {
     chip.setAttribute(HOVER, "");
     chip.focus();
 
+    // jsdom focuses a disabled button where a browser refuses to, so the
+    // `:focus` arm's `:not(:disabled)` is genuinely exercised here.
+    expect(document.activeElement).toBe(chip);
     expect(paint(chip)).toEqual(resting);
     expect(resting).toEqual({
       borderWidth: "2px",
@@ -381,12 +468,12 @@ describe("the sole payment-term chip", () => {
  * jsdom's `getComputedStyle` resolves a cascade by source order alone — it
  * ignores specificity entirely — so every computed-style test above measures
  * declarations and order, never which rule a browser would actually pick. This
- * closes that gap analytically: for each chip state it enumerates the rules the
- * chip matches and requires the highest-specificity setter of each contested
- * property to be unique, so no state is left for source order to decide.
+ * closes that gap analytically: for each chip state it names the selector that
+ * must win every contested property, so a rule that out-specifies the intended
+ * one fails, and so does one that merely ties with it.
  */
 describe("the cascade over both chip controls", () => {
-  /** Longhands a shorthand in this stylesheet also sets, so both contest it. */
+  /** Longhands a shorthand in this stylesheet also sets, so both contest them. */
   const LONGHANDS = {
     border: ["border-width", "border-style", "border-color"],
     padding: ["padding-top", "padding-right", "padding-bottom", "padding-left"],
@@ -396,16 +483,74 @@ describe("the cascade over both chip controls", () => {
 
   const count = (text, pattern) => (text.match(pattern) || []).length;
 
-  /** @returns {number} one comparable weight for a selector's specificity */
-  function specificity(selector) {
+  /** @returns {string} the text between the parenthesis at `open` and its partner */
+  function balanced(selector, open) {
+    let depth = 0;
+
+    for (let at = open; at < selector.length; at += 1) {
+      if (selector[at] === "(") depth += 1;
+      if (selector[at] === ")") {
+        depth -= 1;
+        if (depth === 0) return selector.slice(open + 1, at);
+      }
+    }
+
+    throw new Error("unbalanced parenthesis in selector: " + selector);
+  }
+
+  /** @returns {string[]} one entry per comma-separated arm of a selector list */
+  function arms(selector) {
+    const found = [];
+    let depth = 0;
+    let from = 0;
+
+    for (let at = 0; at < selector.length; at += 1) {
+      const character = selector[at];
+      if (character === "(" || character === "[") depth += 1;
+      else if (character === ")" || character === "]") depth -= 1;
+      else if (character === "," && depth === 0) {
+        found.push(selector.slice(from, at));
+        from = at + 1;
+      }
+    }
+
+    return found
+      .concat(selector.slice(from))
+      .map((arm) => arm.trim())
+      .filter(Boolean);
+  }
+
+  /** Refuses anything this scorer would otherwise mis-score in silence. */
+  function refuseUnsupported(arm) {
+    if (/:(is|where|has)\(/.test(arm)) {
+      throw new Error("selector needs a real specificity engine: " + arm);
+    }
+
+    if (/\[[^\]]*["']/.test(arm)) {
+      throw new Error("quoted attribute value would be read as a combinator: " + arm);
+    }
+
+    for (let at = arm.indexOf(":not("); at !== -1; at = arm.indexOf(":not(", at + 5)) {
+      const inner = balanced(arm, at + 4);
+      if (inner.indexOf(":not(") !== -1 || arms(inner).length > 1) {
+        throw new Error("nested or multi-argument :not() is not scored here: " + arm);
+      }
+    }
+  }
+
+  /** @returns {number} one comparable weight for a single selector arm */
+  function specificity(arm) {
+    refuseUnsupported(arm);
+
     let ids = 0;
     let classes = 0;
     let types = 0;
 
-    const rest = selector.replace(/:not\(([^)]*)\)/g, (whole, inner) => {
-      ids += Math.floor(specificity(inner) / 10000);
-      classes += Math.floor(specificity(inner) / 100) % 100;
-      types += specificity(inner) % 100;
+    const rest = arm.replace(/:not\(([^)]*)\)/g, (whole, inner) => {
+      const inside = specificity(inner);
+      ids += Math.floor(inside / 10000);
+      classes += Math.floor(inside / 100) % 100;
+      types += inside % 100;
       return " ";
     });
 
@@ -417,10 +562,13 @@ describe("the cascade over both chip controls", () => {
     return ids * 10000 + classes * 100 + types;
   }
 
-  /** @returns {Array<{property: string, weight: number}>} one entry per property a rule sets */
+  /** The selector as the stylesheet spells it, with the hover stand-in undone. */
+  const asShipped = (selectorText) =>
+    selectorText.replace(new RegExp("\\[" + HOVER + "\\]", "g"), ":hover").replace(/\s+/g, " ");
+
+  /** @returns {Array<{property: string, important: boolean}>} what a rule sets */
   function declarations(rule) {
     const body = rule.cssText.slice(rule.cssText.indexOf("{") + 1, rule.cssText.lastIndexOf("}"));
-    const weight = specificity(rule.selectorText);
 
     return body
       .split(";")
@@ -428,36 +576,72 @@ describe("the cascade over both chip controls", () => {
       .filter(Boolean)
       .reduce((all, part) => {
         const property = part.slice(0, part.indexOf(":")).trim();
-        // An `!important` declaration wins its own tier, so it never ties with a
-        // normal one however specific that one is.
-        const tier = /!important$/.test(part) ? weight + 1000000 : weight;
+        const important = /!important$/.test(part);
         return all.concat(
-          (LONGHANDS[property] || [property]).map((name) => ({ property: name, weight: tier }))
+          (LONGHANDS[property] || [property]).map((name) => ({ property: name, important }))
         );
       }, []);
   }
 
-  /** @returns {string[]} the properties this chip has more than one top setter for */
-  function tiedProperties(chip) {
-    const top = {};
-    const tied = {};
+  /**
+   * @returns {Object} every property more than one matching rule sets, mapped to
+   *   the selector that wins it — or to the tie, spelled out, where none does.
+   */
+  function cascadeWinners(chip) {
+    const setters = {};
 
     Array.prototype.forEach.call(style.sheet.cssRules, (rule) => {
-      if (!rule.selectorText || !chip.matches(rule.selectorText)) return;
-      declarations(rule).forEach(({ property, weight }) => {
-        if (top[property] === undefined || weight > top[property]) {
-          top[property] = weight;
-          tied[property] = false;
-        } else if (weight === top[property]) {
-          tied[property] = true;
-        }
+      // `@keyframes` cannot paint a chip; anything else unhandled would be
+      // dropped in silence, which is how a rule inside `@media` goes unseen.
+      if (rule.type === CSSRule.KEYFRAMES_RULE) return;
+      if (rule.type !== CSSRule.STYLE_RULE) {
+        throw new Error("the audit cannot read a " + rule.constructor.name);
+      }
+
+      const matched = arms(rule.selectorText).filter((arm) => chip.matches(arm));
+      if (!matched.length) return;
+
+      const weight = Math.max.apply(null, matched.map(specificity));
+      declarations(rule).forEach(({ property, important }) => {
+        setters[property] = (setters[property] || []).concat({
+          // An `!important` declaration wins its own tier, whatever out-specifies it.
+          weight: important ? weight + 1000000 : weight,
+          label: asShipped(rule.selectorText) + (important ? " !important" : "")
+        });
       });
     });
 
-    return Object.keys(tied)
-      .filter((property) => tied[property])
-      .sort();
+    return Object.keys(setters)
+      .filter((property) => setters[property].length > 1)
+      .sort()
+      .reduce((all, property) => {
+        const top = Math.max.apply(
+          null,
+          setters[property].map((setter) => setter.weight)
+        );
+        const at = setters[property]
+          .filter((setter) => setter.weight === top)
+          .map((setter) => setter.label);
+        return Object.assign(all, {
+          [property]: at.length === 1 ? at[0] : "tie between " + at.sort().join(" | ")
+        });
+      }, {});
   }
+
+  test("a selector list is scored one arm at a time, not summed", () => {
+    expect(arms(".a:hover, .b").map(specificity)).toEqual([200, 100]);
+  });
+
+  test.each([
+    { selector: ".x:is(.a.b.c)", case: ":is()" },
+    { selector: ".x:where(.a)", case: ":where(), which weighs nothing" },
+    { selector: ".x:has(.a)", case: ":has()" },
+    { selector: '.x[data-y="a b"]', case: "a quoted attribute value" },
+    { selector: ".x:not(:not(.y))", case: "a nested :not()" },
+    { selector: ".x:not(a, .b)", case: "a multi-argument :not()" }
+  ])("the scorer refuses $case rather than score it wrong in silence", ({ selector }) => {
+    expect(() => specificity(selector)).toThrow();
+  });
 
   describe.each(Object.keys(CONTROLS))("the %s", (control) => {
     test.each(STATES)("$case", ({ which, hovered, focused }) => {
@@ -469,15 +653,25 @@ describe("the cascade over both chip controls", () => {
         chip.focus();
       }
 
-      expect(tiedProperties(chip)).toEqual([]);
+      const expected = which === "selected" ? CONTROLS[control].chosen : CONTROLS[control].state;
+
+      expect(cascadeWinners(chip)).toEqual(
+        hovered || focused || which === "selected" ? expected : {}
+      );
     });
   });
 
-  test("the disabled sole term chip, which the state rules deliberately skip", () => {
-    mountTermChips("classic", [30]);
+  test.each([
+    { checked: 30, chosen: true, case: "chosen, as one offered term normally leaves it" },
+    { checked: 60, chosen: false, case: "unchosen, when the stored term is not the one on offer" }
+  ])("the disabled sole term chip, which the state rule skips: $case", ({ checked, chosen }) => {
+    mountTermChips("classic", [30], checked);
     const chip = document.querySelector(".twoinc-term-chip");
     chip.setAttribute(HOVER, "");
+    chip.focus();
 
-    expect(tiedProperties(chip)).toEqual([]);
+    expect(cascadeWinners(chip)).toEqual(
+      Object.assign({ cursor: TERM.sole }, chosen ? CONTROLS["payment-term chip"].chosen : {})
+    );
   });
 });
