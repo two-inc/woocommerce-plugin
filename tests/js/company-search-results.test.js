@@ -432,7 +432,6 @@ describe("company search hints", () => {
       expect(source).not.toContain("Enter company name to search");
       expect(source).not.toContain("company_search_placeholder");
     });
-
   });
 
   /**
