@@ -14,6 +14,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
         /** WC session key holding the company captured in the current cart (ABN-554). */
         const CAPTURED_COMPANY_SESSION_KEY = 'twoinc_captured_company';
+        const CAPTURED_FIELD_MAX_LENGTH = 100;
 
         public function __construct($wc_twoinc)
         {
@@ -402,8 +403,22 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             }
 
             $order = wc_get_order($order_id);
+            if (!$order || !method_exists($order, 'get_order_key')) {
+                return null;
+            }
 
-            return $order ?: null;
+            // wp_footer fires whether or not core's pay template accepted the
+            // request, so this bootstrap judges ownership for itself (ABN-554).
+            $key = isset($_GET['key']) ? sanitize_text_field(wp_unslash((string) $_GET['key'])) : '';
+            if (!hash_equals((string) $order->get_order_key(), $key)) {
+                return null;
+            }
+
+            if (!function_exists('current_user_can') || !current_user_can('pay_for_order', $order_id)) {
+                return null;
+            }
+
+            return $order;
         }
 
         /**
@@ -449,6 +464,12 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             if ((string) $company_id === '' && (string) $company_name === '') {
                 self::forget_captured_company();
+                return;
+            }
+
+            // A capture belongs to a cart; written without one it would be
+            // read back by whatever cart the buyer opens next (ABN-554).
+            if (!self::cart_has_contents()) {
                 return;
             }
 
@@ -524,10 +545,23 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             }
 
             self::remember_captured_company(
-                sanitize_text_field((string) ($_POST['company_id'] ?? '')),
-                sanitize_text_field((string) ($_POST['company_name'] ?? ''))
+                self::posted_capture_field('company_id'),
+                self::posted_capture_field('company_name')
             );
             wp_send_json_success();
+        }
+
+        /**
+         * Bounded because whatever this accepts is held in the session row and
+         * echoed into every later checkout render (ABN-554).
+         */
+        private static function posted_capture_field(string $key): string
+        {
+            $value = sanitize_text_field(wp_unslash((string) ($_POST[$key] ?? '')));
+
+            return function_exists('mb_substr')
+                ? mb_substr($value, 0, self::CAPTURED_FIELD_MAX_LENGTH)
+                : substr($value, 0, self::CAPTURED_FIELD_MAX_LENGTH);
         }
 
         /**
@@ -626,6 +660,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'csrf_token' => wp_create_nonce('twoinc_checkout'),
                 ],
                 'remember_company_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_remember_company') : '',
+                // A Blocks store serves the pay-for-order endpoint from the
+                // checkout page itself, so the capture controls mount there
+                // too and must not post into the cart's memory (ABN-554).
+                'order_pay' => self::get_order_being_paid() !== null,
                 // Chip selector bootstrap (TWO-24751). JS renders only; the
                 // live data (fees, selection) comes from the wc-ajax
                 // endpoints in WC_Twoinc_Payment_Terms.

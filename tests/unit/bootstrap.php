@@ -905,6 +905,13 @@ class StubOrder
     // Meta store mirroring WC_Order::get_meta single-value behaviour.
     public $meta = [];
 
+    public $order_key = 'wc_order_stubkey';
+
+    public function get_order_key()
+    {
+        return $this->order_key;
+    }
+
     public function get_item_subtotal($item, $inc_tax = false, $round = true)
     {
         $qty = max(1, (int) $item['quantity']);

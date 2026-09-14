@@ -16236,12 +16236,18 @@ final class CaptureMemorySpec
             'testAnEmptyCartReplaysNothingWithNoHookInvolved',
             'testPlacingTheOrderEndsTheCartMemory',
             'testTheOrderBeingPaidReplaysItsOwnCompany',
+            'testAStrangersOrderIsNeverReplayed',
+            'testAnEmptyCartRefusesTheWrite',
+            'testACaptureMadeOnTheOrderPayPageNeverReachesTheNextCart',
+            'testAnOversizedCaptureIsBounded',
+            'testACapturedNameKeepsItsPunctuation',
             'testTheMerchantSetCompanyPrefillsWhenNothingWasCaptured',
             'testACaptureNeverDestroysTheMerchantSetCompany',
             'testOrderingNeverWritesTheBuyersCompanyIntoTheProfile',
             'testTheWriterRefusesAnInvalidToken',
             'testAProfileSaveOmittingTheFieldsLeavesThemStanding',
             'testAProfileSaveStoresSanitisedText',
+            'testAProfileSaveCanClearAField',
         ];
         foreach ($tests as $test) {
             self::$test();
@@ -16335,20 +16341,128 @@ final class CaptureMemorySpec
         }
     }
 
-    /** Given an order carrying a company; When its pay-for-order page renders; Then it replays that order's, not the session's. */
+    /** Given an order placed through the gateway; When its pay-for-order page renders; Then it replays that order's company, not the session's. */
     private static function testTheOrderBeingPaidReplaysItsOwnCompany(): void
     {
         self::liveCart();
         self::capture();
+        $order = self::placeableOrder();
+        $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+        $GLOBALS['__twoinc_test_notices'] = [];
+        $GLOBALS['__twoinc_test_logs'] = [];
+        $_POST = ['company_id' => '811223344', 'company_name' => 'Second Company AS'];
+
+        try {
+            $result = self::placingGateway()->process_payment(42);
+            TinyAssert::same('success', $result['result'] ?? null, 'the order must have been placed');
+
+            $_POST = [];
+            self::onTheOrderPayPage(42, $order);
+
+            $rendered = self::bootstrap();
+            TinyAssert::same('811223344', $rendered['company_id'], 'the order being paid replays the company it was placed with');
+            TinyAssert::same('Second Company AS', $rendered['billing_company'], 'and the name it was placed with');
+        } finally {
+            $_POST = [];
+            self::reset();
+        }
+    }
+
+    /** Given someone else's order id; When the pay-for-order bootstrap runs; Then it discloses nothing. */
+    private static function testAStrangersOrderIsNeverReplayed(): void
+    {
+        self::liveCart();
         $order = new StubOrder();
         $order->meta = ['company_id' => '811223344', 'company_name' => 'Second Company AS'];
         $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
         $GLOBALS['__twoinc_test_query_vars'] = ['order-pay' => 42];
 
-        $rendered = self::bootstrap();
-        TinyAssert::same('811223344', $rendered['company_id'], 'the order being paid replays its own company');
-        TinyAssert::same('Second Company AS', $rendered['billing_company'], 'and its own name');
+        try {
+            $_GET = ['key' => 'wc_order_guessed'];
+            $GLOBALS['__twoinc_test_object_caps'] = ['pay_for_order:42'];
+            TinyAssert::same('', self::bootstrap()['company_id'], 'a wrong order key discloses no company');
+            TinyAssert::same('', self::bootstrap()['billing_company'], 'nor a company name');
+
+            $_GET = ['key' => $order->order_key];
+            $GLOBALS['__twoinc_test_object_caps'] = [];
+            TinyAssert::same('', self::bootstrap()['company_id'], 'a visitor who may not pay for the order discloses no company');
+            TinyAssert::same('', self::bootstrap()['billing_company'], 'nor a company name');
+
+            $GLOBALS['__twoinc_test_object_caps'] = ['pay_for_order:42'];
+            TinyAssert::same('811223344', self::bootstrap()['company_id'], 'the buyer holding both still sees their own order');
+        } finally {
+            self::reset();
+        }
+    }
+
+    /** Given no cart; When a capture is written; Then the cart the buyer starts next replays nothing. */
+    private static function testAnEmptyCartRefusesTheWrite(): void
+    {
+        self::liveCart();
+        WC()->cart = new StubCart(0.0, 0.0, true);
+        self::capture();
+
+        WC()->cart = new StubCart(100.0, 0.0, false);
+        TinyAssert::same('', self::bootstrap()['company_id'], 'a capture belonging to no cart cannot be adopted by the next one');
+        TinyAssert::same('', self::bootstrap()['billing_company'], 'nor its name');
         self::reset();
+    }
+
+    /** Given the pay-for-order page; When the bootstrap renders; Then the browser is told this page owns no cart memory. */
+    private static function testACaptureMadeOnTheOrderPayPageNeverReachesTheNextCart(): void
+    {
+        self::liveCart();
+        $order = new StubOrder();
+        $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+
+        try {
+            TinyAssert::same(false, self::bootstrap()['order_pay'] ?? null, 'an ordinary checkout render owns its cart memory');
+
+            self::onTheOrderPayPage(42, $order);
+            TinyAssert::same(true, self::bootstrap()['order_pay'] ?? null, 'the pay-for-order page must stop the browser writing into the cart memory');
+        } finally {
+            self::reset();
+        }
+    }
+
+    /** Given a company name WordPress slashed on its way into the POST; When it is captured; Then the checkout replays what the buyer picked. */
+    private static function testACapturedNameKeepsItsPunctuation(): void
+    {
+        self::liveCart();
+        $saved = $_POST;
+        $_POST = ['company_id' => '923456789', 'company_name' => "O\\'Brien \\\"Holdings\\\" AS"];
+
+        try {
+            WC_Twoinc_Checkout::ajax_remember_company();
+
+            TinyAssert::same(
+                'O\'Brien "Holdings" AS',
+                self::bootstrap()['billing_company'],
+                "the replayed name must carry no slashes WordPress added"
+            );
+        } finally {
+            $_POST = $saved;
+            self::reset();
+        }
+    }
+
+    /** Given a capture far longer than any company name; When it is written; Then the session row stays bounded. */
+    private static function testAnOversizedCaptureIsBounded(): void
+    {
+        self::liveCart();
+        $saved = $_POST;
+        $_POST = ['company_id' => str_repeat('9', 5000), 'company_name' => str_repeat('A', 5000)];
+
+        try {
+            WC_Twoinc_Checkout::ajax_remember_company();
+
+            $rendered = self::bootstrap();
+            TinyAssert::same(100, strlen($rendered['company_id']), 'the number is capped before it reaches the session');
+            TinyAssert::same(100, strlen($rendered['billing_company']), 'and so is the name');
+        } finally {
+            $_POST = $saved;
+            self::reset();
+        }
     }
 
     /** Given a company a merchant typed into the profile; When any checkout renders; Then it prefills. */
@@ -16449,7 +16563,10 @@ final class CaptureMemorySpec
         }
     }
 
-    /** These four rows are echoed back into the checkout bootstrap. */
+    /**
+     * These four rows are echoed back into the checkout bootstrap, and WordPress
+     * slashes every POST value on the way in.
+     */
     private static function testAProfileSaveStoresSanitisedText(): void
     {
         $GLOBALS['__twoinc_test_user_meta'] = [7 => []];
@@ -16457,25 +16574,55 @@ final class CaptureMemorySpec
         $_POST = [
             '_wpnonce' => wp_create_nonce('update-user_7'),
             'twoinc_company_id' => '<script>alert(1)</script>811223344',
-            'twoinc_billing_company' => 'Second <b>Company</b> AS',
+            'twoinc_billing_company' => "O\\'Brien <b>Holdings</b> AS",
             'twoinc_department' => 'Fin<script>x</script>ance',
-            'twoinc_project' => 'Rollout',
+            'twoinc_project' => "Rollout \\\"Q3\\\"",
         ];
 
         try {
             WC_Twoinc::save_user_meta(7);
 
             $meta = $GLOBALS['__twoinc_test_user_meta'][7] ?? [];
-            $keys = array_map(
-                ['WC_Twoinc_Brand', 'prefixed_name'],
-                ['company_id', 'billing_company', 'department', 'project']
-            );
-            foreach ($keys as $key) {
-                TinyAssert::true(
-                    strpos((string) ($meta[$key] ?? ''), '<') === false,
-                    "$key reached storage carrying markup"
+            $expected = [
+                'company_id' => 'alert(1)811223344',
+                'billing_company' => "O'Brien Holdings AS",
+                'department' => 'Finxance',
+                'project' => 'Rollout "Q3"',
+            ];
+            foreach ($expected as $name => $value) {
+                TinyAssert::same(
+                    $value,
+                    $meta[WC_Twoinc_Brand::prefixed_name($name)] ?? null,
+                    "$name must reach storage as the merchant typed it, stripped of markup and of WordPress's slashes"
                 );
             }
+        } finally {
+            $_POST = [];
+            $GLOBALS['__twoinc_test_object_caps'] = [];
+            self::reset();
+        }
+    }
+
+    /** Given a stored company; When the merchant submits the field empty; Then it is cleared, not kept. */
+    private static function testAProfileSaveCanClearAField(): void
+    {
+        $GLOBALS['__twoinc_test_user_meta'] = [7 => [
+            WC_Twoinc_Brand::prefixed_name('company_id') => '811223344',
+            WC_Twoinc_Brand::prefixed_name('billing_company') => 'Second Company AS',
+        ]];
+        $GLOBALS['__twoinc_test_object_caps'] = ['edit_user:7'];
+        $_POST = [
+            '_wpnonce' => wp_create_nonce('update-user_7'),
+            'twoinc_company_id' => '',
+            'twoinc_billing_company' => '',
+        ];
+
+        try {
+            WC_Twoinc::save_user_meta(7);
+
+            $meta = $GLOBALS['__twoinc_test_user_meta'][7] ?? [];
+            TinyAssert::same('', $meta[WC_Twoinc_Brand::prefixed_name('company_id')] ?? null, 'an emptied field is an instruction to clear it');
+            TinyAssert::same('', $meta[WC_Twoinc_Brand::prefixed_name('billing_company')] ?? null, 'and so is its name');
         } finally {
             $_POST = [];
             $GLOBALS['__twoinc_test_object_caps'] = [];
@@ -16526,8 +16673,18 @@ final class CaptureMemorySpec
         return array_merge(['company_id' => '', 'billing_company' => ''], $rendered);
     }
 
+    /** The request core's pay template would accept: right order, right key, right buyer. */
+    private static function onTheOrderPayPage(int $order_id, $order): void
+    {
+        $GLOBALS['__twoinc_test_query_vars'] = ['order-pay' => $order_id];
+        $GLOBALS['__twoinc_test_object_caps'] = ['pay_for_order:' . $order_id];
+        $_GET = ['key' => $order->order_key];
+    }
+
     private static function reset(): void
     {
+        $_GET = [];
+        $GLOBALS['__twoinc_test_object_caps'] = [];
         $GLOBALS['__twoinc_test_query_vars'] = [];
         $GLOBALS['__twoinc_test_user_id'] = 0;
         $GLOBALS['__twoinc_test_user_meta'] = [];

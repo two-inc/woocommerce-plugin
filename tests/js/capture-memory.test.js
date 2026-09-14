@@ -114,6 +114,20 @@ describe("ABN-554 — the captured company lives in the WC session", () => {
     }
   });
 
+  test("a capture made on the pay-for-order page is handed to no cart", () => {
+    load({ order_pay: true });
+    const ajax = harness.stubAjax(ctx.$);
+
+    try {
+      ctx.capture.write(NAME, NUMBER);
+      jest.runAllTimers();
+
+      expect(ajax.calls.filter((c) => c.url === harness.REMEMBER_COMPANY_URL)).toEqual([]);
+    } finally {
+      ajax.restore();
+    }
+  });
+
   test("restoring what the page already carried posts nothing back", () => {
     load({ billing_company: NAME, company_id: NUMBER });
     const ajax = harness.stubAjax(ctx.$);
