@@ -124,8 +124,10 @@ Vendored assets
   unmounted and `toggleBusinessFields()` puts WooCommerce's own company field on
   screen in its place — the capture mode stays `search`, since the layout
   changed and the mode did not (ABN-585). The company field never carries the
-  native `disabled` flag, and exactly one company-name field is always on
-  screen. The registry gate reads the wider company-search coverage, one global
+  native `disabled` flag, and a company-name field is always on screen —
+  exactly one, except in payment-tile placement, where the tile row and the
+  address area's own `#billing_company_field` are both shown by design. The
+  registry gate reads the wider company-search coverage, one global
   list — not the sole-trader chip's own per-country registry lookup, which is a
   different and smaller list.
 - **The chip row is shown whenever it offers a mode the buyer is not already

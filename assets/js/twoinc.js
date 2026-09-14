@@ -1360,14 +1360,13 @@ class TwoCompanySearch {
    */
   companySearchIsOffered() {
     if (!twoincSupportedBuyerCountries.isSupported(this.currentCountry())) return false;
-    return this.companySearchCountryIsSupported() || this.soleTrader.isAvailable();
+    if (this.companySearchCountryIsSupported()) return true;
+    // Pending reads as offered, as the registry gate's own null does: an
+    // answer that may restore the control is not worth a visible teardown.
+    return this.soleTrader.isAvailable() || this.soleTrader.availabilityIsPending();
   }
 
-  /**
-   * Swap the company-name layout when that answer moves. Edge-triggered: the
-   * swap re-enters this through the control's own re-bind. The first answer
-   * only records itself — `initialize()`'s own pass lays the rows out.
-   */
+  /** Edge-triggered: the first answer only records itself. */
   syncCompanySearchOffered() {
     const offered = this.companySearchIsOffered();
     const known = this.companySearchOffered !== null;
@@ -3709,6 +3708,13 @@ function createSoleTraderController(companySearch) {
       return controller.availabilityByCountry[country] === true;
     },
 
+    /** Countries whose availability answer is still on the wire. */
+    pendingAvailability: {},
+
+    availabilityIsPending: function () {
+      return controller.pendingAvailability[controller.currentCountry()] === true;
+    },
+
     /**
      * Re-evaluate the toggle after every checkout update or country change.
      * Availability is decided server-side by the registry answer for the
@@ -3731,8 +3737,14 @@ function createSoleTraderController(companySearch) {
         controller.apply(controller.availabilityByCountry[country]);
         return;
       }
+      controller.pendingAvailability[country] = true;
       jQuery
         .get(cfg.availability_url, { country: country, csrf_token: cfg.csrf_token })
+        // Registered first, so the handlers below run with the flag already
+        // cleared — they are what re-reads it.
+        .always(function () {
+          delete controller.pendingAvailability[country];
+        })
         .done(function (response) {
           const available = !!(
             response &&

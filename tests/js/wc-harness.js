@@ -166,6 +166,10 @@ function loadTwoinc(twoinc) {
   const $ = installJQuery();
   installWcParams();
   installCompanySearchPanel();
+  // Each load leaves its own document-level listener for the
+  // supported-countries answer, bound to that load's controls; left in place
+  // they stack up and act on the next test's DOM.
+  $(document).off("twoinc_supported_search_countries_updated");
   const exported = loadPluginSource();
   const settings = Object.assign(
     {

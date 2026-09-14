@@ -15,6 +15,22 @@
 
 const harness = require("./wc-harness");
 
+/** Which of the two billing company-name rows the buyer can see. */
+function visibleCompanyRow() {
+  return ["billing_company_display_field", "billing_company_field"].filter(function (id) {
+    const row = document.getElementById(id);
+    return row && !row.classList.contains("hidden");
+  });
+}
+
+/** Which of the two shipping company-name rows the buyer can see. */
+function visibleShippingRow() {
+  return ["shipping_company_display_field", "shipping_company_field"].filter(function (id) {
+    const row = document.getElementById(id);
+    return row && !row.classList.contains("hidden");
+  });
+}
+
 describe("company search country gate", () => {
   let ctx;
   let ajax;
@@ -58,12 +74,32 @@ describe("company search country gate", () => {
       .hasClass(ctx.helper.companySearchUnsupportedCountryClass);
   }
 
-  /** Which of the two company-name rows the buyer can see. */
-  function visibleCompanyRow() {
-    return ["billing_company_display_field", "billing_company_field"].filter(function (id) {
-      const row = document.getElementById(id);
-      return row && !row.classList.contains("hidden");
-    });
+  /**
+   * The shipping form, as `WC_Twoinc_Checkout::update_company_fields()`
+   * declares its rows — the search row carrying `hidden`, the native one not.
+   */
+  function addShippingForm(country) {
+    ctx
+      .$("form[name='checkout']")
+      .append(
+        [
+          '<div class="woocommerce-shipping-fields__field-wrapper">',
+          '  <select id="shipping_country" name="shipping_country">',
+          '    <option value="' + country + '" selected></option>',
+          "  </select>",
+          '  <p id="shipping_company_display_field" class="form-row shipping_company_search form-row-wide hidden">',
+          '    <span class="woocommerce-input-wrapper">',
+          '      <input type="text" id="shipping_company_display" name="shipping_company_display" autocomplete="off" />',
+          "    </span>",
+          "  </p>",
+          '  <p id="shipping_company_field" class="form-row form-row-wide">',
+          '    <span class="woocommerce-input-wrapper">',
+          '      <input type="text" id="shipping_company" name="shipping_company" />',
+          "    </span>",
+          "  </p>",
+          "</div>"
+        ].join("\n")
+      );
   }
 
   /** Move the billing country the way the buyer does, through the change handler. */
@@ -160,7 +196,7 @@ describe("company search country gate", () => {
     expect(document.querySelector("#billing_company_display").getAttribute("role")).toBeNull();
   });
 
-  test("the control comes back when the buyer returns to a covered country", () => {
+  test("the control comes back whole when the buyer returns to a covered country", () => {
     settleGates(["GB"], undefined);
     selectCountry("JP");
 
@@ -168,6 +204,45 @@ describe("company search country gate", () => {
 
     expect(visibleCompanyRow()).toEqual(["billing_company_display_field"]);
     expect(ctx.helper.panel.isBound()).toBe(true);
+    // Bound is not enough: a panel back on screen with its query row still
+    // withdrawn, or a wrap still marked unsupported, is the same dead control.
+    expect(searchIsWithdrawn()).toBe(false);
+    expect(wrapHasUnsupportedClass()).toBe(false);
+  });
+
+  /**
+   * The shipping role's own gate, which chooses between the same two rows
+   * (TWO-40). `syncBillingCountry()` is the production pass that lays both
+   * roles out.
+   */
+  test.each([
+    {
+      country: "GB",
+      registry: ["GB", "JP"],
+      row: "shipping_company_display_field",
+      description: "the search control where both gates allow the country"
+    },
+    {
+      country: "JP",
+      registry: ["GB"],
+      row: "shipping_company_field",
+      description: "the plain field on a country the registry does not cover"
+    },
+    {
+      country: "JP",
+      registry: ["GB", "JP"],
+      allowlist: ["GB"],
+      row: "shipping_company_field",
+      description: "the plain field on a country the merchant does not sell to"
+    }
+  ])("the shipping role in $country gets $description", ({ country, registry, allowlist, row }) => {
+    addShippingForm(country);
+    ctx.shippingHelper.attach();
+    settleGates(registry, allowlist);
+
+    ctx.Twoinc.getInstance().syncBillingCountry();
+
+    expect(visibleShippingRow()).toEqual([row]);
   });
 
   test("a pending fetch fails open: the field stays enabled and usable", () => {
@@ -229,6 +304,16 @@ describe("company search country gate", () => {
       expect(searchIsWithdrawn()).toBe(true);
       expect(wrapHasUnsupportedClass()).toBe(true);
       expect(fieldIsDisabled()).toBe(false);
+    });
+
+    test("a panel rebuilt after the answer landed still carries the gate", () => {
+      // A checkout re-render replaces the host the panel was bound to, and
+      // nothing re-asks the gate without a country change to ask on.
+      harness.releasePanel(ctx.helper);
+
+      ctx.helper.attach();
+
+      expect(ctx.helper.panel.isDisabled()).toBe(true);
     });
 
     test("the panel still opens, without its query row", () => {
@@ -337,4 +422,91 @@ describe("company search country gate", () => {
   function pressKeyOn(node, key) {
     node.dispatchEvent(new window.KeyboardEvent("keydown", { key: key, bubbles: true }));
   }
+});
+
+/**
+ * Sole-trader availability is fetched per country and answers after the
+ * registry gate does, so "no answer yet" must read as offered — tearing the
+ * control down on the way to an answer that restores it is a teardown and a
+ * rebuild the buyer watches happen, one round trip apart (ABN-525).
+ */
+describe("company search country gate, sole-trader availability still in flight", () => {
+  const SOLE_TRADER = {
+    availability_url: "https://shop.example.test/?wc-ajax=two_sole_trader_availability",
+    tokens_url: "https://shop.example.test/?wc-ajax=two_sole_trader_tokens",
+    csrf_token: "test-checkout-csrf-token",
+    text: {
+      registered_business: "Registered company",
+      sole_trader: "Sole trader",
+      popup_prompt: "",
+      select_different: "",
+      error: ""
+    }
+  };
+
+  let ctx;
+  let ajax;
+
+  beforeEach(() => {
+    ctx = harness.loadTwoinc({ sole_trader: SOLE_TRADER });
+    harness.buildCheckoutForm({ country: "GB" });
+    ctx.$("form[name='checkout']").append('<div class="twoinc-sole-trader-note-slot"></div>');
+    ajax = harness.stubAjax(ctx.$);
+    ctx.helper.attach();
+  });
+
+  afterEach(() => {
+    ajax.restore();
+    harness.releasePanel(ctx.helper);
+    document.body.innerHTML = "";
+  });
+
+  function lastRequestTo(url) {
+    return ajax.calls.filter((call) => call.url === url).pop();
+  }
+
+  test("the control stays up until that answer lands, and goes when it says no", () => {
+    // Given: the country the page loaded on is seeded, as `initialize()` does,
+    // so the move below reads as the buyer's own gesture.
+    ctx.helper.countryDidChange(ctx.helper.currentCountry());
+    ctx.$("#billing_country").append('<option value="JP"></option>');
+    ctx.$("#billing_country").val("JP");
+    ctx.Twoinc.getInstance().syncBillingCountry();
+
+    // When: the registry answers first, and does not cover it.
+    lastRequestTo(harness.API_PROXY.supported_countries_url).succeed({
+      supported_countries: ["GB"]
+    });
+
+    // Then: the sole-trader answer is still owed, so nothing is torn down.
+    expect(visibleCompanyRow()).toEqual(["billing_company_display_field"]);
+    expect(ctx.helper.panel.isBound()).toBe(true);
+
+    // And when it lands, and it is a no, the control goes exactly once.
+    lastRequestTo(SOLE_TRADER.availability_url).succeed({
+      success: true,
+      data: { available: false }
+    });
+
+    expect(visibleCompanyRow()).toEqual(["billing_company_field"]);
+    expect(ctx.helper.panel.isBound()).toBe(false);
+  });
+
+  test("an answer of yes keeps the control, with the search alone withdrawn", () => {
+    ctx.helper.countryDidChange(ctx.helper.currentCountry());
+    ctx.$("#billing_country").append('<option value="JP"></option>');
+    ctx.$("#billing_country").val("JP");
+    ctx.Twoinc.getInstance().syncBillingCountry();
+    lastRequestTo(harness.API_PROXY.supported_countries_url).succeed({
+      supported_countries: ["GB"]
+    });
+
+    lastRequestTo(SOLE_TRADER.availability_url).succeed({
+      success: true,
+      data: { available: true }
+    });
+
+    expect(visibleCompanyRow()).toEqual(["billing_company_display_field"]);
+    expect(ctx.helper.panel.isDisabled()).toBe(true);
+  });
 });
