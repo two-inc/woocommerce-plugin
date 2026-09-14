@@ -158,7 +158,11 @@ describe("the consent's sizing", () => {
 
   const ruleBody = (selector) => {
     const match = STYLESHEET.match(
-      new RegExp("(^|\\}|\\*/)\\s*" + selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\{([\\s\\S]*?)\\}")
+      new RegExp(
+        "(^|\\}|\\*/)\\s*" +
+          selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
+          "\\s*\\{([\\s\\S]*?)\\}"
+      )
     );
 
     if (!match) {
