@@ -2425,14 +2425,6 @@ final class BrandConfigSpec
     }
 
     /**
-     * Given a guard in process_payment refuses the order; When the Store API
-     * ran it; Then the return must be WooCommerce's failure array.
-     *
-     * ABN-554: the Store API array_merge()s this return into its payment
-     * details, so a null is a fatal TypeError and the buyer sees a critical
-     * error instead of the reason.
-     */
-    /**
      * Given the address-area company search mounts on WooCommerce's own
      * company row; When a store keeps that row hidden; Then it is revealed for
      * the Blocks checkout alone (ABN-554).
@@ -2509,6 +2501,14 @@ final class BrandConfigSpec
         }
     }
 
+    /**
+     * Given a guard in process_payment refuses the order; When the Store API
+     * ran it; Then the return must be WooCommerce's failure array.
+     *
+     * ABN-554: the Store API array_merge()s this return into its payment
+     * details, so a null is a fatal TypeError and the buyer sees a critical
+     * error instead of the reason.
+     */
     private static function testProcessPaymentGuardsReturnAFailureArray(): void
     {
         $cases = [
@@ -2520,6 +2520,7 @@ final class BrandConfigSpec
             ['plain', ['company_id' => '923456789'], new WP_Error('http', 'down'), 'Failed to request order creation', 'transport failed'],
             ['plain', ['company_id' => '923456789'], ['response' => ['code' => 400], 'body' => '{}'], 'not available for this order', 'API rejected the payload'],
             ['plain', ['company_id' => '923456789'], ['response' => ['code' => 200], 'body' => '{"status":"REJECTED"}'], 'not available for this order', 'API declined the order'],
+            ['plain', ['company_id' => '923456789'], ['result' => 'failure', 'message' => 'upstream refused'], 'upstream refused', 'the transport reported its own failure'],
         ];
 
         foreach ($cases as $case) {

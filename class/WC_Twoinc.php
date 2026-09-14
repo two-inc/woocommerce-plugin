@@ -5036,10 +5036,7 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * WooCommerce's documented failure result. The Store API merges
-         * process_payment()'s return into its payment details unconditionally,
-         * so a bare `return;` there is a fatal TypeError rather than the
-         * classic checkout's tolerated null (ABN-554).
+         * WooCommerce's documented failure result (ABN-554).
          *
          * @param string|string[] $message
          *
@@ -5288,7 +5285,7 @@ if (!class_exists('WC_Twoinc')) {
             if (isset($response) && isset($response['result']) && $response['result'] === 'failure') {
                 $error_message = sprintf(__('Failed to process payment with %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
                 $order->add_order_note($error_message);
-                return $response;
+                return self::payment_failure($response['message'] ?? $error_message);
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_validation_msg($response);

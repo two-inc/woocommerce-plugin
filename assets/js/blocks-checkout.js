@@ -72,6 +72,8 @@
   /** True while the store's own values are being written into the shadow. */
   var applying = false;
   var pushScheduled = false;
+  /** Address keys the controller has written and the store has not seen yet. */
+  var dirty = {};
   var saveScheduled = false;
   var restored = false;
   var announcedActive = null;
@@ -139,7 +141,15 @@
       var input = document.createElement("input");
       input.type = "text";
       input.id = address ? "billing_" + key : key;
-      announceWrites(input, address ? schedulePush : scheduleSave);
+      announceWrites(
+        input,
+        address
+          ? function () {
+              dirty[key] = true;
+              schedulePush();
+            }
+          : scheduleSave
+      );
       host.appendChild(input);
     });
     document.body.appendChild(host);
@@ -186,10 +196,6 @@
 
   /** The store's address into the fields the controller reads. */
   function pull() {
-    // Never over a write that has not reached the store yet: the pull would
-    // restore the pre-write value and the queued push would then find nothing
-    // to send.
-    if (pushScheduled) return false;
     var address = billingAddress();
     if (!address) return false;
     shadow();
@@ -197,6 +203,9 @@
     var moved = false;
     applying = true;
     ADDRESS_KEYS.forEach(function (key) {
+      // Skipped while the controller's own write for this key is still
+      // queued; every other key still follows the store.
+      if (dirty[key]) return;
       var input = document.getElementById("billing_" + key);
       var value = address[key] == null ? "" : String(address[key]);
       if (input && input.value !== value) {
@@ -209,13 +218,18 @@
     return moved;
   }
 
-  /** What the controller wrote into those fields, back to the store. */
+  /**
+   * What the controller wrote into those fields, back to the store — and only
+   * that. Sending every divergent key would push the buyer's own concurrent
+   * edit back to its previous value.
+   */
   function push() {
     var address = billingAddress();
     if (!address) return;
 
     var patch = null;
-    ADDRESS_KEYS.forEach(function (key) {
+    Object.keys(dirty).forEach(function (key) {
+      delete dirty[key];
       var input = document.getElementById("billing_" + key);
       if (!input) return;
       var stored = address[key] == null ? "" : String(address[key]);
@@ -236,6 +250,8 @@
 
   /** The control is already anchored to the host it would mount on now. */
   function isMounted(search) {
+    // Manual entry releases the field, which is not an unmount.
+    if (twoincCompanyCapture.modeFor(search.role) === "manual") return true;
     if (search.panel) return search.panel.isBound();
     var field = document.querySelector(search.companyFieldSelector());
     return !!(field && field.closest("." + search.fieldWrapClass));
@@ -371,9 +387,6 @@
       [events, responses]
     );
 
-    // The tile slot and the sole-trader note slot are React's to own, and the
-    // controller only builds into them — and only asks whether sole trader is
-    // available at all — once they exist.
     element.useEffect(function () {
       mount();
       resync();
@@ -409,10 +422,18 @@
     // `getCartData`, which carries the resolver — `getCustomerData` has none,
     // so its resolution never finishes.
     var store = cartStore();
-    if (!store.hasFinishedResolution || !store.hasFinishedResolution("getCartData")) return;
+    if (!store || !store.hasFinishedResolution) return;
+    // Asked for, not merely waited on: nothing else in this file selects it,
+    // so the resolver only ever starts because of this call.
+    if (store.getCartData) store.getCartData();
+    if (!store.hasFinishedResolution("getCartData")) return;
     if (!billingAddress()) return;
     restored = true;
     shadow();
+    // Before the snapshot, as `initialize()` does: it is what sets the flag
+    // `loadStorageInputs()` reads to leave a signed-in buyer's own stored
+    // company alone.
+    twoincDomHelper.loadUserMetaInputs();
     twoincDomHelper.loadStorageInputs();
     twoincDomHelper.restoreCapturedCompany();
     twoincCompanySearchControls.forEach(function (search) {
@@ -452,8 +473,13 @@
     if (!store || !store.getActivePaymentMethod) return;
     var active = store.getActivePaymentMethod() === name;
     if (active === announcedActive) return;
+    var announced = announceChoice(active);
+    if (!announced || !announced.then) return;
     announcedActive = active;
-    announceChoice(active);
+    announced.catch(function () {
+      // Never sent, so never latched: the next change must try again.
+      if (announcedActive === active) announcedActive = null;
+    });
   }
 
   /**
