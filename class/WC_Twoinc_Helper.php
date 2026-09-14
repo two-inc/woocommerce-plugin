@@ -336,9 +336,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function is_store_api_request()
         {
-            return defined('REST_REQUEST')
-                && REST_REQUEST
-                && strpos((string) ($_SERVER['REQUEST_URI'] ?? ''), '/wc/store/') !== false;
+            if (!defined('REST_REQUEST') || !REST_REQUEST) {
+                return false;
+            }
+            $uri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+
+            // The cart and checkout routes only — not products, not batch.
+            return strpos($uri, '/wc/store/v1/cart') !== false
+                || strpos($uri, '/wc/store/v1/checkout') !== false;
         }
 
         /**

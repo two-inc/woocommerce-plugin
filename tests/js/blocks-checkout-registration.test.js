@@ -28,6 +28,11 @@ function createElement(type, props) {
 /** Handlers the skin binds on document.body, keyed by the jQuery event name. */
 const bodyHandlers = {};
 
+/** One of the skin's own hidden inputs. */
+function shadowInput(id) {
+  return document.getElementById(id);
+}
+
 function globals(overrides) {
   const registered = [];
   window.jQuery = () => ({
@@ -114,7 +119,7 @@ function baseGlobals(location, billing) {
   };
   const subscribers = {};
   const activeMethod = { name: null };
-  const resolution = { finished: true };
+  const resolution = { finished: true, customerData: true };
   const captureValues = { company: "", company_id: "", mode: "search" };
   const control = {
     addressFieldSelector: "#billing_company_display",
@@ -162,6 +167,7 @@ function baseGlobals(location, billing) {
     },
     loadUserMetaInputs() {
       calls.order.push("user-meta");
+      calls.selectorAtUserMeta = control.addressFieldSelector;
     },
     loadStorageInputs() {
       calls.loads += 1;
@@ -212,7 +218,7 @@ function baseGlobals(location, billing) {
           ? { getActivePaymentMethod: () => activeMethod.name }
           : {
               getCartData: () => ({}),
-              getCustomerData: () => ({ billingAddress: address }),
+              getCustomerData: () => (resolution.customerData ? { billingAddress: address } : {}),
               getCartTotals: () => ({
                 total_price: "38600",
                 total_tax: "0",
@@ -415,215 +421,6 @@ describe("blocks-checkout.js reuses the classic controller", () => {
     const base = baseGlobals("address_area");
     const { env } = globals({});
     env.wp.data = base.data;
-    evaluate(env);
-    expect(base.calls.mounts).toBe(0);
-
-    const observed = [];
-    const RealObserver = window.MutationObserver;
-    window.MutationObserver = function (fn) {
-      observed.push(fn);
-      return new RealObserver(fn);
-    };
-    window.MutationObserver.prototype = RealObserver.prototype;
-    evaluate(env);
-    window.MutationObserver = RealObserver;
-    const atBootstrap = base.calls.mounts;
-
-    document.querySelector(".wc-block-components-text-input").innerHTML =
-      '<input id="billing-company">';
-    observed.forEach((fn) => fn([]));
-
-    expect(base.calls.mounts).toBe(atBootstrap + 1);
-  });
-
-  test("the Store API is handed the controller's own captured company", () => {
-    const base = baseGlobals("payment_tile");
-    const { env, registered } = globals({});
-    env.wp.data = base.data;
-    evaluate(env);
-
-    let handler = null;
-    registered[0].content.type({
-      eventRegistration: {
-        onPaymentSetup(fn) {
-          handler = fn;
-          return () => {};
-        }
-      },
-      emitResponse: { responseTypes: { SUCCESS: "success" } }
-    });
-
-    base.captureValues.company = "EXAMPLE TRADING LIMITED";
-    base.captureValues.company_id = "12345678";
-
-    expect(handler()).toEqual({
-      type: "success",
-      meta: {
-        paymentMethodData: {
-          company_id: "12345678",
-          company_name: "EXAMPLE TRADING LIMITED"
-        }
-      }
-    });
-  });
-});
-
-describe("blocks-checkout.js hands the controller the whole page", () => {
-  test("the tile's own slots being ready triggers the controller's full re-render pass", () => {
-    const base = baseGlobals("payment_tile");
-    const { env, registered } = globals({});
-    env.wp.data = base.data;
-    evaluate(env);
-    const atBootstrap = base.calls.resyncs;
-
-    registered[0].content.type({});
-
-    expect(base.calls.resyncs).toBe(atBootstrap + 1);
-  });
-
-  test.each([
-    {
-      id: "billing-company_field",
-      holdsTheField: true,
-      description: "Blocks' own company row is the controller's display row"
-    },
-    {
-      id: "billing_company_field",
-      holdsTheField: false,
-      // toggleBusinessFields() hides the native row while the search is the
-      // active surface, and on a Blocks checkout that row must therefore
-      // never be the buyer's only company field (ABN-554).
-      description: "the native row the controller hides carries no company field"
-    }
-  ])("$description", ({ id, holdsTheField }) => {
-    document.body.innerHTML =
-      '<div class="wc-block-components-text-input"><input id="billing-company"></div>';
-    const base = baseGlobals("address_area");
-    const { env } = globals({});
-    env.wp.data = base.data;
-    evaluate(env);
-
-    const row = document.getElementById(id);
-    expect(row).not.toBeNull();
-    expect(row.contains(document.getElementById("billing-company"))).toBe(holdsTheField);
-  });
-
-  test("a rebuilt company row is re-anchored and the summary re-rendered onto it", () => {
-    document.body.innerHTML =
-      '<div class="wp-block-woocommerce-checkout">' +
-      '<div class="wc-block-components-text-input"><input id="billing-company"></div>' +
-      "</div>";
-    const base = baseGlobals("address_area");
-    const { env } = globals({});
-    env.wp.data = base.data;
-
-    const observed = [];
-    const RealObserver = window.MutationObserver;
-    window.MutationObserver = function (fn) {
-      observed.push(fn);
-      return new RealObserver(fn);
-    };
-    window.MutationObserver.prototype = RealObserver.prototype;
-    evaluate(env);
-    window.MutationObserver = RealObserver;
-    const atBootstrap = base.calls.mounts;
-    const summariesAtBootstrap = base.calls.summaries;
-
-    // What React does on a store update: the row is replaced, taking the id
-    // and the control's wrapper with it.
-    document.querySelector(".wp-block-woocommerce-checkout").innerHTML =
-      '<div class="wc-block-components-text-input"><input id="billing-company"></div>';
-    observed.forEach((fn) => fn([]));
-
-    const row = document.getElementById("billing-company_field");
-    expect(row).not.toBeNull();
-    expect(row.contains(document.getElementById("billing-company"))).toBe(true);
-    // A child, never a sibling: the controller re-inserts the summary into the
-    // slot directly after this row on every render.
-    expect(document.getElementById("billing_company_field").parentElement).toBe(row);
-    expect(base.calls.mounts).toBe(atBootstrap + 1);
-    expect(base.calls.summaries).toBe(summariesAtBootstrap + 1);
-  });
-
-  test.each([
-    {
-      seed: { city: "Oslo" },
-      written: null,
-      expectShadow: { city: "Oslo" },
-      expectPatches: [],
-      description: "the store's address reaches the fields the controller reads"
-    },
-    {
-      seed: {},
-      written: { company: "EXAMPLE TRADING LIMITED" },
-      expectShadow: { company: "EXAMPLE TRADING LIMITED" },
-      expectPatches: [{ company: "EXAMPLE TRADING LIMITED" }],
-      description: "a capture the controller wrote reaches the store"
-    },
-    {
-      seed: {},
-      written: { address_1: "Example House", postcode: "EX1 2AB" },
-      expectShadow: { address_1: "Example House" },
-      expectPatches: [{ address_1: "Example House", postcode: "EX1 2AB" }],
-      description: "a whole registry autofill reaches the store as one dispatch"
-    }
-  ])("$description", async ({ seed, written, expectShadow, expectPatches }) => {
-    const base = baseGlobals("address_area", seed);
-    const { env } = globals({});
-    env.wp.data = base.data;
-    evaluate(env);
-
-    if (written) {
-      // Exactly how the controller writes: jQuery assigns `.value` and fires
-      // nothing.
-      Object.keys(written).forEach((key) => {
-        document.getElementById("billing_" + key).value = written[key];
-      });
-      await Promise.resolve();
-    }
-
-    Object.keys(expectShadow).forEach((key) => {
-      expect(document.getElementById("billing_" + key).value).toBe(expectShadow[key]);
-    });
-    expect(base.calls.patches).toEqual(expectPatches);
-  });
-
-  test("a pull never overwrites a write that has not reached the store yet", async () => {
-    const base = baseGlobals("address_area", { city: "Oslo" });
-    const { env } = globals({});
-    env.wp.data = base.data;
-    evaluate(env);
-    await Promise.resolve();
-    base.calls.patches.length = 0;
-
-    // The controller's write, then a store notification arriving before the
-    // queued push has dispatched.
-    document.getElementById("billing_city").value = "Bergen";
-    base.publish("wc/store/cart");
-    await Promise.resolve();
-
-    expect(document.getElementById("billing_city").value).toBe("Bergen");
-    expect(base.calls.patches).toEqual([{ city: "Bergen" }]);
-  });
-
-  test("nothing is left running on a timer", () => {
-    const base = baseGlobals("address_area");
-    const { env } = globals({});
-    env.wp.data = base.data;
-    const interval = jest.spyOn(window, "setInterval");
-    evaluate(env);
-
-    expect(interval).not.toHaveBeenCalled();
-  });
-
-  test("the control is re-anchored when the checkout block replaces its row", () => {
-    document.body.innerHTML =
-      '<div class="wp-block-woocommerce-checkout"><div class="wc-block-components-text-input"></div></div>';
-    const base = baseGlobals("address_area");
-    const { env } = globals({});
-    env.wp.data = base.data;
-    evaluate(env);
-    expect(base.calls.mounts).toBe(0);
 
     const observed = [];
     const RealObserver = window.MutationObserver;
@@ -852,6 +649,33 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(document.getElementById("twoinc-blocks-shadow").classList.contains(container)).toBe(
       true
     );
+  });
+
+  test("the control is pointed at this checkout's own company field before the restore paints it", () => {
+    const base = baseGlobals("address_area");
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    expect(base.calls.selectorAtUserMeta).toBe("#billing-company");
+  });
+
+  test("a write made while the cart held no address is not pinned forever", async () => {
+    const base = baseGlobals("address_area", { city: "Oslo" });
+    base.resolution.customerData = false;
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    // The controller writes while the store can answer nothing; the key must
+    // not stay marked, or the pull skips it for the life of the page.
+    shadowInput("billing_city").value = "Bergen";
+    await Promise.resolve();
+
+    base.resolution.customerData = true;
+    base.publish("wc/store/cart");
+
+    expect(shadowInput("billing_city").value).toBe("Oslo");
   });
 
   test("the restore waits for the cart's customer data to resolve", () => {

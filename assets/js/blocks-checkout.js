@@ -224,12 +224,15 @@
    * edit back to its previous value.
    */
   function push() {
+    var written = Object.keys(dirty);
+    // Cleared whatever happens next: a key left pinned here is one `pull()`
+    // would skip for the rest of the page, with no push left to send it.
+    dirty = {};
     var address = billingAddress();
     if (!address) return;
 
     var patch = null;
-    Object.keys(dirty).forEach(function (key) {
-      delete dirty[key];
+    written.forEach(function (key) {
       var input = document.getElementById("billing_" + key);
       if (!input) return;
       var stored = address[key] == null ? "" : String(address[key]);
@@ -444,8 +447,10 @@
   function bootstrap() {
     pull();
     pullTotals();
-    restore();
+    // Before the restore: mounting is what points the control at this
+    // checkout's own company field, and the restore paints into it.
     mount();
+    restore();
     resync();
     observeCheckout();
     if (!wp.data || !wp.data.subscribe) return;
