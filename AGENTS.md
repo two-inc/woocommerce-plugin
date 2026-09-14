@@ -213,9 +213,9 @@ Vendored assets
   `yes` saved before the switch went off cannot keep autofilling (ABN-554).
   Ticking company search on switches autofill on with it, edge-triggered
   (ABN-562). A legacy `enable_company_name` row is REWRITTEN to the current key
-  at construction, not read through a fallback: the current key's own
-  `'default' => 'yes'` is what renders the admin checkbox, so a read-time
-  fallback left the screen and the server disagreeing.
+  at construction, because the current key's own `'default' => 'yes'` is what
+  renders the admin checkbox: only one stored value makes the screen and every
+  getter agree.
 
 The payment-term chips are a radio group
 

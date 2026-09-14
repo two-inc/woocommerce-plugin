@@ -28,6 +28,40 @@ function ruleBody(selector) {
   return m === null ? null : m[1];
 }
 
+/**
+ * Every style rule in the injected sheet, at-rule descendants included — a
+ * string scan reads an `@media` prelude as the selector and misses what it
+ * wraps. Requires injectStylesheet().
+ *
+ * @returns {CSSStyleRule[]}
+ */
+function allStyleRules() {
+  const out = [];
+  const walk = (rules) => {
+    Array.prototype.forEach.call(rules || [], (rule) => {
+      if (rule.cssRules) {
+        walk(rule.cssRules);
+      } else if (rule.selectorText) {
+        out.push(rule);
+      }
+    });
+  };
+  Array.prototype.forEach.call(document.styleSheets, (sheet) => walk(sheet.cssRules));
+  return out;
+}
+
+/**
+ * @param {string} needle a selector fragment
+ * @param {RegExp} property what may not be declared
+ * @returns {string[]} the selectors of the offending rules
+ */
+function rulesDeclaring(needle, property) {
+  return allStyleRules()
+    .filter((rule) => rule.selectorText.includes(needle))
+    .filter((rule) => property.test(rule.style.cssText))
+    .map((rule) => rule.selectorText);
+}
+
 const ROWS = ["#billing_company_display_field", "#billing_company_field"];
 
 describe("billing company-row spacing", () => {
@@ -57,11 +91,7 @@ describe("billing company-row spacing", () => {
     // Requirement 3.1's third name. It is the CLASS on the search row on the
     // checkout page and on the input itself on the pay-for-order view, so a
     // rule reaching it from either shape has to be absent.
-    const offenders = stylesheetSource()
-      .split("}")
-      .filter((block) => /\.billing_company_search\b/.test(block.split("{")[0] || ""))
-      .filter((block) => /padding-bottom|padding:/.test(block));
-    expect(offenders).toEqual([]);
+    expect(rulesDeclaring(".billing_company_search", /padding/)).toEqual([]);
   });
 
   test.each([
@@ -71,22 +101,20 @@ describe("billing company-row spacing", () => {
     // A renamed or deleted rule reads as null here and fails the match, so
     // this also pins the rule still existing.
     expect(ruleBody(selector)).toMatch(/position:\s*relative/);
-    // Every rule reaching the row, and the `padding` shorthand too.
-    const offenders = stylesheetSource()
-      .split("}")
-      .filter((block) => block.split("{")[0].includes(selector))
-      .filter((block) => /padding-bottom|padding:/.test(block));
-    expect(offenders).toEqual([]);
+    expect(rulesDeclaring(selector, /padding/)).toEqual([]);
   });
 
   test("the number label pulls nothing up over the row above it", () => {
     // A negative top margin here is what the deleted row padding needed
     // cancelling; with the padding gone it would pull the number into the input.
-    const summaryRules = stylesheetSource()
-      .split("}")
-      .filter((block) => /\.twoinc-company-summary\b/.test(block.split("{")[0] || ""));
-    expect(summaryRules.length).toBeGreaterThan(0);
-    summaryRules.forEach((block) => expect(block).not.toMatch(/margin-top:\s*-/));
+    const named = allStyleRules().filter((rule) =>
+      rule.selectorText.includes(".twoinc-company-summary")
+    );
+    expect(named.length).toBeGreaterThan(0);
+    // Read off cssText: this jsdom leaves the typed `style.marginTop` null.
+    expect(
+      named.filter((rule) => /margin-top:\s*-/.test(rule.style.cssText)).map((r) => r.selectorText)
+    ).toEqual([]);
   });
 
   describe("the row's bottom margin gives way to the affordance link", () => {

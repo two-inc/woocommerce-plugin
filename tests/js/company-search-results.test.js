@@ -448,6 +448,23 @@ describe("company search hints", () => {
       expect(field[0]).toMatch(/type="text"/);
       expect(markup).not.toMatch(/<select[^>]*id="billing_company_display"/);
     });
+
+    test("the pay-for-order template puts no required asterisk on company name", () => {
+      // Hard-coded in this template, so toggleRequiredCues() cannot reach it —
+      // it carries no `.form-row` ancestor and the class is core's `required`,
+      // not `twoinc-required` (ABN-554).
+      const markup = fs.readFileSync(
+        path.join(harness.REPO_ROOT, "views/woocommerce_order_pay.php"),
+        "utf8"
+      );
+      const label = markup.match(/<label for="billing_company_display"[\s\S]*?<\/label>/);
+
+      expect(label).not.toBeNull();
+      expect(label[0]).not.toMatch(/<abbr/);
+      // The phone field still states its own requirement, so this is the
+      // company label alone and not the whole template's markers.
+      expect(markup).toMatch(/<label for="billing_phone_display"[\s\S]*?<abbr/);
+    });
   });
 
   /**
