@@ -390,18 +390,29 @@ describe("read-only captured-company summary", () => {
     });
 
     test("the summary resolves into the control column, right-aligned as everywhere else", () => {
-      // The number right-aligns to the company field on this page exactly as
-      // it does on the checkout page and in the Blocks tile — no third
-      // variant, and nothing overriding it back to the leading edge. The
-      // alignment only lands on the field's own edge while the summary
-      // resolves into column 2, so both are read off the cascade here.
+      // Read off the cascade: the shared end alignment only reaches the company
+      // field's own edge while the summary resolves into column 2.
       harness.injectStylesheet();
       pickCompany("ACME Widgets Ltd", "12345678");
-      summary().wrap('<div class="custom-checkout twoinc-order-pay"></div>');
+      summary().wrap('<div class="twoinc-order-pay"></div>');
 
       expect(window.getComputedStyle(summary()[0]).gridColumn).toBe("2");
       const idStyle = window.getComputedStyle(summary().find(".twoinc-company-summary-id")[0]);
       expect(idStyle.textAlign).toBe("end");
+    });
+
+    test("the template moves its own form, not the class the Blocks skin shares", () => {
+      // `.custom-checkout` is on the Blocks storage host too, which this
+      // prepend would drag into the payment block (ABN-554).
+      const markup = fs.readFileSync(
+        path.join(harness.REPO_ROOT, "views/woocommerce_order_pay.php"),
+        "utf8"
+      );
+      const script = markup.match(/<script>[\s\S]*<\/script>/);
+
+      expect(script).not.toBeNull();
+      expect(script[0]).toContain(".twoinc-order-pay");
+      expect(script[0]).not.toContain(".custom-checkout");
     });
   });
 
