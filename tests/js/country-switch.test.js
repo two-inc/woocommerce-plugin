@@ -338,22 +338,12 @@ describe("billing country switch", () => {
           name: "billing_country",
           val: "ES",
           optionHtml: '<option value="ES">Spain</option>'
-        },
-        {
-          htmlTag: "INPUT",
-          id: "billing_company",
-          name: "billing_company",
-          type: "text",
-          val: "Ejemplo SL"
-        },
-        {
-          htmlTag: "INPUT",
-          id: "company_id",
-          name: "company_id",
-          type: "text",
-          val: "B12345678"
         }
       ]);
+      // The company reaches the page in the bootstrap; only the snapshot's own
+      // fields come back from sessionStorage (ABN-554).
+      window.twoinc.billing_company = "Ejemplo SL";
+      window.twoinc.company_id = "B12345678";
 
       ctx.Twoinc.getInstance().initialize(true);
 

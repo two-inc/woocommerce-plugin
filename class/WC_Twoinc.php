@@ -4761,25 +4761,23 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
 
-            $posted_company_id = (string) ($_POST['twoinc_company_id'] ?? '');
-            $posted_company_name = (string) ($_POST['twoinc_billing_company'] ?? '');
-            // Every profile form posts these back prefilled, so a password
-            // change reaches here carrying the buyer's captured company. Only
-            // an actual edit makes it the merchant's own (ABN-554).
-            $company_changed =
-                $posted_company_id !== (string) get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), true)
-                || $posted_company_name !== (string) get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), true);
-
-            update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), $posted_company_id);
-            update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), $posted_company_name);
-            update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('department'), $_POST['twoinc_department']);
-            update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('project'), $_POST['twoinc_project']);
-
-            if ($company_changed) {
+            // Keyed on presence, not value: this nonce covers the whole
+            // profile form, and a form that omits these fields is not an
+            // instruction to empty them (ABN-554).
+            $posted = [
+                'company_id' => 'twoinc_company_id',
+                'billing_company' => 'twoinc_billing_company',
+                'department' => 'twoinc_department',
+                'project' => 'twoinc_project',
+            ];
+            foreach ($posted as $meta_name => $field) {
+                if (!isset($_POST[$field])) {
+                    continue;
+                }
                 update_user_meta(
                     $user_id,
-                    WC_Twoinc_Brand::prefixed_name('company_scope'),
-                    WC_Twoinc_Checkout::SCOPE_ADMIN
+                    WC_Twoinc_Brand::prefixed_name($meta_name),
+                    sanitize_text_field(wp_unslash((string) $_POST[$field]))
                 );
             }
         }
@@ -5430,34 +5428,16 @@ if (!class_exists('WC_Twoinc')) {
 
             $order->save();
 
+            // The company the buyer captured is deliberately NOT written here:
+            // this meta is the merchant's own prefill, and a capture reaching
+            // it prefills every later cart (ABN-554).
             $user_id = wp_get_current_user()->ID;
             if ($user_id) {
-                if (!get_the_author_meta(WC_Twoinc_Brand::prefixed_name('company_id'), $user_id)) {
-                    update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), $company_id);
-                }
-                if (!get_the_author_meta(WC_Twoinc_Brand::prefixed_name('billing_company'), $user_id)) {
-                    update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), $company_name);
-                }
                 if (!get_the_author_meta(WC_Twoinc_Brand::prefixed_name('department'), $user_id)) {
                     update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('department'), $department);
                 }
                 if (!get_the_author_meta(WC_Twoinc_Brand::prefixed_name('project'), $user_id)) {
                     update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('project'), $project);
-                }
-                // A remembered company this order does not carry may replay nowhere: the scopes it was captured in are not known here (ABN-554).
-                $remembered = (string) get_the_author_meta(WC_Twoinc_Brand::prefixed_name('company_id'), $user_id);
-                $order_carries_it = $remembered !== '' && $remembered === (string) $company_id;
-                $stamp = (string) get_the_author_meta(WC_Twoinc_Brand::prefixed_name('company_scope'), $user_id);
-                // Ordering on an admin-set company does not turn it into a
-                // capture of this cart, which would end its reach at the order.
-                if (!($order_carries_it && $stamp === WC_Twoinc_Checkout::SCOPE_ADMIN)) {
-                    update_user_meta(
-                        $user_id,
-                        WC_Twoinc_Brand::prefixed_name('company_scope'),
-                        $order_carries_it
-                            ? WC_Twoinc_Checkout::capture_scopes_for_order($order)
-                            : WC_Twoinc_Checkout::SCOPE_NONE
-                    );
                 }
             }
 
@@ -5540,6 +5520,11 @@ if (!class_exists('WC_Twoinc')) {
 
             $order->save();
             do_action('twoinc_order_created', $order, $body);
+
+            // The cart is done; the order carries the company from here, and
+            // the buyer never reaches the thankyou page on the redirect legs
+            // below (ABN-554).
+            WC_Twoinc_Checkout::forget_captured_company();
 
             if ($body['state'] == 'VERIFIED' && isset($body['merchant_urls']) && isset($body['merchant_urls']['merchant_confirmation_url'])) {
                 return [

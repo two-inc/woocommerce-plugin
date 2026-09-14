@@ -37,8 +37,8 @@ const PANEL_PATH = "assets/js/company-search-panel.js";
 
 const STYLESHEET_PATH = "assets/css/twoinc.css";
 
-/** The scope `WC_Twoinc_Checkout::capture_scope()` localises for a cart. */
-const CAPTURE_SCOPE = "cart:0123456789abcdef";
+/** The endpoint `WC_Twoinc_Checkout::ajax_remember_company()` answers (ABN-554). */
+const REMEMBER_COMPANY_URL = "https://shop.example.test/?wc-ajax=two_remember_company";
 
 /**
  * The `api_proxy` bootstrap WC_Twoinc_Checkout localises, in the shape
@@ -134,7 +134,7 @@ function loadPluginSource() {
   const exported = indirectEval(
     src +
       "\n;({ twoincUtilHelper, twoincAddressRoles," +
-      " twoincCompanyCapture, twoincCaptureScope," +
+      " twoincCompanyCapture," +
       " twoincSelectWooHelper, twoincSelectWooHelperShipping, twoincDomHelper," +
       " twoincTermChips, twoincTermsConsent, twoincSoleTrader," +
       " twoincSupportedSearchCountries, Twoinc, TwoCompanySearch });"
@@ -169,9 +169,6 @@ function loadTwoinc(twoinc) {
   const settings = Object.assign(
     {
       gateway_id: "woocommerce-gateway-tillit",
-      // Without these the capture-scope gate refuses every restore, which is not the state under test here.
-      capture_scope: CAPTURE_SCOPE,
-      company_scope: CAPTURE_SCOPE,
       enable_company_search: "yes",
       company_search_location: "address_area",
       twoinc_checkout_host: "https://api.example.test",
@@ -195,7 +192,6 @@ function loadTwoinc(twoinc) {
     util: exported.twoincUtilHelper,
     roles: exported.twoincAddressRoles,
     capture: exported.twoincCompanyCapture,
-    captureScope: exported.twoincCaptureScope,
     dom: exported.twoincDomHelper,
     termChips: exported.twoincTermChips,
     termsConsent: exported.twoincTermsConsent,
@@ -323,14 +319,12 @@ function buildCheckoutForm(options) {
 }
 
 /**
- * Seed the `checkoutInputs` snapshot the way `saveCheckoutInputs()` does, stamped with its scope (ABN-554).
+ * Seed the `checkoutInputs` snapshot the way `saveCheckoutInputs()` does.
  *
  * @param {Array} inputs the snapshot entries
- * @param {string} [scope] the scope to stamp, defaulting to this page's
  */
-function seedCheckoutInputs(inputs, scope) {
+function seedCheckoutInputs(inputs) {
   sessionStorage.setItem("checkoutInputs", JSON.stringify(inputs));
-  sessionStorage.setItem("twoincCaptureScope", scope === undefined ? CAPTURE_SCOPE : scope);
 }
 
 /**
@@ -591,7 +585,7 @@ function countGifFrames(bytes) {
 
 module.exports = {
   REPO_ROOT: REPO_ROOT,
-  CAPTURE_SCOPE: CAPTURE_SCOPE,
+  REMEMBER_COMPANY_URL: REMEMBER_COMPANY_URL,
   API_PROXY: API_PROXY,
   requestParams: requestParams,
   countGifFrames: countGifFrames,

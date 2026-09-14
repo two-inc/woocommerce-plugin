@@ -106,12 +106,6 @@ function load_twoinc_classes()
     // every request is safe.
     add_action('woocommerce_cart_calculate_fees', ['WC_Twoinc_Payment_Terms', 'apply_cart_fee']);
 
-    // Same reason again (ABN-554): the Store API empties the cart on a REST
-    // request that never instantiates a payment gateway, so a rotation
-    // registered in the constructor misses it and the ended cart's token
-    // becomes the next cart's.
-    add_action('woocommerce_cart_emptied', ['WC_Twoinc_Checkout', 'rotate_cart_scope']);
-
     // FX rate cache (TWO-25104): a recurring 6h Action Scheduler refresh
     // keeps the spot table warm so checkout conversions (min-order gates,
     // fixed-surcharge amounts) are served from cache. Both registrations
@@ -147,6 +141,9 @@ function load_twoinc_classes()
     add_action('wc_ajax_two_order_intent', ['WC_Twoinc_Api_Proxy', 'ajax_order_intent']);
     add_action('wc_ajax_two_payment_terms', ['WC_Twoinc_Api_Proxy', 'ajax_payment_terms']);
     add_action('wc_ajax_two_supported_countries', ['WC_Twoinc_Api_Proxy', 'ajax_supported_countries']);
+
+    // Records the company the buyer captured against the cart this session holds (ABN-554).
+    add_action('wc_ajax_two_remember_company', ['WC_Twoinc_Checkout', 'ajax_remember_company']);
 
     // A Blocks checkout builds its payment list from its own registry and
     // never reads woocommerce_payment_gateways (ABN-554).

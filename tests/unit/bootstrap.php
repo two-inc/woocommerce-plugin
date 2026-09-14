@@ -44,6 +44,13 @@ function apply_filters($tag, $value, ...$extra)
     return $value;
 }
 
+function do_action($tag, ...$args)
+{
+    foreach ($GLOBALS['__twoinc_test_filters'][$tag] ?? [] as $entry) {
+        call_user_func_array($entry['cb'], array_slice($args, 0, max(1, $entry['args'])));
+    }
+}
+
 function has_filter($tag)
 {
     return !empty($GLOBALS['__twoinc_test_filters'][$tag]);
@@ -1519,3 +1526,8 @@ require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Sole_Trader.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Api_Proxy.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Checkout.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc.php';
+
+// Snapshotted before any spec resets the hook registry: loading
+// WC_Twoinc_Checkout is what registers the cart-ending hooks, and that is the
+// registration CaptureMemorySpec fires.
+$GLOBALS['__twoinc_test_filters_at_load'] = $GLOBALS['__twoinc_test_filters'];
