@@ -57,9 +57,9 @@ describe("the shared terms consent", () => {
 
     expect(consent.validate()).toBe(refusal);
     expect(consent.payload().twoinc_terms_accepted).toBe(carrier);
-    expect(
-      document.querySelector(".twoinc-terms-error").classList.contains("hidden")
-    ).toBe(!errorShown);
+    expect(document.querySelector(".twoinc-terms-error").classList.contains("hidden")).toBe(
+      !errorShown
+    );
   });
 
   test("a brand rendering no consent has nothing to refuse", () => {
@@ -68,7 +68,6 @@ describe("the shared terms consent", () => {
     expect(consent.validate()).toBeNull();
     expect(consent.payload()).toEqual({});
   });
-
 });
 
 describe("the classic checkout gate", () => {
@@ -121,8 +120,6 @@ describe("the classic checkout gate", () => {
     document.getElementById("twoinc_terms_accepted").checked = true;
     ctx.$('input[name="twoinc_terms_accepted"]').trigger("change");
 
-    expect(
-      document.querySelector(".twoinc-terms-error").classList.contains("hidden")
-    ).toBe(true);
+    expect(document.querySelector(".twoinc-terms-error").classList.contains("hidden")).toBe(true);
   });
 });
