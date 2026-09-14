@@ -13,7 +13,7 @@
 
 const harness = require("./wc-harness");
 
-const RING = "2px solid #3043d1";
+const RING = "2px solid #091030";
 const OFFSET = "2px";
 const CHIP = ".two-company-mode-chip";
 const SELECTED_CLASS = "two-company-mode-chip--selected";

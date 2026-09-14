@@ -409,50 +409,51 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   display: none;
 }
 /*
- * Chip palette matches the other platforms' checkouts: brand blue
- * text on a white fill for the unselected state, solid brand blue with
- * white text when selected. Set an explicit colour so the chip text never
- * inherits a theme's light-on-light foreground (white-on-white bug).
- *
- * Geometry matches too: 8px/16px padding and an 8px radius, i.e. a rounded
- * rectangle rather than the pill a radius at half the chip height would
- * give. Keep colour and geometry in step across the platforms. The
- * --selected and --single variants restyle colour only, so they inherit
- * the padding and radius and need no duplicate declarations; the same is
- * true of the brand overlays' chip rules.
+ * Chip palette and geometry match the other platforms' checkouts, so a change
+ * here belongs in all of them. The explicit `color` keeps the chip text off a
+ * theme's light-on-light foreground (white-on-white bug).
  */
 .twoinc-term-chip {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   padding: 8px 16px;
-  border: 1px solid #c4c9e8;
+  border: 2px solid #e3e3e3;
   border-radius: 8px;
   background: #fff;
-  color: #3043d1;
+  color: #091030;
   cursor: pointer;
   line-height: 1.3;
 }
-.twoinc-term-chip:hover {
-  border-color: #3043d1;
-}
-.twoinc-term-chip--selected,
-.twoinc-term-chip--selected:hover {
-  border-color: #3043d1;
-  background: #3043d1;
+/* Doubled class so the chosen state outranks the rule above by specificity
+   rather than by sitting after it. */
+.twoinc-term-chip.twoinc-term-chip--selected {
+  border-color: #091030;
+  background: #091030;
   color: #fff;
+}
+/*
+ * The chosen chip is excluded so neither pointer nor keyboard disturbs it. The
+ * padding absorbs the thinner border so the chip does not resize, and the sole
+ * chip is disabled, where the affordance would promise a click that does nothing.
+ */
+.twoinc-term-chip:not(.twoinc-term-chip--selected):not(:disabled):hover,
+.twoinc-term-chip:not(.twoinc-term-chip--selected):not(:disabled):focus {
+  padding: 9px 17px;
+  border: 1px solid #091030;
+  background: #e3e3e3;
 }
 /*
  * The group is a single tab stop with arrow-key traversal, so the focused chip
  * is the only thing saying where the keyboard is. Offset outside the chip so
- * the ring stays visible against the selected chip's own blue fill.
+ * the ring stays visible against the selected chip's own fill.
  * Keyboard only: a clicked chip gets no ring.
  */
 .twoinc-term-chip:focus-visible {
-  outline: 2px solid #3043d1;
+  outline: 2px solid #091030;
   outline-offset: 2px;
 }
-.twoinc-term-chip--single {
+.twoinc-term-chip.twoinc-term-chip--single {
   cursor: default;
 }
 .twoinc-term-chip__days {
@@ -774,8 +775,8 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   text-align: center;
   padding: 5px 12px;
   border-radius: 5px;
-  border: 1px solid #c4c9e8;
-  color: #3043d1;
+  border: 2px solid #e3e3e3;
+  color: #091030;
   background-color: #fff;
   cursor: pointer;
   user-select: none;
@@ -785,23 +786,27 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   text-transform: none !important;
 }
 
-.two-company-mode-chip--selected {
+/* Doubled class so the chosen state outranks the rule above by specificity
+   rather than by sitting after it. */
+.two-company-mode-chip.two-company-mode-chip--selected {
   color: #fff;
-  background-color: #3043d1;
-  border-color: #3043d1;
+  background-color: #091030;
+  border-color: #091030;
 }
 
-/* The same ring as `.twoinc-term-chip`, for the same reason: offset outside so
-   it stays visible against the selected chip's own blue fill (ABN-554). */
-.two-company-mode-chip:focus-visible {
-  outline: 2px solid #3043d1;
-  outline-offset: 2px;
-}
-
-/* Tint only the unselected chips: `:focus` outranks `--selected`, so tinting
-   every chip leaves the selected one's white label on a near-white fill. */
+/* The chosen chip is excluded so neither pointer nor keyboard disturbs it; the
+   padding absorbs the thinner border so the chip does not resize. */
+.two-company-mode-chip:not(.two-company-mode-chip--selected):hover,
 .two-company-mode-chip:not(.two-company-mode-chip--selected):focus {
-  background-color: #f2f4fd;
+  padding: 6px 13px;
+  border: 1px solid #091030;
+  background-color: #e3e3e3;
+}
+/* Offset outside so the ring stays visible against the selected chip's own
+   fill (ABN-554). */
+.two-company-mode-chip:focus-visible {
+  outline: 2px solid #091030;
+  outline-offset: 2px;
 }
 
 .twoinc-sole-trader-note {
