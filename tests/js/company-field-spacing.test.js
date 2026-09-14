@@ -108,15 +108,14 @@ describe("billing company-row spacing", () => {
 
     test("the stylesheet drops the bottom margin for a marked row", () => {
       ctx.dom.toggleBusinessFields();
-      const before = ROWS.map(
-        (selector) => window.getComputedStyle($(selector)[0]).marginBottom
-      );
+      const before = ROWS.map((selector) => window.getComputedStyle($(selector)[0]).marginBottom);
 
       helper.enterManualCompanyEntry();
 
-      expect(
-        ROWS.map((selector) => window.getComputedStyle($(selector)[0]).marginBottom)
-      ).toEqual(["0px", "0px"]);
+      expect(ROWS.map((selector) => window.getComputedStyle($(selector)[0]).marginBottom)).toEqual([
+        "0px",
+        "0px"
+      ]);
       expect(before).not.toEqual(["0px", "0px"]);
     });
   });
