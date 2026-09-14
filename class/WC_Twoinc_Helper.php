@@ -329,6 +329,24 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * The Blocks checkout's Store API, whose payment route reads a
+         * gateway's RETURN and never the notice queue.
+         *
+         * @return bool
+         */
+        public static function is_store_api_request()
+        {
+            if (!defined('REST_REQUEST') || !REST_REQUEST) {
+                return false;
+            }
+            $uri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+
+            // The cart and checkout routes only — not products, not batch.
+            return strpos($uri, '/wc/store/v1/cart') !== false
+                || strpos($uri, '/wc/store/v1/checkout') !== false;
+        }
+
+        /**
          * @return void
          */
         public static function display_ajax_error($message)

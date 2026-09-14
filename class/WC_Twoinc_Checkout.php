@@ -49,6 +49,62 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // shipping-scoped counterpart, so this instance needs its own
             // slot next to its own address panel instead.
             add_action('woocommerce_after_checkout_shipping_form', [$this, 'render_shipping_sole_trader_note_slot']);
+
+            // A Blocks checkout fires none of the classic hooks above, so the
+            // same bootstrap reaches it from the one hook it does fire
+            // (ABN-554). DOM-ready is what reads it, and that is after the
+            // footer.
+            add_action('wp_footer', [$this, 'inject_blocks_cart_details']);
+
+            // Address-area placement mounts on WooCommerce's own company row,
+            // whose store-level toggle defaults to hidden on a Blocks store —
+            // the same reason update_company_fields() registers the classic
+            // field past that toggle.
+            add_filter('option_woocommerce_checkout_company_field', [$this, 'reveal_blocks_company_field']);
+        }
+
+        /**
+         * @return void
+         */
+        public function inject_blocks_cart_details()
+        {
+            if (self::is_blocks_checkout_request()) {
+                $this->inject_cart_details();
+            }
+        }
+
+        /**
+         * @param mixed $value
+         *
+         * @return mixed
+         */
+        public function reveal_blocks_company_field($value)
+        {
+            if ($value !== 'hidden' || !$this->wc_twoinc) {
+                return $value;
+            }
+            if ($this->wc_twoinc->get_enable_company_search() !== 'yes') {
+                return $value;
+            }
+
+            return self::is_blocks_checkout_request() ? 'optional' : $value;
+        }
+
+        /**
+         * A Blocks checkout render, or the Store API call that serves it.
+         *
+         * @return bool
+         */
+        public static function is_blocks_checkout_request(): bool
+        {
+            if (WC_Twoinc_Helper::is_store_api_request()) {
+                return true;
+            }
+
+            return function_exists('is_singular')
+                && is_singular()
+                && function_exists('has_block')
+                && has_block('woocommerce/checkout');
         }
 
         /**
@@ -516,7 +572,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          */
         public function inject_cart_details()
         {
-            if (!is_checkout()) {
+            if (!is_checkout() && !self::is_blocks_checkout_request()) {
                 return;
             }
 

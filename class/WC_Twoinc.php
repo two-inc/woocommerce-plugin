@@ -3124,9 +3124,9 @@ if (!class_exists('WC_Twoinc')) {
          * the method is chosen, so on those themes the control is an icon at
          * the foot of a collapsed box rather than one beside the title.
          *
-         * A Blocks checkout is out of scope for both routes: this gateway
-         * registers no Blocks payment method, so it is absent from that
-         * checkout entirely.
+         * A Blocks checkout takes neither route: its tile is built by
+         * WC_Twoinc_Blocks_Support, which hands the about control to the
+         * client as its own field.
          *
          * @param string $description
          * @param string $gateway_id
@@ -5053,6 +5053,54 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Record whether this gateway is the buyer's current choice, from the
+         * Blocks tile (ABN-554). The surcharge cart fee is conditional on it,
+         * and a Blocks checkout otherwise names its payment method only at
+         * submit — after the order summary the buyer reads.
+         *
+         * @param array $data
+         *
+         * @return void
+         */
+        public static function set_blocks_chosen_method($data)
+        {
+            $session = function_exists('WC') ? (WC()->session ?? null) : null;
+            if (!$session) {
+                return;
+            }
+            $id = WC_Twoinc_Brand::get('gateway_id');
+            if (!empty($data['active'])) {
+                $session->set('chosen_payment_method', $id);
+            } elseif ($session->get('chosen_payment_method') === $id) {
+                // Never blanks another gateway's choice.
+                $session->set('chosen_payment_method', '');
+            }
+        }
+
+        /**
+         * WooCommerce's documented failure result (ABN-554).
+         *
+         * @param string|string[] $message
+         *
+         * @return array
+         */
+        private static function payment_failure($message)
+        {
+            // The Store API throws the message below itself, and reaches its
+            // own wc_clear_notices() only on the success path — so a notice
+            // left queued here surfaces as a stale 409 on the buyer's NEXT
+            // attempt, before that attempt reaches payment at all.
+            if (WC_Twoinc_Helper::is_store_api_request()) {
+                wc_clear_notices();
+            }
+
+            return [
+                'result'  => 'failure',
+                'message' => is_array($message) ? implode(' ', $message) : (string) $message,
+            ];
+        }
+
+        /**
          * @param int $order_id
          *
          * @return array
@@ -5063,13 +5111,16 @@ if (!class_exists('WC_Twoinc')) {
             $order = wc_get_order($order_id);
 
             if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
-                return;
+                return self::payment_failure(sprintf(
+                    __('This order cannot be paid with %s.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name')
+                ));
             }
 
             $brand_validation_error = $this->get_brand_payment_validation_error($order_id);
             if ($brand_validation_error) {
                 WC_Twoinc_Helper::display_ajax_error($brand_validation_error);
-                return;
+                return self::payment_failure($brand_validation_error);
             }
 
             // The backend-sourced term list can change between checkout
@@ -5087,10 +5138,9 @@ if (!class_exists('WC_Twoinc')) {
                 $posted_term = isset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]) ? (int) $_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] : 0;
                 $offered = WC_Twoinc_Payment_Terms::get_available_terms($this);
                 if ($posted_term > 0 && count($offered) > 0 && !in_array($posted_term, $offered, true)) {
-                    WC_Twoinc_Helper::display_ajax_error(
-                        __('The selected payment term is no longer available. Please review the payment options and place the order again.', 'twoinc-payment-gateway')
-                    );
-                    return;
+                    $term_error = __('The selected payment term is no longer available. Please review the payment options and place the order again.', 'twoinc-payment-gateway');
+                    WC_Twoinc_Helper::display_ajax_error($term_error);
+                    return self::payment_failure($term_error);
                 }
             }
 
@@ -5149,13 +5199,12 @@ if (!class_exists('WC_Twoinc')) {
             // checkout also populates company_id (via the resolved registry
             // identity), so this guard is safe for both flows.
             if ($company_id === '') {
-                WC_Twoinc_Helper::display_ajax_error(
-                    sprintf(
-                        __('Please select your company before paying with %s.', 'twoinc-payment-gateway'),
-                        WC_Twoinc_Brand::get('product_name')
-                    )
+                $company_error = sprintf(
+                    __('Please select your company before paying with %s.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name')
                 );
-                return;
+                WC_Twoinc_Helper::display_ajax_error($company_error);
+                return self::payment_failure($company_error);
             }
 
             // The allowlist can change between checkout render and submit,
@@ -5168,24 +5217,22 @@ if (!class_exists('WC_Twoinc')) {
             }
             if (!$this->is_buyer_country_supported($buyer_country)) {
                 $this->log_buyer_country_rejection('order creation', $buyer_country);
-                WC_Twoinc_Helper::display_ajax_error(
-                    sprintf(
-                        __('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'),
-                        WC_Twoinc_Brand::get('product_name')
-                    )
+                $country_error = sprintf(
+                    __('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name')
                 );
-                return;
+                WC_Twoinc_Helper::display_ajax_error($country_error);
+                return self::payment_failure($country_error);
             }
 
             // The browser disable is not enforcement (TWO-25657).
             if (self::get_order_intent_verdict($company_id) === false) {
-                WC_Twoinc_Helper::display_ajax_error(
-                    sprintf(
-                        __('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'),
-                        WC_Twoinc_Brand::get('product_name')
-                    )
+                $verdict_error = sprintf(
+                    __('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name')
                 );
-                return;
+                WC_Twoinc_Helper::display_ajax_error($verdict_error);
+                return self::payment_failure($verdict_error);
             }
 
             $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_reference'), $order_reference);
@@ -5274,19 +5321,19 @@ if (!class_exists('WC_Twoinc')) {
             if (is_wp_error($response)) {
                 $error_message = sprintf(__('Failed to request order creation with %s.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
                 $order->add_order_note($error_message);
-                return;
+                return self::payment_failure($error_message);
             }
 
             if (isset($response) && isset($response['result']) && $response['result'] === 'failure') {
                 $error_message = sprintf(__('Failed to process payment with %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
                 $order->add_order_note($error_message);
-                return $response;
+                return self::payment_failure($response['message'] ?? $error_message);
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_validation_msg($response);
             if ($twoinc_err) {
                 WC_Twoinc_Helper::display_ajax_error($twoinc_err);
-                return;
+                return self::payment_failure($twoinc_err);
             }
 
             $body = json_decode($response['body'], true);
@@ -5317,7 +5364,7 @@ if (!class_exists('WC_Twoinc')) {
                 }
                 $order->add_order_note($error_message);
                 WC_Twoinc_Helper::display_ajax_error($error_message);
-                return;
+                return self::payment_failure($error_message);
             }
 
             // Store the Twoinc Order Id for future use

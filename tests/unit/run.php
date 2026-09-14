@@ -67,6 +67,9 @@ final class BrandConfigSpec
             'testAvailabilityGateJudgesMerchantBuyerCountryAllowlist',
             'testMerchantBuyerCountryAllowlistIntersectsBrandGate',
             'testBuyerCountrySupportJudgesEachAllowlistState',
+            'testProcessPaymentGuardsReturnAFailureArray',
+            'testBlocksTileChoiceDrivesTheSurchargeGate',
+            'testBlocksCompanyRowRevealedOnlyWhereTheSearchNeedsIt',
             'testOrderCreationRefusesAnUnsupportedBuyerCountry',
             'testOrderIntentRefusesAnUnsupportedBuyerCountry',
             'testOrderCreationRefusesADeclinedOrderIntent',
@@ -2388,6 +2391,8 @@ final class BrandConfigSpec
     {
         return new class ($allowlist) extends WC_Twoinc {
             public $calls = [];
+            /** Canned make_request() reply; null keeps the bare 200 below. */
+            public $response = null;
             private $allowlist;
 
             public function __construct($allowlist)
@@ -2414,9 +2419,171 @@ final class BrandConfigSpec
             public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
             {
                 $this->calls[] = $endpoint;
-                return ['response' => ['code' => 200], 'body' => '{}'];
+                return $this->response ?? ['response' => ['code' => 200], 'body' => '{}'];
             }
         };
+    }
+
+    /**
+     * Given the address-area company search mounts on WooCommerce's own
+     * company row; When a store keeps that row hidden; Then it is revealed for
+     * the Blocks checkout alone (ABN-554).
+     */
+    private static function testBlocksCompanyRowRevealedOnlyWhereTheSearchNeedsIt(): void
+    {
+        $cases = [
+            ['hidden', 'yes', true, [], 'optional', 'Blocks checkout with the search in the address'],
+            ['hidden', 'no', true, [], 'hidden', 'search relocated to the payment tile'],
+            ['hidden', 'yes', false, [], 'hidden', 'a page that is not a Blocks checkout'],
+            ['hidden', 'yes', true, ['woocommerce/cart'], 'hidden', 'a Blocks page without the checkout block'],
+            ['optional', 'yes', true, [], 'optional', 'a store that already shows the row'],
+            ['required', 'yes', true, [], 'required', 'a store that requires the row'],
+        ];
+
+        foreach ($cases as $case) {
+            list($stored, $enabled, $singular, $blocks, $expected, $description) = $case;
+
+            $GLOBALS['__twoinc_test_is_singular'] = $singular;
+            $GLOBALS['__twoinc_test_page_blocks'] = $blocks ?: ['woocommerce/checkout'];
+
+            $gateway = new class ($enabled) extends WC_Twoinc {
+                public $search_enabled;
+
+                public function __construct($enabled)
+                {
+                    $this->search_enabled = $enabled;
+                }
+
+                public function get_enable_company_search()
+                {
+                    return $this->search_enabled;
+                }
+            };
+
+            TinyAssert::same(
+                $expected,
+                (new WC_Twoinc_Checkout($gateway))->reveal_blocks_company_field($stored),
+                $description
+            );
+        }
+
+        unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
+    }
+
+    /**
+     * Given the surcharge cart fee only applies to the chosen payment method;
+     * When a Blocks tile reports its own selection; Then the session follows
+     * it, and never another gateway's (ABN-554).
+     */
+    private static function testBlocksTileChoiceDrivesTheSurchargeGate(): void
+    {
+        $id = WC_Twoinc_Brand::get('gateway_id');
+        $cases = [
+            [['active' => true], '', $id, 'the tile became the buyer\'s choice'],
+            [['active' => true], 'cod', $id, 'switching to the tile from another method'],
+            [['active' => false], $id, '', 'the buyer left the tile'],
+            [['active' => false], 'cod', 'cod', 'another gateway\'s choice is left alone'],
+            [[], $id, '', 'a payload naming no state'],
+        ];
+
+        foreach ($cases as $case) {
+            list($payload, $before, $expected, $description) = $case;
+
+            WC()->session = new StubSession();
+            WC()->session->set('chosen_payment_method', $before);
+            WC_Twoinc::set_blocks_chosen_method($payload);
+
+            TinyAssert::same(
+                $expected,
+                WC()->session->get('chosen_payment_method'),
+                $description
+            );
+        }
+    }
+
+    /**
+     * Given a guard in process_payment refuses the order; When the Store API
+     * ran it; Then the return must be WooCommerce's failure array.
+     *
+     * ABN-554: the Store API array_merge()s this return into its payment
+     * details, so a null is a fatal TypeError and the buyer sees a critical
+     * error instead of the reason.
+     */
+    private static function testProcessPaymentGuardsReturnAFailureArray(): void
+    {
+        $cases = [
+            ['not_two', [], null, 'cannot be paid with Two', 'order is not a Two order'],
+            ['veto', ['company_id' => '923456789'], null, 'Brand says no.', 'brand overlay vetoed payment'],
+            ['plain', ['company_id' => ''], null, 'select your company', 'no company captured'],
+            ['country', ['company_id' => '923456789', 'billing_country' => 'DE'], null, 'not available for this order', 'buyer country off the allowlist'],
+            ['declined', ['company_id' => '923456789'], null, 'not available for this order', 'order intent declined this company'],
+            ['plain', ['company_id' => '923456789'], new WP_Error('http', 'down'), 'Failed to request order creation', 'transport failed'],
+            ['plain', ['company_id' => '923456789'], ['response' => ['code' => 400], 'body' => '{}'], 'not available for this order', 'API rejected the payload'],
+            ['plain', ['company_id' => '923456789'], ['response' => ['code' => 200], 'body' => '{"status":"REJECTED"}'], 'not available for this order', 'API declined the order'],
+            ['plain', ['company_id' => '923456789'], ['result' => 'failure', 'message' => 'upstream refused'], 'upstream refused', 'the transport reported its own failure'],
+        ];
+
+        foreach ($cases as $case) {
+            list($mode, $post, $response, $expected_message, $description) = $case;
+
+            $order = new class extends StubOrder {
+                public $saved_meta = [];
+
+                public function update_meta_data($key, $value)
+                {
+                    $this->saved_meta[$key] = $value;
+                }
+
+                public function save()
+                {
+                }
+
+                public function set_billing_country($value)
+                {
+                }
+
+                public function set_billing_company($value)
+                {
+                }
+
+                public function set_billing_phone($value)
+                {
+                }
+            };
+            $order->payment_method = $mode === 'not_two' ? 'cod' : WC_Twoinc_Brand::get('gateway_id');
+
+            $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+            $GLOBALS['__twoinc_test_notices'] = [];
+            $GLOBALS['__twoinc_test_logs'] = [];
+            WC()->session = new StubSession();
+            if ($mode === 'declined') {
+                WC_Twoinc::record_order_intent_verdict('923456789', false);
+            }
+            if ($mode === 'veto') {
+                add_filter('twoinc_payment_validation_error', static function () {
+                    return 'Brand says no.';
+                });
+            }
+            $_POST = $post;
+
+            $gateway = self::buyerCountryGateway($mode === 'country' ? ['NL'] : null);
+            $gateway->response = $response;
+            $result = $gateway->process_payment(42);
+
+            if ($mode === 'veto') {
+                remove_all_filters('twoinc_payment_validation_error');
+            }
+
+            TinyAssert::true(is_array($result), $description . ': returned no array');
+            TinyAssert::same('failure', $result['result'] ?? null, $description . ': not a failure result');
+            TinyAssert::true(
+                is_string($result['message'] ?? null)
+                    && strpos($result['message'], $expected_message) !== false,
+                $description . ': message was "' . ($result['message'] ?? '') . '"'
+            );
+        }
+
+        $_POST = [];
     }
 
     private static function testOrderCreationRefusesAnUnsupportedBuyerCountry(): void
