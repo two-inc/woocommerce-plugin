@@ -12,6 +12,12 @@ if (!class_exists('WC_Twoinc_Checkout')) {
     {
         private $wc_twoinc;
 
+        /** WC session key holding the token that identifies the current cart (ABN-554). */
+        const CART_SCOPE_SESSION_KEY = 'twoinc_capture_cart';
+
+        /** Stamp for a remembered company no page may replay; blank instead means an admin-set value. */
+        const SCOPE_NONE = 'none';
+
         public function __construct($wc_twoinc)
         {
 
@@ -61,6 +67,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // the same reason update_company_fields() registers the classic
             // field past that toggle.
             add_filter('option_woocommerce_checkout_company_field', [$this, 'reveal_blocks_company_field']);
+
+            add_action('woocommerce_cart_emptied', [__CLASS__, 'rotate_cart_scope']);
         }
 
         /**
@@ -428,8 +436,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
         /**
          * The cart, or on the pay-for-order page the order, a company capture
-         * belongs to. Restores are refused across scopes, so a capture lives
-         * as long as the cart it was made in and no longer (ABN-554).
+         * belongs to (ABN-554).
          *
          * @return string
          */
@@ -440,16 +447,67 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 return 'order:' . $order->get_id();
             }
 
-            $session = function_exists('WC') && WC() ? WC()->session : null;
-            $cart_key = $session && method_exists($session, 'get_customer_id')
-                ? (string) $session->get_customer_id()
-                : '';
-            if ($cart_key === '') {
+            $token = self::cart_scope_token();
+            if ($token === '') {
                 return '';
             }
 
-            // Hashed so the bootstrap does not echo the session key itself.
-            return 'cart:' . substr(hash('sha256', $cart_key), 0, 16);
+            // Hashed so the bootstrap does not echo the session token itself.
+            return 'cart:' . substr(hash('sha256', $token), 0, 16);
+        }
+
+        /**
+         * Minted per cart: the session's own customer id outlives the cart, so keying on it replays a capture into every later one (ABN-554).
+         *
+         * @return string
+         */
+        public static function cart_scope_token(): string
+        {
+            $session = function_exists('WC') && WC() ? WC()->session : null;
+            if (!$session || !method_exists($session, 'get') || !method_exists($session, 'set')) {
+                return '';
+            }
+
+            $token = (string) $session->get(self::CART_SCOPE_SESSION_KEY, '');
+            if ($token === '') {
+                $token = function_exists('wp_generate_password')
+                    ? wp_generate_password(32, false)
+                    : uniqid('', true);
+                $session->set(self::CART_SCOPE_SESSION_KEY, $token);
+            }
+
+            return $token;
+        }
+
+        /**
+         * Emptying the cart ends it, so the capture made in it must not reach the next one (ABN-554).
+         *
+         * @return void
+         */
+        public static function rotate_cart_scope()
+        {
+            $session = function_exists('WC') && WC() ? WC()->session : null;
+            if ($session && method_exists($session, 'set')) {
+                $session->set(self::CART_SCOPE_SESSION_KEY, '');
+            }
+        }
+
+        /**
+         * Every scope a company captured on this order may replay in: the order, and the cart that became it.
+         *
+         * @param mixed $order
+         *
+         * @return string
+         */
+        public static function capture_scopes_for_order($order): string
+        {
+            $scopes = ['order:' . $order->get_id()];
+            $cart = self::capture_scope();
+            if (strpos($cart, 'cart:') === 0) {
+                $scopes[] = $cart;
+            }
+
+            return implode(' ', $scopes);
         }
 
         /**
@@ -652,8 +710,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             $user_id = wp_get_current_user()->ID;
             if ($user_id) {
-                // Blank for a record predating the stamp or set by hand in the
-                // admin, which no page then replays (ABN-554).
                 $properties['company_scope'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_scope'), true);
                 $properties['company_id'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), true);
                 $properties['billing_company'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), true);

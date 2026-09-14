@@ -169,9 +169,7 @@ function loadTwoinc(twoinc) {
   const settings = Object.assign(
     {
       gateway_id: "woocommerce-gateway-tillit",
-      // Every real bootstrap carries these; without them the capture-scope
-      // gate refuses every restore, which is not the state under test here.
-      // A test proving a refusal overrides one of them with a foreign scope.
+      // Without these the capture-scope gate refuses every restore, which is not the state under test here.
       capture_scope: CAPTURE_SCOPE,
       company_scope: CAPTURE_SCOPE,
       enable_company_search: "yes",
@@ -323,9 +321,7 @@ function buildCheckoutForm(options) {
 }
 
 /**
- * Seed the `checkoutInputs` snapshot the way `saveCheckoutInputs()` does —
- * stamped with the scope it was taken in, since an unstamped snapshot is
- * refused (ABN-554).
+ * Seed the `checkoutInputs` snapshot the way `saveCheckoutInputs()` does, stamped with its scope (ABN-554).
  *
  * @param {Array} inputs the snapshot entries
  * @param {string} [scope] the scope to stamp, defaulting to this page's
