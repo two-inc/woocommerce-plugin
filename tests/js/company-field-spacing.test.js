@@ -71,7 +71,12 @@ describe("billing company-row spacing", () => {
     // A renamed or deleted rule reads as null here and fails the match, so
     // this also pins the rule still existing.
     expect(ruleBody(selector)).toMatch(/position:\s*relative/);
-    expect(ruleBody(selector)).not.toMatch(/padding-bottom/);
+    // Every rule reaching the row, and the `padding` shorthand too.
+    const offenders = stylesheetSource()
+      .split("}")
+      .filter((block) => block.split("{")[0].includes(selector))
+      .filter((block) => /padding-bottom|padding:/.test(block));
+    expect(offenders).toEqual([]);
   });
 
   test("the number label pulls nothing up over the row above it", () => {

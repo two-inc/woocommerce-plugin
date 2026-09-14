@@ -433,11 +433,16 @@ describe("the company name and number surfaces", () => {
 
       expect(cue("#billing_company_display_field")).toEqual(UNCUED);
       expect(cue("#billing_company_field")).toEqual(UNCUED);
-      // Nothing replaces it: no core `.optional` was hidden and no asterisk of
-      // any kind was appended to either row.
+      // No asterisk of any kind, and core's own "(optional)" marker is left
+      // showing rather than hidden behind one.
       expect($("#billing_company_display_field, #billing_company_field").find("abbr").length).toBe(
         0
       );
+      $("#billing_company_display_field, #billing_company_field")
+        .find("label .optional")
+        .each(function () {
+          expect($(this).css("display")).not.toBe("none");
+        });
     });
 
     // The cue mechanism still serves the phone field, so the removal above is

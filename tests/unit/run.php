@@ -10931,13 +10931,12 @@ final class BrandConfigSpec
     }
 
     /**
-     * get_enable_company_search() can return null (both the current and the
-     * legacy `enable_company_name` option keys unset) or '' (WooCommerce's
-     * WC_Settings_API::get_option empty-string convention) — neither is
-     * "yes", so both must land on the safe side: relocated into the payment
-     * tile, never silently missing from the checkout entirely — the
-     * regression the fallback in get_enable_company_search() exists to
-     * prevent.
+     * derive_company_search_location() is handed whatever
+     * get_enable_company_search() returns, and a stored '' (WooCommerce's
+     * WC_Settings_API::get_option empty-string convention) or a null from a
+     * caller that never loaded settings is not "yes" — both must land on the
+     * safe side: relocated into the payment tile, never silently missing from
+     * the checkout entirely.
      */
     private static function testCompanySearchLocationFallsBackToPaymentTileOnNullOrEmpty(): void
     {
@@ -11082,6 +11081,23 @@ final class BrandConfigSpec
             $migrate->invoke($gateway);
             TinyAssert::same($stored, $GLOBALS['__twoinc_test_options'][$key], $description);
         }
+
+        // A blob holding both keys is the common pre-rename install that hit
+        // Save afterwards; the migration leaves it alone, so the cleanup is
+        // what retires the dead key.
+        $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
+        $drop->setAccessible(true);
+        $GLOBALS['__twoinc_test_options'][$key] = [
+            'enable_company_search' => 'yes',
+            'enable_company_name' => 'no',
+        ];
+        $gateway->init_settings();
+        $drop->invoke($gateway);
+        TinyAssert::same(
+            ['enable_company_search' => 'yes'],
+            $GLOBALS['__twoinc_test_options'][$key],
+            'the dead legacy key is dropped from an install that carries both'
+        );
     }
 
     /**

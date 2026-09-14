@@ -1317,6 +1317,9 @@ if (!class_exists('WC_Twoinc')) {
          * - `firewall_token` / `firewall_token_browser`: replaced
          *   by the `custom_headers` table. Nothing is carried across — the
          *   fields only ever existed on staging, never in a release.
+         * - `enable_company_name`: renamed to `enable_company_search`. Runs
+         *   AFTER migrate_legacy_company_search_key(), so the value is
+         *   already carried over by the time the key is dropped.
          */
         private function drop_removed_settings()
         {
@@ -1327,6 +1330,7 @@ if (!class_exists('WC_Twoinc')) {
                 'test_checkout_host',
                 'firewall_token',
                 'firewall_token_browser',
+                'enable_company_name',
             ];
             $present = [];
             foreach ($removed as $key) {
