@@ -84,9 +84,13 @@ function wc_add_notice($message, $notice_type = 'success', $data = [])
     $GLOBALS['__twoinc_test_notices'][] = ['message' => (string) $message, 'type' => $notice_type];
 }
 
+// Unique per call like the real thing, so a spec can tell one minted token
+// from the next.
 function wp_generate_password($length = 12, $special_chars = true, $extra_special_chars = false)
 {
-    return str_repeat('a', (int) $length);
+    static $calls = 0;
+    $calls++;
+    return substr(str_pad((string) $calls, (int) $length, 'a', STR_PAD_LEFT), 0, (int) $length);
 }
 
 function wc_get_logger()
@@ -234,6 +238,12 @@ function get_user_meta($user_id, $key = '', $single = false)
 function update_user_meta($user_id, $key, $value, $prev_value = '')
 {
     $GLOBALS['__twoinc_test_user_meta'][$user_id][$key] = $value;
+    return true;
+}
+
+function delete_user_meta($user_id, $key, $meta_value = '')
+{
+    unset($GLOBALS['__twoinc_test_user_meta'][$user_id][$key]);
     return true;
 }
 

@@ -4639,6 +4639,8 @@ if (!class_exists('WC_Twoinc')) {
             update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), $_POST['twoinc_billing_company']);
             update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('department'), $_POST['twoinc_department']);
             update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('project'), $_POST['twoinc_project']);
+            // An admin-set company is no capture, and the stamp one left names a pair that is gone (ABN-554).
+            delete_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_scope'));
         }
 
         /**
@@ -5292,17 +5294,15 @@ if (!class_exists('WC_Twoinc')) {
                 if (!get_the_author_meta(WC_Twoinc_Brand::prefixed_name('project'), $user_id)) {
                     update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('project'), $project);
                 }
-                // Stamp the scope only while the remembered company is the one
-                // this order carries, or the stamp would vouch for a pair it
-                // does not describe (ABN-554).
+                // A remembered company this order does not carry may replay nowhere: the scopes it was captured in are not known here (ABN-554).
                 $remembered = (string) get_the_author_meta(WC_Twoinc_Brand::prefixed_name('company_id'), $user_id);
-                if ($remembered !== '' && $remembered === (string) $company_id) {
-                    update_user_meta(
-                        $user_id,
-                        WC_Twoinc_Brand::prefixed_name('company_scope'),
-                        'order:' . $order->get_id()
-                    );
-                }
+                update_user_meta(
+                    $user_id,
+                    WC_Twoinc_Brand::prefixed_name('company_scope'),
+                    $remembered !== '' && $remembered === (string) $company_id
+                        ? WC_Twoinc_Checkout::capture_scopes_for_order($order)
+                        : WC_Twoinc_Checkout::SCOPE_NONE
+                );
             }
 
             $response = $this->make_request('/v1/order', WC_Twoinc_Helper::compose_twoinc_order(

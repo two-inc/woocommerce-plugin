@@ -2115,29 +2115,31 @@ jQuery(document).on("twoinc_supported_search_countries_updated", function () {
 // through every one of those call sites.
 let twoincSoleTrader = twoincSelectWooHelper.soleTrader;
 
-/**
- * The one gate every remembered capture passes through, on every surface
- * (ABN-554). A capture belongs to the cart it was made in — or, on the
- * pay-for-order page, to the order being paid — so it survives a reload of
- * that same cart and is refused anywhere else.
- */
+/** The one gate every remembered capture passes through, on every surface (ABN-554). */
 let twoincCaptureScope = {
   /** sessionStorage key holding the scope the `checkoutInputs` snapshot was taken in. */
   STAMP_KEY: "twoincCaptureScope",
+
+  /** Every field a company capture writes, across both address roles. */
+  COMPANY_FIELD_IDS: [
+    "company_id",
+    "company_name",
+    "billing_company",
+    "billing_company_display",
+    "shipping_company",
+    "shipping_company_id"
+  ],
 
   /** The scope of the page being loaded, server-resolved. */
   current: function () {
     return twoincUtilHelper.blankToEmpty(window.twoinc && window.twoinc.capture_scope);
   },
 
-  /**
-   * A page that cannot name its own scope restores nothing: with no scope to
-   * compare against there is no way to tell a capture of this cart from one
-   * of another.
-   */
+  /** A stamp lists every scope its capture may replay in: the order, and the cart that became it. */
   belongsHere: function (scope) {
     const here = twoincCaptureScope.current();
-    return here !== "" && twoincUtilHelper.blankToEmpty(scope) === here;
+    if (here === "") return false;
+    return twoincUtilHelper.blankToEmpty(scope).split(" ").indexOf(here) >= 0;
   },
 
   stamp: function () {
@@ -2148,19 +2150,28 @@ let twoincCaptureScope = {
     return twoincUtilHelper.blankToEmpty(sessionStorage.getItem(twoincCaptureScope.STAMP_KEY));
   },
 
-  forget: function () {
-    sessionStorage.removeItem("checkoutInputs");
-    sessionStorage.removeItem(twoincCaptureScope.STAMP_KEY);
+  /** Crossing scopes invalidates the capture, not the address the buyer typed (ABN-554). */
+  forgetCompany: function (inputs) {
+    const kept = (inputs || []).filter(function (inp) {
+      return twoincCaptureScope.COMPANY_FIELD_IDS.indexOf(inp.id) < 0;
+    });
+    sessionStorage.setItem("checkoutInputs", JSON.stringify(kept));
+    twoincCaptureScope.stamp();
+    // Written by the same save, so a mode left behind would outlive the capture it describes.
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const key = sessionStorage.key(i);
+      if (key && key.indexOf(twoincCompanyCapture.CAPTURE_MODE_KEY) === 0) {
+        sessionStorage.removeItem(key);
+      }
+    }
+    return kept;
   },
 
-  /**
-   * The company the server remembered for this buyer, blank unless it was
-   * captured for the cart or order this page is (ABN-554). The one read of
-   * that bootstrap, so no restore path can reach it past the gate.
-   */
+  /** An unscoped record was set by hand in the admin profile, so it belongs to the buyer rather than to one cart (ABN-554). */
   userMetaCompany: function () {
     const meta = window.twoinc || {};
-    if (!twoincCaptureScope.belongsHere(meta.company_scope)) {
+    const scope = twoincUtilHelper.blankToEmpty(meta.company_scope);
+    if (scope !== "" && !twoincCaptureScope.belongsHere(scope)) {
       return { billing_company: "", company_id: "" };
     }
     return {
@@ -2819,23 +2830,22 @@ let twoincDomHelper = {
     // Alongside the field snapshot, since the same restore consumes both.
     twoincCompanyCapture.rememberCaptureMode();
   },
-  /**
-   * The snapshot, but only when it was taken in this page's own scope —
-   * otherwise it is dropped rather than left for the next reader (ABN-554).
-   * The one read path, so no caller can reach a snapshot past the gate.
-   */
+  /** The one read path for the snapshot, so no caller reaches a capture past the scope gate (ABN-554). */
   storedCheckoutInputs: function () {
     const raw = sessionStorage.getItem("checkoutInputs");
     if (!raw) return null;
-    if (!twoincCaptureScope.belongsHere(twoincCaptureScope.storedScope())) {
-      twoincCaptureScope.forget();
-      return null;
-    }
+    let inputs;
     try {
-      return JSON.parse(raw);
+      inputs = JSON.parse(raw);
     } catch (e) {
       return null;
     }
+    // A page that cannot name its own scope judges nothing, and must leave the snapshot for one that can.
+    if (twoincCaptureScope.current() === "") return null;
+    if (!twoincCaptureScope.belongsHere(twoincCaptureScope.storedScope())) {
+      inputs = twoincCaptureScope.forgetCompany(inputs);
+    }
+    return inputs;
   },
   getCheckoutInput: function (htmlTag, inpType, inpName) {
     let checkoutInputs = twoincDomHelper.storedCheckoutInputs();
