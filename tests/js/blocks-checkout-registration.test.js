@@ -100,7 +100,7 @@ afterEach(() => {
  * controller's accessors and call its mount.
  */
 function baseGlobals(location, billing) {
-  const calls = { mounts: 0, patches: [], resyncs: 0 };
+  const calls = { mounts: 0, patches: [], resyncs: 0, summaries: 0 };
   const captureValues = { company: "", company_id: "" };
   const control = {
     addressFieldSelector: "#billing_company_display",
@@ -110,6 +110,9 @@ function baseGlobals(location, billing) {
     },
     syncCompanySearchTileLocation() {
       calls.mounts += 1;
+    },
+    renderCompanySummary() {
+      calls.summaries += 1;
     }
   };
 
@@ -408,7 +411,21 @@ describe("blocks-checkout.js hands the controller the whole page", () => {
     expect(base.calls.resyncs).toBe(atBootstrap + 1);
   });
 
-  test("Blocks' company row is given the id the controller hangs its affordances on", () => {
+  test.each([
+    {
+      id: "billing-company_field",
+      holdsTheField: true,
+      description: "Blocks' own company row is the controller's display row"
+    },
+    {
+      id: "billing_company_field",
+      holdsTheField: false,
+      // toggleBusinessFields() hides the native row while the search is the
+      // active surface, and on a Blocks checkout that row must therefore
+      // never be the buyer's only company field (ABN-554).
+      description: "the native row the controller hides carries no company field"
+    }
+  ])("$description", ({ id, holdsTheField }) => {
     document.body.innerHTML =
       '<div class="wc-block-components-text-input"><input id="billing-company"></div>';
     const base = baseGlobals("address_area");
@@ -416,7 +433,45 @@ describe("blocks-checkout.js hands the controller the whole page", () => {
     env.wp.data = base.data;
     evaluate(env);
 
-    expect(document.querySelector("#billing_company_field")).not.toBeNull();
+    const row = document.getElementById(id);
+    expect(row).not.toBeNull();
+    expect(row.contains(document.getElementById("billing-company"))).toBe(holdsTheField);
+  });
+
+  test("a rebuilt company row is re-anchored and the summary re-rendered onto it", () => {
+    document.body.innerHTML =
+      '<div class="wp-block-woocommerce-checkout">' +
+      '<div class="wc-block-components-text-input"><input id="billing-company"></div>' +
+      "</div>";
+    const base = baseGlobals("address_area");
+    const { env } = globals({});
+    env.wp.data = base.data;
+
+    const observers = [];
+    const RealObserver = window.MutationObserver;
+    window.MutationObserver = function (fn) {
+      observers.push(fn);
+      return new RealObserver(fn);
+    };
+    window.MutationObserver.prototype = RealObserver.prototype;
+    evaluate(env);
+    window.MutationObserver = RealObserver;
+
+    const mountsAtFirstAnchor = base.calls.mounts;
+    const summariesAtFirstAnchor = base.calls.summaries;
+
+    // What React does on a store update: the row is replaced, taking the id
+    // and the control's wrapper with it.
+    document.querySelector(".wp-block-woocommerce-checkout").innerHTML =
+      '<div class="wc-block-components-text-input"><input id="billing-company"></div>';
+    observers.forEach((fn) => fn([]));
+
+    const row = document.getElementById("billing-company_field");
+    expect(row).not.toBeNull();
+    expect(row.contains(document.getElementById("billing-company"))).toBe(true);
+    expect(document.getElementById("billing_company_field").parentElement).toBe(row.parentElement);
+    expect(base.calls.mounts).toBe(mountsAtFirstAnchor + 1);
+    expect(base.calls.summaries).toBe(summariesAtFirstAnchor + 1);
   });
 });
 

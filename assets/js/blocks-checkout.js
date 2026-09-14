@@ -66,6 +66,9 @@
 
   var SHADOW_ID = "twoinc-blocks-shadow";
 
+  /** The row id the controller addresses as the native company row. */
+  var NATIVE_ROW_ID = "billing_company_field";
+
   /** True while the store's own values are being written into the shadow. */
   var applying = false;
   var pushScheduled = false;
@@ -233,15 +236,37 @@
   }
 
   /**
-   * The controller hangs the read-only company number, the sole-trader
-   * spinner and the link back out of manual entry on the row it knows as
-   * `<field>_field`. Blocks' own company row carries no id, so the skin gives
-   * it the one the controller looks for.
+   * Blocks' company row is the controller's DISPLAY row — the search
+   * control's own visible surface — not the native one. The distinction is
+   * load-bearing: `toggleBusinessFields()` hides the native row whenever the
+   * search is the active surface, which on a Blocks checkout is the buyer's
+   * only company field (ABN-554).
    */
-  function nameRowId(search) {
+  function anchorRow(search) {
     var field = document.querySelector(search.addressFieldSelector);
     var row = field && field.closest(".wc-block-components-text-input");
-    if (row && !row.id) row.id = "billing_company_field";
+    if (!row) return;
+
+    var id = search.addressFieldSelector.slice(1) + "_field";
+    if (row.id !== id) row.id = id;
+    nativeRow(row);
+  }
+
+  /**
+   * And the native row itself, which carries no field here — only the link
+   * back out of manual entry, which the controller hangs on this id. Replaced
+   * only once React has orphaned it.
+   */
+  function nativeRow(after) {
+    var row = document.getElementById(NATIVE_ROW_ID);
+    if (!row) {
+      row = document.createElement("div");
+      row.id = NATIVE_ROW_ID;
+      row.className = "hidden";
+    }
+    if (row.parentElement !== after.parentElement) {
+      after.insertAdjacentElement("afterend", row);
+    }
   }
 
   function mount() {
@@ -252,12 +277,15 @@
     // fields, which is where address-area placement is specified to put the
     // control; the tile mount the controller builds itself.
     search.addressFieldSelector = "#billing-company";
-    nameRowId(search);
+    anchorRow(search);
     if (isMounted(search)) return;
     if (!search.isTileLocation() && !document.querySelector(search.addressFieldSelector)) {
       return;
     }
     search.syncCompanySearchTileLocation();
+    // The summary anchors against the row the control mounts on, and a
+    // rebuilt row is a new anchor.
+    search.renderCompanySummary();
   }
 
   /**
