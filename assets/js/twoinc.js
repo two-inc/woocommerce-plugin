@@ -3415,6 +3415,42 @@ let twoincTermChips = {
   }
 };
 
+/**
+ * Two's own terms consent: the one gate both checkouts call — classic through
+ * `checkout_place_order`, Blocks through `onPaymentSetup` (ABN-554).
+ */
+let twoincTermsConsent = {
+  FIELD: "twoinc_terms_accepted",
+  checkbox: function () {
+    return document.querySelector('input[name="' + twoincTermsConsent.FIELD + '"]');
+  },
+  isAccepted: function () {
+    const box = twoincTermsConsent.checkbox();
+    return !!box && box.checked;
+  },
+  /** The carrier under the name the classic form posts it as. */
+  payload: function () {
+    const payload = {};
+    if (!twoincTermsConsent.checkbox()) return payload;
+    payload[twoincTermsConsent.FIELD] = twoincTermsConsent.isAccepted() ? "1" : "";
+    return payload;
+  },
+  message: function () {
+    return (window.twoinc && window.twoinc.text && window.twoinc.text.terms_not_accepted) || "";
+  },
+  showError: function (show) {
+    jQuery(".twoinc-terms-error").toggleClass("hidden", !show);
+  },
+  /** null once consent is in hand; the refusal sentence otherwise. */
+  validate: function () {
+    // No box on the page means the brand declared no terms to consent to.
+    if (!twoincTermsConsent.checkbox()) return null;
+    const accepted = twoincTermsConsent.isAccepted();
+    twoincTermsConsent.showError(!accepted);
+    return accepted ? null : twoincTermsConsent.message();
+  }
+};
+
 // Delegated because a checkout update replaces the payment fragment, and with
 // it the chip container this listens on. On `document`, not `document.body`:
 // this script is enqueued in the head, where there is no body yet and a
@@ -5167,6 +5203,28 @@ class Twoinc {
       .on("change.twoincPaymentMethod", 'input[name="payment_method"]', function () {
         twoincDomHelper.toggleBusinessFields();
       });
+
+    // Bound on the forms themselves, not delegated: `checkout_place_order` is
+    // fired with `triggerHandler`, which does not bubble, and a delegated
+    // `submit` would run after WooCommerce's own directly-bound one has
+    // already posted the order.
+    jQuery("form.checkout")
+      .off("checkout_place_order.twoincTerms")
+      .on("checkout_place_order.twoincTerms", function () {
+        if (!twoincDomHelper.isTwoincSelected()) return;
+        return twoincTermsConsent.validate() === null;
+      });
+    // The pay-for-order form submits natively and fires no `checkout_place_order`.
+    jQuery("form#order_review")
+      .off("submit.twoincTerms")
+      .on("submit.twoincTerms", function (event) {
+        if (!twoincDomHelper.isTwoincSelected()) return;
+        if (twoincTermsConsent.validate() !== null) event.preventDefault();
+      });
+
+    $body.on("change", 'input[name="' + twoincTermsConsent.FIELD + '"]', function () {
+      twoincTermsConsent.showError(false);
+    });
 
     // Handle the representative inputs blur event
     $body.on(

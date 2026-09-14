@@ -25,6 +25,15 @@ return [
     'gateway_id' => 'woocommerce-gateway-tillit',
     'logo_url' => WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg',
     'about_url' => 'https://www.two.inc/what-is-two',
+    // Buyer-facing terms page behind the checkout consent. A path is resolved
+    // against the brand's checkout host, so it follows checkout_env the way
+    // every other service URL does; an absolute URL is used verbatim. Absent
+    // or empty renders no consent at all (ABN-554).
+    'payment_terms_link' => '/terms',
+    // Consent sentence override: a sprintf template taking %1$s the terms
+    // anchor and %2$s the provider's legal full name. null uses the base's
+    // own translated sentence.
+    'payment_terms_text' => null,
     // Meta key prefix (e.g. _twoinc_order_reference, twoinc_company_id)
     // and the confirmation request param prefix. An overlay MUST
     // set the prefix its installed base already uses — live stores hold

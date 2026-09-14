@@ -366,8 +366,8 @@
    * own for it to read (ABN-554).
    */
   function captured() {
-    if (!control()) return {};
-    var payload = {};
+    var payload = twoincTermsConsent.payload();
+    if (!control()) return payload;
     twoincCompanySearchControls.forEach(function (search) {
       var company = search.readCapturedCompany();
       // A carrier's selector minus its "#" is the POST key the server reads.
@@ -415,6 +415,10 @@
       function () {
         if (!events) return undefined;
         return events.onPaymentSetup(function () {
+          var refusal = twoincTermsConsent.validate();
+          if (refusal) {
+            return { type: responses.responseTypes.ERROR, message: refusal };
+          }
           return {
             type: responses.responseTypes.SUCCESS,
             meta: { paymentMethodData: captured() }

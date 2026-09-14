@@ -125,7 +125,8 @@
 }
 .twoinc-pay-box.twoinc-intent-approved,
 .twoinc-pay-box.twoinc-err-payment-default,
-.twoinc-pay-box.twoinc-err-phone-number {
+.twoinc-pay-box.twoinc-err-phone-number,
+.twoinc-terms-error {
   margin-top: 12px;
   padding: 16px;
   border-radius: 8px;
@@ -139,7 +140,8 @@
   color: #155724;
 }
 .twoinc-pay-box.twoinc-err-payment-default,
-.twoinc-pay-box.twoinc-err-phone-number {
+.twoinc-pay-box.twoinc-err-phone-number,
+.twoinc-terms-error {
   background: #f8d7da;
   border: 2px solid #dc3545;
   color: #721c24;
@@ -874,4 +876,21 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
 #select_different_sole_trader_btn:focus,
 #select_different_sole_trader_btn_shipping:focus {
   border-color: #808080 !important;
+}
+
+.twoinc-terms-consent {
+  margin-top: 12px;
+}
+.twoinc-terms-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.twoinc-terms-row input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+.twoinc-terms-text {
+  font-size: 14px;
+  line-height: 1.4;
 }

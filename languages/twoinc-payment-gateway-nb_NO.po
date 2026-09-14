@@ -1648,3 +1648,17 @@ msgstr "Gebyr for betalingsvilkår - %s dager"
 #, php-format
 msgid "Payment terms fee - %s days from end of month"
 msgstr "Gebyr for betalingsvilkår - %s dager fra månedens slutt"
+
+#: class/WC_Twoinc.php
+msgid "payment terms"
+msgstr "betalingsvilkår"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "You must accept %s to place order."
+msgstr "Du må akseptere %s for å legge inn bestillingen."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "I accept the %1$s and authorize %2$s to process my data automatically."
+msgstr "Jeg aksepterer %1$s og gir %2$s tillatelse til å behandle mine data automatisk."
