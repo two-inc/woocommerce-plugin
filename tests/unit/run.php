@@ -16150,7 +16150,7 @@ final class CaptureScopeSpec
         $GLOBALS['__twoinc_test_wc_orders'] = [42 => self::stampableOrder()];
         $GLOBALS['__twoinc_test_notices'] = [];
         $GLOBALS['__twoinc_test_logs'] = [];
-        $GLOBALS['__twoinc_test_user_meta'] = [];
+        $GLOBALS['__twoinc_test_user_meta'] = [7 => []];
         $GLOBALS['__twoinc_test_user_id'] = 7;
         $GLOBALS['__twoinc_test_query_vars'] = [];
         WC()->session = new StubSession();
