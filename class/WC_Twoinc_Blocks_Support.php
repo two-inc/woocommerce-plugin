@@ -31,7 +31,16 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
             wp_register_script(
                 $handle,
                 WC_TWOINC_PLUGIN_URL . $asset,
-                ['wc-blocks-registry', 'wc-settings', 'wp-element', 'wp-html-entities'],
+                [
+                    'wc-blocks-registry',
+                    'wc-settings',
+                    'wp-element',
+                    'wp-html-entities',
+                    'wp-data',
+                    // The classic controller this file is a skin over, so its
+                    // globals exist before the mount runs (ABN-554).
+                    'twoinc-payment-gateway-js',
+                ],
                 twoinc_get_asset_version($asset),
                 true
             );

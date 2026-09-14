@@ -5022,6 +5022,14 @@ if (!class_exists('WC_Twoinc')) {
          */
         private static function payment_failure($message)
         {
+            // The Store API throws the message below itself, and reaches its
+            // own wc_clear_notices() only on the success path — so a notice
+            // left queued here surfaces as a stale 409 on the buyer's NEXT
+            // attempt, before that attempt reaches payment at all.
+            if (WC_Twoinc_Helper::is_store_api_request()) {
+                wc_clear_notices();
+            }
+
             return [
                 'result'  => 'failure',
                 'message' => is_array($message) ? implode(' ', $message) : (string) $message,

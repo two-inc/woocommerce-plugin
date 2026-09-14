@@ -331,6 +331,19 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * @return void
          */
+        /**
+         * The Blocks checkout's Store API, whose payment route reads a
+         * gateway's RETURN and never the notice queue.
+         *
+         * @return bool
+         */
+        public static function is_store_api_request()
+        {
+            return defined('REST_REQUEST')
+                && REST_REQUEST
+                && strpos((string) ($_SERVER['REQUEST_URI'] ?? ''), '/wc/store/') !== false;
+        }
+
         public static function display_ajax_error($message)
         {
             if (is_string($message)) {

@@ -68,6 +68,7 @@ final class BrandConfigSpec
             'testMerchantBuyerCountryAllowlistIntersectsBrandGate',
             'testBuyerCountrySupportJudgesEachAllowlistState',
             'testProcessPaymentGuardsReturnAFailureArray',
+            'testBlocksCompanyRowRevealedOnlyWhereTheSearchNeedsIt',
             'testOrderCreationRefusesAnUnsupportedBuyerCountry',
             'testOrderIntentRefusesAnUnsupportedBuyerCountry',
             'testOrderCreationRefusesADeclinedOrderIntent',
@@ -2430,6 +2431,52 @@ final class BrandConfigSpec
      * details, so a null is a fatal TypeError and the buyer sees a critical
      * error instead of the reason.
      */
+    /**
+     * Given the address-area company search mounts on WooCommerce's own
+     * company row; When a store keeps that row hidden; Then it is revealed for
+     * the Blocks checkout alone (ABN-554).
+     */
+    private static function testBlocksCompanyRowRevealedOnlyWhereTheSearchNeedsIt(): void
+    {
+        $cases = [
+            ['hidden', 'yes', true, [], 'optional', 'Blocks checkout with the search in the address'],
+            ['hidden', 'no', true, [], 'hidden', 'search relocated to the payment tile'],
+            ['hidden', 'yes', false, [], 'hidden', 'a page that is not a Blocks checkout'],
+            ['hidden', 'yes', true, ['woocommerce/cart'], 'hidden', 'a Blocks page without the checkout block'],
+            ['optional', 'yes', true, [], 'optional', 'a store that already shows the row'],
+            ['required', 'yes', true, [], 'required', 'a store that requires the row'],
+        ];
+
+        foreach ($cases as $case) {
+            list($stored, $enabled, $singular, $blocks, $expected, $description) = $case;
+
+            $GLOBALS['__twoinc_test_is_singular'] = $singular;
+            $GLOBALS['__twoinc_test_page_blocks'] = $blocks ?: ['woocommerce/checkout'];
+
+            $gateway = new class ($enabled) extends WC_Twoinc {
+                public $search_enabled;
+
+                public function __construct($enabled)
+                {
+                    $this->search_enabled = $enabled;
+                }
+
+                public function get_enable_company_search()
+                {
+                    return $this->search_enabled;
+                }
+            };
+
+            TinyAssert::same(
+                $expected,
+                (new WC_Twoinc_Checkout($gateway))->reveal_blocks_company_field($stored),
+                $description
+            );
+        }
+
+        unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
+    }
+
     private static function testProcessPaymentGuardsReturnAFailureArray(): void
     {
         $cases = [

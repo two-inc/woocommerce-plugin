@@ -1207,6 +1207,21 @@ function is_checkout()
     return $GLOBALS['__twoinc_test_is_checkout'] ?? true;
 }
 
+function is_singular($post_types = '')
+{
+    return $GLOBALS['__twoinc_test_is_singular'] ?? false;
+}
+
+function has_block($block_name, $post = null)
+{
+    return in_array($block_name, $GLOBALS['__twoinc_test_page_blocks'] ?? [], true);
+}
+
+function wc_clear_notices()
+{
+    $GLOBALS['__twoinc_test_notices'] = [];
+}
+
 function delete_transient($key)
 {
     unset($GLOBALS['__twoinc_test_transients'][$key]);

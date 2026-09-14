@@ -40,7 +40,10 @@ function globals(overrides) {
         }
       }
     },
-    wp: { element: { createElement }, htmlEntities: { decodeEntities: (v) => v } },
+    wp: {
+      element: { createElement, useEffect: (fn) => fn() },
+      htmlEntities: { decodeEntities: (v) => v }
+    },
     twoincBlocksName: "woocommerce-gateway-tillit"
   };
   return { env: Object.assign(base, overrides), registered };
@@ -55,10 +58,81 @@ function evaluate(env) {
 }
 
 afterEach(() => {
-  ["wc", "wp", "twoincBlocksName"].forEach((key) => {
+  [
+    "wc",
+    "wp",
+    "twoincBlocksName",
+    "twoinc",
+    "twoincSelectWooHelper",
+    "twoincCompanyCapture",
+    "twoincAddressRoles"
+  ].forEach((key) => {
     delete window[key];
   });
+  document.body.innerHTML = "";
 });
+
+/**
+ * The base plugin's own globals, as twoinc.js leaves them on the page.
+ * Nothing here is a reimplementation: the skin is only allowed to read the
+ * controller's accessors and call its mount.
+ */
+function baseGlobals(location, billing) {
+  const calls = { mounts: 0, patches: [] };
+  const captureValues = { company: "", company_id: "" };
+  const control = {
+    addressFieldSelector: "#billing_company_display",
+    isTileLocation: () => location === "payment_tile",
+    companyFieldSelector() {
+      return this.isTileLocation() ? "#twoinc_tile_company_name" : this.addressFieldSelector;
+    },
+    syncCompanySearchTileLocation() {
+      calls.mounts += 1;
+    }
+  };
+
+  window.twoinc = { company_search_location: location };
+  window.twoincSelectWooHelper = control;
+  window.twoincAddressRoles = { primary: () => "billing" };
+  window.twoincCompanyCapture = {
+    numberField: () => ({ val: () => captureValues.company_id }),
+    nameField: () => ({ val: () => captureValues.company })
+  };
+
+  const address = Object.assign(
+    {
+      first_name: "",
+      last_name: "",
+      company: "",
+      address_1: "",
+      address_2: "",
+      city: "",
+      state: "",
+      postcode: "",
+      country: "",
+      phone: "",
+      email: ""
+    },
+    billing || {}
+  );
+
+  return {
+    calls,
+    control,
+    captureValues,
+    address,
+    data: {
+      select: () => ({ getCustomerData: () => ({ billingAddress: address }) }),
+      dispatch: () => ({
+        setBillingAddress(patch) {
+          calls.patches.push(patch);
+          Object.assign(address, patch);
+        }
+      }),
+      subscribe: () => () => {}
+    }
+  };
+}
 
 describe("blocks-checkout.js registration", () => {
   test.each([
@@ -104,7 +178,7 @@ describe("blocks-checkout.js registration", () => {
       description: "the label carries the about control"
     },
     {
-      slot: (config) => [config.content.type()],
+      slot: (config) => config.content.type().children,
       expected: METHOD_DATA.subtitle,
       description: "the content carries the subtitle"
     }
@@ -115,5 +189,121 @@ describe("blocks-checkout.js registration", () => {
       .filter(Boolean)
       .map((node) => node.props.src || (node.props.dangerouslySetInnerHTML || {}).__html);
     expect(values).toContain(expected);
+  });
+});
+
+describe("blocks-checkout.js reuses the classic controller", () => {
+  test.each([
+    {
+      location: "address_area",
+      markup: '<input id="billing-company">',
+      anchored: "#billing-company",
+      mounts: 1,
+      description: "address placement mounts on WooCommerce's own company row"
+    },
+    {
+      location: "address_area",
+      markup: "",
+      anchored: "#billing-company",
+      mounts: 0,
+      description: "address placement waits for the row to render"
+    },
+    {
+      location: "payment_tile",
+      markup: "",
+      anchored: "#billing-company",
+      mounts: 1,
+      description: "tile placement leaves the mount to the controller"
+    }
+  ])("$description", ({ location, markup, anchored, mounts }) => {
+    document.body.innerHTML = markup;
+    const base = baseGlobals(location);
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    expect(base.control.addressFieldSelector).toBe(anchored);
+    expect(base.calls.mounts).toBe(mounts);
+  });
+
+  test("an already-anchored control is never re-mounted", () => {
+    document.body.innerHTML =
+      '<span class="two-company-field-wrap"><input id="billing-company"></span>';
+    const base = baseGlobals("address_area");
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    expect(base.calls.mounts).toBe(0);
+  });
+
+  test.each([
+    {
+      seed: { city: "Oslo" },
+      shadow: null,
+      expectShadow: { city: "Oslo" },
+      expectPatches: [],
+      description: "the store's address reaches the fields the controller reads"
+    },
+    {
+      seed: {},
+      shadow: { address_1: "Example House", postcode: "EX1 2AB" },
+      expectShadow: { address_1: "Example House" },
+      expectPatches: [{ address_1: "Example House", postcode: "EX1 2AB" }],
+      description: "a registry autofill the controller wrote reaches the store"
+    }
+  ])("$description", ({ seed, shadow, expectShadow, expectPatches }) => {
+    const base = baseGlobals("address_area", seed);
+    const { env } = globals({});
+    env.wp.data = base.data;
+    let subscriber = null;
+    base.data.subscribe = (fn) => {
+      subscriber = fn;
+      return () => {};
+    };
+    evaluate(env);
+
+    if (shadow) {
+      Object.keys(shadow).forEach((key) => {
+        document.getElementById("billing_" + key).value = shadow[key];
+      });
+      subscriber();
+    }
+
+    Object.keys(expectShadow).forEach((key) => {
+      expect(document.getElementById("billing_" + key).value).toBe(expectShadow[key]);
+    });
+    expect(base.calls.patches).toEqual(expectPatches);
+  });
+
+  test("the Store API is handed the controller's own captured company", () => {
+    const base = baseGlobals("payment_tile");
+    const { env, registered } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    let handler = null;
+    registered[0].content.type({
+      eventRegistration: {
+        onPaymentSetup(fn) {
+          handler = fn;
+          return () => {};
+        }
+      },
+      emitResponse: { responseTypes: { SUCCESS: "success" } }
+    });
+
+    base.captureValues.company = "EXAMPLE TRADING LIMITED";
+    base.captureValues.company_id = "12345678";
+
+    expect(handler()).toEqual({
+      type: "success",
+      meta: {
+        paymentMethodData: {
+          company_id: "12345678",
+          company_name: "EXAMPLE TRADING LIMITED"
+        }
+      }
+    });
   });
 });
