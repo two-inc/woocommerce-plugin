@@ -55,25 +55,29 @@ function styleRulesOf(sheet) {
 let sheet;
 
 /**
- * Is `needle` the SUBJECT of one of this rule's selectors, rather than an
- * ancestor of it or a prefix of a longer id? Padding on a descendant is not
- * padding on the row.
+ * Does one of this rule's selectors name `needle` — as the subject or as an
+ * ancestor, since bottom padding on a wrapper inside the row adds the same
+ * gap — and not merely prefix a longer id?
  *
  * @param {string} selectorText
  * @param {string} needle
  * @returns {boolean}
  */
 function targets(selectorText, needle) {
-  return selectorText.split(",").some((part) => {
-    const subject =
-      part
-        .trim()
-        .split(/[\s>+~]+/)
-        .pop() || "";
-    const at = subject.indexOf(needle);
-    if (at < 0) return false;
-    return !/[A-Za-z0-9_-]/.test(subject.charAt(at + needle.length));
-  });
+  // Attribute values and `:not()` arguments are stripped first: a value can
+  // hold the separators this splits on, and a negated needle is not reached.
+  const cleaned = selectorText.replace(/\[[^\]]*\]/g, "").replace(/:not\([^)]*\)/g, "");
+  return cleaned.split(",").some((part) =>
+    part
+      .trim()
+      .split(/[\s>+~]+/)
+      .some((compound) => {
+        const at = compound.indexOf(needle);
+        if (at < 0) return false;
+        // Not a longer id the needle merely prefixes.
+        return !/[A-Za-z0-9_-]/.test(compound.charAt(at + needle.length));
+      })
+  );
 }
 
 /**
@@ -118,14 +122,22 @@ describe("billing company-row spacing", () => {
 
   // The scan's own contract, against a sheet written for the purpose — the
   // plugin's sheet carries no at-rule, so nothing else here would notice the
-  // walk stopping at one, or the subject test matching an ancestor.
+  // walk stopping at one, or the needle matching a longer id.
   describe("what the stylesheet scan can see", () => {
+    let injected;
+
+    afterEach(() => {
+      // Left in <head>, these rules would reach the computed-style cases below.
+      if (injected) injected.remove();
+      injected = null;
+    });
+
     /** @param {string} css @returns {CSSStyleSheet} */
     function inject(css) {
-      const el = document.createElement("style");
-      el.textContent = css;
-      document.head.appendChild(el);
-      return el.sheet;
+      injected = document.createElement("style");
+      injected.textContent = css;
+      document.head.appendChild(injected);
+      return injected.sheet;
     }
 
     test.each([
@@ -145,9 +157,21 @@ describe("billing company-row spacing", () => {
         description: "horizontal padding, which is deliberate elsewhere"
       },
       {
+        // `#billing_company_field .woocommerce-input-wrapper` is a live rule;
+        // bottom padding there is the gap this file forbids.
         css: "#billing_company_field .child { padding-bottom: 15px }",
+        offenders: ["#billing_company_field .child"],
+        description: "bottom padding on a wrapper inside the row"
+      },
+      {
+        css: '#billing_company_field[data-x="a b"] { padding-bottom: 15px }',
+        offenders: ['#billing_company_field[data-x="a b"]'],
+        description: "an attribute value holding a space"
+      },
+      {
+        css: ".other:not(#billing_company_field) { padding-bottom: 15px }",
         offenders: [],
-        description: "padding on a descendant, not the row"
+        description: "a selector that negates the row"
       },
       {
         css: "#billing_company_field_extra { padding-bottom: 15px }",

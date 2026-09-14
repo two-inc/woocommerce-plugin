@@ -450,21 +450,21 @@ describe("company search hints", () => {
     });
 
     test("the pay-for-order template puts no required asterisk on company name", () => {
-      // Hard-coded in this template, so toggleRequiredCues() cannot reach it —
-      // it carries no `.form-row` ancestor and the class is core's `required`,
-      // not `twoinc-required` (ABN-554).
+      // This template writes its own labels, so toggleRequiredCues() never
+      // reaches them — the rows carry no `.form-row` ancestor (ABN-554).
       const markup = fs.readFileSync(
         path.join(harness.REPO_ROOT, "views/woocommerce_order_pay.php"),
         "utf8"
       );
-      const label = markup.match(/<label for="billing_company_display"[\s\S]*?<\/label>/);
+      // The whole field block, not just the label: an asterisk after the
+      // closing tag reads the same on screen.
+      const field = markup.match(/<div id="billing_company_display_field">[\s\S]*?<\/div>/);
+      const phone = markup.match(/<div id="billing_phone_display_field">[\s\S]*?<\/div>/);
 
-      expect(label).not.toBeNull();
-      expect(label[0]).not.toMatch(/<abbr/);
-      // The phone field still states its own requirement, so this is the
-      // company label alone and not the whole template's markers. Bounded to
-      // the label: unbounded, it matched the next label's marker instead.
-      const phone = markup.match(/<label for="billing_phone_display"[\s\S]*?<\/label>/);
+      expect(field).not.toBeNull();
+      expect(field[0]).not.toMatch(/<abbr|\*/);
+      // Phone still states its own requirement, so this is the company field
+      // alone and not every marker in the template.
       expect(phone).not.toBeNull();
       expect(phone[0]).toMatch(/<abbr/);
     });
