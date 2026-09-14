@@ -285,6 +285,7 @@ final class BrandConfigSpec
             'testAssetVersionTracksFileMtimeNotPluginVersion',
             'testAssetVersionFallsBackToPluginVersionWhenFileMissing',
             'testCompanySearchLocationDerivedFromEnableCompanySearchBothDirections',
+            'testOrderPayCountryComesFromTheOrderNotTheShop',
             'testCompanySearchLocationFallsBackToPaymentTileOnNullOrEmpty',
             'testCompanySearchLocationSettingDroppedFromUpgradedInstalls',
             'testEnableCompanySearchForOthersSettingDroppedFromUpgradedInstalls',
@@ -11162,6 +11163,59 @@ final class BrandConfigSpec
             $derive->invoke(null, 'no'),
             'checkbox unchecked ("no") must relocate into the payment tile, not disappear'
         );
+    }
+
+    /**
+     * ABN-554. The pay-for-order form's country drives company search and
+     * sole-trader availability, so it has to be the country of the order the
+     * buyer is paying for. The shop's base country is the last resort, not the
+     * default — the bug this replaces marked it `selected` unconditionally.
+     */
+    private static function testOrderPayCountryComesFromTheOrderNotTheShop(): void
+    {
+        $GLOBALS['__twoinc_test_base_country'] = 'NO';
+
+        $order = function ($billing, $shipping) {
+            return new class ($billing, $shipping) {
+                private $billing;
+
+                private $shipping;
+
+                public function __construct($billing, $shipping)
+                {
+                    $this->billing = $billing;
+                    $this->shipping = $shipping;
+                }
+
+                public function get_billing_country()
+                {
+                    return $this->billing;
+                }
+
+                public function get_shipping_country()
+                {
+                    return $this->shipping;
+                }
+            };
+        };
+
+        foreach (
+            [
+                [$order('GB', ''), 'GB', 'the order\'s billing country wins'],
+                [$order('', 'SE'), 'SE', 'shipping covers a billing country the order never captured'],
+                [$order('GB', 'SE'), 'GB', 'billing still wins when both are set'],
+                [$order('', ''), 'NO', 'the shop base country is the last resort'],
+                [null, 'NO', 'off the pay-for-order endpoint there is no order to read'],
+            ] as [$subject, $expected, $description]
+        ) {
+            TinyAssert::same(
+                $expected,
+                WC_Twoinc_Checkout::resolve_order_pay_country($subject),
+                $description
+            );
+        }
+
+        unset($GLOBALS['__twoinc_test_base_country']);
     }
 
     /**
