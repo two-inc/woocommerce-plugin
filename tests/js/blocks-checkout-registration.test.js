@@ -248,40 +248,94 @@ describe("blocks-checkout.js reuses the classic controller", () => {
   test.each([
     {
       seed: { city: "Oslo" },
-      shadow: null,
+      written: null,
       expectShadow: { city: "Oslo" },
       expectPatches: [],
       description: "the store's address reaches the fields the controller reads"
     },
     {
       seed: {},
-      shadow: { address_1: "Example House", postcode: "EX1 2AB" },
+      written: { company: "EXAMPLE TRADING LIMITED" },
+      expectShadow: { company: "EXAMPLE TRADING LIMITED" },
+      expectPatches: [{ company: "EXAMPLE TRADING LIMITED" }],
+      description: "a capture the controller wrote reaches the store"
+    },
+    {
+      seed: {},
+      written: { address_1: "Example House", postcode: "EX1 2AB" },
       expectShadow: { address_1: "Example House" },
       expectPatches: [{ address_1: "Example House", postcode: "EX1 2AB" }],
-      description: "a registry autofill the controller wrote reaches the store"
+      description: "a whole registry autofill reaches the store as one dispatch"
     }
-  ])("$description", ({ seed, shadow, expectShadow, expectPatches }) => {
+  ])("$description", async ({ seed, written, expectShadow, expectPatches }) => {
     const base = baseGlobals("address_area", seed);
     const { env } = globals({});
     env.wp.data = base.data;
-    let subscriber = null;
-    base.data.subscribe = (fn) => {
-      subscriber = fn;
-      return () => {};
-    };
     evaluate(env);
 
-    if (shadow) {
-      Object.keys(shadow).forEach((key) => {
-        document.getElementById("billing_" + key).value = shadow[key];
+    if (written) {
+      // Exactly how the controller writes: jQuery assigns `.value` and fires
+      // nothing.
+      Object.keys(written).forEach((key) => {
+        document.getElementById("billing_" + key).value = written[key];
       });
-      subscriber();
+      await Promise.resolve();
     }
 
     Object.keys(expectShadow).forEach((key) => {
       expect(document.getElementById("billing_" + key).value).toBe(expectShadow[key]);
     });
     expect(base.calls.patches).toEqual(expectPatches);
+  });
+
+  test("a store value moving again mid-pull is never overwritten by the pull", async () => {
+    const base = baseGlobals("address_area", { city: "Oslo" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    // The buyer's own edit, landing between the pull's write and the queued
+    // push: without the suppression, the pull's stale value wins.
+    base.address.city = "Bergen";
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([]);
+  });
+
+  test("nothing is left running on a timer", () => {
+    const base = baseGlobals("address_area");
+    const { env } = globals({});
+    env.wp.data = base.data;
+    const interval = jest.spyOn(window, "setInterval");
+    evaluate(env);
+
+    expect(interval).not.toHaveBeenCalled();
+  });
+
+  test("the control is re-anchored when the checkout block replaces its row", () => {
+    document.body.innerHTML =
+      '<div class="wp-block-woocommerce-checkout"><div class="wc-block-components-text-input"></div></div>';
+    const base = baseGlobals("address_area");
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    expect(base.calls.mounts).toBe(0);
+
+    const observed = [];
+    const RealObserver = window.MutationObserver;
+    window.MutationObserver = function (fn) {
+      observed.push(fn);
+      return new RealObserver(fn);
+    };
+    window.MutationObserver.prototype = RealObserver.prototype;
+    evaluate(env);
+    window.MutationObserver = RealObserver;
+
+    document.querySelector(".wc-block-components-text-input").innerHTML =
+      '<input id="billing-company">';
+    observed.forEach((fn) => fn([]));
+
+    expect(base.calls.mounts).toBe(1);
   });
 
   test("the Store API is handed the controller's own captured company", () => {

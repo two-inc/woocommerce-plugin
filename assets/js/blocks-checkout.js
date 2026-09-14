@@ -66,8 +66,9 @@
 
   var SHADOW_ID = "twoinc-blocks-shadow";
 
-  /** Last value each field was reconciled at, so either side's change is visible. */
-  var settled = {};
+  /** True while the store's own values are being written into the shadow. */
+  var applying = false;
+  var pushScheduled = false;
 
   function cartStore() {
     return wp.data && wp.data.select && wp.data.select("wc/store/cart");
@@ -77,6 +78,38 @@
     var store = cartStore();
     var customer = store && store.getCustomerData && store.getCustomerData();
     return (customer && customer.billingAddress) || null;
+  }
+
+  /**
+   * Make one shadow input announce its own writes.
+   *
+   * The controller sets these through jQuery, which assigns `.value` and fires
+   * nothing at all — not even a native event — so an own-property accessor
+   * over the prototype's is what turns a capture or a registry autofill into
+   * something this file can react to rather than sample.
+   */
+  function announceWrites(input) {
+    var native = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
+    Object.defineProperty(input, "value", {
+      configurable: true,
+      get: function () {
+        return native.get.call(this);
+      },
+      set: function (value) {
+        native.set.call(this, value);
+        if (!applying) schedulePush();
+      }
+    });
+  }
+
+  /** One dispatch per burst: a capture writes the number and the name separately. */
+  function schedulePush() {
+    if (pushScheduled) return;
+    pushScheduled = true;
+    Promise.resolve().then(function () {
+      pushScheduled = false;
+      push();
+    });
   }
 
   function shadow() {
@@ -90,45 +123,51 @@
       var input = document.createElement("input");
       input.type = "text";
       input.id = ADDRESS_KEYS.indexOf(key) === -1 ? key : "billing_" + key;
+      if (ADDRESS_KEYS.indexOf(key) !== -1) announceWrites(input);
       host.appendChild(input);
     });
     document.body.appendChild(host);
     return host;
   }
 
-  /**
-   * Reconcile the two copies of the billing address, whichever side moved.
-   * The controller writes these fields with a bare `.val()` — no event of any
-   * kind — so the only way to see a capture or an address autofill land is to
-   * look.
-   */
-  function reconcile() {
+  /** The store's address into the fields the controller reads. */
+  function pull() {
     var address = billingAddress();
     if (!address) return false;
     shadow();
 
     var moved = false;
+    applying = true;
+    ADDRESS_KEYS.forEach(function (key) {
+      var input = document.getElementById("billing_" + key);
+      var value = address[key] == null ? "" : String(address[key]);
+      if (input && input.value !== value) {
+        input.value = value;
+        moved = true;
+      }
+    });
+    applying = false;
+
+    return moved;
+  }
+
+  /** What the controller wrote into those fields, back to the store. */
+  function push() {
+    var address = billingAddress();
+    if (!address) return;
 
     var patch = null;
     ADDRESS_KEYS.forEach(function (key) {
       var input = document.getElementById("billing_" + key);
       if (!input) return;
       var stored = address[key] == null ? "" : String(address[key]);
-
-      if (stored !== settled[key]) {
-        input.value = stored;
-        moved = true;
-      } else if (input.value !== settled[key]) {
-        moved = true;
+      if (input.value !== stored) {
         patch = patch || {};
         patch[key] = input.value;
-        stored = input.value;
       }
-      settled[key] = stored;
     });
 
     if (patch) wp.data.dispatch("wc/store/cart").setBillingAddress(patch);
-    return moved;
   }
 
   // -------------------------------------------------------------- mounting
@@ -258,20 +297,31 @@
   // one, exactly as on a classic checkout, so the mirror and the mount are the
   // page's business rather than the tile component's.
   function bootstrap() {
-    reconcile();
+    pull();
     mount();
     resync();
     if (!wp.data || !wp.data.subscribe) return;
-    wp.data.subscribe(tick, "wc/store/cart");
-    // The store never publishes the controller's own silent writes, and React
-    // re-renders the mount out from under it, so both are also polled.
-    window.setInterval(tick, 300);
+    wp.data.subscribe(function () {
+      // A country change is what the controller re-reads its per-country
+      // gates on, the same pass a classic `updated_checkout` triggers.
+      if (pull()) resync();
+      mount();
+    }, "wc/store/cart");
+    observeCheckout();
   }
 
-  function tick() {
-    var moved = reconcile();
-    mount();
-    if (moved) resync();
+  /**
+   * Re-anchor if the checkout block ever replaces the row the control is
+   * mounted on. React leaves nodes it did not create alone, so this is the
+   * guard against a remount, not the ordinary path — the ordinary path is the
+   * store subscription above and the tile's own mount effect.
+   */
+  function observeCheckout() {
+    var root = document.querySelector(".wp-block-woocommerce-checkout");
+    if (!root || typeof window.MutationObserver !== "function") return;
+    new window.MutationObserver(function () {
+      mount();
+    }).observe(root, { childList: true, subtree: true });
   }
 
   if (document.readyState === "loading") {
