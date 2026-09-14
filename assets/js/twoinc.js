@@ -593,6 +593,8 @@ let twoincCompanyCapture = {
    * @returns {void}
    */
   rememberOnServer: function (companyName, companyId) {
+    // The cart's memory, and the order-pay page is not a cart (ABN-554).
+    if (window.twoinc && window.twoinc.order_pay) return;
     const url = twoincUtilHelper.blankToEmpty(window.twoinc && window.twoinc.remember_company_url);
     if (url === "") return;
     const name = twoincUtilHelper.blankToEmpty(companyName);
