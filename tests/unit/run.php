@@ -284,6 +284,7 @@ final class BrandConfigSpec
             'testCompanySearchLocationFallsBackToPaymentTileOnNullOrEmpty',
             'testCompanySearchLocationSettingDroppedFromUpgradedInstalls',
             'testEnableCompanySearchForOthersSettingDroppedFromUpgradedInstalls',
+            'testAddressLookupIsOffWhereverCompanySearchIsOff',
             'testCategorizeVerificationResultDistinguishesFailureReasons',
             'testVerifyApiKeyDistinguishesUnreachableFromNotConfigured',
             'testOnlyARejectedApiKeyRevertsOnSave',
@@ -10974,6 +10975,41 @@ final class BrandConfigSpec
         $gateway->init_settings();
         $drop->invoke($gateway);
         TinyAssert::same(['api_key' => 'keep-me'], $GLOBALS['__twoinc_test_options'][$key]);
+    }
+
+    /**
+     * ABN-554: the admin screen withdraws and unticks "Autofill company
+     * address" while "Enable company search in address entry" is off, so the
+     * effective getter has to agree — a `yes` saved before company search was
+     * switched off must not keep autofilling until the merchant next saves.
+     */
+    private static function testAddressLookupIsOffWhereverCompanySearchIsOff(): void
+    {
+        $cases = [
+            ['yes', 'yes', 'yes', 'company search on, autofill on'],
+            ['yes', 'no', 'no', 'company search on, autofill off'],
+            ['no', 'yes', 'no', 'company search off overrides a stored yes'],
+            ['no', 'no', 'no', 'company search off, autofill off'],
+            [null, 'yes', 'no', 'company search unset reads as off'],
+            ['', 'yes', 'no', 'company search empty reads as off'],
+        ];
+
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $key = $gateway->get_option_key();
+
+        foreach ($cases as [$search, $lookup, $expected, $description]) {
+            $GLOBALS['__twoinc_test_options'][$key] = [
+                'enable_company_search' => $search,
+                'enable_address_lookup' => $lookup,
+            ];
+            $gateway->init_settings();
+            TinyAssert::same($expected, $gateway->get_enable_address_lookup(), $description);
+        }
     }
 
     /**

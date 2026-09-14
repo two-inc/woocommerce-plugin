@@ -270,6 +270,21 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Autofill is withdrawn from the admin screen when company search in
+         * the address entry is off, so a `yes` stored before that switch was
+         * turned off must not keep autofilling (ABN-554).
+         *
+         * @return string
+         */
+        public function get_enable_address_lookup()
+        {
+            if ($this->get_enable_company_search() !== 'yes') {
+                return 'no';
+            }
+            return $this->get_option('enable_address_lookup');
+        }
+
+        /**
          * The decoded merchant record from Two's API, fetched at most once
          * per PHP request — the memo covers failures too, so a hanging API
          * costs a single capped stall per request instead of one per

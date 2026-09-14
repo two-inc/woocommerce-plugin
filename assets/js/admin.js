@@ -67,16 +67,32 @@ jQuery(function ($) {
         .open();
   });
 
-  // Ticking "search in address entry" by hand switches autofill on with it. Edge, never level —
-  // nothing writes that checkbox on render or on an untick, so a stored off survives a save (ABN-562).
-  $("body").on(
-    "change",
-    "#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search",
-    function () {
-      if (!$(this).prop("checked")) return;
-      $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_address_lookup").prop("checked", true);
-    }
+  // "Autofill company address" follows "Enable company search in address entry":
+  // off means off AND withdrawn, unticked so the next save stores it off rather
+  // than leaving a stale `yes` behind (ABN-554). Ticking company search by hand
+  // switches autofill on with it (ABN-562) — that half stays edge-triggered, since
+  // driving an ON from the level showed a stored off as on and saved it back.
+  const $companySearchToggle = $(
+    "#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search"
   );
+  const $addressLookupToggle = $(
+    "#woocommerce_" + twoinc_admin.gateway_id + "_enable_address_lookup"
+  );
+
+  function syncAddressLookupToggle(merchantTickedSearch) {
+    const searchOn = $companySearchToggle.prop("checked");
+    if (!searchOn) {
+      $addressLookupToggle.prop("checked", false);
+    } else if (merchantTickedSearch) {
+      $addressLookupToggle.prop("checked", true);
+    }
+    $addressLookupToggle.closest("tr").toggle(searchOn);
+  }
+
+  $companySearchToggle.on("change", function () {
+    syncAddressLookupToggle(true);
+  });
+  syncAddressLookupToggle(false);
 
   jQuery("[id*='" + twoinc_admin.gateway_id + "'].wc-settings-sub-title").append(
     '<a href="#" class="collapsed setting-dropdown"><span class="dashicons dashicons-arrow-down-alt2"></span></a>'

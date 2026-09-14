@@ -376,23 +376,24 @@ describe("company-search tile location (TWO-25326)", () => {
       expect(helper.panel.getField()[0]).toBe($("#twoinc_tile_company_name")[0]);
     });
 
-    // See the `requiredTargets` rule in `toggleBusinessFields()` (TWO-25232).
+    // No company input is required in tile placement, whatever the country
+    // (ABN-554) — the tile's own guidance is the signal.
     test.each([
       { country: "GB", description: "a country with a registry" },
       { country: "US", description: "a country with no registry" }
-    ])("$description requires the native field, not the tile input", ({ country }) => {
+    ])("$description requires no company input at all", ({ country }) => {
       selectCountry(country);
 
       dom.toggleBusinessFields();
 
-      expect($("#billing_company").attr("required")).toBe("required");
-      expect($("#twoinc_tile_company_name").attr("required")).toBeUndefined();
-      expect($("#billing_company_display").attr("required")).toBeUndefined();
+      expect($("#billing_company").attr("required")).toBeFalsy();
+      expect($("#twoinc_tile_company_name").attr("required")).toBeFalsy();
+      expect($("#billing_company_display").attr("required")).toBeFalsy();
     });
   });
 
-  describe("the address area still requires the search control (TWO-25232)", () => {
-    test("required-ness stays on the display field when the control is in the address area", () => {
+  describe("the address-area control is not required either (ABN-554)", () => {
+    test("the display field carries no required flag when the control is in the address area", () => {
       ctx = harness.loadTwoinc({
         gateway_id: GATEWAY_ID,
         enable_company_search: "yes",
@@ -407,7 +408,8 @@ describe("company-search tile location (TWO-25326)", () => {
 
       dom.toggleBusinessFields();
 
-      expect($("#billing_company_display").attr("required")).toBe("required");
+      expect($("#billing_company_display").attr("required")).toBeFalsy();
+      expect($("#billing_company_display_field").find("label .twoinc-required").length).toBe(0);
     });
   });
 });

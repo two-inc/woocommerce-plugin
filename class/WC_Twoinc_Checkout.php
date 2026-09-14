@@ -159,9 +159,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // share a priority (PHP's sort is stable).
             if (!isset($fields['billing']['billing_company'])) {
                 $fields['billing']['billing_company'] = [
-                    // Optional here because required-ness is decided
-                    // client-side, per capture mode and payment method
-                    // (toggleBusinessFields' `requiredTargets`).
+                    // The payment tile's own guidance is the only signal that
+                    // a company is needed — no required flag, and no asterisk
+                    // either (ABN-554).
                     'label' => __('Company name', 'twoinc-payment-gateway'),
                     'autocomplete' => 'organization',
                     'class' => array('form-row-wide'),
@@ -412,7 +412,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 // for the admin's checked preference must read THIS value
                 // against 'address_area', not the runtime flag above.
                 'company_search_location' => self::derive_company_search_location($enable_company_search),
-                'enable_address_lookup' => $this->wc_twoinc->get_option('enable_address_lookup'),
+                'enable_address_lookup' => $this->wc_twoinc->get_enable_address_lookup(),
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
                 'gateway_id' => WC_Twoinc_Brand::get('gateway_id'),
