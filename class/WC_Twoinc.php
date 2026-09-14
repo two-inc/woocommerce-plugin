@@ -124,7 +124,8 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             add_filter('woocommerce_gateway_description', [$this, 'append_about_block_to_description'], 10, 2);
-            add_action('woocommerce_review_order_before_submit', [$this, 'render_terms_consent']);
+            // Priority 20: after the about block, so the consent sits at the foot of the payment box.
+            add_filter('woocommerce_gateway_description', [$this, 'append_terms_consent_to_description'], 20, 2);
 
             // Brand product constraints (e.g. a minimum order value in a
             // specific currency/market) remove the gateway from checkout
@@ -3056,12 +3057,12 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * The consent block, built once and emitted by both checkouts — the
-         * classic one from `render_terms_consent()`, the Blocks tile from the
-         * payment-method data it is handed (ABN-554).
+         * classic one from `append_terms_consent_to_description()`, the Blocks
+         * tile from the payment-method data it is handed (ABN-554).
          *
-         * NOT part of the gateway description: WooCommerce runs that through
-         * wp_kses_post(), which drops the checkbox and leaves a consent the
-         * buyer cannot give.
+         * Never fold this into build_payment_description(): WooCommerce runs
+         * that string through wp_kses_post(), which drops the checkbox and
+         * leaves a consent the buyer cannot give.
          *
          * No HTML5 `required`: core hides the payment box of an unselected
          * method, and a required control inside a hidden box blocks the whole
@@ -3114,10 +3115,25 @@ if (!class_exists('WC_Twoinc')) {
             );
         }
 
-        /** The classic checkout's emitter: inside the form, so the tick posts. */
-        public function render_terms_consent()
+        /**
+         * The classic checkout's emitter. A filter rather than part of the
+         * description string because core runs that string through
+         * wp_kses_post(), which drops the checkbox, then runs this filter on
+         * the result — so the consent reaches `.payment_box` intact and rides
+         * core's show/hide of the selected method (ABN-554).
+         *
+         * @param string $description
+         * @param string $gateway_id
+         *
+         * @return string
+         */
+        public function append_terms_consent_to_description($description, $gateway_id)
         {
-            echo $this->get_terms_consent_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+            if ($gateway_id !== $this->id) {
+                return $description;
+            }
+
+            return $description . $this->get_terms_consent_html();
         }
 
         /** @return bool */

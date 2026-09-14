@@ -142,9 +142,15 @@ export async function placeOrder(page: Page): Promise<string> {
   return match?.[1] ?? "";
 }
 
-/** The terms consent gating order placement. */
+/**
+ * The terms consent gating order placement. Scoped to the payment box on
+ * purpose: that is what makes it appear and disappear with the method
+ * selection, and a consent that escaped the tile would still tick (ABN-554).
+ */
 export async function acceptTerms(page: Page) {
-  const checkbox = page.locator('input[name="twoinc_terms_accepted"]');
+  const checkbox = page.locator(
+    '.payment_box.payment_method_woocommerce-gateway-tillit input[name="twoinc_terms_accepted"]'
+  );
   await checkbox.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
   await checkbox.check();
   await expect(checkbox).toBeChecked({ timeout: DEFAULT_TIMEOUT });
