@@ -141,6 +141,7 @@ function baseGlobals(location, billing, shipping) {
     rebindUnlessManual() {
       calls.rebinds.push(this.role);
     },
+    soleTrader: { refresh() {} },
     isTileLocation: () => role === "billing" && location === "payment_tile",
     companyFieldSelector() {
       return this.isTileLocation() ? "#twoinc_tile_company_name" : this.addressFieldSelector;

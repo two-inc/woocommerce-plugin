@@ -338,6 +338,8 @@
     var slot = document.createElement("div");
     slot.className = "twoinc-sole-trader-note-slot-blocks " + cls + " hidden";
     row.appendChild(slot);
+    // Any refresh that ran before this host existed answered "no sole trader" and cached nothing.
+    search.soleTrader.refresh();
   }
 
   function mount() {

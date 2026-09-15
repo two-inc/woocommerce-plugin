@@ -3742,6 +3742,7 @@ function createSoleTraderController(companySearch) {
         controller.apply(controller.availabilityByCountry[country]);
         return;
       }
+      if (controller.availabilityIsPending()) return;
       controller.pendingAvailability[country] = true;
       jQuery
         .get(cfg.availability_url, { country: country, csrf_token: cfg.csrf_token })
