@@ -15,8 +15,26 @@ export async function navigateToOrders(page: Page) {
   await page.waitForLoadState("load");
 }
 
+/**
+ * Open an order from the WP admin order list.
+ *
+ * The list renders whatever the order query returned at page load, so an order
+ * placed moments earlier is not guaranteed to be listed on the first render.
+ * Reload until the row appears instead of clicking a locator that is not there
+ * yet and relying on the click timeout plus a test retry.
+ */
 export async function openOrder(page: Page, searchTerm: string) {
-  await page.locator(`a.order-view:has-text("${searchTerm}")`).first().click();
+  const orderLink = page.locator(`a.order-view:has-text("${searchTerm}")`).first();
+
+  await expect(async () => {
+    if ((await orderLink.count()) === 0) {
+      await page.reload();
+      await page.waitForLoadState("load");
+    }
+    await expect(orderLink).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 60_000, intervals: [1_000, 2_000, 5_000] });
+
+  await orderLink.click();
   await page.waitForLoadState("load");
 }
 

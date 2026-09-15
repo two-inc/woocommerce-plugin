@@ -11,8 +11,141 @@ if (!class_exists('WC_Twoinc_Helper')) {
     class WC_Twoinc_Helper
     {
         /**
-         * Round the amount in woocommerce way
+         * Reduces buyer-facing copy to text plus links: an `<a>` with an
+         * http(s) href survives, every other tag is dropped and its text kept,
+         * and all other markup is escaped.
          *
+         * Surviving anchors are rebuilt from their allowed attributes, so no
+         * attribute this plugin does not itself emit can reach the page. The
+         * href itself is only checked for scheme and userinfo, not vouched for
+         * - whoever writes the copy chooses where an http(s) link points.
+         * `target` and `rel` are matched case-insensitively, as browsers treat
+         * those keywords; `rel` is read as a token set, and a kept
+         * `target="_blank"` always carries `rel="noopener"`.
+         *
+         * @return string
+         */
+        public static function escape_anchor_only_html($html)
+        {
+            // Only a name-like tag opens markup; a stray '<' stays text rather
+            // than swallowing the copy up to the next '>'.
+            $parts = preg_split(
+                '/(<\/?[a-zA-Z][^>]*>)/',
+                self::strip_control_characters((string) $html),
+                -1,
+                PREG_SPLIT_DELIM_CAPTURE
+            );
+            if ($parts === false) {
+                return '';
+            }
+
+            $result = '';
+            $open_anchors = 0;
+            foreach ($parts as $index => $part) {
+                if ($index % 2 === 0) {
+                    // ENT_SUBSTITUTE: without it one malformed byte blanks the whole run.
+                    $result .= htmlspecialchars($part, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false);
+                    continue;
+                }
+
+                if (preg_match('/^<\/a\s*>$/i', $part)) {
+                    if ($open_anchors > 0) {
+                        $result .= '</a>';
+                        $open_anchors--;
+                    }
+                    continue;
+                }
+
+                // A nested anchor is invalid HTML the browser would unnest
+                // anyway; its text is kept, its tag is not.
+                if ($open_anchors === 0 && preg_match('/^<a\s[^>]*>$/i', $part)) {
+                    $anchor = self::rebuild_allowed_anchor($part);
+                    if ($anchor !== '') {
+                        $result .= $anchor;
+                        $open_anchors++;
+                    }
+                }
+            }
+
+            return $result . str_repeat('</a>', $open_anchors);
+        }
+
+        /**
+         * Whether escaping leaves the value's content alone - the admin
+         * accept/reject boundary, so it is the render boundary (ABN-554).
+         * Entity encoding is not a change; only markup this escaper drops or
+         * rewrites fails.
+         *
+         * @return bool
+         */
+        public static function renders_unchanged($html)
+        {
+            $html = (string) $html;
+
+            return html_entity_decode(self::escape_anchor_only_html($html), ENT_QUOTES, 'UTF-8')
+                === html_entity_decode($html, ENT_QUOTES, 'UTF-8');
+        }
+
+        /**
+         * @return string
+         */
+        private static function strip_control_characters($text)
+        {
+            $stripped = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
+
+            return $stripped === null ? '' : $stripped;
+        }
+
+        /**
+         * @return string the anchor rebuilt from its allowed attributes, or ''
+         *                when the href is not a plain http(s) URL
+         */
+        private static function rebuild_allowed_anchor($tag)
+        {
+            preg_match_all(
+                '/([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+))/',
+                $tag,
+                $matches,
+                PREG_SET_ORDER
+            );
+
+            $attributes = [];
+            foreach ($matches as $match) {
+                $name = strtolower($match[1]);
+                if (!isset($attributes[$name])) {
+                    // PREG_SET_ORDER truncates each set at the last participating
+                    // group, so an empty quoted value leaves later groups absent.
+                    $attributes[$name] = $match[2] !== ''
+                        ? $match[2]
+                        : ((isset($match[3]) && $match[3] !== '') ? $match[3] : (isset($match[4]) ? $match[4] : ''));
+                }
+            }
+
+            $href = html_entity_decode(trim(isset($attributes['href']) ? $attributes['href'] : ''), ENT_QUOTES, 'UTF-8');
+            if (!preg_match('/^https?:\/\//i', $href)) {
+                return '';
+            }
+            // Userinfo is the classic spoof: everything before the '@' reads as the host.
+            if (preg_match('/^https?:\/\/[^\/?#]*@/i', $href)) {
+                return '';
+            }
+
+            $opens_new_tab = isset($attributes['target']) && strtolower(trim($attributes['target'])) === '_blank';
+            $rel_tokens = preg_split('/\s+/', isset($attributes['rel']) ? strtolower(trim($attributes['rel'])) : '', -1, PREG_SPLIT_NO_EMPTY);
+
+            $anchor = '<a href="' . htmlspecialchars($href, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"';
+            if ($opens_new_tab) {
+                $anchor .= ' target="_blank"';
+            }
+            // A new tab without noopener hands the opener over, so the pair is not the copy's to split.
+            if ($opens_new_tab || in_array('noopener', $rel_tokens, true)) {
+                $anchor .= ' rel="noopener"';
+            }
+
+            return $anchor . '>';
+        }
+
+        /**
          * @return string
          */
         public static function round_amt($amt)
@@ -21,7 +154,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Round the rate to 6dp
+         * 6dp precision.
          *
          * @return string
          */
@@ -31,20 +164,68 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Get error message from twoinc response
+         * Round a computed discount once at the payload boundary and fail
+         * loud if it is genuinely negative (TWO-25097).
          *
-         * @param $response
+         * The discount must be derived at native precision and rounded
+         * exactly once, here — rounding the operands first manufactures
+         * phantom +/-0.01 discounts when they round in opposite directions.
+         * The sign check runs on the once-rounded value so sub-cent float
+         * residue doesn't fail an otherwise healthy checkout.
          *
+         * A genuinely negative discount is a data inconsistency from an
+         * upstream cart-rule/coupon bug — surfaced, never silently clamped
+         * to zero.
+         *
+         * @param float  $discount_amount discount at native precision
+         * @param string $subject         short surface identifier for the
+         *                                exception (safe to surface to the
+         *                                shopper as a checkout notice)
+         * @param string $log_context     full diagnostic for the log only:
+         *                                ids and raw operands
+         *
+         * @return string the once-rounded, non-negative discount amount
+         * @throws Exception when the rounded discount is negative
+         */
+        public static function guard_negative_discount($discount_amount, $subject, $log_context)
+        {
+            $rounded = WC_Twoinc_Helper::round_amt($discount_amount);
+            if ((float) $rounded < 0) {
+                if (function_exists('wc_get_logger')) {
+                    wc_get_logger()->error(
+                        'Negative discount amount calculated for ' . $subject
+                            . ': ' . $log_context
+                            . ' (native ' . var_export($discount_amount, true)
+                            . ', rounded ' . $rounded . ')',
+                        ['source' => 'twoinc-payment-gateway']
+                    );
+                }
+                throw new Exception(
+                    sprintf(
+                        __('Negative discount amount calculated for %s.', 'twoinc-payment-gateway'),
+                        $subject
+                    )
+                );
+            }
+            // Strip negative zero ("-0.00") left by sub-cent float residue
+            // so the payload always carries a plain non-negative amount.
+            if ((float) $rounded == 0.0) {
+                $rounded = WC_Twoinc_Helper::round_amt(0);
+            }
+            return $rounded;
+        }
+
+        /**
          * @return string|void
          */
         public static function get_twoinc_error_msg($response)
         {
             if (!$response) {
-                return sprintf(__('Empty response from %s.', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME);
+                return sprintf(__('Empty response from %s.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
             }
 
             if ($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
-                return sprintf(__('Response code from %s: %d', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME, $response['response']['code']);
+                return sprintf(__('Response code from %s: %d', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), $response['response']['code']);
             }
 
             if ($response['body']) {
@@ -60,15 +241,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Get validation message from twoinc response
-         *
-         * @param $response
-         *
          * @return string|void
          */
         public static function get_twoinc_validation_msg($response)
         {
-            $err_msg = sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME);
+            $err_msg = sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
             if (!$response) {
                 return $err_msg;
             }
@@ -76,7 +253,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if ($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
                 if ($response['body']) {
                     $body = json_decode($response['body'], true);
-                    // Parameters validation errors
                     if (!is_string($body) && isset($body['error_json']) && is_array($body['error_json'])) {
                         $errs = array();
                         foreach ($body['error_json'] as $err) {
@@ -91,7 +267,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                             return $errs;
                         }
                     }
-                    // Custom errors
                     if (isset($body['error_code']) && $body['error_code'] == 'SAME_BUYER_SELLER_ERROR') {
                         return __('Buyer and merchant may not be the same company', 'twoinc-payment-gateway');
                     }
@@ -102,15 +277,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Get validation message
-         *
-         * @param $loc_str
-         *
          * @return string|void
          */
         public static function get_msg_from_err($err)
         {
-            // Check if required keys exist
             if (!isset($err['loc']) || !isset($err['msg'])) {
                 return null;
             }
@@ -153,17 +323,30 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if ($loc_str === '["billing_address","postal_code"]') {
                 return sprintf($generic_err_template, __('Postal code', 'twoinc-payment-gateway'));
             }
-            // Handle invoice email validation errors
             if (strpos($loc_str, '["invoice_details","invoice_emails"') === 0) {
                 return sprintf($generic_err_template, __('Invoice email address', 'twoinc-payment-gateway'));
             }
         }
 
         /**
-         * Display notice message in website for buyers
+         * The Blocks checkout's Store API, whose payment route reads a
+         * gateway's RETURN and never the notice queue.
          *
-         * @param $message
-         *
+         * @return bool
+         */
+        public static function is_store_api_request()
+        {
+            if (!defined('REST_REQUEST') || !REST_REQUEST) {
+                return false;
+            }
+            $uri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+
+            // The cart and checkout routes only — not products, not batch.
+            return strpos($uri, '/wc/store/v1/cart') !== false
+                || strpos($uri, '/wc/store/v1/checkout') !== false;
+        }
+
+        /**
          * @return void
          */
         public static function display_ajax_error($message)
@@ -184,37 +367,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Authenticate external REST requests
-         *
-         * @param $wc_twoinc
-         *
-         * @return bool
-         */
-        public static function auth_rest_request($wc_twoinc)
-        {
-            // TODO: Drop comparison against HTTP_X_API_KEY in a future release
-            return hash('sha256', $wc_twoinc->get_option('api_key')) === $_SERVER['HTTP_X_API_KEY_HASH'] || $wc_twoinc->api_key === $_SERVER['HTTP_X_API_KEY'];
-        }
-
-
-
-        /**
-         * Check if order is paid by twoinc
-         *
-         * @param $order
-         *
          * @return bool
          */
         public static function is_twoinc_order($order)
         {
-            return $order && $order->get_payment_method() && $order->get_payment_method() === 'woocommerce-gateway-tillit';
+            return $order && $order->get_payment_method() && $order->get_payment_method() === WC_Twoinc_Brand::get('gateway_id');
         }
 
         /**
-         * Check if address json to send to Twoinc is empty
-         *
-         * @param $twoinc_address
-         *
          * @return bool
          */
         public static function is_twoinc_address_empty($twoinc_address)
@@ -234,10 +394,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Check if string has no content except special characters
-         *
-         * @param $twoinc_address
-         *
          * @return bool
          */
         public static function is_str_no_word($s)
@@ -247,24 +403,24 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Compose the cart items
+         * @param bool $is_refund refund line items carry negated amounts, so
+         *                        the negative-discount guard below does not
+         *                        apply to them.
          *
          * @return array
          */
-        public static function get_line_items($line_items, $shippings, $fees, $order)
+        public static function get_line_items($line_items, $shippings, $fees, $order, $is_refund = false)
         {
 
             $items = [];
 
             /** @var WC_Order_Item_Product $line_item */
             foreach ($line_items as $line_item) {
-
                 $product_simple = WC_Twoinc_Helper::get_product($line_item);
 
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $order);
 
-                // Check if product exists and is a valid object. If not, use fallback values.
-                if ( ! is_object($product_simple) ) {
+                if (! is_object($product_simple)) {
                     $name = method_exists($line_item, 'get_name') ? $line_item->get_name() : 'Item';
                     $description = '';
                     $image_url = '';
@@ -275,8 +431,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $name = $product_simple->get_name();
                     $description = substr($product_simple->get_description(), 0, 255);
                     $image_url = '';
-                    if ( $product_simple->get_id() ) {
-                        $thumbnail = get_the_post_thumbnail_url( $product_simple->get_id() );
+                    if ($product_simple->get_id()) {
+                        $thumbnail = get_the_post_thumbnail_url($product_simple->get_id());
                         $image_url = $thumbnail ? $thumbnail : '';
                     }
                     $product_page_url = $product_simple->get_permalink();
@@ -284,12 +440,30 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $categories = wp_get_post_terms($product_simple->get_id(), 'product_cat');
                 }
 
+                // Guard rounds once at the payload boundary and fails loud on
+                // a genuinely negative discount (TWO-25097); skipped for
+                // refunds, whose negated line amounts make that check invalid.
+                if ($is_refund) {
+                    $discount_amount = WC_Twoinc_Helper::round_amt($line_item['line_subtotal'] - $line_item['line_total']);
+                } else {
+                    $discount_amount = WC_Twoinc_Helper::guard_negative_discount(
+                        $line_item['line_subtotal'] - $line_item['line_total'],
+                        sprintf('product "%s"', $name),
+                        sprintf(
+                            'order %s, line_subtotal %s - line_total %s',
+                            $order->get_id(),
+                            var_export($line_item['line_subtotal'], true),
+                            var_export($line_item['line_total'], true)
+                        )
+                    );
+                }
+
                 $product = [
                     'name' => $name,
                     'description' => $description,
                     'gross_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_total'] + $line_item['line_tax'])),
                     'net_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_total'])),
-                    'discount_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
+                    'discount_amount' => $discount_amount,
                     'tax_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_tax'])),
                     'tax_class_name' => $tax_rate['name'],
                     'tax_rate' => strval(WC_Twoinc_Helper::round_rate($tax_rate['rate'])),
@@ -310,7 +484,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     ]
                 ];
 
-                if ( ! empty( $categories ) && is_array( $categories ) ) {
+                if (! empty($categories) && is_array($categories)) {
                     foreach ($categories as $category) {
                         $product['details']['categories'][] = $category->name;
                     }
@@ -319,12 +493,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $items[] = $product;
             }
 
-            // Shipping
             foreach ($shippings as $shipping) {
                 if ($shipping->get_total() == 0) {
                     continue;
                 }
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($shipping, $order);
+                $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $order);
                 $shipping_line = [
                     'name' => 'Shipping - ' . $shipping->get_name(),
                     'description' => '',
@@ -345,14 +518,16 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $items[] = $shipping_line;
             }
 
-            // Fee
             foreach ($fees as $fee) {
                 if ($fee->get_total() == 0) {
                     continue;
                 }
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($fee, $order);
                 $fee_line = [
-                    'name' => 'Fee - ' . $fee->get_name(),
+                    // Already the resolved, translated, brand-correct label;
+                    // no hardcoded prefix — 'type' => 'SERVICE' below carries
+                    // the semantic instead.
+                    'name' => $fee->get_name(),
                     'description' => '',
                     'gross_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total() + $fee->get_total_tax())),
                     'net_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total())),
@@ -375,8 +550,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Get internally convened tax key for twoinc computation
-         *
          * @return array
          */
         private static function get_internal_tax_key($tax_rate)
@@ -385,8 +558,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Compose the tax subtotals
-         *
          * @return array
          */
         public static function get_tax_subtotals($line_items, $shippings, $fees, $order)
@@ -397,7 +568,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             /** @var WC_Order_Item_Product $line_item */
             foreach ($line_items as $line_item) {
-
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $order);
                 $tax_single_line = [
                     'tax_amount' => $line_item['line_tax'],
@@ -411,12 +581,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $tax_subtotal_dict[$tax_key][] = $tax_single_line;
             }
 
-            // Shipping
             foreach ($shippings as $shipping) {
                 if ($shipping->get_total() == 0) {
                     continue;
                 }
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($shipping, $order);
+                $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $order);
                 $tax_single_line = [
                     'tax_amount' => $shipping->get_total_tax(),
                     'tax_rate' => $tax_rate['rate'],
@@ -429,7 +598,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $tax_subtotal_dict[$tax_key][] = $tax_single_line;
             }
 
-            // Fee
             foreach ($fees as $fee) {
                 if ($fee->get_total() == 0) {
                     continue;
@@ -447,7 +615,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $tax_subtotal_dict[$tax_key][] = $tax_single_line;
             }
 
-            // Aggregate the tax_subtotals
             foreach ($tax_subtotal_dict as $tax_single_line_list) {
                 $tax_subtotal = [
                     'tax_amount' => 0,
@@ -467,11 +634,107 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Compose request body for twoinc create order
+         * WooCommerce core has no stable tracking-number storage (Fulfillments
+         * is still behind a beta flag), so tracking is sourced from the
+         * `_wc_shipment_tracking_items` order meta shared by the official
+         * WooCommerce Shipment Tracking extension and the zorem Advanced
+         * Shipment Tracking plugin. Predefined carriers keep their tracking
+         * URL in the plugin's carrier list, not in meta, so
+         * `carrier_tracking_url` is only sent for custom entries. The most
+         * recent entry wins.
          *
-         * @param $order
+         * @param WC_Order $order
          *
-         * @return bool
+         * @return array
+         */
+        public static function get_shipping_details($order)
+        {
+            $shipping_details = [
+                'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
+            ];
+
+            $tracking_items = $order->get_meta('_wc_shipment_tracking_items', true);
+            if (is_array($tracking_items) && count($tracking_items) > 0) {
+                $latest = end($tracking_items);
+                // The meta key is world-writable, so every field is treated
+                // as untrusted: non-scalar or whitespace-only values are
+                // dropped rather than coerced into garbage.
+                $tracking_number = is_array($latest) ? self::clean_tracking_field($latest, 'tracking_number') : '';
+                if ($tracking_number !== '') {
+                    $shipping_details['tracking_number'] = $tracking_number;
+                    $carrier_name = self::clean_tracking_field($latest, 'custom_tracking_provider');
+                    if ($carrier_name !== '') {
+                        $carrier_tracking_url = self::clean_tracking_field($latest, 'custom_tracking_link');
+                        if ($carrier_tracking_url !== '') {
+                            $shipping_details['carrier_tracking_url'] = $carrier_tracking_url;
+                        }
+                    } else {
+                        $carrier_name = self::clean_tracking_field($latest, 'tracking_provider');
+                    }
+                    if ($carrier_name !== '') {
+                        $shipping_details['carrier_name'] = $carrier_name;
+                    }
+                }
+            }
+
+            /**
+             * Escape hatch for merchants whose tracking data lives outside
+             * the `_wc_shipment_tracking_items` meta convention (TWO-24762).
+             *
+             * Fires up to 3x per fulfilment (presence gate, change-detection
+             * hash, edit body) plus on every checkout/edit body composition,
+             * so callbacks must be fast, pure and deterministic — a
+             * non-deterministic one churns the change hash and can make the
+             * gate and the shipped body disagree. Non-array return discarded.
+             *
+             * @param array    $shipping_details Composed shipping details.
+             * @param WC_Order $order            WooCommerce order.
+             */
+            $filtered = apply_filters('twoinc_shipping_details', $shipping_details, $order);
+            return is_array($filtered) ? $filtered : $shipping_details;
+        }
+
+        /**
+         * Trimmed string field from a shipment-tracking meta entry, or '' when
+         * absent, non-scalar or whitespace-only.
+         *
+         * @param array  $entry
+         * @param string $key
+         *
+         * @return string
+         */
+        private static function clean_tracking_field($entry, $key)
+        {
+            if (!isset($entry[$key])) {
+                return '';
+            }
+            $value = $entry[$key];
+            // Booleans are excluded from the scalar family on purpose:
+            // strval(true) is '1', which would be kept as a "tracking
+            // number" rather than dropped as the garbage it is.
+            if (!is_string($value) && !is_int($value) && !is_float($value)) {
+                return '';
+            }
+            return trim(strval($value));
+        }
+
+        /**
+         * Brand extension hooks fire in this order, each seeing the
+         * previous one's result (the same hooks fire in
+         * compose_twoinc_edit_order so create and edit stay symmetric):
+         *
+         * 1. `twoinc_payment_terms_line` — filters the full line_items
+         *    array (receive and return ALL line items, not a single
+         *    line); second arg is the body draft BEFORE the payload
+         *    filters below run.
+         * 2. `two_order_create` — legacy body filter, kept for existing
+         *    integrations.
+         * 3. `twoinc_order_payload` — filters the final body; second
+         *    arg is the WC_Order.
+         *
+         * @param WC_Order $order
+         *
+         * @return array
          */
         public static function compose_twoinc_order(
             $order,
@@ -487,7 +750,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $payment_reference_type = '',
             $vendor_name = '',
             $tracking_id = '',
-            $skip_nonce = false
+            $skip_csrf_token = false,
+            $payment_terms = null
         ) {
 
             $billing_address = [
@@ -529,7 +793,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),
                 'net_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() - $order->get_total_tax())),
                 'tax_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_tax())),
-                'discount_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_discount())),
+                // Guard rounds once at the payload boundary, fails loud on a
+                // negative (TWO-25097).
+                'discount_amount' => WC_Twoinc_Helper::guard_negative_discount(
+                    $order->get_total_discount(),
+                    sprintf('order %s', $order->get_id()),
+                    sprintf('total discount %s', var_export($order->get_total_discount(), true))
+                ),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
                 'invoice_details' => $invoice_details,
@@ -537,7 +807,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'company' => [
                         'organization_number' => $company_id,
                         'country_prefix' => $order->get_billing_country(),
-                        'company_name' => $order->get_billing_company()
+                        // The captured company, not the address's — the two may differ.
+                        'company_name' => $order->get_meta('company_name') ?: $order->get_billing_company()
                     ],
                     'representative' => [
                         'email' => $order->get_billing_email(),
@@ -555,7 +826,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'merchant_order_id' => strval($order->get_id()),
                 'merchant_reference' => '',
                 'merchant_urls' => [
-                    // 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
                     'merchant_cancel_order_url' => wp_specialchars_decode($order->get_cancel_order_url()),
                     'merchant_edit_order_url' => wp_specialchars_decode($order->get_edit_order_url()),
                     'merchant_order_verification_failed_url' => wp_specialchars_decode($order->get_cancel_order_url()),
@@ -564,26 +834,37 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 ],
                 'billing_address' => $billing_address,
                 'shipping_address' => $shipping_address,
-                'shipping_details' => [
-                    // 'carrier_name' => '',
-                    // 'tracking_number' => '',
-                    // 'carrier_tracking_url' => '',
-                    'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
-                ]
+                'shipping_details' => WC_Twoinc_Helper::get_shipping_details($order)
             ];
 
             if ($vendor_name) {
                 $req_body['vendor_name'] = $vendor_name;
             }
 
-            if (!$skip_nonce) {
-                $req_body['merchant_urls']['merchant_confirmation_url'] = sprintf(
-                    '%s/twoinc-payment-gateway/confirm?order_id=%s&twoinc_order_reference=%s&twoinc_nonce=%s',
+            // Shape from WC_Twoinc_Payment_Terms::get_order_payload_terms (TWO-24751).
+            if ($payment_terms) {
+                $req_body['terms'] = $payment_terms['terms'];
+                $req_body['available_terms'] = $payment_terms['available_terms'];
+            }
+
+            if (!$skip_csrf_token) {
+                // Param names and token action derive from the brand's
+                // meta_prefix so process_confirmation matches what live
+                // branded stores expect. Path segment is cosmetic —
+                // confirmation detection is by param presence, not path.
+                $confirmation_url = sprintf(
+                    '%s/twoinc-payment-gateway/confirm?order_id=%s&%s=%s&%s=%s',
                     get_home_url(),
                     $order->get_id(),
+                    WC_Twoinc_Brand::prefixed_name('order_reference'),
                     $order_reference,
-                    wp_create_nonce('twoinc_confirm_' . $order->get_id())
+                    WC_Twoinc_Brand::prefixed_name('csrf_token'),
+                    wp_create_nonce(WC_Twoinc_Brand::prefixed_name('confirm_' . $order->get_id()))
                 );
+                // Brand overlays use their own confirmation route; without
+                // this hook an overlay would have to duplicate process_payment().
+                $req_body['merchant_urls']['merchant_confirmation_url'] =
+                    apply_filters('twoinc_confirmation_url', $confirmation_url, $order->get_id());
             }
 
             if ($purchase_order_number) {
@@ -598,19 +879,29 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['tracking_id'] = $tracking_id;
             }
 
+            // Must receive and return the FULL line_items array — append or
+            // adjust entries, never return a single line.
+            $req_body['line_items'] = apply_filters('twoinc_payment_terms_line', $req_body['line_items'], $req_body);
+
+            // Legacy body filter, kept for existing integrations; runs before
+            // twoinc_order_payload, which sees its result.
             if (has_filter('two_order_create')) {
                 $req_body = apply_filters('two_order_create', $req_body);
             }
+
+            $req_body = apply_filters('twoinc_order_payload', $req_body, $order);
 
             return $req_body;
         }
 
         /**
-         * Compose request body for twoinc edit order
+         * @param WC_Order $order
+         * @param string   $department
+         * @param string   $project
+         * @param string   $purchase_order_number
+         * @param string   $vendor_name
          *
-         * @param $order
-         *
-         * @return bool
+         * @return array
          */
         public static function compose_twoinc_edit_order(
             $order,
@@ -645,7 +936,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),
                 'net_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() - $order->get_total_tax())),
                 'tax_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_tax())),
-                'discount_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_discount())),
+                // Guard rounds once at the payload boundary, fails loud on a
+                // negative (TWO-25097).
+                'discount_amount' => WC_Twoinc_Helper::guard_negative_discount(
+                    $order->get_total_discount(),
+                    sprintf('order %s', $order->get_id()),
+                    sprintf('total discount %s', var_export($order->get_total_discount(), true))
+                ),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
                 'buyer_department' => $department,
@@ -657,12 +954,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'merchant_reference' => '',
                 'billing_address' => $billing_address,
                 'shipping_address' => $shipping_address,
-                'shipping_details' => [
-                    // 'carrier_name' => '',
-                    // 'tracking_number' => '',
-                    // 'carrier_tracking_url' => '',
-                    'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
-                ]
+                'shipping_details' => WC_Twoinc_Helper::get_shipping_details($order)
             ];
 
             if ($vendor_name) {
@@ -677,20 +969,22 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['tax_subtotals'] = WC_Twoinc_Helper::get_tax_subtotals($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order);
             }
 
+            // Same brand hooks as compose_twoinc_order, in the same order, so
+            // a mutation applied at creation isn't dropped from the edit PUT
+            // body — which would also break the change-detection hash both
+            // composers feed.
+            $req_body['line_items'] = apply_filters('twoinc_payment_terms_line', $req_body['line_items'], $req_body);
+
             if (has_filter('two_order_edit')) {
                 $req_body = apply_filters('two_order_edit', $req_body);
             }
+
+            $req_body = apply_filters('twoinc_order_payload', $req_body, $order);
 
             return $req_body;
         }
 
         /**
-         * Compose request body for twoinc refund order
-         *
-         * @param $order_refund
-         * @param $amount
-         * @param $currency
-         *
          * @return array
          */
         public static function compose_twoinc_refund($order_refund, $amount, $currency)
@@ -699,42 +993,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $req_body = [
                 'amount' => strval(WC_Twoinc_Helper::round_amt($amount)),
                 'currency' => $currency,
-                'line_items' => WC_Twoinc_Helper::get_line_items($order_refund->get_items(), $order_refund->get_items('shipping'), $order_refund->get_items('fee'), $order_refund)
+                'line_items' => WC_Twoinc_Helper::get_line_items($order_refund->get_items(), $order_refund->get_items('shipping'), $order_refund->get_items('fee'), $order_refund, true)
             ];
 
             return $req_body;
         }
 
         /**
-         * Compose request body for twoinc refund order
-         *
-         * @param $order_id
-         *
-         * @return array
-         */
-        public static function get_private_order_notes($order_id)
-        {
-            global $wpdb;
-
-            $results = $wpdb->get_results("" .
-                "SELECT * FROM $wpdb->comments" .
-                "  WHERE `comment_post_ID` = $order_id" .
-                "    AND `comment_type` LIKE 'order_note'");
-
-            foreach ($results as $note) {
-                $order_note[]  = array(
-                    'note_id'      => $note->comment_ID,
-                    'note_date'    => $note->comment_date,
-                    'note_author'  => $note->comment_author,
-                    'note_content' => $note->comment_content,
-                );
-            }
-            return $order_note;
-        }
-
-        /**
-         * Force reload after admin ajax request
-         *
          * @return void
          */
         public static function append_admin_force_reload()
@@ -745,10 +1010,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Check if country is supported by twoinc
-         *
-         * @param $country
-         *
          * @return bool
          */
         public static function is_country_supported($country)
@@ -757,58 +1018,263 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Check if tax subtotals is required in twoinc order request body
+         * The merchant's "Validate tax subtotals" setting is the only source
+         * of truth (TWO-25502). Swedish shops need it on, which the one-time
+         * backfill in WC_Twoinc::migrate_se_tax_subtotals() takes care of.
          *
          * @return bool
          */
         public static function is_tax_subtotals_required_by_twoinc()
         {
-            return strtolower(WC()->countries->get_base_country()) == 'se';
+            $gateway = WC_Twoinc::get_instance();
+            return $gateway && 'yes' === $gateway->get_option('enable_tax_subtotals');
         }
 
         /**
-         * Check if current server is twoinc development
-         *
          * @return bool
          */
         public static function is_twoinc_development()
         {
             $hostname = str_replace(array('http://', 'https://'), '', get_home_url());
 
-            // Local or configured in env var
             if (preg_match('/^localhost(?::[0-9]{1,5})?$/', $hostname) === 1) {
                 return true;
             }
 
-            // Configured dev sites via env var
             $env_dev_hostnames = getenv('TWOINC_DEV_HOSTNAMES');
             if ($env_dev_hostnames && in_array($hostname, explode(',', $env_dev_hostnames))) {
                 return true;
             }
 
-            // Dev subdomains
             $twoinc_dev_sites = '/^.*\.(?:staging|release|experimental|perf|cyber|demo|sandbox)\.two\.inc$/';
             if (preg_match($twoinc_dev_sites, $hostname) === 1) {
                 return true;
             }
 
-            // Merchant's staging
-            if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com', 'icecreamextreme.no', 'www.staging83.avshop.no'))) {
-                return true;
-            }
-
-            // Neither local nor twoinc development site
             return false;
         }
 
         /**
-         * Get short locale, e.g. en_US to en
+         * Environment modes the host builder accepts. The mode string is
+         * spliced into the API hostname, and WooCommerce's select
+         * validation does not restrict POSTed values to the options list —
+         * so this allowlist is what keeps an admin-supplied string from
+         * steering the gateway's API calls to an arbitrary host.
+         */
+        public const ENVIRONMENT_MODES = ['production', 'sandbox', 'staging'];
+
+        /**
+         * Mirrors the Magento config repository's mode setting: 'PROD' /
+         * 'Production' map to 'production'; anything outside
+         * ENVIRONMENT_MODES (including the empty default) also resolves to
+         * 'production'.
+         *
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string one of ENVIRONMENT_MODES
+         */
+        public static function get_environment_mode($gateway)
+        {
+            $mode = strtolower((string) $gateway->get_option('checkout_env'));
+            if ($mode === 'prod') {
+                $mode = 'production';
+            }
+            if (!in_array($mode, self::ENVIRONMENT_MODES, true)) {
+                $mode = 'production';
+            }
+            return $mode;
+        }
+
+        /**
+         * The environment the gateway actually talks to — not always the
+         * configured mode: a dev-sniffed shop (see is_twoinc_development())
+         * carrying the never-configured default 'production' mode is by
+         * definition not a production shop. Local/dev tooling that needs the
+         * API on an arbitrary host (e.g. `make install`'s docker-compose
+         * stack, not on a *.staging.two.inc domain) uses the
+         * TWOINC_DEV_API_HOST env var — a developer-set server var, never a
+         * wp-admin field. Falls back to 'staging' when unset: a test
+         * environment can neither take real money nor accept a production
+         * token.
+         *
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string one of ENVIRONMENT_MODES
+         */
+        public static function get_effective_environment_mode($gateway)
+        {
+            $mode = self::get_environment_mode($gateway);
+            if ($mode !== 'production' || !self::is_twoinc_development()) {
+                return $mode;
+            }
+            $dev_api_host = getenv('TWOINC_DEV_API_HOST');
+            if ($dev_api_host) {
+                return self::environment_mode_of_host($dev_api_host, $gateway);
+            }
+            return 'staging';
+        }
+
+        /**
+         * Classifies an arbitrary API host (from TWOINC_DEV_API_HOST) so
+         * every other host the gateway emits (checkout, signup) lands in the
+         * same environment (TWO-25170). Production API host -> 'production';
+         * `api.<mode>` labels -> that mode; anything else (localhost, a
+         * bespoke tunnel) -> 'staging', since a dev-sniffed shop must not
+         * resolve to production.
+         *
+         * @param string             $host
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string one of ENVIRONMENT_MODES
+         */
+        private static function environment_mode_of_host($host, $gateway)
+        {
+            $hostname = (string) parse_url($host, PHP_URL_HOST);
+            $production = (string) parse_url(
+                sprintf(WC_Twoinc_Brand::get('checkout_url_template'), 'api'),
+                PHP_URL_HOST
+            );
+            if ($hostname !== '' && $hostname === $production) {
+                return 'production';
+            }
+            $labels = explode('.', $hostname);
+            if (
+                count($labels) > 1
+                && $labels[0] === 'api'
+                && in_array($labels[1], self::ENVIRONMENT_MODES, true)
+                && $labels[1] !== 'production'
+            ) {
+                return $labels[1];
+            }
+            return 'staging';
+        }
+
+        /**
+         * Builds an environment host from the brand's URL template, mirroring
+         * the Magento config repository: ('api', mode 'staging') on the Two
+         * brand -> https://api.staging.two.inc; production drops the mode
+         * suffix. Resolves off the *effective* mode, so every service host
+         * sits in the same environment as the API host.
+         *
+         * @param string             $service 'api' or 'checkout'
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string
+         */
+        public static function get_environment_host($service, $gateway)
+        {
+            $override = self::get_dev_host_override($service, $gateway);
+            if ($override !== '') {
+                return $override;
+            }
+            $mode = self::get_effective_environment_mode($gateway);
+            $prefix = $mode === 'production' ? $service : $service . '.' . $mode;
+            return sprintf(WC_Twoinc_Brand::get('checkout_url_template'), $prefix);
+        }
+
+        /**
+         * Developer env var backing each service host (TWO-40). Three
+         * independent overrides:
+         *
+         *   - 'api'      the checkout/merchant API
+         *   - 'checkout' Two's hosted checkout page — loaded by the BROWSER,
+         *                so a Docker-network alias the shop's own server can
+         *                reach is not necessarily one the buyer's browser can
+         *                resolve
+         *   - 'portal'   the merchant portal
+         *
+         * Server env vars, never wp-admin fields.
+         */
+        public const DEV_HOST_ENV_VARS = [
+            'api' => 'TWOINC_DEV_API_HOST',
+            'checkout' => 'TWOINC_DEV_CHECKOUT_HOST',
+            'portal' => 'TWOINC_DEV_PORTAL_HOST',
+        ];
+
+        /**
+         * A developer's override for one service host, or '' (TWO-40).
+         *
+         * Gated so a production instance can never honour one even if the
+         * variable leaks into its process environment: the shop must BOTH
+         * sniff as a development site AND still carry the never-configured
+         * default mode.
+         *
+         * @param string             $service key of DEV_HOST_ENV_VARS
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string
+         */
+        public static function get_dev_host_override($service, $gateway)
+        {
+            if (!array_key_exists($service, self::DEV_HOST_ENV_VARS)) {
+                return '';
+            }
+            if (
+                self::get_environment_mode($gateway) !== 'production'
+                || !self::is_twoinc_development()
+            ) {
+                return '';
+            }
+            $host = getenv(self::DEV_HOST_ENV_VARS[$service]);
+            return is_string($host) && $host !== '' ? $host : '';
+        }
+
+        /**
+         * Brand's merchant-portal signup URL, host swapped for a developer
+         * override when one applies (TWO-40); only the origin is
+         * replaced, so a brand overlay's own signup path is kept.
+         *
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string
+         */
+        public static function get_merchant_portal_signup_url($gateway)
+        {
+            $url = (string) WC_Twoinc_Brand::get('sign_up_url');
+            $override = self::get_dev_host_override('portal', $gateway);
+            if ($override === '') {
+                return $url;
+            }
+            $path = (string) parse_url($url, PHP_URL_PATH);
+            return rtrim($override, '/') . $path;
+        }
+
+        /**
+         * A brand-supplied URL, or '' unless it is http(s). Anything else
+         * (javascript:, data:, a bare path) would survive to markup as an
+         * empty href once esc_url blanked it, so it is refused here instead.
+         *
+         * @param mixed $url
+         *
+         * @return string
+         */
+        public static function http_url_or_empty($url)
+        {
+            if (!is_string($url)) {
+                return '';
+            }
+            $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+
+            return in_array($scheme, ['http', 'https'], true) ? $url : '';
+        }
+
+        /**
+         * Full-form locale (e.g. en_US) — sent as the invoice PDF `lang`
+         * param and the Accept-Language header, both matching `lang`
+         * literally against an allow-list (underscore, not hyphen).
+         *
+         * determine_locale(), not get_user_locale(): the storefront page
+         * (including this plugin's own strings) renders in the
+         * site/switched locale, which is the language the API should answer
+         * in — get_user_locale() would instead return a logged-in buyer's WP
+         * profile language, which can differ from the checkout page around
+         * it.
          *
          * @return string
          */
         public static function get_locale()
         {
-            $locale = get_user_locale();
+            $locale = determine_locale();
             if ($locale && strlen($locale) > 0) {
                 return $locale;
             }
@@ -816,8 +1282,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Recursively utf8 encode object
-         *
          * @return array
          */
         public static function utf8ize($d)
@@ -831,28 +1295,22 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $d->$k = WC_Twoinc_Helper::utf8ize($v);
                 }
             } elseif (is_string($d)) {
-                // Return if already UTF-8
                 if (mb_check_encoding($d, 'UTF-8')) {
                     return $d;
                 }
 
-                // Try to detect encoding and convert
                 $encoding = mb_detect_encoding($d, mb_detect_order(), true);
                 if ($encoding) {
                     return mb_convert_encoding($d, 'UTF-8', $encoding);
                 }
 
-                // Fallback: Mimic utf8_encode's original behavior
+                // Mimics removed utf8_encode()'s fallback behavior.
                 return mb_convert_encoding($d, 'UTF-8', 'ISO-8859-1');
             }
             return $d;
         }
 
         /**
-         * Get Order Unsecured Hash
-         *
-         * @param $obj
-         *
          * @return string
          */
         public static function hash_order($order, $twoinc_meta)
@@ -877,10 +1335,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Get Unsecured Hash
-         *
-         * @param $obj
-         *
          * @return string
          */
         public static function hash_obj($obj)
@@ -889,11 +1343,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Recursively compare arrays
-         *
-         * @param $src_arr
-         * @param $dst_arr
-         *
          * @return array
          */
         public static function array_diff_r($src_arr, $dst_arr)
@@ -920,34 +1369,19 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Get product from a line item
-         *
-         * @param $line_item
-         *
          * @return array
          */
         public static function get_product($line_item)
         {
 
             if (gettype($line_item) !== 'array' && get_class($line_item) === 'WC_Order_Item_Product') {
-                /** @var WC_Product_Variation */
-                //if ($line_item->get_product()->get_type() === 'variation') {
-                //    return new WC_Product_Variation($line_item->get_product()->get_variation_id());
-                //}
-                /** @var WC_Order_Item_Product */
                 return $line_item->get_product();
             } else {
-                /** @var WC_Product_Simple */
                 return $line_item['data'];
             }
         }
 
         /**
-         * Get tax rate from a line item
-         *
-         * @param $line_item
-         * @param $order
-         *
          * @return array
          */
         private static function get_item_tax_rate($line_item, $order)
@@ -972,10 +1406,78 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Get tax rate element from a list of tax rate
+         * Shipping-only wrapper around get_item_tax_rate(): a shipping line
+         * that carries tax but declares no order-tax row for it (e.g. a
+         * carrier/click-and-collect module that registers no tax class)
+         * falls back to the "Default shipping tax class" setting instead of
+         * silently reporting the line as untaxed. A genuinely untaxed
+         * shipping line, and one with a declared rate, are unaffected.
          *
-         * @param $tax_rate_list
+         * @return array
+         */
+        private static function get_shipping_tax_rate($shipping, $order)
+        {
+            $resolved = self::get_item_tax_rate($shipping, $order);
+            if ($resolved['rate'] || round((float) $shipping->get_total_tax(), 2) === 0.0) {
+                return $resolved;
+            }
+            $fallback = self::get_default_shipping_tax_rate_fallback($order);
+            return $fallback ?? $resolved;
+        }
+
+        /**
+         * "Default shipping tax class" resolved against the order's shipping
+         * address, summing every matching tax-rate-table row flagged for
+         * shipping — applied here to an already-placed order rather than a
+         * live cart. Null when no class is configured or nothing matches, so
+         * the caller keeps today's untaxed-line behaviour.
          *
+         * @return array{rate: float, name: string}|null
+         */
+        private static function get_default_shipping_tax_rate_fallback($order)
+        {
+            if (!class_exists('WC_Tax') || !class_exists('WC_Twoinc')) {
+                return null;
+            }
+            $gateway = WC_Twoinc::get_instance();
+            $tax_class = $gateway ? trim((string) $gateway->get_option('default_shipping_tax_class')) : '';
+            if ($tax_class === '') {
+                return null;
+            }
+            $rates = WC_Tax::find_rates([
+                'country' => (string) $order->get_shipping_country(),
+                'state' => (string) $order->get_shipping_state(),
+                'postcode' => (string) $order->get_shipping_postcode(),
+                'city' => (string) $order->get_shipping_city(),
+                'tax_class' => $tax_class,
+            ]);
+            $percent = 0.0;
+            $found = false;
+            foreach ((array) $rates as $rate) {
+                if (($rate['shipping'] ?? 'yes') !== 'yes') {
+                    continue; // rate-table row explicitly excludes shipping
+                }
+                $percent += (float) ($rate['rate'] ?? 0);
+                $found = true;
+            }
+            if (!$found) {
+                return null;
+            }
+            if ($gateway->is_debug_logging_enabled() && function_exists('wc_get_logger')) {
+                wc_get_logger()->info(
+                    sprintf(
+                        'Using the configured default shipping tax class fallback (%.4F%%) for'
+                            . ' order %s: no tax rate was declared for a taxed shipping line.',
+                        $percent,
+                        $order->get_id()
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
+            return ['rate' => $percent / 100, 'name' => 'Default shipping tax class'];
+        }
+
+        /**
          * @return array
          */
         private static function get_tax_rate_from_tax_list($tax_rate_list)
@@ -992,7 +1494,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'name' => 'NA'
                 ];
             } elseif (count($no_zero_list) == 1) {
-                // return the 1st element
                 return reset($no_zero_list);
             } else {
                 $sum_rate = 0;

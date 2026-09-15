@@ -71,7 +71,10 @@ export async function cancelOrder(orderId: string): Promise<void> {
 export async function triggerFulfilBatch(): Promise<void> {
   if (!TWO_ADMIN_PASSWORD) throw new Error("TWO_ADMIN_PASSWORD env var not set");
   const basic = Buffer.from(`${TWO_ADMIN_LOGIN}:${TWO_ADMIN_PASSWORD}`).toString("base64");
-  const loginRes = await fetch(`${API_BASE_URL}/admin/v1/login`, {
+  // The basic-auth admin login lives under the dev-only `/test/` family and only
+  // exists in lower environments. It was moved there upstream on 2026-07-31; the
+  // old path now 404s, which is what broke this job on every run since.
+  const loginRes = await fetch(`${API_BASE_URL}/test/admin/login`, {
     method: "POST",
     headers: { Authorization: `Basic ${basic}` }
   });

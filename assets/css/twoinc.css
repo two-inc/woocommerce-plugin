@@ -35,30 +35,116 @@
   max-height: 32px;
 }
 
-.twoinc-loader::before {
-  width: 1em;
-  height: 1em;
-  display: block;
-  position: relative;
-  margin: auto;
-  content: "";
-  animation: spin 1s ease-in-out infinite;
-  background: url(../images/loader.svg) center center;
-  background-size: cover;
-  line-height: 1;
-  text-align: center;
-  font-size: 2em;
-  color: rgba(0, 0, 0, 0.75);
-  opacity: 0.5;
+/*
+ * Order-intent check in flight (cross-platform target, TWO-25326,
+ * 2026-08-04): the shared spinner GIF beside the visible words "Checking
+ * availability", laid out as one centred row.
+ *
+ * The GIF is the SAME asset the company-search field already paints
+ * (assets/images/loader.gif, see .twoinc-search-spinner below), byte-identical
+ * to the one the Magento front ends ship — so converging on the shared spinner
+ * needed no new asset here, only a second rule pointing at the one already in
+ * the tree. It is painted as a background-image on a childless node for the
+ * same reason given at
+ * .twoinc-search-spinner: the URL then resolves relative to this stylesheet,
+ * so no asset URL has to be plumbed through WordPress's asset helper into the
+ * markup. Fixed 16px because the asset is natively 16x16 and an em-relative
+ * box would blur it.
+ *
+ * This replaces the .twoinc-dots pulse (still below, still used by the
+ * term-chip fee quote) — a wordless pulse was the reason this checkout was
+ * the only one of the four showing no text during the check. Deliberately
+ * still NOT Magento core's full-screen loading mask, which the Luma checkout
+ * borrows: that is core CSS we do not own, and it blocks the whole page.
+ */
+.twoinc-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+}
+/*
+ * Its own hiding rule, following the same idiom as `.twoinc-term-chips.hidden`
+ * and `.twoinc-sole-trader-note-slot.hidden` below. The blanket `.hidden` at
+ * the top of this file is `display: none !important`, so it does beat the
+ * `display: flex` above — but only on the strength of that `!important`, since
+ * the two declarations have equal specificity and this one comes later. Two
+ * classes beats one whatever the source order, so the loader stays hidden if
+ * the `!important` is ever tidied away, which is exactly the kind of edit
+ * nobody would connect to a permanently visible spinner.
+ */
+.twoinc-pay-box.twoinc-loader.hidden {
+  display: none;
+}
+.twoinc-loader__spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  background-image: url("../images/loader.gif");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 16px 16px;
+}
+.twoinc-loader__text {
+  font-weight: 500;
 }
 
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+/*
+ * The intent result, as a coloured bordered box (cross-platform target,
+ * TWO-25326, 2026-08-04). Until now these three boxes carried NO styling at
+ * all in this stylesheet and rendered as bare paragraphs of theme text, so an
+ * "not available for this order" verdict read as ordinary tile copy.
+ *
+ * Colours, border weight, radius and padding are taken from the PrestaShop
+ * module's equivalent boxes, which is the reference implementation for this
+ * convergence — same palette, so a merchant running two of our plugins sees
+ * one design. They are the familiar green/red notice palette rather than
+ * WooCommerce core's own `.woocommerce-message` / `.woocommerce-error`
+ * conventions on purpose: those are top-border-only bars whose accent colour
+ * is themeable, so a themed shop would render a decline in the theme's brand
+ * colour, and they are laid out for full-width page notices rather than a box
+ * inside the payment tile.
+ *
+ * Message only, no title. The PrestaShop box grew a marketing heading above
+ * its sentence; that heading is being dropped in the same pass, and this
+ * platform must not grow one — the sentence already names the product.
+ *
+ * `overflow-wrap: anywhere` predates the colour (TWO-25326) and is why the two
+ * company-carrying boxes are grouped: they hold the captured company
+ * (`<name> (<number>)`) directly in their sentence, where the standalone
+ * `.twoinc-company-tile-label` used to, and registry names in DE/NL/NO
+ * routinely contain a single unbroken token wider than the tile column. The
+ * phone-number box carries a fixed short sentence and needs no such
+ * protection, which is the one declaration it does not share.
+ */
+.twoinc-pay-box.twoinc-intent-approved,
+.twoinc-pay-box.twoinc-err-payment-default {
+  overflow-wrap: anywhere;
+}
+.twoinc-pay-box.twoinc-intent-approved,
+.twoinc-pay-box.twoinc-err-payment-default,
+.twoinc-pay-box.twoinc-err-phone-number,
+.twoinc-terms-error {
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.twoinc-pay-box.twoinc-intent-approved {
+  background: #d4edda;
+  border: 2px solid #28a745;
+  color: #155724;
+}
+.twoinc-pay-box.twoinc-err-payment-default,
+.twoinc-pay-box.twoinc-err-phone-number,
+.twoinc-terms-error {
+  background: #f8d7da;
+  border: 2px solid #dc3545;
+  color: #721c24;
 }
 
 .twoinc-source,
@@ -76,105 +162,751 @@
   height: unset;
 }
 
-#abt-twoinc-link {
-  width: 100%;
-  padding-left: 31px;
+/* Core prints the control after the method's </label> — the only seam that is
+   outside the label — so the row is laid out here to keep it beside the
+   title, with the payment box still on its own line below.
+   Without :has() support the icon degrades to its own line under the title. */
+li.wc_payment_method:has(> .abt-twoinc) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
 }
 
-#abt-twoinc-link a {
-  float: right;
-  font-size: 0.8em;
+/* Fills the row, which lands the icon at its right end; min-width: 0 keeps
+   that icon on the title's line in a narrow column instead of below it. */
+li.wc_payment_method:has(> .abt-twoinc) > label {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
+  flex-basis: 100%;
 }
 
 .abt-twoinc {
   position: relative;
-  text-align: right;
-  cursor: pointer;
-  font-size: 0.83em;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 6px;
+}
 
-  /* Indicate the icon is interactive */
+.abt-twoinc-icon {
+  display: inline-flex;
+  line-height: 0;
+  text-decoration: none;
+}
+
+.abt-twoinc-icon img {
+  width: 20px;
+  height: 19px;
 }
 
 .abt-twoinc-text {
-  visibility: hidden;
-  width: 190px;
-  height: auto;
-  background-color: rgb(34, 34, 34);
-  color: #fff !important;
-  text-align: center;
+  position: absolute;
+  z-index: 100;
+  bottom: 140%;
+  /* Right-anchored: the control sits at the row's right end, where a centred
+     tooltip would overhang the checkout column. */
+  right: 0;
+  width: 240px;
+  max-width: 80vw;
   padding: 10px;
   border-radius: 5px;
-  /* Position the tooltip text */
-  position: absolute;
-  z-index: 1;
-  bottom: 120%;
-  /* Adjust this to move the tooltip above the question mark */
-  left: 50%;
-  transform: translateX(-50%);
-  opacity: 0;
-  transition: opacity 0.3s;
+  background-color: rgb(34, 34, 34);
+  color: #fff !important;
   font-size: 12px;
-  white-space: normal;
+  font-weight: 400;
   line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
 }
 
-.abt-twoinc-text a {
-  text-decoration: none;
-  text-align: right;
-  cursor: pointer;
-  padding: 5px 10px;
-  margin: 20px 20px;
-  border-radius: 5px;
-  border: 1px solid gray;
-  color: white;
-  background-color: blue;
+.abt-twoinc-text p {
+  margin: 0 0 8px;
 }
 
-.abt-twoinc:hover .abt-twoinc-text {
-  visibility: visible;
+.abt-twoinc-text p:last-child {
+  margin-bottom: 0;
+}
+
+.abt-twoinc:hover .abt-twoinc-text,
+.abt-twoinc:focus-within .abt-twoinc-text {
   opacity: 1;
+  pointer-events: auto;
 }
 
 #billing_company_display_field {
   position: relative;
-  padding-bottom: 15px;
 }
 
 #billing_company_field {
   position: relative;
+}
+
+/* Class-driven because the links are shown with inline `display`, which no selector can read (ABN-554). */
+#billing_company_display_field.twoinc-affordance-shown,
+#billing_company_field.twoinc-affordance-shown {
+  margin-bottom: 0;
+}
+
+/*
+ * Read-only label carrying the captured company NUMBER (TWO-25288; narrowed
+ * from name+number to number-only by TWO-25326).
+ *
+ * Replaces the floating company-id overlay, which was absolutely positioned
+ * over the picker's selection box and so could only ever hold one short value.
+ * This sits in normal flow underneath the company fields, where the
+ * number belongs.
+ *
+ * The captured NAME no longer renders here. TWO-25326 rules out any company
+ * name or number text in the address area beyond the company-name field
+ * itself and this number label — the name was a second copy of what the
+ * control directly above already shows. It no longer renders as a standalone
+ * label anywhere: it lives inside the payment tile's intent-message sentence
+ * instead.
+ */
+.twoinc-company-summary {
   padding-bottom: 15px;
+  /*
+   * Matches WooCommerce core's `.form-row { padding: 3px }`: without it the
+   * right-aligned id below sits ~3px outboard of the input's own right
+   * edge, the same box the field above it uses. Cosmetic on its own, but
+   * pixel alignment is the entire point of this change.
+   */
+  padding-left: 3px;
+  padding-right: 3px;
+  line-height: 1.4;
 }
 
-.floating-company {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  -ms-transform: translateY(-50%);
-  transform: translateY(-50%);
+/*
+ * The number reads as secondary to the name it belongs to, but not as disabled
+ * text: this is the buyer's own registry identifier, and the grey the overlay
+ * used (#ddd) was close to invisible on a white checkout. Kept as a flat
+ * single-class selector so brand overlays can recolour it without raising
+ * specificity.
+ *
+ * `display: block` + `text-align: end` (TWO-25326): this used to sit on the
+ * SAME line as the name, `margin-left: 8px` away from it. A long company name
+ * pushed the number right up against — and on a narrow viewport, past — the
+ * edge of the summary's own box, which is exactly what happened live:
+ * picking a result left no number visibly on screen. Giving the number its
+ * own row, right-aligned to the input's right edge (the summary div carries
+ * the same horizontal padding as the field above it — see `.twoinc-company-
+ * summary` above), means the two values never compete for the same
+ * horizontal space regardless of how long the name is.
+ *
+ * `text-align: end` rather than `right`: logical, not physical — this plugin
+ * ships no RTL locale today (nothing in `class/` or `assets/` branches on text
+ * direction), but `end` costs nothing now and stays correct if one is ever
+ * added. No `white-space: nowrap`: the id has its own row, so letting a long
+ * identifier wrap beats pushing it past the row edge.
+ */
+.twoinc-company-summary-id {
+  display: block;
+  text-align: end;
+  color: #6b6b6b;
+  overflow-wrap: anywhere;
 }
 
-.floating-company-id {
+/*
+ * The link back out of manual entry, in normal block flow as the wrapper's
+ * last child so it sits below the input rather than over it.
+ *
+ * `width: 100%` is what makes `text-align: end` mean anything: a <button> is a
+ * form control and shrink-wraps at `width: auto` even when blockified.
+ * `text-transform: none !important` because a host theme's own button rule is
+ * routinely `!important` itself.
+ *
+ * The wrapper is a `<span>`, inline by default, and a theme that made it
+ * `display: flex` would put the button back on the input's own line.
+ */
+#billing_company_field .woocommerce-input-wrapper {
+  display: block;
+  position: relative;
+}
+#search_company_btn,
+#search_shipping_company_btn {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 4px;
+  text-align: end;
+  cursor: pointer;
+  color: #3043d1;
+  background: none;
+  border: 1px dotted transparent;
+  padding: 0 2px;
+  font: inherit;
+  text-transform: none !important;
+}
+
+/*
+ * Explicit focus indicator. Reported live: tabbing out of the manual-entry
+ * name field lands focus here with no visible sign of it. The button carries
+ * no host-supplied focus styling of its own — same class of problem as the
+ * uppercase fix above: a real <button> is a target for a host theme's own
+ * button chrome, where the <div> this used to be never was.
+ *
+ * An outline was too large (~4px wider than the button's own padding) and
+ * visually inconsistent with this checkout's other focus states (a plain
+ * dotted rectangle with square corners). A dotted BORDER matches that
+ * instead — sized to the button's own box rather than offset outside it —
+ * and the explicit `padding: 0 2px` above (replacing whatever padding the
+ * browser's own button default supplied) is what gives the border room to
+ * sit close against the text without the two fighting for the same few
+ * pixels. The non-focus state above sets a `border: 1px dotted transparent`
+ * (same width as the focus border, colour only) deliberately, rather than
+ * `border: 0` — a border occupies box space (unlike outline, which doesn't),
+ * so drawing it only on `:focus` would grow the button by 2px the moment
+ * focus lands and shrink it back on blur, nudging its right-aligned text
+ * sideways by ~1px each way. Reserving the same width up front, invisible
+ * until `:focus` recolours it, means the box never changes size — only
+ * colour.
+ *
+ * `!important` for the same defensive reason as the text-transform override:
+ * a theme's own button-focus reset, if one exists, is routinely `!important`
+ * itself, and this checkout only ever wants ITS OWN plain dotted rectangle
+ * here — not whatever the theme would otherwise draw (or not draw).
+ *
+ * `#808080` rather than the `grey`/`gray` keyword: every other colour in
+ * this stylesheet is hex, and this is the only rule that would otherwise be
+ * the one exception.
+ */
+#search_company_btn:focus,
+#search_shipping_company_btn:focus {
+  border-color: #808080 !important;
+}
+
+/* Payment terms chip selector (TWO-24751) */
+/*
+ * Heading above the chips, shown only when more than one term is offered.
+ * It names the chip radiogroup, so it is a `span` and needs the block display
+ * a form label would have carried.
+ */
+.twoinc-term-chips-heading {
+  display: block;
+  margin: 8px 0 0;
+  font-weight: 500;
+}
+.twoinc-term-chips-heading.hidden {
+  display: none;
+}
+.twoinc-term-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.twoinc-term-chips.hidden {
+  display: none;
+}
+/* Two classes, same idiom as `.twoinc-term-chips.hidden` above (ABN-554). */
+.twoinc-term-chips.twoinc-withheld,
+.twoinc-term-chips-heading.twoinc-withheld {
+  display: none;
+}
+/*
+ * Chip palette and geometry match the other platforms' checkouts, so a change
+ * here belongs in all of them. The explicit `color` keeps the chip text off a
+ * theme's light-on-light foreground (white-on-white bug).
+ */
+.twoinc-term-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 16px;
+  border: 2px solid #e3e3e3;
+  border-radius: 8px;
+  background: #fff;
+  color: #091030;
+  cursor: pointer;
+  line-height: 1.3;
+}
+/* Doubled class so the chosen state outranks the rule above by specificity
+   rather than by sitting after it. */
+.twoinc-term-chip.twoinc-term-chip--selected {
+  border-color: #091030;
+  background: #091030;
+  color: #fff;
+}
+/*
+ * The chosen chip is excluded so neither pointer nor keyboard disturbs it. The
+ * padding absorbs the thinner border so the chip does not resize, and the sole
+ * chip is disabled, where the affordance would promise a click that does nothing.
+ * The label colour is restated because a host theme rule at 0-1-1, such as a
+ * bare `button:hover`, out-specifies the base class rule (ABN-597).
+ */
+.twoinc-term-chip:not(.twoinc-term-chip--selected):not(:disabled):hover,
+.twoinc-term-chip:not(.twoinc-term-chip--selected):not(:disabled):focus {
+  padding: 9px 17px;
+  border: 1px solid #091030;
+  background: #e3e3e3;
+  color: #091030;
+}
+/*
+ * The group is a single tab stop with arrow-key traversal, so the focused chip
+ * is the only thing saying where the keyboard is. Offset outside the chip so
+ * the ring stays visible against the selected chip's own fill.
+ * Keyboard only: a clicked chip gets no ring.
+ */
+.twoinc-term-chip:focus-visible {
+  outline: 2px solid #091030;
+  outline-offset: 2px;
+}
+.twoinc-term-chip.twoinc-term-chip--single {
+  cursor: default;
+}
+.twoinc-term-chip__days {
+  font-weight: 500;
+}
+.twoinc-term-chip__fee {
+  font-size: 0.85em;
+  color: inherit;
+  opacity: 0.85;
+}
+/*
+ * The dot-pulse loading idiom: a 1.4s staggered three-dot opacity
+ * pulse, timing matched to the other platforms' checkouts.
+ * Used by the term-chip fee quote. The order-intent loader used to share it and no
+ * longer does — it paints the spinner GIF instead (see .twoinc-loader above) — so
+ * this rule has one consumer, not two.
+ * Markup: <span class="twoinc-dots" aria-hidden="true"><span>.</span>x3.
+ */
+.twoinc-dots {
+  display: inline-block;
+  letter-spacing: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: inherit;
+}
+.twoinc-dots > span {
+  display: inline-block;
+  animation: twoinc-dot-pulse 1.4s infinite ease-in-out both;
+}
+.twoinc-dots > span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.twoinc-dots > span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes twoinc-dot-pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+/*
+ * The sole-trader in-flight spinner, painted over the company-NAME field.
+ *
+ * The motion comes from an animated GIF painted as a background-image on one
+ * childless node: the URL then resolves relative to this stylesheet, so no
+ * asset URL has to be plumbed into the markup. Fixed 16px because the asset is
+ * natively 16x16 and scaling it only blurs it.
+ */
+.twoinc-search-spinner {
+  display: inline-block;
   position: absolute;
-  right: 24px;
-  margin-top: 0.8px;
-  top: 50%;
-  -ms-transform: translateY(-50%);
-  transform: translateY(-50%);
-  color: #dddddd;
+  right: 14px;
+  top: calc(50% - 8px);
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  background-image: url("../images/loader.gif");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 16px 16px;
+}
+/*
+ * The same spinner, over the company-NAME field, for the sole-trader flow
+ * (2026-08-20 — see syncSoleTraderSpinner). Reuses .twoinc-search-spinner
+ * above for the asset and the 16px box; only the positioning context and the
+ * horizontal inset are per-host.
+ *
+ * The host is the input's own wrapper — the panel's `.two-company-field-wrap`,
+ * or WooCommerce's `.woocommerce-input-wrapper` around the native input — so
+ * the 50%-based vertical centring above lands on the control rather than on
+ * the field's label as well.
+ */
+.twoinc-name-searching {
+  position: relative;
+}
+/*
+ * WooCommerce core's own wrapper is not reliably a block across themes, and an
+ * inline positioning context puts the spinner against the text run rather than
+ * the input box. Only while the spinner is up, so the native field's own layout
+ * is untouched the rest of the time.
+ */
+.woocommerce-input-wrapper.twoinc-name-searching {
+  display: block;
+}
+.woocommerce-input-wrapper.twoinc-name-searching > input {
+  padding-right: 30px;
+}
+
+/* Sole trader toggle (TWO-24754) */
+/*
+ * The signup-prompt note + in-flight error only (TWO-40). The mode CHIPS
+ * themselves render inside the company-search panel — see
+ * `.two-company-mode-chips` below — never in this always-present payment-tile
+ * slot; that DOM-placement defect was ported wrong twice before this.
+ */
+.twoinc-sole-trader-note-slot {
+  margin: 12px 0;
+}
+.twoinc-sole-trader-note-slot.hidden {
+  display: none;
+}
+
+/*
+ * The company-search control's location in the payment tile (TWO-25326). The
+ * standalone `company_search_location` setting is folded into the
+ * `enable_company_search` checkbox — unchecked means this slot, not "off".
+ * Holds `#billing_company_display_field` when
+ * twoincDomHelper.syncCompanySearchTileLocation()
+ * moves it out of the address area — NOT `#billing_company_field` or
+ * `#company_id_field`, which deliberately stay put (see that function's own
+ * doc comment). The field carries all its own styling from the address
+ * form, so this wrapper only needs enough of its own spacing to sit cleanly
+ * between the sole-trader toggle and the intent message, when it holds
+ * anything at all.
+ *
+ * The standalone `.twoinc-company-tile-label` text label this replaced is
+ * gone outright (TWO-25326): the company now lives inside the intent-message
+ * sentences instead, which need no CSS of their own beyond what
+ * `.twoinc-pay-box` already provides.
+ */
+.twoinc-company-search-tile-slot {
+  margin: 12px 0;
+}
+.twoinc-company-search-tile-slot.hidden {
+  display: none;
+}
+
+/* ABN-554: host themes space `.form-row` inside the payment box, so the tile row cancels it. */
+.twoinc-company-search-tile-slot
+  #twoinc_tile_company_row.twoinc-inp-container.form-row.form-row-wide {
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+/*
+ * The company-capture popover (TWO-25503), the structure PrestaShop and
+ * Magento already render: one anchored panel whose three children are the
+ * query row, the results host and the mode chips, and which is a real DOM
+ * child of the wrapper around the company-name input. Because it is a child
+ * and not a body-appended layer, the browser's own tab order walks the control
+ * the way it reads and no key handling is needed to make Tab behave.
+ *
+ * Class names and modifiers are the panel script's, not this stylesheet's —
+ * it is vendored verbatim, so a name changed here silently stops matching.
+ */
+.two-company-field-wrap {
+  display: block;
+  position: relative;
+}
+
+/*
+ * The wrapper takes its width from the layout and the input takes its width
+ * from the wrapper — never the other way round. The payment tile builds its
+ * company row outside the address form, where a theme's own input sizing may
+ * not reach, and an input left at its intrinsic size would drag the panel
+ * (`left: 0; right: 0` on the wrapper) narrow with it.
+ */
+.two-company-field-wrap > input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* This plugin's own, because a bare `.hidden` is a theme's to define or not,
+   and a chip that silently fails to hide offers a mode the country cannot
+   serve. */
+.two-hidden {
+  display: none !important;
+}
+
+/*
+ * The 8px gap and the shadow are what make the panel read as a floating
+ * control rather than a continuation of the input, matching PrestaShop.
+ *
+ * Anchored to the INPUT's height, not to `100%` of the wrapper: the wrapper
+ * also carries the sole-trader link in normal flow, so `100%` grows the moment
+ * one is adopted. `syncFieldWrapMetrics()` keeps the property current; the
+ * `100%` fallback is what a pre-measurement first paint gets.
+ */
+.two-company-dropdown {
+  position: absolute;
+  z-index: 9999;
+  top: calc(var(--two-company-input-height, 100%) + 8px);
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid #c4c9e8;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+/* Makes the attribute authoritative even against a theme that resets
+   `[hidden]`. */
+.two-company-dropdown[hidden] {
+  display: none;
+}
+
+/* Anchors the spinner inside the query field. */
+.two-company-dropdown__search {
+  position: relative;
+}
+
+.two-company-dropdown__query {
+  box-sizing: border-box;
+  width: 100%;
+  /* Reserves the spinner's lane so a long query never runs underneath it. */
+  padding: 6px 34px 6px 10px;
+  border: 1px solid #c4c9e8;
+  border-radius: 3px;
+  font: inherit;
+  text-transform: none !important;
+  text-overflow: ellipsis;
+}
+
+/* Firefox clips the placeholder from the input's own `text-overflow`; Chrome and
+   Safari only honour it on the pseudo-element, so both are declared. */
+.two-company-dropdown__query::placeholder {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-#company_not_in_btn {
-  cursor: pointer;
-  color: #3043d1;
-  margin: 4px 12px;
+/*
+ * Shown only while a search is on the wire, via a modifier on the element
+ * itself rather than a parent state class: brand overlays hook this indicator
+ * with flat single-class rules and win only on load order at equal
+ * specificity.
+ */
+.two-company-dropdown__spinner {
+  display: none;
+  position: absolute;
+  top: calc(50% - 8px);
+  right: 12px;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  background-image: url("../images/loader.gif");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 16px 16px;
 }
 
-#search_company_btn {
-  text-align: right;
+.two-company-dropdown__spinner--active {
+  display: inline-block;
+}
+
+/* The scroll lives on the results host, so the chips below stay outside it and
+   are reachable without scrolling past up to 50 results. */
+.two-company-dropdown__results {
+  max-height: 240px;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
+/* The panel is only as wide as the company field, so a wrapped row runs to
+   three or four lines and gives the scroll container a horizontal scrollbar. */
+.two-company-dropdown__row {
+  padding: 6px 10px;
+  border-radius: 3px;
   cursor: pointer;
-  padding-top: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none !important;
+}
+
+/* The API marks the matched substring with `mark`, whose UA default is a
+   yellow highlighter no theme here resets. */
+.two-company-dropdown__row mark {
+  background: transparent;
+  color: inherit;
+}
+
+.two-company-dropdown__row:hover,
+.two-company-dropdown__row--active {
+  background-color: #f0f2f5;
+}
+
+/* Too-short, or no matches. */
+.two-company-dropdown__message {
+  padding: 6px 10px;
+  color: #6b6b6b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* The search being DOWN is a different answer from "your company is not here"
+   and must not read like it. */
+.two-company-dropdown__message--unavailable {
+  border-radius: 3px;
+  background: #fdf0d5;
+  color: #6f4900;
+}
+
+/*
+ * The chips, inside the panel and after the results — the tab order the DOM
+ * already describes, and the reason the panel exists in this shape at all.
+ * `white-space: normal` deliberately, not nowrap/ellipsis: a chip label may
+ * wrap onto two lines and must not truncate.
+ */
+.two-company-mode-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #eeeeee;
+}
+
+.two-company-mode-chip {
+  flex: 1 1 calc(50% - 8px);
+  box-sizing: border-box;
+  text-align: center;
+  padding: 5px 12px;
+  border-radius: 5px;
+  border: 2px solid #e3e3e3;
+  color: #091030;
+  background-color: #fff;
+  cursor: pointer;
+  user-select: none;
+  font: inherit;
+  white-space: normal;
+  word-break: break-word;
+  text-transform: none !important;
+}
+
+/* Doubled class so the chosen state outranks the rule above by specificity
+   rather than by sitting after it. */
+.two-company-mode-chip.two-company-mode-chip--selected {
+  color: #fff;
+  background-color: #091030;
+  border-color: #091030;
+}
+
+/* The chosen chip is excluded so neither pointer nor keyboard disturbs it; the
+   padding absorbs the thinner border so the chip does not resize. The label
+   colour is restated because a host theme rule at 0-1-1, such as a bare
+   `button:hover`, out-specifies the base class rule (ABN-597). */
+.two-company-mode-chip:not(.two-company-mode-chip--selected):hover,
+.two-company-mode-chip:not(.two-company-mode-chip--selected):focus {
+  padding: 6px 13px;
+  border: 1px solid #091030;
+  background-color: #e3e3e3;
+  color: #091030;
+}
+/* Offset outside so the ring stays visible against the selected chip's own
+   fill (ABN-554). */
+.two-company-mode-chip:focus-visible {
+  outline: 2px solid #091030;
+  outline-offset: 2px;
+}
+
+.twoinc-sole-trader-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: #6b6b6b;
+}
+.twoinc-sole-trader-note.hidden {
+  display: none;
+}
+.twoinc-sole-trader-note svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.twoinc-sole-trader-note__link {
   color: #3043d1;
-  position: absolute;
-  right: 4px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.twoinc-sole-trader-toggle__error {
+  flex-basis: 100%;
+  color: #b00020;
+}
+
+/*
+ * In-flight state for the sole-trader round trip (TWO-40).
+ *
+ * Wired to the real duration of the token-mint + buyer-lookup call graph, not
+ * to a timeout, and paired with the in-field spinner the company-search
+ * control already shows (.twoinc-search-spinner) rather than a separate
+ * overlay.
+ *
+ * Deliberately INDICATIVE only — no `pointer-events: none`, no dimming.
+ * Blocking the chips would leave the buyer unable to pick "Registered
+ * company" for the duration of a round trip they may not associate with the
+ * chips at all. Stacking a second signup popup is prevented by the
+ * re-entrancy guard on the launch itself, which is where that belongs.
+ */
+.twoinc-sole-trader-toggle--busy .two-company-mode-chip {
+  cursor: progress;
+}
+
+/*
+ * "Select a different sole trader" (TWO-40).
+ *
+ * Deliberately the same visual slot and the same treatment as
+ * #search_company_btn — one affordance pattern for "the identity I captured is
+ * not the one I want", whichever capture mode produced it — so this rule is a
+ * grouped selector on that one rather than a second copy of it. See that
+ * rule's own comments for why each declaration is there, and
+ * #search_company_btn:focus below for the dotted focus border.
+ */
+#select_different_sole_trader_btn,
+#select_different_sole_trader_btn_shipping {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 4px;
+  text-align: end;
+  cursor: pointer;
+  color: #3043d1;
+  background: none;
+  border: 1px dotted transparent;
+  padding: 0 2px;
+  font: inherit;
+  text-transform: none !important;
+}
+#select_different_sole_trader_btn:focus,
+#select_different_sole_trader_btn_shipping:focus {
+  border-color: #808080 !important;
+}
+
+.twoinc-terms-consent {
+  margin-top: 12px;
+}
+.twoinc-terms-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.twoinc-terms-row input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+.twoinc-terms-text {
+  font-size: 11.2px;
+  line-height: 1.4;
+}
+
+/* Classic only: the Blocks tile carries the same classes and must not gain it. */
+#payment .twoinc-terms-consent {
+  padding-bottom: 5px;
 }

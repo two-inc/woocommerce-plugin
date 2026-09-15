@@ -1,5 +1,4 @@
 <?php
-// Add due in days to order req body to Two
 function add_two_order_fields($two_req)
 {
     $order = wc_get_order($two_req['merchant_order_id']);
@@ -12,10 +11,8 @@ function add_two_order_fields($two_req)
 add_filter("two_order_create", "add_two_order_fields");
 
 
-// Add the new field due in days in checkout
 function add_two_due_days($fields)
 {
-
     $lang = WC_Twoinc_Helper::get_locale();
     $label_text = "Days you'll have to pay your invoice";
     if ($lang === 'sv_SE') {
@@ -42,7 +39,6 @@ function add_two_due_days($fields)
 add_filter("woocommerce_checkout_fields", "add_two_due_days");
 
 
-// Add the javascript to replace due in days in UI
 function add_demo_replace_due_in_days_script()
 {
     ?>
@@ -52,7 +48,7 @@ function replaceDueInDays() {
     if (jQuery('#twoinc-due-in-days').length == 0) {
         jQuery('label[for="payment_method_woocommerce-gateway-tillit"]').html(
             jQuery('label[for="payment_method_woocommerce-gateway-tillit"]').html()
-                .replace(twoinc.days_on_invoice, '<span id="twoinc-due-in-days"></span>')
+                .replace(twoinc.merchant_due_in_days, '<span id="twoinc-due-in-days"></span>')
         )
     }
     jQuery('#twoinc-due-in-days').text(jQuery('#billing_due_in_days').val())
@@ -67,7 +63,7 @@ document.addEventListener("DOMContentLoaded", function() {
 })
 </script>
 
-<?php
+    <?php
 }
 add_action('woocommerce_before_checkout_billing_form', 'add_demo_replace_due_in_days_script');
 
@@ -101,7 +97,7 @@ function getNodesThatContain(text) {
 
 function replaceDueInDays() {
     let dueInDays = <?php echo $twoinc_due_in_days; ?>;
-    let defaultDueInDays = <?php echo $twoinc_obj->get_merchant_default_days_on_invoice(); ?>;
+    let defaultDueInDays = <?php echo $twoinc_obj->get_merchant_due_in_days(); ?>;
     let twoincMethodText = "<?php echo $twoinc_obj->title; ?>";
     getNodesThatContain(twoincMethodText).each(function (){
         jQuery(this).html(jQuery(this).html().replace(twoincMethodText, twoincMethodText.replace(defaultDueInDays, dueInDays)))
@@ -115,7 +111,7 @@ document.addEventListener("DOMContentLoaded", function() {
 })
 </script>
 
-<?php
+        <?php
     }
 }
 add_action('wp_footer', 'update_due_in_days_in_confirm_page');

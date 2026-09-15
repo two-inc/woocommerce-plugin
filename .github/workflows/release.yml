@@ -1,0 +1,74 @@
+name: Release
+
+# Tags and releases the version already in the tree once Deploy (php-lint)
+# has passed on a push to main. The version was computed on the PR into
+# staging by version-bump.yml, so nothing is bumped here. The Release event
+# then triggers the WordPress.org publish job in deploy.yaml.
+on:
+  workflow_run:
+    workflows: [Deploy]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    steps:
+      - name: Mint GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.TWO_INC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.TWO_INC_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+      - name: Decide whether there is anything to release
+        id: gate
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PASSED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse HEAD)" != "$PASSED_SHA" ]; then
+            echo "::warning::main moved past ${PASSED_SHA}; the next Deploy run will release."
+            exit 0
+          fi
+          version=$(sed -n 's/^[[:space:]]*current_version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' bumpver.toml | head -1)
+          [ -n "$version" ] || { echo "::error::could not read current_version from bumpver.toml"; exit 1; }
+          if gh release view "$version" >/dev/null 2>&1; then
+            echo "Release ${version} already exists; nothing to release."
+            exit 0
+          fi
+          prev=$(git tag --list '[0-9]*' --sort=-v:refname | grep -vx "$version" | head -1 || true)
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "prev=${prev}" >> "$GITHUB_OUTPUT"
+      - name: Tag and create the GitHub Release
+        if: steps.gate.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.gate.outputs.version }}
+          PREV: ${{ steps.gate.outputs.prev }}
+        run: |
+          set -euo pipefail
+          git config user.name "two-inc-app[bot]"
+          git config user.email "${{ vars.TWO_INC_APP_ID }}+two-inc-app[bot]@users.noreply.github.com"
+          # A previous run may have pushed the tag and then failed to create
+          # the Release; finish the job rather than stop at the tag.
+          if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
+            echo "Tag ${VERSION} already exists; creating the Release for it."
+          else
+            git tag -a "$VERSION" -m "Release $VERSION"
+            git push origin "$VERSION"
+          fi
+          gh release create "$VERSION" --target main --title "$VERSION" --generate-notes ${PREV:+--notes-start-tag "$PREV"}

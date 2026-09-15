@@ -1,0 +1,24 @@
+name: Merge back
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: merge-main
+  cancel-in-progress: true
+
+jobs:
+  main-to-staging:
+    name: main → staging
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    if: github.ref_name == 'main'
+    steps:
+      - name: Merge or create pull request
+        uses: two-inc/actions/back-merge@main
+        with:
+          client-id: ${{ vars.TWO_INC_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.TWO_INC_APP_PRIVATE_KEY }}
+          source-ref: main
+          target-ref: staging
+          reviewer: brtkwr

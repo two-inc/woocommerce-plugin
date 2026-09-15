@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-import { triggerFulfilBatch, waitForOrderState } from "../checkout-api.js";
+import { triggerFulfilBatch, waitForOrderState } from "../two-api.js";
 import * as checkout from "../pages/checkout.js";
 import * as store from "../pages/store.js";
 import * as wpAdmin from "../pages/wp-admin.js";

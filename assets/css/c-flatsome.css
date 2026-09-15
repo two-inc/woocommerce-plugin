@@ -4,7 +4,7 @@ form.checkout.woocommerce-checkout
   z-index: 1;
   opacity: unset;
 }
-form.checkout.woocommerce-checkout #select2-billing_company_display-container {
+form.checkout.woocommerce-checkout #billing_company_display {
   margin-top: 7px;
 }
 form.checkout.woocommerce-checkout .iti__flag {

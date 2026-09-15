@@ -1,0 +1,253 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: woocommerce-plugin\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-02 09:39+0100\n"
+"PO-Revision-Date: 2026-09-03 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: Spanish\n"
+"Language: es_ES\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Loco https://localise.biz/\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Loco-Version: 2.7.2; wp-6.8.1\n"
+
+#: class/WC_Twoinc_Checkout.php:379
+msgid "We use your company name to automatically populate your address and register the company that made the purchase."
+msgstr "Utilizamos el nombre de su empresa para rellenar automáticamente su dirección y registrar la empresa que realizó la compra."
+
+#: class/WC_Twoinc_Checkout.php:383
+msgid "Company search is temporarily unavailable. Please try again."
+msgstr "La búsqueda de empresas no está disponible temporalmente. Inténtelo de nuevo."
+
+#. translators: %d: minimum number of characters the buyer must type before the company search runs. Left unresolved here and interpolated in JS from the threshold the widget enforces, so the two cannot disagree.
+#: class/WC_Twoinc_Checkout.php:391
+#, php-format
+msgid "Enter %d or more characters"
+msgstr "Introduzca %d o más caracteres"
+
+#: class/WC_Twoinc_Checkout.php:398
+msgid "Enter manually"
+msgstr "Introducir manualmente"
+
+#: class/WC_Twoinc_Checkout.php:399
+msgid "Search for company"
+msgstr "Buscar empresa"
+
+msgid "%d results are available, use up and down arrow keys to navigate."
+msgstr "%d resultados están disponibles, use las flechas arriba y abajo para navegar."
+
+msgid "1 result is available, use up and down arrow keys to navigate."
+msgstr "1 resultado está disponible, use las flechas arriba y abajo para navegar."
+
+#: class/WC_Twoinc.php:1168 class/WC_Twoinc.php:1187 class/WC_Twoinc.php:2939
+#: class/WC_Twoinc_Checkout.php:437
+#, php-format
+msgid "%s days"
+msgstr "%s días"
+
+#: class/WC_Twoinc_Checkout.php:444
+msgid "Selected payment terms"
+msgstr "Condiciones de pago seleccionadas"
+
+#: class/WC_Twoinc_Checkout.php:450
+#, php-format
+msgid "EOM+%s"
+msgstr "EOM+%s"
+
+#: class/WC_Twoinc_Checkout.php:453
+#, php-format
+msgid "EOM+%s: pay %s days after the end of the month"
+msgstr "EOM+%s: pague %s días después del final del mes"
+
+#: class/WC_Twoinc_Checkout.php:460
+#, php-format
+msgid "EOM+%1$s: pay %1$s days after the end of the month, plus a %2$s surcharge"
+msgstr "EOM+%1$s: pague %1$s días después del final del mes, más un recargo de %2$s"
+
+#: class/WC_Twoinc_Checkout.php:469
+msgid "Registered company"
+msgstr "Empresa registrada"
+
+#: class/WC_Twoinc_Checkout.php:470
+msgid "Sole trader"
+msgstr "Autónomo"
+
+#: class/WC_Twoinc_Checkout.php:471
+msgid "Click here to login or sign up as a sole trader."
+msgstr "Haga clic aquí para iniciar sesión o registrarse como autónomo."
+
+#: class/WC_Twoinc_Checkout.php:477
+msgid "Select a different sole trader"
+msgstr "Seleccionar otro autónomo"
+
+#: class/WC_Twoinc_Checkout.php:478
+msgid "Something went wrong setting up sole trader checkout. Please try again."
+msgstr "Se produjo un error al configurar el pago como autónomo. Inténtelo de nuevo."
+
+#: class/WC_Twoinc.php:1408
+#, php-format
+msgid "What is %s?"
+msgstr "¿Qué es %s?"
+
+#: class/WC_Twoinc.php:1414
+#, php-format
+msgid "%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple."
+msgstr "%s es una solución de pago para compras B2B en línea, que le permite comprar a sus comerciantes y proveedores favoritos con crédito comercial. Con %s, puede acceder al instante a crédito comercial flexible para simplificar sus compras."
+
+#: class/WC_Twoinc.php:1415
+msgid "Buy now, receive your goods, pay your invoice later."
+msgstr "Compre ahora, reciba sus productos y pague su factura más tarde."
+
+#: class/WC_Twoinc.php:1417
+msgid "Click to find out more"
+msgstr "Haga clic para saber más"
+
+#. translators: shown beside the spinner while the order-intent availability check runs.
+#: class/WC_Twoinc.php:935
+msgid "Checking availability"
+msgstr "Comprobando disponibilidad"
+
+#: class/WC_Twoinc.php:1151
+msgid "We could not complete that just now. Please wait a moment and try again."
+msgstr "No se pudo completar esto en este momento. Espere un momento y vuelva a intentarlo."
+
+#: class/WC_Twoinc.php:1737
+#, php-format
+msgid "To pay with %s, search for your company name and select it from the results."
+msgstr "Para pagar con %s, busca el nombre de tu empresa y selecciónalo entre los resultados."
+
+#: class/WC_Twoinc.php:4042
+#, php-format
+msgid "Please select your company before paying with %s."
+msgstr "Seleccione su empresa antes de pagar con %s."
+
+#. translators: 1: submitted value, 2: comma-separated list of valid methods
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Unrecognised surcharge method: %1$s. Choose one of: %2$s."
+msgstr "Método de recargo no reconocido: %1$s. Elija uno de: %2$s."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "The last attempt was on %s."
+msgstr "El último intento fue el %s."
+
+#: class/WC_Twoinc.php
+msgid "No attempt has been made yet."
+msgstr "Todavía no se ha realizado ningún intento."
+
+#: class/WC_Twoinc.php
+msgid "Payment method at checkout"
+msgstr "Método de pago en la caja"
+
+#: class/WC_Twoinc.php
+msgid "Not shown at checkout"
+msgstr "No se muestra en la caja"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "no API key is saved. Check \"%s API key\"."
+msgstr "no hay ninguna clave API guardada. Compruebe \"Clave API de %s\"."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the API key was rejected. Check \"%s API key\" and \"Environment\"."
+msgstr "la clave API fue rechazada. Compruebe \"Clave API de %s\" y \"Entorno\"."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "no buyer countries are currently enabled for your account. Contact %s to have them enabled."
+msgstr "actualmente no hay ningún país de comprador activado para su cuenta. Póngase en contacto con %s para activarlos."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %s"
+msgstr "oculto para cestas por debajo de %s"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "hidden for baskets below %1$s or %2$s"
+msgstr "oculto para cestas por debajo de %1$s o %2$s"
+
+#: class/WC_Twoinc.php
+msgid "excluding tax"
+msgstr "sin impuestos"
+
+#: class/WC_Twoinc.php
+msgid "including tax"
+msgstr "con impuestos"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Check the \"%s API key\" and \"Environment\" settings."
+msgstr "Compruebe los ajustes \"Clave API de %s\" y \"Entorno\"."
+
+#: class/WC_Twoinc.php
+msgid "the payment method is disabled. Check \"Turn on/off\"."
+msgstr "el método de pago está desactivado. Compruebe \"Turn on/off\"."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers billed in %s"
+msgstr "se ofrece solo a compradores facturados en %s"
+
+#: class/WC_Twoinc.php
+msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
+msgstr "el método de recargo guardado no se reconoce. Compruebe \"Surcharge method\"."
+
+#: class/WC_Twoinc.php
+msgid "Shown at checkout"
+msgstr "Se muestra en la caja"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "offered only to buyers in %s"
+msgstr "se ofrece solo a compradores en %s"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "the buyer countries on your account could not be read. Contact %s."
+msgstr "los países del comprador de su cuenta no se han podido leer. Póngase en contacto con %s."
+
+#: class/WC_Twoinc.php
+msgid "minimum order value not known until your profile refreshes"
+msgstr "el valor mínimo del pedido no se conoce hasta que su perfil se actualice"
+
+#: class/WC_Twoinc.php
+msgid "hidden for baskets in a currency the buyer surcharge cannot be priced in"
+msgstr "oculto para cestas en una moneda en la que el recargo al comprador no puede calcularse"
+
+#: class/WC_Twoinc.php
+msgid "Automatic"
+msgstr "Automático"
+
+#: class/WC_Twoinc_Payment_Terms.php
+msgid "Payment terms fee"
+msgstr "Comisión por condiciones de pago"
+
+#: class/WC_Twoinc_Payment_Terms.php
+#, php-format
+msgid "Payment terms fee - %s days"
+msgstr "Comisión por condiciones de pago - %s días"
+
+#: class/WC_Twoinc_Payment_Terms.php
+#, php-format
+msgid "Payment terms fee - %s days from end of month"
+msgstr "Comisión por condiciones de pago - %s días desde el final del mes"
+
+#: class/WC_Twoinc.php
+msgid "payment terms"
+msgstr "condiciones de pago"
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "You must accept %s to place order."
+msgstr "Debe aceptar %s para realizar el pedido."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "I accept the %1$s and authorize %2$s to process my data automatically."
+msgstr "Acepto las %1$s y autorizo a %2$s a tratar mis datos automáticamente."

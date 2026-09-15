@@ -52,7 +52,7 @@ Append the following lines to your active theme's `functions.php`
 ```
 // Add due in days to order req body to Two
 function add_two_order_fields( $two_req ) {
-    $order = get_wc_order($two_req['merchant_order_id']);
+    $order = wc_get_order($two_req['merchant_order_id']);
     $due_in_days = (string) $order->get_meta( '_billing_due_in_days', true );
     if ( $due_in_days && ctype_digit( $due_in_days ) ) {
         $twoinc_obj = WC_Twoinc::get_instance();

@@ -16,7 +16,13 @@ concurrency:
 jobs:
   e2e-tests:
     runs-on: ${{ vars.RUNNER_STANDARD }}
-    timeout-minutes: 15
+    # Must exceed Playwright's own worst case, or a fully-failing suite is
+    # killed before it can report: 4 tests x 2 attempts (retries: 1) x the
+    # 180s per-test timeout = 24m of testing, plus ~4m of setup. At 15m the
+    # job was cancelled mid-run, which discards the reporter output AND the
+    # traces, leaving no way to see why a test failed. A passing run still
+    # takes ~5m, so this ceiling only ever costs time on a broken suite.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -34,7 +40,9 @@ jobs:
       - name: Fetch secrets
         id: secrets
         run: |
-          MERCHANT_API_KEY=$(gcloud secrets versions access latest --secret="STAGING_SHOP_MERCHANT_API_KEY_TILLITTESTUK" --project=two-beta)
+          # Temporary: the usual e2e test account has too much order history to
+          # place orders reliably; revert to it once that is cleared.
+          MERCHANT_API_KEY=$(gcloud secrets versions access latest --secret="STAGING_SHOP_MERCHANT_API_KEY_GB" --project=two-beta)
           echo "::add-mask::$MERCHANT_API_KEY"
           echo "MERCHANT_API_KEY=$MERCHANT_API_KEY" >> $GITHUB_OUTPUT
 
@@ -45,12 +53,17 @@ jobs:
       - name: Generate Docker plugin config
         run: |
           mkdir -p docker/config
-          sed "s|\${MERCHANT_API_KEY}|${MERCHANT_API_KEY}|g" docker/config/staging-tillittestuk.json.tpl > docker/config/staging-tillittestuk.json
+          sed "s|\${MERCHANT_API_KEY}|${MERCHANT_API_KEY}|g" docker/config/staging-demostoregb.json.tpl > docker/config/staging-demostoregb.json
         env:
           MERCHANT_API_KEY: ${{ steps.secrets.outputs.MERCHANT_API_KEY }}
 
       - name: Start WordPress
-        run: docker compose up -d
+        run: |
+          # Compose defaults WOOCOM_PLUGIN_CONFIG_JSON to the local-dev
+          # config; CI must seed the gateway with the staging config the
+          # previous step rendered.
+          echo "WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-demostoregb.json" > .env
+          docker compose up -d
 
       - name: Wait for bootstrap to complete
         run: |
@@ -80,12 +93,18 @@ jobs:
           TWO_ADMIN_PASSWORD: ${{ steps.secrets.outputs.TWO_ADMIN_PASSWORD }}
 
       - name: Upload test results
-        if: failure()
+        # always(), not failure(): a job that exceeds timeout-minutes is
+        # CANCELLED, not failed, and a cancelled job skips every step whose
+        # condition doesn't explicitly reference always()/cancelled() — so
+        # failure() silently threw away the traces for exactly the runs that
+        # needed them most.
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: tests/e2e/test-results/
           retention-days: 7
+          if-no-files-found: ignore
 
       - name: Stop WordPress
         if: always()

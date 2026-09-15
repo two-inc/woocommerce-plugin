@@ -3,15 +3,27 @@
     <div class="woocommerce-billing-fields__field-wrapper">
         <div id="twoinc-fn-target" class="twoinc-target"></div>
         <div id="twoinc-ln-target" class="twoinc-target"></div>
-        <div id="twoinc-em-target" class="twoinc-target"></div>
-        <div id="twoinc-ph-target" class="twoinc-target"></div>
+        <?php
+        /*
+         * No phone/email targets here deliberately: positionFields() in
+         * twoinc.js used to pull them up alongside these, but that produced
+         * a visible ~1s field reorder. Phone/email
+         * stay in their native WC position after town/city.
+         */
+        ?>
     </div>
-
-    <div class="company_not_in_btn" style="display: none;">
-        <?php esc_html_e('My company is not on the list', 'twoinc-payment-gateway'); ?>
-    </div>
-
-    <div id="search_company_btn" style="display: none;">
-        <?php esc_html_e('Search for company', 'twoinc-payment-gateway'); ?>
-    </div>
+    <?php
+    /*
+     * The "Enter manually" mode chip and the link back to search are built
+     * in JS from the localised text map, not as markup here (TWO-25288) —
+     * load-bearing, not tidying: every surface that runs the search binding
+     * renders its own copy of the company inputs, so cloning static markup
+     * from this view would leave those with no way into manual entry and no
+     * way back out.
+     *
+     * The chip is a real <button>, a sibling of the results list rather than
+     * a row inside it (TWO-40), so it stays reachable without scrolling
+     * past however many results came back.
+     */
+    ?>
 </div>

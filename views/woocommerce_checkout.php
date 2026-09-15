@@ -1,5 +1,7 @@
 <?php
+
 /**
  * @global WC_Checkout $checkout
  */
-$checkout = WC()->checkout(); ?>
+
+$checkout = WC()->checkout();
