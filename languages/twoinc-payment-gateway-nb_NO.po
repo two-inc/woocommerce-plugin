@@ -18,23 +18,23 @@ msgstr ""
 #. Plugin Name of the plugin
 #: tillit-payment-gateway.php
 msgid "Two - BNPL for businesses"
-msgstr ""
+msgstr "Two - BNPL for bedrifter"
 
 #. Plugin URI of the plugin
 #. Author URI of the plugin
 #: tillit-payment-gateway.php
 msgid "https://two.inc"
-msgstr ""
+msgstr "https://two.inc"
 
 #. Description of the plugin
 #: tillit-payment-gateway.php
 msgid "Integration between WooCommerce and Two"
-msgstr ""
+msgstr "Integrasjon mellom WooCommerce og Two"
 
 #. Author of the plugin
 #: tillit-payment-gateway.php
 msgid "Two"
-msgstr ""
+msgstr "Two"
 
 #: class/WC_Twoinc.php:88
 msgid "Place order"
@@ -56,17 +56,17 @@ msgstr "Sandbox"
 #: class/WC_Twoinc.php:921
 #, php-format
 msgid "The %s payment method stays available; buyers are offered no payment term to choose from until one can be read."
-msgstr ""
+msgstr "Betalingsmåten %s er fortsatt tilgjengelig; kjøpere får ingen betalingsvilkår å velge mellom før ett kan leses."
 
 #. translators: %s is a date and time in the site's own format
 #: class/WC_Twoinc.php:927
 #, php-format
 msgid "Payment terms were last read successfully on %s."
-msgstr ""
+msgstr "Betalingsvilkår ble sist lest inn uten feil %s."
 
 #: class/WC_Twoinc.php:930
 msgid "Payment terms have never been read successfully on this site."
-msgstr ""
+msgstr "Betalingsvilkår har aldri blitt lest inn uten feil på dette nettstedet."
 
 #. translators: %s is a date and time in the site's own format
 #: class/WC_Twoinc.php:937
@@ -86,83 +86,83 @@ msgstr "Kontroller innstillingene \"%s API-nøkkel\" og \"Miljø\"."
 
 #: class/WC_Twoinc.php:956
 msgid "The plugin retries by itself; \"Refresh merchant profile\" under Diagnostics retries now."
-msgstr ""
+msgstr "Pluginet prøver på nytt av seg selv; \\\"Oppdater selgerprofil\\\" under Diagnostikk prøver på nytt nå."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:968
 #, php-format
 msgid "No API key is saved, so your payment terms cannot be read from %s."
-msgstr ""
+msgstr "Ingen API-nøkkel er lagret, så betalingsvilkårene dine kan ikke leses fra %s."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:971
 #, php-format
 msgid "Your %s account currently offers no payment terms."
-msgstr ""
+msgstr "%s-kontoen din tilbyr for øyeblikket ingen betalingsvilkår."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:974
 #, php-format
 msgid "Your %s account returned no list of payment terms."
-msgstr ""
+msgstr "%s-kontoen din returnerte ingen liste over betalingsvilkår."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:977
 #, php-format
 msgid "Your payment terms have not been read from %s yet."
-msgstr ""
+msgstr "Betalingsvilkårene dine er ennå ikke lest fra %s."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:983
 #, php-format
 msgid "Your payment terms could not be read: %s could not be reached (network failure or timeout)."
-msgstr ""
+msgstr "Betalingsvilkårene dine kunne ikke leses: %s kunne ikke nås (nettverksfeil eller tidsavbrudd)."
 
 #. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
 #: class/WC_Twoinc.php:986
 #, php-format
 msgid "Your payment terms could not be read: %1$s rejected the saved API key (HTTP %2$d)."
-msgstr ""
+msgstr "Betalingsvilkårene dine kunne ikke leses: %1$s avviste den lagrede API-nøkkelen (HTTP %2$d)."
 
 #. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
 #: class/WC_Twoinc.php:989
 #, php-format
 msgid "Your payment terms could not be read: %1$s refused the request as too frequent (HTTP %2$d)."
-msgstr ""
+msgstr "Betalingsvilkårene dine kunne ikke leses: %1$s avviste forespørselen som for hyppig (HTTP %2$d)."
 
 #. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
 #: class/WC_Twoinc.php:992
 #, php-format
 msgid "Your payment terms could not be read: %1$s reported a server error (HTTP %2$d)."
-msgstr ""
+msgstr "Betalingsvilkårene dine kunne ikke leses: %1$s rapporterte en serverfeil (HTTP %2$d)."
 
 #. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
 #: class/WC_Twoinc.php:995
 #, php-format
 msgid "Your payment terms could not be read: %1$s answered HTTP %2$d."
-msgstr ""
+msgstr "Betalingsvilkårene dine kunne ikke leses: %1$s svarte HTTP %2$d."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:999
 #, php-format
 msgid "Your payment terms could not be read: the answer from %s could not be understood."
-msgstr ""
+msgstr "Betalingsvilkårene dine kunne ikke leses: svaret fra %s kunne ikke forstås."
 
 #: class/WC_Twoinc.php:1013
 msgid "Never"
-msgstr ""
+msgstr "Aldri"
 
 #. translators: %s is a date and time in the site's own format
 #: class/WC_Twoinc.php:1022
 #, php-format
 msgid "%s — the last attempt to refresh these figures failed; use \"Refresh merchant profile\" under Diagnostics to retry"
-msgstr ""
+msgstr "%s — siste forsøk på å oppdatere disse tallene mislyktes; bruk \\\"Oppdater selgerprofil\\\" under Diagnostikk for å prøve igjen"
 
 #. translators: %s is a date and time in the site's own format
 #: class/WC_Twoinc.php:1029
 #, php-format
 msgid "%s — these figures are out of date; use \"Refresh merchant profile\" under Diagnostics"
-msgstr ""
+msgstr "%s — disse tallene er utdaterte; bruk \\\"Oppdater selgerprofil\\\" under Diagnostikk"
 
 #: class/WC_Twoinc.php:1051
 msgid "Payment method at checkout"
@@ -253,45 +253,45 @@ msgstr "inklusiv mva."
 #: class/WC_Twoinc.php:1220
 #, php-format
 msgid "Resolved (%d available)"
-msgstr ""
+msgstr "Løst (%d tilgjengelig)"
 
 #. translators: %d is a count of payment terms
 #: class/WC_Twoinc.php:1225
 #, php-format
 msgid "Resolved (%d available), last refresh failed"
-msgstr ""
+msgstr "Løst (%d tilgjengelig), siste oppdatering mislyktes"
 
 #. translators: %d is a count of payment terms
 #: class/WC_Twoinc.php:1227
 #, php-format
 msgid "Resolved (%d available), out of date"
-msgstr ""
+msgstr "Løst (%d tilgjengelig), utdatert"
 
 #: class/WC_Twoinc.php:1229
 msgid "No API key saved"
-msgstr ""
+msgstr "Ingen API-nøkkel lagret"
 
 #: class/WC_Twoinc.php:1231
 msgid "None offered by the account"
-msgstr ""
+msgstr "Ingen tilbys av kontoen"
 
 #: class/WC_Twoinc.php:1233
 msgid "Not returned by the account"
-msgstr ""
+msgstr "Ikke returnert av kontoen"
 
 #: class/WC_Twoinc.php:1235
 msgid "Not read yet"
-msgstr ""
+msgstr "Ikke lest ennå"
 
 #. translators: %d is an HTTP status code
 #: class/WC_Twoinc.php:1241
 #, php-format
 msgid "Could not be read (HTTP %d)"
-msgstr ""
+msgstr "Kunne ikke leses (HTTP %d)"
 
 #: class/WC_Twoinc.php:1242
 msgid "Could not be read"
-msgstr ""
+msgstr "Kunne ikke leses"
 
 #: class/WC_Twoinc.php:1466
 #, php-format
@@ -631,7 +631,7 @@ msgstr "Du har ikke tillatelse til å laste ned denne fakturaen."
 
 #: class/WC_Twoinc.php:4013
 msgid "Could not refresh the merchant profile; the values read previously are still in use."
-msgstr ""
+msgstr "Kunne ikke oppdatere selgerprofilen; verdiene som ble lest tidligere, er fortsatt i bruk."
 
 #: class/WC_Twoinc.php:4022
 msgid "Merchant profile refreshed."
@@ -647,7 +647,7 @@ msgstr "Kunne ikke oppdatere selgerprofilen."
 
 #: class/WC_Twoinc.php:4111
 msgid "no figure"
-msgstr ""
+msgstr "ingen sats"
 
 #: class/WC_Twoinc.php:4312
 msgid "This API key is invalid or has expired."
@@ -838,7 +838,7 @@ msgstr "Klarerte proxy-adresser: %s er ikke en gyldig IP-adresse eller CIDR-blok
 #: class/WC_Twoinc.php:5269
 #, php-format
 msgid "This order cannot be paid with %s."
-msgstr ""
+msgstr "Denne ordren kan ikke betales med %s."
 
 #: class/WC_Twoinc.php:5304
 msgid "The selected payment term is no longer available. Please review the payment options and place the order again."
@@ -1444,7 +1444,7 @@ msgstr "Mangler"
 
 #: class/WC_Twoinc.php:6638
 msgid "Merchant profile last read"
-msgstr ""
+msgstr "Selgerprofil sist lest"
 
 #: class/WC_Twoinc.php:6662
 msgid "SSL verification is disabled while the environment is not production-hardened; re-check the \"Disable SSL verification\" setting."
@@ -1731,29 +1731,29 @@ msgstr "Lukk"
 #: snippets/delivery-date-checkout.php:71
 #: snippets/delivery-date-checkout.php:79
 msgid "Delivery Date"
-msgstr ""
+msgstr "Leveringsdato"
 
 #: snippets/admin-order-list-columns.php:84
 msgid "Customer"
-msgstr ""
+msgstr "Kunde"
 
 #: snippets/delivery-date-checkout.php:27
 msgid "Select Pickup Date"
-msgstr ""
+msgstr "Velg hentedato"
 
 #: snippets/delivery-date-checkout.php:52
 msgid "Select Date"
-msgstr ""
+msgstr "Velg dato"
 
 #: snippets/delivery-date-checkout.php:70
 #, php-format
 msgid "%s is a required field."
-msgstr ""
+msgstr "%s er et obligatorisk felt."
 
 #: snippets/delivery-date-checkout.php:78
 #, php-format
 msgid "%s cannot be parsed."
-msgstr ""
+msgstr "%s kan ikke tolkes."
 
 #: tillit-payment-gateway.php:256
 msgid "Settings"
