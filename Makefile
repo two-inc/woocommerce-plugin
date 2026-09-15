@@ -53,7 +53,7 @@ run:
 		echo " Proxy store:     $$PROXY_URL/"; \
 		echo " Proxy admin:     $$PROXY_URL/wp-admin/"; \
 	fi; \
-	echo " Credentials:      admin / twoinb2b"; \
+	echo " Credentials:      exampleuser@two.inc / examplepassword123"; \
 	dev/print-resolved-hosts.sh; \
 	echo "========================================="
 
