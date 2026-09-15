@@ -30,3 +30,8 @@
 .two-company-dropdown {
   line-height: normal;
 }
+
+/* Spaced as the classic payment-tile slot. */
+.twoinc-sole-trader-note-slot-blocks {
+  margin: 12px 0;
+}

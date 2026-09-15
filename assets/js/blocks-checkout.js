@@ -302,6 +302,7 @@
     var id = search.addressFieldSelector.slice(1) + "_field";
     if (row.id !== id) row.id = id;
     nativeRow(search, row);
+    noteSlot(search, row);
   }
 
   /**
@@ -321,6 +322,22 @@
       native.className = "hidden";
     }
     if (native.parentElement !== row) row.appendChild(native);
+  }
+
+  /**
+   * A per-role host for the sole-trader note, which is what the controller
+   * asks for per-country availability behind. Neither classic host is on a
+   * Blocks page: the invoice role's sits in the gateway description, rendered
+   * only for the selected method, and the delivery role's comes from a
+   * classic-only hook (TWO-25776).
+   */
+  function noteSlot(search, row) {
+    var cls = "twoinc-sole-trader-note-slot-blocks-" + search.role;
+    search.soleTraderNoteSlotClass = cls;
+    if (row.querySelector("." + cls)) return;
+    var slot = document.createElement("div");
+    slot.className = "twoinc-sole-trader-note-slot-blocks " + cls + " hidden";
+    row.appendChild(slot);
   }
 
   function mount() {
