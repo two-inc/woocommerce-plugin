@@ -37,3 +37,5 @@ phpcs.xml export-ignore
 phpstan.neon export-ignore
 phpstan-baseline.neon export-ignore
 messages.mo export-ignore
+package.json export-ignore
+package-lock.json export-ignore

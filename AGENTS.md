@@ -436,6 +436,8 @@ This is a public repository
   nothing else: a section, question or ruling number belonging to an internal review
   document means nothing to a reader outside the company, and neither does a person
   named as the authority for a rule.
+  Commit trailers added by tooling (`Co-Authored-By`, `Claude-Session`) are
+  attribution, not citations, and stay.
 - Describe another plugin's behaviour in your own words; never reproduce its source
   text, schema fragments or test identifiers here.
 
@@ -629,5 +631,4 @@ it. Check before pushing:
     git archive --format tar --worktree-attributes HEAD | tar -t | awk -F/ '{print $1}' | sort -u
 
 The expected top level is `assets brands class languages readme.txt templates
-tillit-payment-gateway.php uninstall.php views`, plus `package.json` and
-`package-lock.json`, which `.distignore` alone removes.
+tillit-payment-gateway.php uninstall.php views`.
