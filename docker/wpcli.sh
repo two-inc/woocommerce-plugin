@@ -37,19 +37,8 @@ else
 fi
 # Env values (TWO_API_KEY / TWO_API_BASE_URL) override the JSON
 bash /opt/tillit-payment-gateway/dev/configure
-wp post update $(wp option get woocommerce_checkout_page_id) --post_content='[woocommerce_checkout]'
 wp post update $(wp option get woocommerce_cart_page_id) --post_content='[woocommerce_cart]'
-blocks_checkout_exists=$(wp post list --post_type=page --name=blocks-checkout --format=count 2>/dev/null || echo 0)
-if [ "$blocks_checkout_exists" -lt 1 ]; then
-  # Second checkout page so both renderers are reachable at once (ABN-554); the content comes from
-  # WooCommerce because the checkout block renders nothing without its inner blocks.
-  blocks_checkout_content=$(wp eval '$m = new ReflectionMethod( "WC_Install", "get_checkout_block_content" ); $m->setAccessible( true ); echo $m->invoke( null );' 2>/dev/null || true)
-  if [ -n "$blocks_checkout_content" ]; then
-    wp post create --post_type=page --post_status=publish --post_title='Blocks Checkout' --post_name=blocks-checkout --post_content="$blocks_checkout_content"
-  else
-    echo "Warning: WooCommerce did not yield Blocks checkout content, skipping the blocks-checkout page"
-  fi
-fi
+wp eval-file /opt/tillit-payment-gateway/docker/checkout-pages-seed.php
 wp option update woocommerce_coming_soon no
 wp option update woocommerce_currency $WOOCOM_CURRENCY
 wp option update woocommerce_default_country $WOOCOM_DEFAULT_COUNTRY

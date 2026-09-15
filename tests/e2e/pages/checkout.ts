@@ -16,14 +16,14 @@ export async function selectTwoPayment(page: Page) {
   }
 }
 
-export const SOLE_TRADER_TOGGLE = ".two-company-mode-chips";
-export const MODE_CHIP = ".two-company-mode-chip";
-
-/** The company-capture popover, a child of the company field's own wrapper. */
-export const COMPANY_PANEL = ".two-company-dropdown";
-
 /** The company-name field the popover anchors to. */
 export const COMPANY_FIELD = "#billing_company_display";
+
+export const SOLE_TRADER_TOGGLE = `.two-company-field-wrap:has(${COMPANY_FIELD}) .two-company-mode-chips`;
+export const MODE_CHIP = ".two-company-mode-chip";
+
+/** The billing popover: the delivery company field carries one of its own. */
+export const COMPANY_PANEL = `.two-company-field-wrap:has(${COMPANY_FIELD}) .two-company-dropdown`;
 
 /**
  * The pay box renders a "Registered company / Sole trader" chooser whenever

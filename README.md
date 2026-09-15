@@ -214,8 +214,9 @@ are out of scope here — they live in the `e2e-tests` repo.
 ### Environment
 
 - Store: <http://localhost:8888>, admin at `/wp-admin` (`exampleuser@two.inc` / `examplepassword123`)
-- Checkout pages: `/checkout/` (classic shortcode) and `/blocks-checkout/`
-  (WooCommerce Blocks)
+- Checkout pages: `/blocks/checkout/` (WooCommerce Blocks, the default) and
+  `/classic/checkout/` (classic shortcode). The header control picks which one
+  every checkout link routes to; the choice is held in a cookie
 - Products: "Product 1"–"Product 4" (random prices 100–200) plus "Expensive
   Product" (500000) for the max-limit test
 - Merchant: `demostoregb` (UK). This is a temporary repoint: `tillittestuk`
