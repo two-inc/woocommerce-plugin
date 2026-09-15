@@ -57,7 +57,7 @@ return [
     // rounding). WC_Twoinc::get_rounding_step_options is the only reader.
     'available_rounding_steps' => [0.10, 0.50, 1.00, 5.00, 10.00],
     // Buyer-facing label for the offset-pricing fee line; null uses the
-    // translated "Service charge" default.
+    // translated "Payment terms fee" default.
     'fee_line_label' => null,
     // FAQ link target for the tagline under the payment-method title. The
     // tagline sentence itself is a fixed, statically-extracted msgid in
