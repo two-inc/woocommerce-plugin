@@ -17,23 +17,23 @@ msgstr ""
 #. Plugin Name of the plugin
 #: tillit-payment-gateway.php
 msgid "Two - BNPL for businesses"
-msgstr ""
+msgstr "Two - BNPL voor bedrijven"
 
 #. Plugin URI of the plugin
 #. Author URI of the plugin
 #: tillit-payment-gateway.php
 msgid "https://two.inc"
-msgstr ""
+msgstr "https://two.inc"
 
 #. Description of the plugin
 #: tillit-payment-gateway.php
 msgid "Integration between WooCommerce and Two"
-msgstr ""
+msgstr "Integratie tussen WooCommerce en Two"
 
 #. Author of the plugin
 #: tillit-payment-gateway.php
 msgid "Two"
-msgstr ""
+msgstr "Two"
 
 #: class/WC_Twoinc.php:88
 msgid "Place order"
@@ -55,17 +55,17 @@ msgstr "Sandbox"
 #: class/WC_Twoinc.php:921
 #, php-format
 msgid "The %s payment method stays available; buyers are offered no payment term to choose from until one can be read."
-msgstr ""
+msgstr "De betaalmethode %s blijft beschikbaar; kopers krijgen geen betaalvoorwaarden om uit te kiezen totdat er één gelezen kan worden."
 
 #. translators: %s is a date and time in the site's own format
 #: class/WC_Twoinc.php:927
 #, php-format
 msgid "Payment terms were last read successfully on %s."
-msgstr ""
+msgstr "De betaalvoorwaarden zijn voor het laatst met succes gelezen op %s."
 
 #: class/WC_Twoinc.php:930
 msgid "Payment terms have never been read successfully on this site."
-msgstr ""
+msgstr "De betaalvoorwaarden zijn op deze site nog nooit met succes gelezen."
 
 #. translators: %s is a date and time in the site's own format
 #: class/WC_Twoinc.php:937
@@ -85,83 +85,83 @@ msgstr "Controleer de instellingen \"%s API-sleutel\" en \"Omgeving\"."
 
 #: class/WC_Twoinc.php:956
 msgid "The plugin retries by itself; \"Refresh merchant profile\" under Diagnostics retries now."
-msgstr ""
+msgstr "De plugin probeert het vanzelf opnieuw; \\\"Verkopersprofiel vernieuwen\\\" onder Diagnostiek probeert het nu opnieuw."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:968
 #, php-format
 msgid "No API key is saved, so your payment terms cannot be read from %s."
-msgstr ""
+msgstr "Er is geen API-sleutel opgeslagen, dus je betaalvoorwaarden kunnen niet uit %s worden gelezen."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:971
 #, php-format
 msgid "Your %s account currently offers no payment terms."
-msgstr ""
+msgstr "Je %s-account biedt momenteel geen betaalvoorwaarden aan."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:974
 #, php-format
 msgid "Your %s account returned no list of payment terms."
-msgstr ""
+msgstr "Je %s-account heeft geen lijst met betaalvoorwaarden geretourneerd."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:977
 #, php-format
 msgid "Your payment terms have not been read from %s yet."
-msgstr ""
+msgstr "Je betaalvoorwaarden zijn nog niet uit %s gelezen."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:983
 #, php-format
 msgid "Your payment terms could not be read: %s could not be reached (network failure or timeout)."
-msgstr ""
+msgstr "Je betaalvoorwaarden konden niet worden gelezen: %s kon niet worden bereikt (netwerkfout of time-out)."
 
 #. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
 #: class/WC_Twoinc.php:986
 #, php-format
 msgid "Your payment terms could not be read: %1$s rejected the saved API key (HTTP %2$d)."
-msgstr ""
+msgstr "Je betaalvoorwaarden konden niet worden gelezen: %1$s heeft de opgeslagen API-sleutel geweigerd (HTTP %2$d)."
 
 #. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
 #: class/WC_Twoinc.php:989
 #, php-format
 msgid "Your payment terms could not be read: %1$s refused the request as too frequent (HTTP %2$d)."
-msgstr ""
+msgstr "Je betaalvoorwaarden konden niet worden gelezen: %1$s heeft het verzoek geweigerd omdat het te vaak werd gedaan (HTTP %2$d)."
 
 #. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
 #: class/WC_Twoinc.php:992
 #, php-format
 msgid "Your payment terms could not be read: %1$s reported a server error (HTTP %2$d)."
-msgstr ""
+msgstr "Je betaalvoorwaarden konden niet worden gelezen: %1$s heeft een serverfout gemeld (HTTP %2$d)."
 
 #. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
 #: class/WC_Twoinc.php:995
 #, php-format
 msgid "Your payment terms could not be read: %1$s answered HTTP %2$d."
-msgstr ""
+msgstr "Je betaalvoorwaarden konden niet worden gelezen: %1$s antwoordde HTTP %2$d."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:999
 #, php-format
 msgid "Your payment terms could not be read: the answer from %s could not be understood."
-msgstr ""
+msgstr "Je betaalvoorwaarden konden niet worden gelezen: het antwoord van %s kon niet worden begrepen."
 
 #: class/WC_Twoinc.php:1013
 msgid "Never"
-msgstr ""
+msgstr "Nooit"
 
 #. translators: %s is a date and time in the site's own format
 #: class/WC_Twoinc.php:1022
 #, php-format
 msgid "%s — the last attempt to refresh these figures failed; use \"Refresh merchant profile\" under Diagnostics to retry"
-msgstr ""
+msgstr "%s — de laatste poging om deze cijfers te vernieuwen is mislukt; gebruik \\\"Verkopersprofiel vernieuwen\\\" onder Diagnostiek om het opnieuw te proberen"
 
 #. translators: %s is a date and time in the site's own format
 #: class/WC_Twoinc.php:1029
 #, php-format
 msgid "%s — these figures are out of date; use \"Refresh merchant profile\" under Diagnostics"
-msgstr ""
+msgstr "%s — deze cijfers zijn verouderd; gebruik \\\"Verkopersprofiel vernieuwen\\\" onder Diagnostiek"
 
 #: class/WC_Twoinc.php:1051
 msgid "Payment method at checkout"
@@ -252,45 +252,45 @@ msgstr "inclusief btw"
 #: class/WC_Twoinc.php:1220
 #, php-format
 msgid "Resolved (%d available)"
-msgstr ""
+msgstr "Opgelost (%d beschikbaar)"
 
 #. translators: %d is a count of payment terms
 #: class/WC_Twoinc.php:1225
 #, php-format
 msgid "Resolved (%d available), last refresh failed"
-msgstr ""
+msgstr "Opgelost (%d beschikbaar), laatste verversing mislukt"
 
 #. translators: %d is a count of payment terms
 #: class/WC_Twoinc.php:1227
 #, php-format
 msgid "Resolved (%d available), out of date"
-msgstr ""
+msgstr "Opgelost (%d beschikbaar), verouderd"
 
 #: class/WC_Twoinc.php:1229
 msgid "No API key saved"
-msgstr ""
+msgstr "Geen API-sleutel opgeslagen"
 
 #: class/WC_Twoinc.php:1231
 msgid "None offered by the account"
-msgstr ""
+msgstr "Geen aangeboden door het account"
 
 #: class/WC_Twoinc.php:1233
 msgid "Not returned by the account"
-msgstr ""
+msgstr "Niet geretourneerd door het account"
 
 #: class/WC_Twoinc.php:1235
 msgid "Not read yet"
-msgstr ""
+msgstr "Nog niet gelezen"
 
 #. translators: %d is an HTTP status code
 #: class/WC_Twoinc.php:1241
 #, php-format
 msgid "Could not be read (HTTP %d)"
-msgstr ""
+msgstr "Kon niet worden gelezen (HTTP %d)"
 
 #: class/WC_Twoinc.php:1242
 msgid "Could not be read"
-msgstr ""
+msgstr "Kon niet worden gelezen"
 
 #: class/WC_Twoinc.php:1466
 #, php-format
@@ -630,7 +630,7 @@ msgstr "U mag deze factuur niet downloaden."
 
 #: class/WC_Twoinc.php:4013
 msgid "Could not refresh the merchant profile; the values read previously are still in use."
-msgstr ""
+msgstr "Kon het verkopersprofiel niet vernieuwen; de eerder gelezen waarden zijn nog in gebruik."
 
 #: class/WC_Twoinc.php:4022
 msgid "Merchant profile refreshed."
@@ -646,7 +646,7 @@ msgstr "Het verkopersprofiel kon niet worden vernieuwd."
 
 #: class/WC_Twoinc.php:4111
 msgid "no figure"
-msgstr ""
+msgstr "geen bedrag"
 
 #: class/WC_Twoinc.php:4312
 msgid "This API key is invalid or has expired."
@@ -837,7 +837,7 @@ msgstr "Vertrouwde proxy-adressen: %s is geen geldig IP-adres of CIDR-blok en wo
 #: class/WC_Twoinc.php:5269
 #, php-format
 msgid "This order cannot be paid with %s."
-msgstr ""
+msgstr "Deze bestelling kan niet met %s worden betaald."
 
 #: class/WC_Twoinc.php:5304
 msgid "The selected payment term is no longer available. Please review the payment options and place the order again."
@@ -1443,7 +1443,7 @@ msgstr "Ontbreekt"
 
 #: class/WC_Twoinc.php:6638
 msgid "Merchant profile last read"
-msgstr ""
+msgstr "Verkopersprofiel laatst gelezen"
 
 #: class/WC_Twoinc.php:6662
 msgid "SSL verification is disabled while the environment is not production-hardened; re-check the \"Disable SSL verification\" setting."
@@ -1730,29 +1730,29 @@ msgstr "Sluiten"
 #: snippets/delivery-date-checkout.php:71
 #: snippets/delivery-date-checkout.php:79
 msgid "Delivery Date"
-msgstr ""
+msgstr "Leverdatum"
 
 #: snippets/admin-order-list-columns.php:84
 msgid "Customer"
-msgstr ""
+msgstr "Klant"
 
 #: snippets/delivery-date-checkout.php:27
 msgid "Select Pickup Date"
-msgstr ""
+msgstr "Afhaaldatum selecteren"
 
 #: snippets/delivery-date-checkout.php:52
 msgid "Select Date"
-msgstr ""
+msgstr "Datum selecteren"
 
 #: snippets/delivery-date-checkout.php:70
 #, php-format
 msgid "%s is a required field."
-msgstr ""
+msgstr "%s is een verplicht veld."
 
 #: snippets/delivery-date-checkout.php:78
 #, php-format
 msgid "%s cannot be parsed."
-msgstr ""
+msgstr "%s kan niet worden verwerkt."
 
 #: tillit-payment-gateway.php:256
 msgid "Settings"
