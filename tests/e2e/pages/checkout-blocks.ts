@@ -30,6 +30,11 @@ export async function selectTwoPayment(page: Page) {
   await expect(radio).toBeChecked();
 }
 
+/** Blocks names the address fields after the one form it renders: shipping only when the cart needs it. */
+async function addressPrefix(page: Page): Promise<"shipping" | "billing"> {
+  return (await page.locator("#shipping-address_1").count()) > 0 ? "shipping" : "billing";
+}
+
 export async function fillCompanySearch(page: Page, companyName = BUYER_COMPANY) {
   const wrap = page.locator(COMPANY_WRAP).first();
   await wrap.locator("input").first().click();
@@ -42,27 +47,29 @@ export async function fillCompanySearch(page: Page, companyName = BUYER_COMPANY)
   await result.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
   await result.click();
 
-  await expect(page.locator("#shipping-address_1")).not.toBeEmpty({ timeout: LONG_TIMEOUT });
+  const prefix = await addressPrefix(page);
+  await expect(page.locator(`#${prefix}-address_1`)).not.toBeEmpty({ timeout: LONG_TIMEOUT });
 }
 
 /** After the company pick: its address reaches the fields through the cart store, clearing these. */
 export async function fillContactDetails(page: Page, firstName: string, lastName: string) {
+  const prefix = await addressPrefix(page);
   await page.locator("#email").fill(RECIPIENT_EMAIL);
-  await page.locator("#shipping-first_name").fill(firstName);
-  await page.locator("#shipping-last_name").fill(lastName);
-  await page.locator("#shipping-phone").fill(PHONE_NUMBER);
-  await page.locator("#shipping-phone").blur();
+  await page.locator(`#${prefix}-first_name`).fill(firstName);
+  await page.locator(`#${prefix}-last_name`).fill(lastName);
+  await page.locator(`#${prefix}-phone`).fill(PHONE_NUMBER);
+  await page.locator(`#${prefix}-phone`).blur();
 
   await page.waitForFunction(
-    ([last, email]) => {
+    ([last, email, addressKey]) => {
       const customer = window.wp?.data?.select("wc/store/cart")?.getCustomerData?.();
       return (
         !!customer &&
-        customer.shippingAddress?.last_name === last &&
+        customer[addressKey]?.last_name === last &&
         customer.billingAddress?.email === email
       );
     },
-    [lastName, RECIPIENT_EMAIL],
+    [lastName, RECIPIENT_EMAIL, `${prefix}Address`],
     { timeout: LONG_TIMEOUT }
   );
 }
