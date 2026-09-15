@@ -14,8 +14,79 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e-tests:
+  # Which WordPress versions the checkout suite runs on (PLAT-2320). The
+  # compose default is the floor this suite has always covered; the current
+  # release is what the readme's "Tested up to" claims, and nothing exercised
+  # a real checkout there. Discovered at run time so the leg tracks upstream
+  # instead of going stale as a hand-written pin.
+  #
+  # Honest-CI convention (TWO-24998): a transport or parse failure FAILS
+  # discovery rather than emitting an empty matrix that would skip-green.
+  discover:
+    name: Discover WordPress versions
     runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.wp.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve the compose default + current WordPress
+        id: wp
+        run: |
+          set -o pipefail
+          # Read the floor out of docker-compose.yaml so there is one pin to
+          # move, not a second copy here that can drift away from it.
+          pinned=$(sed -n 's/^ *image: wordpress:\${WORDPRESS_VERSION:-\([0-9][0-9.]*\)}-php.*/\1/p' docker-compose.yaml)
+          if [ -z "$pinned" ]; then
+            echo "::error::e2e: could not read the WordPress default from docker-compose.yaml"
+            exit 1
+          fi
+          if ! info=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
+            "https://api.wordpress.org/core/version-check/1.7/"); then
+            echo "::error::e2e: could not query the wordpress.org core version API"
+            exit 1
+          fi
+          # Highest version across the offers, rather than offers[0]: the API
+          # orders them by upgrade path, not by version.
+          current=$(echo "$info" | jq -r '
+            [ .offers[].current
+              | select(type == "string" and test("^[0-9]+(\\.[0-9]+)*$")) ]
+            | map(split(".") | map(tonumber))
+            | sort | last // empty | map(tostring) | join(".")')
+          if [ -z "$current" ]; then
+            echo "::error::e2e: could not resolve the current WordPress release"
+            exit 1
+          fi
+          if [ "$pinned" = "$current" ]; then
+            echo "WordPress legs: $current (compose default is already current)"
+            echo "matrix={\"wordpress\":[\"$current\"]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "WordPress legs: pinned=$pinned current=$current"
+            echo "matrix={\"wordpress\":[\"$pinned\",\"$current\"]}" >> "$GITHUB_OUTPUT"
+          fi
+
+  e2e-tests:
+    name: e2e (WordPress ${{ matrix.wordpress }})
+    needs: discover
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    strategy:
+      fail-fast: false
+      # Serial on purpose. The compose harness fixes container names and binds
+      # host port 8888, so two legs on one runner would collide; running them
+      # one at a time leaves that constraint exactly as it was rather than
+      # widening it.
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    # Namespace the Compose project per leg, the same way support-matrix.yaml
+    # and upgrade-smoke.yaml namespace their docker resources by run id. The
+    # compose volumes are project-scoped, so a leg landing on a runner that
+    # still holds another job's `wordpress_data` would otherwise boot on that
+    # install rather than on the WordPress it asked for. Serial legs alone do
+    # not cover this: the legs need not share a runner, so the teardown below
+    # can run somewhere other than where the next leg starts.
+    env:
+      COMPOSE_PROJECT_NAME: e2e-${{ github.run_id }}-${{ strategy.job-index }}
     # Must exceed Playwright's own worst case, or a fully-failing suite is
     # killed before it can report: 4 tests x 2 attempts (retries: 1) x the
     # 180s per-test timeout = 24m of testing, plus ~4m of setup. At 15m the
@@ -61,8 +132,13 @@ jobs:
         run: |
           # Compose defaults WOOCOM_PLUGIN_CONFIG_JSON to the local-dev
           # config; CI must seed the gateway with the staging config the
-          # previous step rendered.
-          echo "WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-demostoregb.json" > .env
+          # previous step rendered. WORDPRESS_VERSION selects this leg's
+          # image tag; WooCommerce stays at the compose pin in both legs, so
+          # WordPress is the only variable that moves between them.
+          {
+            echo "WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-demostoregb.json"
+            echo "WORDPRESS_VERSION=${{ matrix.wordpress }}"
+          } > .env
           docker compose up -d
 
       - name: Wait for bootstrap to complete
@@ -76,6 +152,21 @@ jobs:
             sleep 5
           done
           docker compose logs wpcli 2>&1 | grep -q "sleep infinity" || (echo "Bootstrap failed" && docker compose logs && exit 1)
+
+      - name: Record the WordPress version under test
+        run: |
+          set -o pipefail
+          booted=$(docker compose exec -T wpcli wp core version | tr -d '\r')
+          echo "WordPress under test: $booted (leg: ${{ matrix.wordpress }})"
+          # A mistyped or withdrawn tag leaves the image resolving to something
+          # else, which would green having tested a version nobody asked for.
+          case "$booted" in
+            "${{ matrix.wordpress }}" | "${{ matrix.wordpress }}".*) ;;
+            *)
+              echo "::error::e2e: expected WordPress ${{ matrix.wordpress }}, booted $booted"
+              exit 1
+              ;;
+          esac
 
       - uses: actions/setup-node@v7
         with:
@@ -101,11 +192,18 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-report
+          # Per leg: upload-artifact rejects a name already used in the run,
+          # so a shared name would fail the second leg on the upload rather
+          # than on anything it tested.
+          name: playwright-report-wp${{ matrix.wordpress }}
           path: tests/e2e/test-results/
           retention-days: 7
           if-no-files-found: ignore
 
       - name: Stop WordPress
         if: always()
-        run: docker compose down
+        # -v, not a bare `down`: named volumes survive a bare `down`, so with a
+        # per-leg project name they would accumulate on the runner one set per
+        # leg, and on a shared runner a bare `down` is what leaves a populated
+        # `wordpress_data` behind for some later job to boot on.
+        run: docker compose down -v
