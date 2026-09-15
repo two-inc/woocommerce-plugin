@@ -213,7 +213,7 @@ are out of scope here — they live in the `e2e-tests` repo.
 
 ### Environment
 
-- Store: <http://localhost:8888>, admin at `/wp-admin` (`admin` / `twoinb2b`)
+- Store: <http://localhost:8888>, admin at `/wp-admin` (`exampleuser@two.inc` / `examplepassword123`)
 - Checkout pages: `/blocks/checkout/` (WooCommerce Blocks, the default) and
   `/classic/checkout/` (classic shortcode). The header control picks which one
   every checkout link routes to; the choice is held in a cookie
