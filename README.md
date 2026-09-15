@@ -90,8 +90,8 @@ with a merge commit. Everything after that is automated:
 with the other plugin repos. They bump and push straight to `main`, which the
 branch ruleset rejects, so do not use them.
 
-The ABN overlay ([woocommerce-abn-plugin](https://github.com/two-inc/woocommerce-abn-plugin))
-requires this plugin, so release this one first when both are going out.
+Brand overlay plugins built on this one (private repositories) require it, so
+release this plugin first when both are going out.
 
 ## Set up Wordpress for local development
 
