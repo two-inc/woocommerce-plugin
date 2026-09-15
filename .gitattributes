@@ -24,3 +24,16 @@ docker-compose.yaml export-ignore
 README.md export-ignore
 Makefile export-ignore
 CODEOWNERS export-ignore
+
+# Repo tooling that must not ship in the plugin package
+AGENTS.md export-ignore
+.next-major export-ignore
+.env.example export-ignore
+.prettierignore export-ignore
+dev/ export-ignore
+frpc.toml export-ignore
+start-proxy.sh export-ignore
+phpcs.xml export-ignore
+phpstan.neon export-ignore
+phpstan-baseline.neon export-ignore
+messages.mo export-ignore
