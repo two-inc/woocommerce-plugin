@@ -436,6 +436,8 @@ This is a public repository
   nothing else: a section, question or ruling number belonging to an internal review
   document means nothing to a reader outside the company, and neither does a person
   named as the authority for a rule.
+  Commit trailers added by tooling (`Co-Authored-By`, `Claude-Session`) are
+  attribution, not citations, and stay.
 - Describe another plugin's behaviour in your own words; never reproduce its source
   text, schema fragments or test identifiers here.
 
@@ -612,3 +614,46 @@ Key Conventions
 8. Use WordPress's hook system for modular and extensible code.
 9. Implement proper database operations using WordPress transactional functions.
 10. Use WordPress's WP_Cron API for scheduling tasks.
+
+## readme.txt changelog entries are merchant copy on the public listing
+
+`readme.txt`'s `== Changelog ==` and `== Upgrade Notice ==` render on the
+wordpress.org listing, and the upgrade notice is what a merchant sees in their
+admin when the update is offered. Merchant copy, not an engineering changelog.
+
+- **No Linear ticket ids and no internal references.** They mean nothing to a
+  merchant and this listing is public.
+- **Describe changes against the last RELEASED version, not against
+  development.** A bug introduced and fixed while a feature was being built is
+  not news: nobody ever had it. `git grep -l <feature> <previous-tag>` settles
+  whether the feature shipped before.
+- **Write what changes in their shop**, then what it means for them, naming
+  real admin paths. Not a feature name, not a commit subject.
+- **A release with nothing merchant-visible says so** ("maintenance release")
+  rather than dressing up a chore.
+- The sections wordpress.org recognises are `== Description ==`,
+  `== Installation ==`, `== Frequently Asked Questions ==`, `== Screenshots ==`,
+  `== Changelog ==`, `== Upgrade Notice ==`. A Markdown `##` heading is not a
+  section: it renders inside whichever section precedes it, which is why the
+  whole listing was one Description block until 2.24.0.
+
+`release.yml` builds the GitHub Release body with `--generate-notes`, which is
+a pull request list for engineers and separate from the above.
+
+## The plugin package contains plugin files only
+
+Two exclusion lists decide what merchants receive, and both must agree:
+
+- `.distignore`: honoured by the WordPress.org deploy in `deploy.yaml`.
+- `.gitattributes` (`export-ignore`): honoured by `git archive`, which `make
+archive` uses.
+
+A file that is repository tooling rather than plugin code (agent instructions,
+CI configs, dev scripts, lint and analysis configs, env examples, version
+markers, stray build output) goes into both lists in the same change that adds
+it. Check before pushing:
+
+    git archive --format tar --worktree-attributes HEAD | tar -t | awk -F/ '{print $1}' | sort -u
+
+The expected top level is `assets brands class languages readme.txt templates
+tillit-payment-gateway.php uninstall.php views`.

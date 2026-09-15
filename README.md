@@ -75,21 +75,23 @@ run. It is identical in every Two plugin repository.
 
 ### Releasing
 
-Ensure that you have `bumpver` installed:
+Open a PR from `staging` into `main` titled `Release <version>` and merge it
+with a merge commit. Everything after that is automated:
 
-    pip install -r dev-requirements.txt
+1.  `Deploy` runs php-lint on `main`.
+2.  `.github/workflows/release.yml` tags the version already in the tree and
+    creates the GitHub Release. It skips when that version is already tagged.
+3.  The Release event runs the `release` job in `deploy.yaml`, which publishes
+    to the WordPress plugin directory and attaches the zip to the Release.
+4.  `merge-back.yml` fast-forwards `staging` to `main`. The merge commit is
+    what keeps that a fast-forward.
 
-A release does not bump anything: the version in the tree on `main` is already
-the version the change computed on its PR. So on `main`, tag it and cut the
-Release, which triggers publication to the WordPress plugin directory:
+`make patch` / `make minor` / `make major` are kept only for Makefile parity
+with the other plugin repos. They bump and push straight to `main`, which the
+branch ruleset rejects, so do not use them.
 
-    v=$(bumpver show --environ | grep '^CURRENT_VERSION=' | cut -d= -f2)
-    git tag "$v" && git push origin "$v"
-    gh release create "$v" --generate-notes
-
-`make patch` / `make minor` / `make major` remain available for the case where
-you genuinely mean to override the computed version — note that they bump as
-well as release, which is normally not what you want any more.
+Brand overlay plugins built on this one (private repositories) require it, so
+release this plugin first when both are going out.
 
 ## Set up Wordpress for local development
 
