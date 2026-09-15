@@ -7,7 +7,7 @@ docker/
 docs/
 snippets/
 node_modules/
-tests/js/
+tests/
 
 # Files to ignore
 .distignore
