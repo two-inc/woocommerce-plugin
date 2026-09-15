@@ -1,8 +1,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: woocommerce-plugin\n"
-"Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-02 09:39+0100\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/app\n"
+"POT-Creation-Date: 2026-09-15T13:38:32+00:00\n"
 "PO-Revision-Date: 2025-07-01 10:28+0000\n"
 "Last-Translator: \n"
 "Language-Team: Dutch\n"
@@ -14,1650 +14,2223 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=n != 1;\n"
 "X-Loco-Version: 2.7.2; wp-6.8.1\n"
 
-#: class/WC_Twoinc.php:63
+#. Plugin Name of the plugin
+#: tillit-payment-gateway.php
+msgid "Two - BNPL for businesses"
+msgstr ""
+
+#. Plugin URI of the plugin
+#. Author URI of the plugin
+#: tillit-payment-gateway.php
+msgid "https://two.inc"
+msgstr ""
+
+#. Description of the plugin
+#: tillit-payment-gateway.php
+msgid "Integration between WooCommerce and Two"
+msgstr ""
+
+#. Author of the plugin
+#: tillit-payment-gateway.php
+msgid "Two"
+msgstr ""
+
+#: class/WC_Twoinc.php:88
 msgid "Place order"
 msgstr "Bestelling plaatsen"
 
-#: class/WC_Twoinc.php:65
+#: class/WC_Twoinc.php:90
 msgid "Making it easy for businesses to buy online."
 msgstr "Maak het voor bedrijven gemakkelijk om online te kopen."
 
-#: class/WC_Twoinc.php:205
+#: class/WC_Twoinc.php:230
 msgid "Production"
 msgstr "Productie"
 
-#: class/WC_Twoinc.php:206
+#: class/WC_Twoinc.php:231
 msgid "Sandbox"
 msgstr "Sandbox"
 
-#: class/WC_Twoinc.php:865
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:921
 #, php-format
-msgid "What is %s?"
-msgstr "Wat is %s ?"
+msgid ""
+"The %s payment method stays available; buyers are offered no payment term to "
+"choose from until one can be read."
+msgstr ""
 
-#: class/WC_Twoinc.php:868
+#. translators: %s is a date and time in the site's own format
+#: class/WC_Twoinc.php:927
 #, php-format
-msgid "%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple."
-msgstr "%s is een betaaloplossing voor B2B-aankopen online, waarmee u bij uw favoriete handelaren en leveranciers op handelskrediet kunt kopen. Met %s krijgt u direct toegang tot flexibel handelskrediet om aankopen eenvoudig te maken."
+msgid "Payment terms were last read successfully on %s."
+msgstr ""
 
-#: class/WC_Twoinc.php:869
-msgid "Buy now, receive your goods, pay your invoice later."
-msgstr "Koop nu, ontvang uw goederen, betaal uw factuur later."
+#: class/WC_Twoinc.php:930
+msgid "Payment terms have never been read successfully on this site."
+msgstr ""
 
-#: class/WC_Twoinc.php:1417
-msgid "Click to find out more"
-msgstr "Klik om meer te weten te komen"
-
-#. translators: shown beside the spinner while the order-intent availability check runs.
-#: class/WC_Twoinc.php:935
-msgid "Checking availability"
-msgstr "Beschikbaarheid controleren"
-
-#. translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side — reorderable, do not assume %1$s precedes %2$s in every locale
-#: class/WC_Twoinc.php:1019
+#. translators: %s is a date and time in the site's own format
+#: class/WC_Twoinc.php:937
 #, php-format
-msgid "This order by %2$s is likely to be accepted by %1$s"
-msgstr "Deze bestelling van %2$s wordt waarschijnlijk geaccepteerd door %1$s"
+msgid "The last attempt was on %s."
+msgstr "De laatste poging was op %s."
 
-#: class/WC_Twoinc.php:1028
-#, php-format
-msgid "Your invoice with %1$s is likely to be accepted, subject to additional checks."
-msgstr "Uw factuur met %1$s wordt waarschijnlijk geaccepteerd, mits er aanvullende controles worden uitgevoerd."
-
-#. translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side
-#: class/WC_Twoinc.php:1065
-#, php-format
-msgid "%1$s is not available for this order by %2$s"
-msgstr "%1$s is niet beschikbaar voor deze bestelling van %2$s"
-
-#: class/WC_Twoinc.php:1149 class/WC_Twoinc.php:4061 class/WC_Twoinc.php:4172
-#: class/WC_Twoinc_Helper.php:113
-#, php-format
-msgid "Invoice purchase with %s is not available for this order."
-msgstr "Aankoop op factuur met %s is niet beschikbaar voor deze bestelling."
-
-#: class/WC_Twoinc.php:1150
-msgid "Phone number is invalid."
-msgstr "Telefoonnummer is ongeldig."
-
-#: class/WC_Twoinc.php:1151
-msgid "We could not complete that just now. Please wait a moment and try again."
-msgstr "Dit kon niet worden voltooid. Probeer het zo weer opnieuw."
-
-#: class/WC_Twoinc.php:1737
-#, php-format
-msgid "To pay with %s, search for your company name and select it from the results."
-msgstr "Om met %s te betalen, zoek je bedrijfsnaam op en selecteer deze uit de resultaten."
-
-#: class/WC_Twoinc.php:1168 class/WC_Twoinc.php:1187 class/WC_Twoinc.php:2939
-#: class/WC_Twoinc_Checkout.php:437
-#, php-format
-msgid "%s days"
-msgstr "%s dagen"
-
-#: class/WC_Twoinc.php:1233
-msgid "Rounding step must be one of the offered values."
-msgstr "Afrondingsstap moet een van de aangeboden waarden zijn."
-
-#: class/WC_Twoinc.php:1251
-msgid "— select a tax class —"
-msgstr "— selecteer een btw-klasse —"
-
-#: class/WC_Twoinc.php:1336
-msgid "-- Select surcharge tax treatment --"
-msgstr "-- Selecteer BTW-behandeling voor toeslag --"
-
-#: class/WC_Twoinc.php:1337
-msgid "Standard (store default tax rules)"
-msgstr "Standaard (standaard btw-regels van de winkel)"
-
-#: class/WC_Twoinc.php:1338
-msgid "Specific tax class"
-msgstr "Specifieke btw-klasse"
-
-#: class/WC_Twoinc.php:1339
-msgid "Never taxed"
-msgstr "Nooit belast"
-
-#: class/WC_Twoinc.php:1382
-msgid "⚠ This store is set to leave the surcharge UNTAXED for every destination. That treatment is no longer available and these settings cannot be saved while it is stored — select a tax treatment above. To keep the fee untaxed, create a tax class with a 0% rate under WooCommerce → Settings → Tax and select it as the surcharge tax class."
-msgstr "⚠ Deze winkel is ingesteld om de toeslag ONBELAST te laten voor elke bestemming. Die behandeling is niet meer beschikbaar en deze instellingen kunnen niet worden opgeslagen zolang die is opgeslagen — selecteer hierboven een btw-behandeling. Wilt u de vergoeding onbelast houden, maak dan een btw-klasse met een tarief van 0% aan onder WooCommerce → Instellingen → Btw en selecteer die als btw-klasse van de toeslag."
-
-#: class/WC_Twoinc.php:1405
-#, php-format
-msgid "⚠ The previously selected tax class (\"%s\") no longer exists. The surcharge is currently taxed under the Standard treatment — select an existing tax class or change the tax treatment above."
-msgstr "⚠ De eerder geselecteerde btw-klasse (\"%s\") bestaat niet meer. De toeslag wordt momenteel belast volgens de Standaard-behandeling — selecteer een bestaande btw-klasse of wijzig hierboven de btw-behandeling."
-
-#: class/WC_Twoinc.php:1540
-msgid "Select a surcharge tax treatment before enabling surcharges."
-msgstr "Selecteer een btw-behandeling voor de toeslag voordat u toeslagen inschakelt."
-
-#. translators: %s: comma-separated term days, e.g. "14, 30"
-#: class/WC_Twoinc.php:1552
-#, php-format
-msgid "Clear or correct the surcharge limit of 0 on these terms before enabling a percentage surcharge: %s. A limit of 0 charges nothing at all; to charge nothing on a term, set its percentage and fixed fee to 0 and leave the limit empty."
-msgstr "Wis of corrigeer het maximum van 0 voor de toeslag op deze termijnen voordat je een percentagetoeslag inschakelt: %s. Een maximum van 0 zorgt ervoor dat er helemaal niets in rekening wordt gebracht; om voor een termijn niets in rekening te brengen, stel je het percentage en het vaste bedrag in op 0 en laat je het maximum leeg."
-
-#: class/WC_Twoinc.php:1574
-msgid "Select a surcharge tax treatment — surcharges cannot be used without one."
-msgstr "Selecteer een btw-behandeling voor de toeslag — toeslagen kunnen niet zonder worden gebruikt."
-
-#: class/WC_Twoinc.php:1585
-msgid "That surcharge tax treatment leaves the surcharge untaxed for every destination and is no longer available. Create a tax class with a 0% rate and select it as the surcharge tax class instead."
-msgstr "Die btw-behandeling van de toeslag laat de toeslag onbelast voor elke bestemming en is niet meer beschikbaar. Maak in plaats daarvan een btw-klasse met een tarief van 0% aan en selecteer die als btw-klasse van de toeslag."
-
-#: class/WC_Twoinc.php:1592
-msgid "Surcharge tax treatment must be one of the offered modes."
-msgstr "De btw-behandeling van de toeslag moet een van de aangeboden modi zijn."
-
-#: class/WC_Twoinc.php:1611
-msgid "Surcharge tax class must be one of the store's existing tax classes."
-msgstr "De btw-klasse van de toeslag moet een van de bestaande btw-klassen van de winkel zijn."
-
-#: class/WC_Twoinc.php:1624
-msgid "Default shipping tax class must be one of the store's existing tax classes."
-msgstr "De standaard btw-klasse voor verzending moet een van de bestaande btw-klassen van de winkel zijn."
-
-#. translators: %s: store currency symbol, e.g. "€"
-#: class/WC_Twoinc.php:1669
-#, php-format
-msgid "Enter a limit amount (in %s) if you do not want to charge your customer more than a specific amount. Leave the limit field empty if you don't want to impose a limit amount."
-msgstr "Vul een limietbedrag (in %s) in als je je klant niet meer dan een specifiek bedrag in rekening wilt brengen. Laat het limietveld leeg als je geen limietbedrag wilt instellen."
-
-#: class/WC_Twoinc.php:1675
-msgid "A limit of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead."
-msgstr "Een maximum van 0 is niet toegestaan. Als je voor een termijn niets in rekening wilt brengen, stel dan het percentage en het vaste bedrag van die termijn in op 0."
-
-#: class/WC_Twoinc.php:1679
-msgid "The limit applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
-msgstr "Het maximum geldt voor de hele vergoeding: het percentage en het vaste bedrag samen, niet alleen het percentage."
-
-#: class/WC_Twoinc.php:1683
-msgid "Enter the percentage of the fee's cost to you that you want the surcharge to recover. 100% means the fee no longer reduces your revenue at all."
-msgstr "Vul het percentage in van de vergoedingskosten voor jou dat je met de toeslag wilt terugverdienen. 100% betekent dat de vergoeding je omzet niet langer verlaagt."
-
-#: class/WC_Twoinc.php:1685
-msgid "Enter the amount you want to charge your customer."
-msgstr "Vul het bedrag in dat je bij je klant in rekening wilt brengen."
-
-#. translators: %s: maximum fixed amount with currency, e.g. "EUR 25"
-#: class/WC_Twoinc.php:1689
-#, php-format
-msgid "Max %s."
-msgstr "Max %s."
-
-#: class/WC_Twoinc.php:1694
-msgid "Enter the amount and percentage of the fee charged to you that you want to offset with a surcharge. Max 100%."
-msgstr "Vul het bedrag en percentage in van de vergoeding die aan jou in rekening wordt gebracht en die je wilt compenseren met een toeslag. Max 100%."
-
-#: class/WC_Twoinc.php:1719
-msgid "No payment terms are offered yet — configure the offered terms above first."
-msgstr "Er worden nog geen betalingstermijnen aangeboden — stel eerst hierboven de aangeboden termijnen in."
-
-#: class/WC_Twoinc.php:1722
-msgid "Term (days)"
-msgstr "Termijn (dagen)"
-
-#: class/WC_Twoinc.php:1723
-msgid "Fixed"
-msgstr "Vast"
-
-#: class/WC_Twoinc.php:1724
-msgid "Percent of fee"
-msgstr "Percentage van de vergoeding"
-
-#: class/WC_Twoinc.php:1725
-msgid "Limit"
-msgstr "Maximum"
-
-#. translators: %s: store currency code, e.g. "EUR"
-#: class/WC_Twoinc.php:1744
-#, php-format
-msgid "Amounts are shown in %s."
-msgstr "Bedragen worden getoond in %s."
-
-#: class/WC_Twoinc.php:1766
-msgid "fixed fee"
-msgstr "vast bedrag"
-
-#: class/WC_Twoinc.php:1767
-msgid "percentage"
-msgstr "percentage"
-
-#: class/WC_Twoinc.php:1768
-msgid "limit"
-msgstr "limiet"
-
-#. translators: 1: grid column name, already translated; 2: term days
-#: class/WC_Twoinc.php:1841
-#, php-format
-msgid "Surcharge %1$s for the %2$s-day term must be a non-negative number."
-msgstr "Toeslag %1$s voor de termijn van %2$s dagen moet een niet-negatief getal zijn."
-
-#. translators: %s: term days
-#: class/WC_Twoinc.php:1849
-#, php-format
-msgid "Surcharge percentage for the %s-day term must be between 0 and 100."
-msgstr "Toeslagpercentage voor de termijn van %s dagen moet tussen 0 en 100 liggen."
-
-#. translators: %s: term days
-#: class/WC_Twoinc.php:1875
-#, php-format
-msgid "Surcharge limit for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the limit empty."
-msgstr "Het maximum voor de toeslag voor de termijn van %s dagen mag niet 0 zijn. Als je voor deze termijn niets in rekening wilt brengen, stel dan het percentage en het vaste bedrag in op 0 en laat het maximum leeg."
-
-#. translators: 1: term days, 2: maximum amount with currency
-#: class/WC_Twoinc.php:1882
-#, php-format
-msgid "Surcharge fixed amount for the %1$s-day term exceeds the maximum of %2$s."
-msgstr "Vast toeslagbedrag voor de termijn van %1$s dagen overschrijdt het maximum van %2$s."
+#: class/WC_Twoinc.php:943
+msgid "No attempt has been made yet."
+msgstr "Er is nog geen poging gedaan."
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc.php:950
 #, php-format
-msgid "Your payment terms could not be read: %s could not be reached (network failure or timeout)."
-msgstr ""
+msgid "Check the \"%s API key\" and \"Environment\" settings."
+msgstr "Controleer de instellingen \"%s API-sleutel\" en \"Omgeving\"."
 
-#. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Your payment terms could not be read: %1$s rejected the saved API key (HTTP %2$d)."
-msgstr ""
-
-#. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Your payment terms could not be read: %1$s refused the request as too frequent (HTTP %2$d)."
-msgstr ""
-
-#. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Your payment terms could not be read: %1$s reported a server error (HTTP %2$d)."
-msgstr ""
-
-#. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Your payment terms could not be read: %1$s answered HTTP %2$d."
+#: class/WC_Twoinc.php:956
+msgid ""
+"The plugin retries by itself; \"Refresh merchant profile\" under Diagnostics "
+"retries now."
 msgstr ""
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Your payment terms could not be read: the answer from %s could not be understood."
-msgstr ""
-
-#. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Your %s account currently offers no payment terms."
-msgstr ""
-
-#. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Your %s account returned no list of payment terms."
-msgstr ""
-
-#. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Your payment terms have not been read from %s yet."
-msgstr ""
-
-#. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc.php:968
 #, php-format
 msgid "No API key is saved, so your payment terms cannot be read from %s."
 msgstr ""
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc.php:971
 #, php-format
-msgid "The %s payment method stays available; buyers are offered no payment term to choose from until one can be read."
+msgid "Your %s account currently offers no payment terms."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:974
+#, php-format
+msgid "Your %s account returned no list of payment terms."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:977
+#, php-format
+msgid "Your payment terms have not been read from %s yet."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:983
+#, php-format
+msgid ""
+"Your payment terms could not be read: %s could not be reached (network "
+"failure or timeout)."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
+#: class/WC_Twoinc.php:986
+#, php-format
+msgid ""
+"Your payment terms could not be read: %1$s rejected the saved API key (HTTP "
+"%2$d)."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
+#: class/WC_Twoinc.php:989
+#, php-format
+msgid ""
+"Your payment terms could not be read: %1$s refused the request as too "
+"frequent (HTTP %2$d)."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
+#: class/WC_Twoinc.php:992
+#, php-format
+msgid ""
+"Your payment terms could not be read: %1$s reported a server error (HTTP "
+"%2$d)."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
+#: class/WC_Twoinc.php:995
+#, php-format
+msgid "Your payment terms could not be read: %1$s answered HTTP %2$d."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:999
+#, php-format
+msgid ""
+"Your payment terms could not be read: the answer from %s could not be "
+"understood."
+msgstr ""
+
+#: class/WC_Twoinc.php:1013
+msgid "Never"
 msgstr ""
 
 #. translators: %s is a date and time in the site's own format
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc.php:1022
 #, php-format
-msgid "Payment terms were last read successfully on %s."
+msgid ""
+"%s — the last attempt to refresh these figures failed; use \"Refresh "
+"merchant profile\" under Diagnostics to retry"
 msgstr ""
 
-#: class/WC_Twoinc.php
-msgid "Payment terms have never been read successfully on this site."
+#. translators: %s is a date and time in the site's own format
+#: class/WC_Twoinc.php:1029
+#, php-format
+msgid ""
+"%s — these figures are out of date; use \"Refresh merchant profile\" under "
+"Diagnostics"
 msgstr ""
 
-#: class/WC_Twoinc.php
-msgid "The plugin retries by itself; \"Refresh merchant profile\" under Diagnostics retries now."
+#: class/WC_Twoinc.php:1051
+msgid "Payment method at checkout"
+msgstr "Betaalmethode in de checkout"
+
+#. translators: prefix of a reason the payment method is absent from checkout
+#: class/WC_Twoinc.php:1053
+msgid "Not shown at checkout"
+msgstr "Niet zichtbaar in de checkout"
+
+#: class/WC_Twoinc.php:1057
+msgid "the payment method is disabled. Check \"Turn on/off\"."
+msgstr "de betaalmethode is uitgeschakeld. Controleer \"Aan/uitzetten\"."
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:1061
+#, php-format
+msgid "no API key is saved. Check \"%s API key\"."
+msgstr "er is geen API-sleutel opgeslagen. Controleer \"%s API-sleutel\"."
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:1070
+#, php-format
+msgid "the API key was rejected. Check \"%s API key\" and \"Environment\"."
 msgstr ""
+"de API-sleutel is geweigerd. Controleer \"%s API-sleutel\" en \"Omgeving\"."
+
+#: class/WC_Twoinc.php:1079
+msgid ""
+"the saved surcharge method is not recognised. Check \"Surcharge method\"."
+msgstr ""
+"de opgeslagen toeslagmethode wordt niet herkend. Controleer "
+"\"Toeslagmethode\"."
+
+#. translators: %s is the brand provider's full name
+#: class/WC_Twoinc.php:1088
+#, php-format
+msgid "the buyer countries on your account could not be read. Contact %s."
+msgstr ""
+"de landen van de koper op uw account konden niet worden gelezen. Neem "
+"contact op met %s."
+
+#. translators: %s is the brand provider's full name
+#: class/WC_Twoinc.php:1093
+#, php-format
+msgid ""
+"no buyer countries are currently enabled for your account. Contact %s to "
+"have them enabled."
+msgstr ""
+"er zijn momenteel geen landen van de koper geactiveerd voor uw account. Neem "
+"contact op met %s om ze te laten activeren."
+
+#: class/WC_Twoinc.php:1111
+msgid "Shown at checkout"
+msgstr "Zichtbaar in de checkout"
+
+#. translators: %s is a comma-separated list of ISO country codes
+#: class/WC_Twoinc.php:1121
+#, php-format
+msgid "offered only to buyers in %s"
+msgstr "alleen aangeboden aan kopers in %s"
+
+#: class/WC_Twoinc.php:1127
+msgid "minimum order value not known until your profile refreshes"
+msgstr "minimumbestelwaarde nog niet bekend totdat uw profiel is vernieuwd"
+
+#. translators: %s is an amount with its currency, e.g. "250.00 EUR (excluding tax)"
+#: class/WC_Twoinc.php:1137
+#, php-format
+msgid "hidden for baskets below %s"
+msgstr "verborgen voor winkelwagens onder %s"
+
+#. translators: %1$s and %2$s are amounts with their currencies
+#: class/WC_Twoinc.php:1142
+#, php-format
+msgid "hidden for baskets below %1$s or %2$s"
+msgstr "verborgen voor winkelwagens onder %1$s of %2$s"
+
+#: class/WC_Twoinc.php:1149
+msgid ""
+"hidden for baskets in a currency the buyer surcharge cannot be priced in"
+msgstr ""
+"verborgen voor winkelwagens in een valuta waarin de toeslag voor de koper "
+"niet kan worden berekend"
+
+#. translators: %s is a comma-separated list of ISO country codes
+#: class/WC_Twoinc.php:1174
+#, php-format
+msgid "offered only to buyers billed in %s"
+msgstr "alleen aangeboden aan kopers die worden gefactureerd in %s"
+
+#: class/WC_Twoinc.php:1208
+msgid "excluding tax"
+msgstr "exclusief btw"
+
+#: class/WC_Twoinc.php:1209
+msgid "including tax"
+msgstr "inclusief btw"
 
 #. translators: %d is a count of payment terms
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc.php:1220
 #, php-format
 msgid "Resolved (%d available)"
 msgstr ""
 
-#: class/WC_Twoinc.php
+#. translators: %d is a count of payment terms
+#: class/WC_Twoinc.php:1225
+#, php-format
+msgid "Resolved (%d available), last refresh failed"
+msgstr ""
+
+#. translators: %d is a count of payment terms
+#: class/WC_Twoinc.php:1227
+#, php-format
+msgid "Resolved (%d available), out of date"
+msgstr ""
+
+#: class/WC_Twoinc.php:1229
 msgid "No API key saved"
 msgstr ""
 
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc.php:1231
 msgid "None offered by the account"
 msgstr ""
 
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc.php:1233
 msgid "Not returned by the account"
 msgstr ""
 
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc.php:1235
 msgid "Not read yet"
 msgstr ""
 
 #. translators: %d is an HTTP status code
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc.php:1241
 #, php-format
 msgid "Could not be read (HTTP %d)"
 msgstr ""
 
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc.php:1242
 msgid "Could not be read"
 msgstr ""
 
-#: class/WC_Twoinc.php
-msgid "Merchant profile last read"
-msgstr ""
+#: class/WC_Twoinc.php:1466
+#, php-format
+msgid "What is %s?"
+msgstr "Wat is %s ?"
 
-#: class/WC_Twoinc.php
-msgid "Never"
+#: class/WC_Twoinc.php:1473
+#, php-format
+msgid ""
+"%s is a payment solution for B2B purchases online, allowing you to buy from "
+"your favourite merchants and suppliers on trade credit. Using %s, you can "
+"access flexible trade credit instantly to make purchasing simple."
 msgstr ""
+"%s is een betaaloplossing voor B2B-aankopen online, waarmee u bij uw "
+"favoriete handelaren en leveranciers op handelskrediet kunt kopen. Met %s "
+"krijgt u direct toegang tot flexibel handelskrediet om aankopen eenvoudig te "
+"maken."
 
-#: class/WC_Twoinc.php
-msgid "Could not refresh the merchant profile; the values read previously are still in use."
+#: class/WC_Twoinc.php:1474
+msgid "Buy now, receive your goods, pay your invoice later."
+msgstr "Koop nu, ontvang uw goederen, betaal uw factuur later."
+
+#: class/WC_Twoinc.php:1476
+msgid "Click to find out more"
+msgstr "Klik om meer te weten te komen"
+
+#. translators: shown beside the spinner while the order-intent availability check runs.
+#: class/WC_Twoinc.php:1540
+msgid "Checking availability"
+msgstr "Beschikbaarheid controleren"
+
+#. translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side — reorderable, do not assume %1$s precedes %2$s in every locale
+#: class/WC_Twoinc.php:1655
+#, php-format
+msgid "This order by %2$s is likely to be accepted by %1$s"
+msgstr "Deze bestelling van %2$s wordt waarschijnlijk geaccepteerd door %1$s"
+
+#: class/WC_Twoinc.php:1664
+#, php-format
+msgid ""
+"Your invoice with %1$s is likely to be accepted, subject to additional "
+"checks."
 msgstr ""
-#: class/WC_Twoinc.php:2040
+"Uw factuur met %1$s wordt waarschijnlijk geaccepteerd, mits er aanvullende "
+"controles worden uitgevoerd."
+
+#: class/WC_Twoinc.php:1700 class/WC_Twoinc.php:5381 class/WC_Twoinc.php:5391
+#: class/WC_Twoinc.php:5499 class/WC_Twoinc_Helper.php:248
+#, php-format
+msgid "Invoice purchase with %s is not available for this order."
+msgstr "Aankoop op factuur met %s is niet beschikbaar voor deze bestelling."
+
+#. translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side
+#: class/WC_Twoinc.php:1716
+#, php-format
+msgid "%1$s is not available for this order by %2$s"
+msgstr "%1$s is niet beschikbaar voor deze bestelling van %2$s"
+
+#: class/WC_Twoinc.php:1804
+msgid "Phone number is invalid."
+msgstr "Telefoonnummer is ongeldig."
+
+#: class/WC_Twoinc.php:1805
+msgid ""
+"We could not complete that just now. Please wait a moment and try again."
+msgstr "Dit kon niet worden voltooid. Probeer het zo weer opnieuw."
+
+#: class/WC_Twoinc.php:1809
+#, php-format
+msgid ""
+"To pay with %s, search for your company name and select it from the results."
+msgstr ""
+"Om met %s te betalen, zoek je bedrijfsnaam op en selecteer deze uit de "
+"resultaten."
+
+#: class/WC_Twoinc.php:1827 class/WC_Twoinc.php:1847 class/WC_Twoinc.php:2794
+#: class/WC_Twoinc.php:4089 class/WC_Twoinc_Checkout.php:673
+#, php-format
+msgid "%s days"
+msgstr "%s dagen"
+
+#: class/WC_Twoinc.php:1844 class/WC_Twoinc.php:4091
+msgid "Automatic"
+msgstr "Automatisch"
+
+#: class/WC_Twoinc.php:1892
+msgid "Rounding step must be one of the offered values."
+msgstr "Afrondingsstap moet een van de aangeboden waarden zijn."
+
+#: class/WC_Twoinc.php:1910
+msgid "— select a tax class —"
+msgstr "— selecteer een btw-klasse —"
+
+#: class/WC_Twoinc.php:1995
+msgid "-- Select surcharge tax treatment --"
+msgstr "-- Selecteer BTW-behandeling voor toeslag --"
+
+#: class/WC_Twoinc.php:1996
+msgid "Standard (store default tax rules)"
+msgstr "Standaard (standaard btw-regels van de winkel)"
+
+#: class/WC_Twoinc.php:1997
+msgid "Specific tax class"
+msgstr "Specifieke btw-klasse"
+
+#: class/WC_Twoinc.php:1998
+msgid "Never taxed"
+msgstr "Nooit belast"
+
+#: class/WC_Twoinc.php:2041
+msgid ""
+"⚠ This store is set to leave the surcharge UNTAXED for every destination. "
+"That treatment is no longer available and these settings cannot be saved "
+"while it is stored — select a tax treatment above. To keep the fee untaxed, "
+"create a tax class with a 0% rate under WooCommerce → Settings → Tax and "
+"select it as the surcharge tax class."
+msgstr ""
+"⚠ Deze winkel is ingesteld om de toeslag ONBELAST te laten voor elke "
+"bestemming. Die behandeling is niet meer beschikbaar en deze instellingen "
+"kunnen niet worden opgeslagen zolang die is opgeslagen — selecteer hierboven "
+"een btw-behandeling. Wilt u de vergoeding onbelast houden, maak dan een btw-"
+"klasse met een tarief van 0% aan onder WooCommerce → Instellingen → Btw en "
+"selecteer die als btw-klasse van de toeslag."
+
+#: class/WC_Twoinc.php:2064
+#, php-format
+msgid ""
+"⚠ The previously selected tax class (\"%s\") no longer exists. The surcharge "
+"is currently taxed under the Standard treatment — select an existing tax "
+"class or change the tax treatment above."
+msgstr ""
+"⚠ De eerder geselecteerde btw-klasse (\"%s\") bestaat niet meer. De toeslag "
+"wordt momenteel belast volgens de Standaard-behandeling — selecteer een "
+"bestaande btw-klasse of wijzig hierboven de btw-behandeling."
+
+#. translators: 1: submitted value, 2: comma-separated list of valid methods
+#: class/WC_Twoinc.php:2178
+#, php-format
+msgid "Unrecognised surcharge method: %1$s. Choose one of: %2$s."
+msgstr "Onbekende toeslagmethode: %1$s. Kies een van: %2$s."
+
+#: class/WC_Twoinc.php:2205
+msgid "Select a surcharge tax treatment before enabling surcharges."
+msgstr ""
+"Selecteer een btw-behandeling voor de toeslag voordat u toeslagen inschakelt."
+
+#. translators: %s: comma-separated term days, e.g. "14, 30"
+#: class/WC_Twoinc.php:2217
+#, php-format
+msgid ""
+"Clear or correct the surcharge limit of 0 on these terms before enabling a "
+"percentage surcharge: %s. A limit of 0 charges nothing at all; to charge "
+"nothing on a term, set its percentage and fixed fee to 0 and leave the limit "
+"empty."
+msgstr ""
+"Wis of corrigeer het maximum van 0 voor de toeslag op deze termijnen voordat "
+"je een percentagetoeslag inschakelt: %s. Een maximum van 0 zorgt ervoor dat "
+"er helemaal niets in rekening wordt gebracht; om voor een termijn niets in "
+"rekening te brengen, stel je het percentage en het vaste bedrag in op 0 en "
+"laat je het maximum leeg."
+
+#: class/WC_Twoinc.php:2239
+msgid ""
+"Select a surcharge tax treatment — surcharges cannot be used without one."
+msgstr ""
+"Selecteer een btw-behandeling voor de toeslag — toeslagen kunnen niet zonder "
+"worden gebruikt."
+
+#: class/WC_Twoinc.php:2250
+msgid ""
+"That surcharge tax treatment leaves the surcharge untaxed for every "
+"destination and is no longer available. Create a tax class with a 0% rate "
+"and select it as the surcharge tax class instead."
+msgstr ""
+"Die btw-behandeling van de toeslag laat de toeslag onbelast voor elke "
+"bestemming en is niet meer beschikbaar. Maak in plaats daarvan een btw-"
+"klasse met een tarief van 0% aan en selecteer die als btw-klasse van de "
+"toeslag."
+
+#: class/WC_Twoinc.php:2257
+msgid "Surcharge tax treatment must be one of the offered modes."
+msgstr ""
+"De btw-behandeling van de toeslag moet een van de aangeboden modi zijn."
+
+#: class/WC_Twoinc.php:2276
+msgid "Surcharge tax class must be one of the store's existing tax classes."
+msgstr ""
+"De btw-klasse van de toeslag moet een van de bestaande btw-klassen van de "
+"winkel zijn."
+
+#: class/WC_Twoinc.php:2289
+msgid ""
+"Default shipping tax class must be one of the store's existing tax classes."
+msgstr ""
+"De standaard btw-klasse voor verzending moet een van de bestaande btw-"
+"klassen van de winkel zijn."
+
+#. translators: %s: store currency symbol, e.g. "€"
+#: class/WC_Twoinc.php:2325
+#, php-format
+msgid ""
+"Enter a limit amount (in %s) if you do not want to charge your customer more "
+"than a specific amount. Leave the limit field empty if you don't want to "
+"impose a limit amount."
+msgstr ""
+"Vul een limietbedrag (in %s) in als je je klant niet meer dan een specifiek "
+"bedrag in rekening wilt brengen. Laat het limietveld leeg als je geen "
+"limietbedrag wilt instellen."
+
+#: class/WC_Twoinc.php:2331
+msgid ""
+"A limit of 0 is not allowed. To charge nothing on a term, set the percentage "
+"and the fixed fee for that term to 0 instead."
+msgstr ""
+"Een maximum van 0 is niet toegestaan. Als je voor een termijn niets in "
+"rekening wilt brengen, stel dan het percentage en het vaste bedrag van die "
+"termijn in op 0."
+
+#: class/WC_Twoinc.php:2335
+msgid ""
+"The limit applies to the whole fee: the percentage and the fixed fee "
+"together, not the percentage alone."
+msgstr ""
+"Het maximum geldt voor de hele vergoeding: het percentage en het vaste "
+"bedrag samen, niet alleen het percentage."
+
+#: class/WC_Twoinc.php:2339
+msgid ""
+"Enter the percentage of the fee's cost to you that you want the surcharge to "
+"recover. 100% means the fee no longer reduces your revenue at all."
+msgstr ""
+"Vul het percentage in van de vergoedingskosten voor jou dat je met de "
+"toeslag wilt terugverdienen. 100% betekent dat de vergoeding je omzet niet "
+"langer verlaagt."
+
+#: class/WC_Twoinc.php:2341
+msgid "Enter the amount you want to charge your customer."
+msgstr "Vul het bedrag in dat je bij je klant in rekening wilt brengen."
+
+#. translators: %s: maximum fixed amount with currency, e.g. "EUR 25"
+#: class/WC_Twoinc.php:2345
+#, php-format
+msgid "Max %s."
+msgstr "Max %s."
+
+#: class/WC_Twoinc.php:2350
+msgid ""
+"Enter the amount and percentage of the fee charged to you that you want to "
+"offset with a surcharge. Max 100%."
+msgstr ""
+"Vul het bedrag en percentage in van de vergoeding die aan jou in rekening "
+"wordt gebracht en die je wilt compenseren met een toeslag. Max 100%."
+
+#: class/WC_Twoinc.php:2373
+msgid ""
+"No payment terms are offered yet — configure the offered terms above first."
+msgstr ""
+"Er worden nog geen betalingstermijnen aangeboden — stel eerst hierboven de "
+"aangeboden termijnen in."
+
+#: class/WC_Twoinc.php:2376
+msgid "Term (days)"
+msgstr "Termijn (dagen)"
+
+#: class/WC_Twoinc.php:2377
+msgid "Fixed"
+msgstr "Vast"
+
+#: class/WC_Twoinc.php:2378
+msgid "Percent of fee"
+msgstr "Percentage van de vergoeding"
+
+#: class/WC_Twoinc.php:2379
+msgid "Limit"
+msgstr "Maximum"
+
+#. translators: %s: store currency code, e.g. "EUR"
+#: class/WC_Twoinc.php:2398
+#, php-format
+msgid "Amounts are shown in %s."
+msgstr "Bedragen worden getoond in %s."
+
+#: class/WC_Twoinc.php:2418
+msgid "fixed fee"
+msgstr "vast bedrag"
+
+#: class/WC_Twoinc.php:2419
+msgid "percentage"
+msgstr "percentage"
+
+#: class/WC_Twoinc.php:2420
+msgid "limit"
+msgstr "limiet"
+
+#. translators: 1: grid column name, already translated; 2: term days
+#: class/WC_Twoinc.php:2499
+#, php-format
+msgid "Surcharge %1$s for the %2$s-day term must be a non-negative number."
+msgstr ""
+"Toeslag %1$s voor de termijn van %2$s dagen moet een niet-negatief getal "
+"zijn."
+
+#. translators: %s: term days
+#: class/WC_Twoinc.php:2507
+#, php-format
+msgid "Surcharge percentage for the %s-day term must be between 0 and 100."
+msgstr ""
+"Toeslagpercentage voor de termijn van %s dagen moet tussen 0 en 100 liggen."
+
+#. translators: %s: term days
+#: class/WC_Twoinc.php:2533
+#, php-format
+msgid ""
+"Surcharge limit for the %s-day term cannot be 0. To charge nothing on this "
+"term, set the percentage and the fixed fee to 0 instead, and leave the limit "
+"empty."
+msgstr ""
+"Het maximum voor de toeslag voor de termijn van %s dagen mag niet 0 zijn. "
+"Als je voor deze termijn niets in rekening wilt brengen, stel dan het "
+"percentage en het vaste bedrag in op 0 en laat het maximum leeg."
+
+#. translators: 1: term days, 2: maximum amount with currency
+#: class/WC_Twoinc.php:2540
+#, php-format
+msgid ""
+"Surcharge fixed amount for the %1$s-day term exceeds the maximum of %2$s."
+msgstr ""
+"Vast toeslagbedrag voor de termijn van %1$s dagen overschrijdt het maximum "
+"van %2$s."
+
+#: class/WC_Twoinc.php:2729
 msgid "Select at least one payment term or enter a custom term."
-msgstr "Selecteer ten minste één betalingstermijn of voer een aangepaste termijn in."
+msgstr ""
+"Selecteer ten minste één betalingstermijn of voer een aangepaste termijn in."
+
+#. translators: %s is the stored number of days.
+#: class/WC_Twoinc.php:2757
+#, php-format
+msgid ""
+"Legacy setting. This offers a custom term of %s days after the end of the "
+"month. It is no longer supported and cannot be edited. Choose Remove to "
+"withdraw it, or use the payment terms above to change what you offer."
+msgstr ""
+"Verouderde instelling. Dit biedt een aangepaste termijn van %s dagen na het "
+"einde van de maand. Deze wordt niet langer ondersteund en kan niet worden "
+"gewijzigd. Kies Verwijderen om deze in te trekken, of gebruik de "
+"betalingstermijnen hierboven om te wijzigen wat u aanbiedt."
+
+#. translators: %s is the stored number of days.
+#: class/WC_Twoinc.php:2764
+#, php-format
+msgid ""
+"Legacy setting. This offers a custom term of %s days from fulfilment. It is "
+"no longer supported and cannot be edited. Choose Remove to withdraw it, or "
+"use the payment terms above to change what you offer."
+msgstr ""
+"Verouderde instelling. Dit biedt een aangepaste termijn van %s dagen vanaf "
+"uitvoering. Deze wordt niet langer ondersteund en kan niet worden gewijzigd. "
+"Kies Verwijderen om deze in te trekken, of gebruik de betalingstermijnen "
+"hierboven om te wijzigen wat u aanbiedt."
+
+#: class/WC_Twoinc.php:2809 class/WC_Twoinc.php:4106 class/WC_Twoinc.php:6375
+msgid "Remove"
+msgstr "Verwijderen"
+
+#: class/WC_Twoinc.php:2879
+msgid "Custom payment terms (days) can only be removed, not changed."
+msgstr ""
+"Aangepaste betalingstermijnen (dagen) kunnen alleen worden verwijderd, niet "
+"gewijzigd."
+
+#. translators: %s is the unusable stored value.
+#: class/WC_Twoinc.php:2884
+#, php-format
+msgid ""
+"Custom payment terms (days) holds \"%s\", which is not a usable number of "
+"days. Choose Remove on that field to clear it."
+msgstr ""
+"Aangepaste betalingstermijnen (dagen) bevat %s, wat geen bruikbaar aantal "
+"dagen is. Kies Verwijderen bij dat veld om het te wissen."
+
+#. translators: %s is the stored number of days.
+#: class/WC_Twoinc.php:2915
+#, php-format
+msgid ""
+"Custom payment terms (days) of %s is now one of the standard terms you "
+"offer, so it has been selected under Payment terms and the custom field "
+"cleared."
+msgstr ""
+"Aangepaste betalingstermijnen (dagen) van %s is nu een van de "
+"standaardtermijnen die u aanbiedt, dus deze is geselecteerd onder "
+"Betalingstermijnen en het aangepaste veld is gewist."
+
+#. translators: %s: the link text naming Two's terms, e.g. "payment terms".
+#: class/WC_Twoinc.php:3053
+#, php-format
+msgid "You must accept %s to place order."
+msgstr "U moet %s accepteren om de bestelling te plaatsen."
+
+#: class/WC_Twoinc.php:3054 class/WC_Twoinc.php:3081
+msgid "payment terms"
+msgstr "betaalvoorwaarden"
+
+#. translators: %1$s: a link to the brand's terms page; %2$s: the provider's full name.
+#: class/WC_Twoinc.php:3091
+#, php-format
+msgid "I accept the %1$s and authorize %2$s to process my data automatically."
+msgstr ""
+"Ik accepteer de %1$s en geef toestemming aan %2$s voor automatische "
+"verwerking van mijn gegevens."
 
 #. translators: %1$s opens and %2$s closes a link to the brand's FAQ page.
-#: class/WC_Twoinc.php:2254
+#: class/WC_Twoinc.php:3193
 #, php-format
 msgid "For all companies, %1$sread more%2$s."
 msgstr "Voor alle bedrijven, %1$slees meer%2$s."
 
-#: class/WC_Twoinc.php:2610
+#: class/WC_Twoinc.php:3722
 #, php-format
 msgid "Download %s invoice"
 msgstr "Download %s-factuur"
 
-#: class/WC_Twoinc.php:2617
+#: class/WC_Twoinc.php:3729
 #, php-format
 msgid "Download %s credit note"
 msgstr "Download %s-creditnota"
 
-#: class/WC_Twoinc.php:2668
+#: class/WC_Twoinc.php:3780
 #, php-format
 msgid "No %s order reference is set for this order."
 msgstr "Er is geen %s-bestelreferentie ingesteld voor deze bestelling."
 
-#: class/WC_Twoinc.php:2715
-msgid "The invoice for this order is still being prepared. Please try again later."
-msgstr "De factuur voor deze bestelling wordt nog voorbereid. Probeer het later opnieuw."
+#: class/WC_Twoinc.php:3827
+msgid ""
+"The invoice for this order is still being prepared. Please try again later."
+msgstr ""
+"De factuur voor deze bestelling wordt nog voorbereid. Probeer het later "
+"opnieuw."
 
-#: class/WC_Twoinc.php:2735
+#: class/WC_Twoinc.php:3847
 #, php-format
 msgid "No %1$s invoice is available because the order is in state: %2$s."
-msgstr "Er is geen %1$s-factuur beschikbaar omdat de bestelling de status heeft: %2$s."
+msgstr ""
+"Er is geen %1$s-factuur beschikbaar omdat de bestelling de status heeft: "
+"%2$s."
 
-#: class/WC_Twoinc.php:2776
+#: class/WC_Twoinc.php:3888
 #, php-format
 msgid "Could not reach %s to retrieve the invoice. Please try again."
 msgstr "Kon %s niet bereiken om de factuur op te halen. Probeer het opnieuw."
 
-#: class/WC_Twoinc.php:2784
+#: class/WC_Twoinc.php:3896
 #, php-format
 msgid "Could not retrieve the %s invoice."
 msgstr "Kon de %s-factuur niet ophalen."
 
-#: class/WC_Twoinc.php:2822
+#: class/WC_Twoinc.php:3934
 msgid "Invalid invoice variant."
 msgstr "Ongeldige factuurvariant."
 
-#: class/WC_Twoinc.php:2827
+#: class/WC_Twoinc.php:3939
 msgid "Order not found."
 msgstr "Bestelling niet gevonden."
 
-#: class/WC_Twoinc.php:2837
+#: class/WC_Twoinc.php:3949
 msgid "You are not allowed to download this invoice."
 msgstr "U mag deze factuur niet downloaden."
 
-#: class/WC_Twoinc.php:3155
+#: class/WC_Twoinc.php:4013
+msgid ""
+"Could not refresh the merchant profile; the values read previously are still "
+"in use."
+msgstr ""
+
+#: class/WC_Twoinc.php:4022
+msgid "Merchant profile refreshed."
+msgstr "Verkopersprofiel vernieuwd."
+
+#: class/WC_Twoinc.php:4107
+msgid "Refreshing…"
+msgstr "Vernieuwen…"
+
+#: class/WC_Twoinc.php:4108
+msgid "Could not refresh the merchant profile."
+msgstr "Het verkopersprofiel kon niet worden vernieuwd."
+
+#: class/WC_Twoinc.php:4111
+msgid "no figure"
+msgstr ""
+
+#: class/WC_Twoinc.php:4312
 msgid "This API key is invalid or has expired."
 msgstr "Deze API-sleutel is ongeldig of verlopen."
 
 #. translators: 1: product name (e.g. Two). 2: HTTP status code returned by the API (e.g. 502), substituted by admin.js.
-#: class/WC_Twoinc.php:3157
+#: class/WC_Twoinc.php:4314
 #, php-format
-msgid "%1$s's API returned a service error (HTTP %2$s). This is likely temporary on %1$s's side — try again shortly."
-msgstr "De API van %1$s gaf een servicefout terug (HTTP %2$s). Dit is waarschijnlijk tijdelijk aan de kant van %1$s — probeer het zo weer opnieuw."
+msgid ""
+"%1$s's API returned a service error (HTTP %2$s). This is likely temporary on "
+"%1$s's side — try again shortly."
+msgstr ""
+"De API van %1$s gaf een servicefout terug (HTTP %2$s). Dit is waarschijnlijk "
+"tijdelijk aan de kant van %1$s — probeer het zo weer opnieuw."
 
 #. translators: %s: product name (e.g. Two).
-#: class/WC_Twoinc.php:3159
+#: class/WC_Twoinc.php:4316
 #, php-format
-msgid "Could not reach %s's API (network or connectivity error). Try again shortly."
-msgstr "Kon de API van %s niet bereiken (netwerk- of verbindingsfout). Probeer het zo weer opnieuw."
+msgid ""
+"Could not reach %s's API (network or connectivity error). Try again shortly."
+msgstr ""
+"Kon de API van %s niet bereiken (netwerk- of verbindingsfout). Probeer het "
+"zo weer opnieuw."
 
 #. translators: %s: product name (e.g. Two).
-#: class/WC_Twoinc.php:3161
+#: class/WC_Twoinc.php:4318
 #, php-format
 msgid "Enter an API key above to enable %s."
 msgstr "Voer hierboven een API-sleutel in om %s in te schakelen."
 
-#: class/WC_Twoinc.php:3162
+#: class/WC_Twoinc.php:4319
 msgid "Could not complete verification — try again shortly."
 msgstr "Verificatie kon niet worden voltooid — probeer het zo weer opnieuw."
 
 #. translators: 1: product name (e.g. Two). 2: HTTP status code returned by the API (e.g. 418), substituted by admin.js.
-#: class/WC_Twoinc.php:3164
+#: class/WC_Twoinc.php:4321
 #, php-format
 msgid "%1$s's API returned an unexpected response (HTTP %2$s)."
 msgstr "De API van %1$s gaf een onverwacht antwoord terug (HTTP %2$s)."
 
-#: class/WC_Twoinc.php:3165
+#: class/WC_Twoinc.php:4322
 msgid "This API key could not be verified."
 msgstr "Deze API-sleutel kon niet worden geverifieerd."
 
-#: class/WC_Twoinc.php:3311
+#: class/WC_Twoinc.php:4467
 #, php-format
-msgid "%s has acknowledged request to fulfill %d order. An invoice will be sent to the buyer when the fulfilment is complete."
-msgid_plural "%s has acknowledged request to fulfill %d orders. Invoices will be sent to the buyers when the fulfilments are complete."
-msgstr[0] "%s heeft het verzoek om %d bestelling uit te voeren bevestigd. Wanneer de uitvoering is voltooid, wordt er een factuur naar de koper verzonden."
-msgstr[1] "%s heeft verzoeken bevestigd om %d bestellingen uit te voeren. Facturen worden naar de kopers verzonden wanneer de uitvoeringen zijn voltooid."
+msgid ""
+"%s has acknowledged request to fulfill %d order. An invoice will be sent to "
+"the buyer when the fulfilment is complete."
+msgid_plural ""
+"%s has acknowledged request to fulfill %d orders. Invoices will be sent to "
+"the buyers when the fulfilments are complete."
+msgstr[0] ""
+"%s heeft het verzoek om %d bestelling uit te voeren bevestigd. Wanneer de "
+"uitvoering is voltooid, wordt er een factuur naar de koper verzonden."
+msgstr[1] ""
+"%s heeft verzoeken bevestigd om %d bestellingen uit te voeren. Facturen "
+"worden naar de kopers verzonden wanneer de uitvoeringen zijn voltooid."
 
-#: class/WC_Twoinc.php:3319
+#: class/WC_Twoinc.php:4476
 #, php-format
 msgid "%s has failed to issue invoice for order %s."
 msgstr "%s kon geen factuur uitgeven voor bestelling %s ."
 
-#: class/WC_Twoinc.php:3325
+#: class/WC_Twoinc.php:4482
 #, php-format
 msgid "%s has cancelled %d order."
 msgid_plural "%s has cancelled %d orders."
 msgstr[0] "%s heeft %d bestelling geannuleerd."
 msgstr[1] "%s heeft %d bestellingen geannuleerd."
 
-#: class/WC_Twoinc.php:3329
+#: class/WC_Twoinc.php:4486
 #, php-format
 msgid "%s has failed to cancel order %s."
 msgstr "%s kon bestelling %s niet annuleren."
 
-#: class/WC_Twoinc.php:3417
+#: class/WC_Twoinc.php:4574
 #, php-format
 msgid "Could not update status to \"Fulfilled\" with %s."
 msgstr "Kan status niet bijwerken naar \"Vervuld\" met %s ."
 
-#: class/WC_Twoinc.php:3418 class/WC_Twoinc.php:3513 class/WC_Twoinc.php:4243
-#: class/WC_Twoinc.php:5332
+#: class/WC_Twoinc.php:4575 class/WC_Twoinc.php:4670 class/WC_Twoinc.php:5575
+#: class/WC_Twoinc.php:6828
 #, php-format
 msgid "Reason: Could not find %s order ID."
 msgstr "Reden: Kon %s order-ID niet vinden."
 
-#: class/WC_Twoinc.php:3448
+#: class/WC_Twoinc.php:4605
 #, php-format
-msgid "The tracking number could not be attached to the %s order. The invoice will be sent without it."
-msgstr "Het trackingnummer kon niet aan de %s-bestelling worden gekoppeld. De factuur wordt zonder trackingnummer verzonden."
+msgid ""
+"The tracking number could not be attached to the %s order. The invoice will "
+"be sent without it."
+msgstr ""
+"Het trackingnummer kon niet aan de %s-bestelling worden gekoppeld. De "
+"factuur wordt zonder trackingnummer verzonden."
 
-#: class/WC_Twoinc.php:3458 class/WC_Twoinc.php:3470
+#: class/WC_Twoinc.php:4615 class/WC_Twoinc.php:4627
 #, php-format
 msgid "Could not update order status to \"Fulfilled\" with %s."
 msgstr "De orderstatus kon niet worden bijgewerkt naar \"Vervuld\" met %s ."
 
-#: class/WC_Twoinc.php:3462 class/WC_Twoinc.php:3474 class/WC_Twoinc.php:3529
-#: class/WC_Twoinc.php:3537 class/WC_Twoinc.php:4303 class/WC_Twoinc.php:4316
-#: class/WC_Twoinc.php:5226 class/WC_Twoinc.php:5368
+#: class/WC_Twoinc.php:4619 class/WC_Twoinc.php:4631 class/WC_Twoinc.php:4686
+#: class/WC_Twoinc.php:4694 class/WC_Twoinc.php:5635 class/WC_Twoinc.php:5648
+#: class/WC_Twoinc.php:6722 class/WC_Twoinc.php:6864
 #, php-format
 msgid "Please contact %s support with order ID: %s"
 msgstr "Neem contact op met %s support met order-ID: %s"
 
-#: class/WC_Twoinc.php:3475 class/WC_Twoinc.php:3538 class/WC_Twoinc.php:4304
-#: class/WC_Twoinc.php:5369
+#: class/WC_Twoinc.php:4632 class/WC_Twoinc.php:4695 class/WC_Twoinc.php:5636
+#: class/WC_Twoinc.php:6865
 #, php-format
 msgid "Response: %s"
 msgstr "Antwoord: %s"
 
-#: class/WC_Twoinc.php:3480
+#: class/WC_Twoinc.php:4637
 #, php-format
-msgid "%s has acknowledged the request to fulfil the order. An invoice will be sent to the buyer when the fulfilment is complete."
-msgstr "%s heeft het verzoek om de bestelling uit te voeren bevestigd. Er wordt een factuur naar de koper gestuurd wanneer de uitvoering is voltooid."
+msgid ""
+"%s has acknowledged the request to fulfil the order. An invoice will be sent "
+"to the buyer when the fulfilment is complete."
+msgstr ""
+"%s heeft het verzoek om de bestelling uit te voeren bevestigd. Er wordt een "
+"factuur naar de koper gestuurd wanneer de uitvoering is voltooid."
 
-#: class/WC_Twoinc.php:3512 class/WC_Twoinc.php:3528 class/WC_Twoinc.php:3536
+#: class/WC_Twoinc.php:4669 class/WC_Twoinc.php:4685 class/WC_Twoinc.php:4693
 msgid "Could not update status to \"Cancelled\"."
 msgstr "De status kon niet worden bijgewerkt naar \"Geannuleerd\"."
 
-#: class/WC_Twoinc.php:3520
+#: class/WC_Twoinc.php:4677
 #, php-format
 msgid "Order is already cancelled with %s."
 msgstr "Bestelling is al geannuleerd met %s ."
 
-#: class/WC_Twoinc.php:3574
+#: class/WC_Twoinc.php:4731
 #, php-format
 msgid "%s pre-filled fields"
 msgstr "%s vooraf ingevulde velden"
 
-#: class/WC_Twoinc.php:3578
+#: class/WC_Twoinc.php:4735
 msgid "Billing company name"
 msgstr "Naam van het factureringsbedrijf"
 
-#: class/WC_Twoinc.php:3584
+#: class/WC_Twoinc.php:4741
 msgid "Billing company ID"
 msgstr "Factureringsbedrijf-ID"
 
-#: class/WC_Twoinc.php:3590 class/WC_Twoinc_Checkout.php:277
+#: class/WC_Twoinc.php:4747 class/WC_Twoinc_Checkout.php:331
 msgid "Project"
 msgstr "Project"
 
-#: class/WC_Twoinc.php:3594
+#: class/WC_Twoinc.php:4751
 msgid "The project displayed on the invoices"
 msgstr "Het project dat op de facturen wordt weergegeven"
 
-#: class/WC_Twoinc.php:3598 class/WC_Twoinc_Checkout.php:286
+#: class/WC_Twoinc.php:4755 class/WC_Twoinc_Checkout.php:340
 msgid "Department"
 msgstr "Afdeling"
 
-#: class/WC_Twoinc.php:3602
+#: class/WC_Twoinc.php:4759
 msgid "The department displayed on the invoices"
 msgstr "De afdeling die op de facturen wordt weergegeven"
 
-#: class/WC_Twoinc.php:3788 class/WC_Twoinc.php:3884 class/WC_Twoinc.php:4191
+#: class/WC_Twoinc.php:4988 class/WC_Twoinc.php:5112 class/WC_Twoinc.php:5518
 msgid "including"
 msgstr "inclusief"
 
-#: class/WC_Twoinc.php:3789 class/WC_Twoinc.php:3884 class/WC_Twoinc.php:4191
+#: class/WC_Twoinc.php:4989 class/WC_Twoinc.php:5112 class/WC_Twoinc.php:5518
 msgid "excluding"
 msgstr "exclusief"
 
-#: class/WC_Twoinc.php:3792
+#: class/WC_Twoinc.php:4992
 #, php-format
-msgid "Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below and must exceed it."
-msgstr "Platformminimum %1$s, %2$s btw. Een waarde hier wordt geïnterpreteerd in de winkelvaluta op de hieronder gekozen btw-grondslag en moet hoger zijn."
+msgid ""
+"Platform minimum %1$s, %2$s tax. A value here is interpreted in the store "
+"currency on the tax basis selected below and must exceed it."
+msgstr ""
+"Platformminimum %1$s, %2$s btw. Een waarde hier wordt geïnterpreteerd in de "
+"winkelvaluta op de hieronder gekozen btw-grondslag en moet hoger zijn."
 
 #. translators: 1: platform minimum in its native currency, e.g. "EUR 250.00", 2: the same minimum converted into the store currency at the current FX rate, e.g. "NOK 2,941.18", 3: tax basis label, "including" or "excluding"
-#: class/WC_Twoinc.php:3806
+#: class/WC_Twoinc.php:5006
 #, php-format
-msgid "Platform minimum %1$s (approximately %2$s at the current exchange rate), %3$s tax. A value here is interpreted in the store currency on the tax basis selected below — both minimums are enforced independently."
-msgstr "Platformminimum %1$s (ongeveer %2$s tegen de huidige wisselkoers), %3$s btw. Een waarde hier wordt geïnterpreteerd in de winkelvaluta op de hieronder geselecteerde btw-grondslag — beide minima worden onafhankelijk gehandhaafd."
+msgid ""
+"Platform minimum %1$s (approximately %2$s at the current exchange rate), "
+"%3$s tax. A value here is interpreted in the store currency on the tax basis "
+"selected below — both minimums are enforced independently."
+msgstr ""
+"Platformminimum %1$s (ongeveer %2$s tegen de huidige wisselkoers), %3$s btw. "
+"Een waarde hier wordt geïnterpreteerd in de winkelvaluta op de hieronder "
+"geselecteerde btw-grondslag — beide minima worden onafhankelijk gehandhaafd."
 
-#: class/WC_Twoinc.php:3813
+#: class/WC_Twoinc.php:5013
 #, php-format
-msgid "Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below; it cannot be checked against the platform minimum (different currency) — both minimums are enforced independently."
-msgstr "Platformminimum %1$s, %2$s btw. Een waarde hier wordt geïnterpreteerd in de winkelvaluta op de hieronder gekozen btw-grondslag; deze kan niet worden vergeleken met het platformminimum (andere valuta) — beide minima worden onafhankelijk toegepast."
+msgid ""
+"Platform minimum %1$s, %2$s tax. A value here is interpreted in the store "
+"currency on the tax basis selected below; it cannot be checked against the "
+"platform minimum (different currency) — both minimums are enforced "
+"independently."
+msgstr ""
+"Platformminimum %1$s, %2$s btw. Een waarde hier wordt geïnterpreteerd in de "
+"winkelvaluta op de hieronder gekozen btw-grondslag; deze kan niet worden "
+"vergeleken met het platformminimum (andere valuta) — beide minima worden "
+"onafhankelijk toegepast."
 
-#: class/WC_Twoinc.php:3818
-msgid "Hide the payment method below this order value (store currency, on the tax basis selected below). Leave empty for no minimum."
-msgstr "Verberg de betaalmethode onder deze orderwaarde (winkelvaluta, op de hieronder gekozen btw-grondslag). Laat leeg voor geen minimum."
+#: class/WC_Twoinc.php:5018
+msgid ""
+"Hide the payment method below this order value (store currency, on the tax "
+"basis selected below). Leave empty for no minimum."
+msgstr ""
+"Verberg de betaalmethode onder deze orderwaarde (winkelvaluta, op de "
+"hieronder gekozen btw-grondslag). Laat leeg voor geen minimum."
 
-#: class/WC_Twoinc.php:3873
+#. translators: 1: the subtitle as typed, 2: what the checkout tile would render
+#: class/WC_Twoinc.php:5068
+#, php-format
+msgid ""
+"Subtitle accepts plain text and a single link only; \"%1$s\" would be shown "
+"as \"%2$s\"."
+msgstr ""
+"De ondertitel accepteert alleen platte tekst en één link; \"%1$s\" wordt "
+"weergegeven als \"%2$s\"."
+
+#: class/WC_Twoinc.php:5101
 msgid "Minimum order value must be a non-negative number."
 msgstr "Minimale orderwaarde moet een niet-negatief getal zijn."
 
-#: class/WC_Twoinc.php:3882
+#: class/WC_Twoinc.php:5110
 #, php-format
 msgid "Minimum order value must exceed the platform minimum of %1$s, %2$s tax."
-msgstr "Minimale orderwaarde moet hoger zijn dan het platformminimum van %1$s, %2$s btw."
+msgstr ""
+"Minimale orderwaarde moet hoger zijn dan het platformminimum van %1$s, %2$s "
+"btw."
 
 #. translators: %s is a comma-separated list of the rejected entries
-#: class/WC_Twoinc.php:3914
+#: class/WC_Twoinc.php:5142
 #, php-format
-msgid "Trusted proxy addresses: %s is not a valid IP address or CIDR block, and is ignored. Requests from it are not treated as coming from a trusted proxy."
-msgstr "Vertrouwde proxy-adressen: %s is geen geldig IP-adres of CIDR-blok en wordt genegeerd. Verzoeken daarvandaan worden niet behandeld als afkomstig van een vertrouwde proxy."
+msgid ""
+"Trusted proxy addresses: %s is not a valid IP address or CIDR block, and is "
+"ignored. Requests from it are not treated as coming from a trusted proxy."
+msgstr ""
+"Vertrouwde proxy-adressen: %s is geen geldig IP-adres of CIDR-blok en wordt "
+"genegeerd. Verzoeken daarvandaan worden niet behandeld als afkomstig van een "
+"vertrouwde proxy."
 
-#: class/WC_Twoinc.php:3979
-msgid "The selected payment term is no longer available. Please review the payment options and place the order again."
-msgstr "De geselecteerde betalingstermijn is niet meer beschikbaar. Controleer de betalingsopties en plaats de bestelling opnieuw."
+#: class/WC_Twoinc.php:5269
+#, php-format
+msgid "This order cannot be paid with %s."
+msgstr ""
 
-#: class/WC_Twoinc.php:4042
+#: class/WC_Twoinc.php:5304
+msgid ""
+"The selected payment term is no longer available. Please review the payment "
+"options and place the order again."
+msgstr ""
+"De geselecteerde betalingstermijn is niet meer beschikbaar. Controleer de "
+"betalingsopties en plaats de bestelling opnieuw."
+
+#: class/WC_Twoinc.php:5366
 #, php-format
 msgid "Please select your company before paying with %s."
 msgstr "Selecteer uw bedrijf voordat u betaalt met %s."
 
-#: class/WC_Twoinc.php:4152
+#: class/WC_Twoinc.php:5479
 #, php-format
 msgid "Failed to request order creation with %s."
 msgstr "Het is niet gelukt om een bestelling aan te maken met %s ."
 
-#: class/WC_Twoinc.php:4158
+#: class/WC_Twoinc.php:5485
 #, php-format
 msgid "Failed to process payment with %s"
 msgstr "Betaling met %s kon niet worden verwerkt"
 
-#: class/WC_Twoinc.php:4188
+#: class/WC_Twoinc.php:5515
 #, php-format
 msgid "Minimum order value is %1$s%2$s %3$s tax."
 msgstr "De minimale orderwaarde is %1$s%2$s %3$s btw."
 
-#: class/WC_Twoinc.php:4242 class/WC_Twoinc.php:4295 class/WC_Twoinc.php:4302
-#: class/WC_Twoinc.php:4315
+#: class/WC_Twoinc.php:5574 class/WC_Twoinc.php:5627 class/WC_Twoinc.php:5634
+#: class/WC_Twoinc.php:5647
 #, php-format
 msgid "Failed to request order refund with %s."
 msgstr "Het aanvragen van restitutie van de bestelling met %s is mislukt."
 
-#: class/WC_Twoinc.php:4247
+#: class/WC_Twoinc.php:5579
 #, php-format
 msgid "Could not find %s order ID"
 msgstr "Kon %s order-ID niet vinden"
 
-#: class/WC_Twoinc.php:4255
+#: class/WC_Twoinc.php:5587
 #, php-format
 msgid "Order has already been fully refunded with %s."
 msgstr "De bestelling is al volledig terugbetaald met %s ."
 
-#: class/WC_Twoinc.php:4280
+#: class/WC_Twoinc.php:5612
 #, php-format
 msgid "Could not initiate refund with %s"
 msgstr "Kon geen restitutie starten met %s"
 
-#: class/WC_Twoinc.php:4308 class/WC_Twoinc.php:4320
+#: class/WC_Twoinc.php:5640 class/WC_Twoinc.php:5652
 #, php-format
 msgid "Could not initiate refund with %s."
 msgstr "Kon geen restitutie starten met %s ."
 
-#: class/WC_Twoinc.php:4327
+#: class/WC_Twoinc.php:5659
 #, php-format
 msgid "Invoice has been refunded and credit note has been sent by %s."
 msgstr "Factuur is terugbetaald en creditnota is verzonden door %s ."
 
-#: class/WC_Twoinc.php:4330
+#: class/WC_Twoinc.php:5662
 #, php-format
-msgid "Invoice has been partially refunded and credit note has been sent by %s."
-msgstr "Factuur is gedeeltelijk terugbetaald en creditnota is verzonden door %s ."
+msgid ""
+"Invoice has been partially refunded and credit note has been sent by %s."
+msgstr ""
+"Factuur is gedeeltelijk terugbetaald en creditnota is verzonden door %s ."
 
-#: class/WC_Twoinc.php:4447 class/WC_Twoinc.php:4454
+#: class/WC_Twoinc.php:5779 class/WC_Twoinc.php:5786
 msgid "The security code is not valid."
 msgstr "De beveiligingscode is ongeldig."
 
-#: class/WC_Twoinc.php:4460 class/WC_Twoinc.php:4469
+#: class/WC_Twoinc.php:5792 class/WC_Twoinc.php:5801
 #, php-format
 msgid "Unable to retrieve %s order information."
 msgstr "Kan %s bestelinformatie niet ophalen."
 
-#: class/WC_Twoinc.php:4476
+#: class/WC_Twoinc.php:5808
 #, php-format
 msgid "Unable to confirm the order with %s."
 msgstr "Kan de bestelling met %s niet bevestigen."
 
-#: class/WC_Twoinc.php:4483
+#: class/WC_Twoinc.php:5815
 #, php-format
 msgid "Order ID %s has been placed with %s."
 msgstr "Order-ID %s is geplaatst bij %s ."
 
-#: class/WC_Twoinc.php:4504
+#: class/WC_Twoinc.php:5836
 msgid "General"
 msgstr "Algemeen"
 
-#: class/WC_Twoinc.php:4507
+#: class/WC_Twoinc.php:5839
 msgid "Turn on/off"
 msgstr "Aan/uitzetten"
 
-#: class/WC_Twoinc.php:4509
+#: class/WC_Twoinc.php:5841
 #, php-format
 msgid "Enable %s payments"
 msgstr "%s Betalingen inschakelen"
 
-#: class/WC_Twoinc.php:4514 class/WC_Twoinc.php:5133
+#: class/WC_Twoinc.php:5846 class/WC_Twoinc.php:6618
 msgid "Environment"
 msgstr "Omgeving"
 
-#: class/WC_Twoinc.php:4519
+#: class/WC_Twoinc.php:5851
 #, php-format
 msgid "%s API key"
 msgstr "%s API-sleutel"
 
 #. translators: %s is the contact email address for obtaining production API keys
-#: class/WC_Twoinc.php:4523
+#: class/WC_Twoinc.php:5855
 #, php-format
-msgid "API key for the sandbox environment is available on your merchant portal (however please reach out to %s for access to production keys)."
-msgstr "De API-sleutel voor de sandboxomgeving is beschikbaar in uw verkopersportaal (neem contact op met %s voor toegang tot productiesleutels)."
+msgid ""
+"API key for the sandbox environment is available on your merchant portal "
+"(however please reach out to %s for access to production keys)."
+msgstr ""
+"De API-sleutel voor de sandboxomgeving is beschikbaar in uw verkopersportaal "
+"(neem contact op met %s voor toegang tot productiesleutels)."
 
-#: class/WC_Twoinc.php:4537
+#: class/WC_Twoinc.php:5860
 msgid "Vendor name (optional)"
 msgstr "Leveranciersnaam (optioneel)"
 
 #. translators: %1$s and %2$s are both the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:4541
+#: class/WC_Twoinc.php:5864
 #, php-format
-msgid "If this store represents one of several vendor sites sharing the same %1$s merchant account, enter a name here to identify this specific site/vendor on each order sent to %2$s. Leave blank if you only run a single site."
-msgstr "Als deze winkel een van meerdere leverancierssites is die dezelfde %1$s-handelaarsaccount delen, voer hier een naam in om deze specifieke site/leverancier te identificeren op elke bestelling die naar %2$s wordt verzonden. Laat leeg als u slechts één site beheert."
+msgid ""
+"If this store represents one of several vendor sites sharing the same %1$s "
+"merchant account, enter a name here to identify this specific site/vendor on "
+"each order sent to %2$s. Leave blank if you only run a single site."
+msgstr ""
+"Als deze winkel een van meerdere leverancierssites is die dezelfde %1$s-"
+"handelaarsaccount delen, voer hier een naam in om deze specifieke site/"
+"leverancier te identificeren op elke bestelling die naar %2$s wordt "
+"verzonden. Laat leeg als u slechts één site beheert."
 
-#: class/WC_Twoinc.php:4549
+#: class/WC_Twoinc.php:5872
 msgid "Checkout fields"
 msgstr "Afrekenvelden"
 
-#: class/WC_Twoinc.php:4552
+#: class/WC_Twoinc.php:5875
 msgid "Title"
 msgstr "Titel"
 
-#: class/WC_Twoinc.php:4559
+#: class/WC_Twoinc.php:5882
 msgid "Subtitle"
 msgstr "Ondertitel"
 
-#: class/WC_Twoinc.php:4561
+#: class/WC_Twoinc.php:5884
 msgid "Optional subtitle shown beneath the title at checkout."
-msgstr "Optionele ondertitel die bij het afrekenen onder de titel wordt weergegeven."
+msgstr ""
+"Optionele ondertitel die bij het afrekenen onder de titel wordt weergegeven."
 
-#: class/WC_Twoinc.php:4851
-#, php-format
-msgid "Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\"."
-msgstr "De ondertitel accepteert alleen platte tekst en één link; \"%1$s\" wordt weergegeven als \"%2$s\"."
-
-#: class/WC_Twoinc.php:4569
+#: class/WC_Twoinc.php:5892
 #, php-format
 msgid "Minimum order value, %s"
 msgstr "Minimale orderwaarde, %s"
 
-#: class/WC_Twoinc.php:4577
+#: class/WC_Twoinc.php:5900
 msgid "Minimum order value tax basis"
 msgstr "Btw-grondslag minimale orderwaarde"
 
-#: class/WC_Twoinc.php:4581
+#: class/WC_Twoinc.php:5904
 msgid "Including tax (gross)"
 msgstr "Inclusief btw (bruto)"
 
-#: class/WC_Twoinc.php:4582
+#: class/WC_Twoinc.php:5905
 msgid "Excluding tax (net)"
 msgstr "Exclusief btw (netto)"
 
-#: class/WC_Twoinc.php:4584
-msgid "Whether the basket is compared against the minimum including or excluding tax."
-msgstr "Of het winkelmandje met het minimum wordt vergeleken inclusief of exclusief btw."
+#: class/WC_Twoinc.php:5907
+msgid ""
+"Whether the basket is compared against the minimum including or excluding "
+"tax."
+msgstr ""
+"Of het winkelmandje met het minimum wordt vergeleken inclusief of exclusief "
+"btw."
 
-#: class/WC_Twoinc.php:4587
+#: class/WC_Twoinc.php:5910
 msgid "Pre-approve buyer during checkout"
 msgstr "Koper vooraf goedkeuren tijdens het afrekenen"
 
-#: class/WC_Twoinc.php:4588
+#: class/WC_Twoinc.php:5911
 msgid "Approve buyer when phone and company name is filled out."
-msgstr "Keur de koper goed wanneer het telefoonnummer en de bedrijfsnaam zijn ingevuld."
+msgstr ""
+"Keur de koper goed wanneer het telefoonnummer en de bedrijfsnaam zijn "
+"ingevuld."
 
-#: class/WC_Twoinc.php:4595
+#: class/WC_Twoinc.php:5918
 #, php-format
 msgid "Show \"What is %s\" link in checkout"
 msgstr "Toon de link \"Wat is %s \" bij het afrekenen"
 
-#: class/WC_Twoinc.php:4601
+#: class/WC_Twoinc.php:5924
 msgid "Display input tooltips"
 msgstr "Weergave van invoertooltips"
 
-#: class/WC_Twoinc.php:4615
+#: class/WC_Twoinc.php:5938
 msgid "Show invoice email field"
 msgstr "Veld voor factuur e-mailadres weergeven"
 
-#: class/WC_Twoinc.php:4616
-msgid "Adds an input field where buyers can input optional additional email address to receive invoice."
-msgstr "Voegt een invoerveld toe waarin kopers optioneel een extra e-mailadres kunnen invoeren om de factuur te ontvangen."
+#: class/WC_Twoinc.php:5939
+msgid ""
+"Adds an input field where buyers can input optional additional email address "
+"to receive invoice."
+msgstr ""
+"Voegt een invoerveld toe waarin kopers optioneel een extra e-mailadres "
+"kunnen invoeren om de factuur te ontvangen."
 
-#: class/WC_Twoinc.php:4623
+#: class/WC_Twoinc.php:5946
 msgid "Show PO number field"
 msgstr "Veld voor PO-nummer weergeven"
 
-#: class/WC_Twoinc.php:4624
-msgid "Adds an input field where buyers can input their purchase order number to display on the invoice."
-msgstr "Voegt een invoerveld toe waarin kopers hun inkoopordernummer kunnen invoeren dat op de factuur moet worden weergegeven."
+#: class/WC_Twoinc.php:5947
+msgid ""
+"Adds an input field where buyers can input their purchase order number to "
+"display on the invoice."
+msgstr ""
+"Voegt een invoerveld toe waarin kopers hun inkoopordernummer kunnen invoeren "
+"dat op de factuur moet worden weergegeven."
 
-#: class/WC_Twoinc.php:4631
+#: class/WC_Twoinc.php:5954
 msgid "Show project field"
 msgstr "Veld voor project weergeven"
 
-#: class/WC_Twoinc.php:4632
-msgid "Adds an input field where buyers can input their project in the company to display on the invoice."
-msgstr "Voegt een invoerveld toe waarin kopers hun project in het bedrijf kunnen invoeren, zodat dit op de factuur wordt weergegeven."
+#: class/WC_Twoinc.php:5955
+msgid ""
+"Adds an input field where buyers can input their project in the company to "
+"display on the invoice."
+msgstr ""
+"Voegt een invoerveld toe waarin kopers hun project in het bedrijf kunnen "
+"invoeren, zodat dit op de factuur wordt weergegeven."
 
-#: class/WC_Twoinc.php:4639
+#: class/WC_Twoinc.php:5962
 msgid "Show department field"
 msgstr "Veld voor afdeling weergeven"
 
-#: class/WC_Twoinc.php:4640
-msgid "Adds an input field where buyers can input their department to display on the invoice."
-msgstr "Voegt een invoerveld toe waarin kopers hun afdeling kunnen opgeven die op de factuur moet worden weergegeven."
+#: class/WC_Twoinc.php:5963
+msgid ""
+"Adds an input field where buyers can input their department to display on "
+"the invoice."
+msgstr ""
+"Voegt een invoerveld toe waarin kopers hun afdeling kunnen opgeven die op de "
+"factuur moet worden weergegeven."
 
-#: class/WC_Twoinc.php:4650
+#: class/WC_Twoinc.php:5973
 msgid "Enable company search in address entry"
 msgstr "Bedrijf zoeken bij adresinvoer inschakelen"
 
-#: class/WC_Twoinc.php:4651
-msgid "When enabled, the buyer may search for their company within the address entry section of the checkout. Otherwise, company search will be visible within the payment method."
-msgstr "Wanneer dit is ingeschakeld, kan de koper zijn bedrijf zoeken in het adresgedeelte van de checkout. Anders is bedrijf zoeken zichtbaar binnen de betaalmethode."
+#: class/WC_Twoinc.php:5974
+msgid ""
+"When enabled, the buyer may search for their company within the address "
+"entry section of the checkout. Otherwise, company search will be visible "
+"within the payment method."
+msgstr ""
+"Wanneer dit is ingeschakeld, kan de koper zijn bedrijf zoeken in het "
+"adresgedeelte van de checkout. Anders is bedrijf zoeken zichtbaar binnen de "
+"betaalmethode."
 
-#: class/WC_Twoinc.php:4658
+#: class/WC_Twoinc.php:5981
 msgid "Autofill company address"
 msgstr "Bedrijfsadres automatisch aanvullen"
 
-#: class/WC_Twoinc.php:4659
-msgid "Enables automatically filling in the registered address from the national registry."
-msgstr "Hiermee wordt het geregistreerde adres automatisch ingevuld vanuit het rijksregister."
+#: class/WC_Twoinc.php:5982
+msgid ""
+"Enables automatically filling in the registered address from the national "
+"registry."
+msgstr ""
+"Hiermee wordt het geregistreerde adres automatisch ingevuld vanuit het "
+"rijksregister."
 
-#: class/WC_Twoinc.php:4671 class/WC_Twoinc.php:4685
+#: class/WC_Twoinc.php:5994 class/WC_Twoinc.php:6008 class/WC_Twoinc.php:6633
 msgid "Payment terms"
 msgstr "Betalingstermijnen"
 
-#: class/WC_Twoinc.php:4674
+#: class/WC_Twoinc.php:5997
 msgid "Payment terms type"
 msgstr "Type betalingstermijn"
 
-#: class/WC_Twoinc.php:4675
-msgid "Standard counts the term days from the invoice date. End of month counts them from the end of the invoice month."
-msgstr "Standaard telt de termijndagen vanaf de factuurdatum. Einde van de maand telt deze vanaf het einde van de factuurmaand."
+#: class/WC_Twoinc.php:5998
+msgid ""
+"Standard counts the term days from the invoice date. End of month counts "
+"them from the end of the invoice month."
+msgstr ""
+"Standaard telt de termijndagen vanaf de factuurdatum. Einde van de maand "
+"telt deze vanaf het einde van de factuurmaand."
 
-#: class/WC_Twoinc.php:4679
+#: class/WC_Twoinc.php:6002
 msgid "Standard (from invoice date)"
 msgstr "Standaard (vanaf factuurdatum)"
 
-#: class/WC_Twoinc.php:4680
+#: class/WC_Twoinc.php:6003
 msgid "End of month"
 msgstr "Einde van de maand"
 
-#: class/WC_Twoinc.php:4686
+#: class/WC_Twoinc.php:6009
 msgid "Select the payment term(s) you want to offer."
 msgstr "Selecteer de betalingstermijn(en) die u wilt aanbieden."
 
-#: class/WC_Twoinc.php:4691
+#: class/WC_Twoinc.php:6014
 msgid "Custom payment terms (days)"
 msgstr "Aangepaste betalingstermijnen (dagen)"
 
-#: class/WC_Twoinc.php:4703
+#: class/WC_Twoinc.php:6020
 msgid "Default payment terms"
 msgstr "Standaard betalingstermijnen"
 
-#: class/WC_Twoinc.php:4704
-msgid "Select the payment term that will be automatically selected for your customer. Automatic leaves the choice to the checkout, which uses your own default term when you offer it."
-msgstr "Kies de betalingstermijn die automatisch voor uw klant wordt geselecteerd. Automatisch laat de keuze aan de checkout, die uw eigen standaardtermijn gebruikt als u die aanbiedt."
+#: class/WC_Twoinc.php:6021
+msgid ""
+"Select the payment term that will be automatically selected for your "
+"customer. Automatic leaves the choice to the checkout, which uses your own "
+"default term when you offer it."
+msgstr ""
+"Kies de betalingstermijn die automatisch voor uw klant wordt geselecteerd. "
+"Automatisch laat de keuze aan de checkout, die uw eigen standaardtermijn "
+"gebruikt als u die aanbiedt."
 
-#: class/WC_Twoinc.php:4711
+#: class/WC_Twoinc.php:6028
 msgid "Surcharge method"
 msgstr "Toeslagmethode"
 
-#: class/WC_Twoinc.php:4712
+#: class/WC_Twoinc.php:6029
 msgid "Select a method to surcharge your customer."
 msgstr "Kies een methode om uw klant een toeslag in rekening te brengen."
 
-#: class/WC_Twoinc.php:4716
+#: class/WC_Twoinc.php:6033
 msgid "No surcharge applied"
 msgstr "Geen toeslag"
 
-#: class/WC_Twoinc.php:4717
+#: class/WC_Twoinc.php:6034
 msgid "Percentage"
 msgstr "Percentage"
 
-#: class/WC_Twoinc.php:4718
+#: class/WC_Twoinc.php:6035
 msgid "Fixed fee"
 msgstr "Vast bedrag"
 
-#: class/WC_Twoinc.php:4719
+#: class/WC_Twoinc.php:6036
 msgid "Fixed fee and percentage"
 msgstr "Vast bedrag en percentage"
 
-#: class/WC_Twoinc.php:4724
+#: class/WC_Twoinc.php:6041
 msgid "Surcharge calculation basis"
 msgstr "Berekeningsgrondslag toeslag"
 
-#: class/WC_Twoinc.php:4725
-msgid "Total fee charges the configured surcharge for the chosen term. Fee difference charges only the difference versus the default term (which then shows no surcharge)."
-msgstr "Totale vergoeding brengt de ingestelde toeslag voor de gekozen termijn in rekening. Verschil in vergoeding brengt alleen het verschil ten opzichte van de standaardtermijn in rekening (die dan geen toeslag toont)."
+#: class/WC_Twoinc.php:6042
+msgid ""
+"Total fee charges the configured surcharge for the chosen term. Fee "
+"difference charges only the difference versus the default term (which then "
+"shows no surcharge)."
+msgstr ""
+"Totale vergoeding brengt de ingestelde toeslag voor de gekozen termijn in "
+"rekening. Verschil in vergoeding brengt alleen het verschil ten opzichte van "
+"de standaardtermijn in rekening (die dan geen toeslag toont)."
 
-#: class/WC_Twoinc.php:4729
+#: class/WC_Twoinc.php:6046
 msgid "Total fee for selected term"
 msgstr "Totale vergoeding voor geselecteerde termijn"
 
-#: class/WC_Twoinc.php:4730
+#: class/WC_Twoinc.php:6047
 msgid "Fee difference vs default payment term"
 msgstr "Verschil in vergoeding t.o.v. standaard betalingstermijn"
 
-#: class/WC_Twoinc.php:4735
+#: class/WC_Twoinc.php:6052
 msgid "Surcharge line description"
 msgstr "Omschrijving toeslagregel"
 
-#: class/WC_Twoinc.php:4736
+#: class/WC_Twoinc.php:6053
 #, php-format
-msgid "Buyer-facing label for the surcharge line. Use %s for the term length in days. Leave blank to use the brand default."
-msgstr "Label van de toeslagregel dat de koper ziet. Gebruik %s voor de termijn in dagen. Laat leeg voor de merkstandaard."
+msgid ""
+"Buyer-facing label for the surcharge line. Use %s for the term length in "
+"days. Leave blank to use the brand default."
+msgstr ""
+"Label van de toeslagregel dat de koper ziet. Gebruik %s voor de termijn in "
+"dagen. Laat leeg voor de merkstandaard."
 
-#: class/WC_Twoinc.php:4742
+#: class/WC_Twoinc.php:6059
 msgid "Surcharge tax treatment"
 msgstr "Btw-behandeling van de toeslag"
 
-#: class/WC_Twoinc.php:4743
-msgid "How the surcharge line is taxed. Standard applies your store's default tax rules to the fee. Specific tax class taxes the fee under a WooCommerce tax class you select below — to leave the fee untaxed, create a tax class with a 0% rate and select it here."
-msgstr "Hoe de toeslagregel wordt belast. Standaard past de standaard btw-regels van uw winkel toe op het bedrag. Specifieke btw-klasse belast het bedrag onder een WooCommerce-btw-klasse die u hieronder selecteert — om het bedrag onbelast te laten, maakt u een btw-klasse met een tarief van 0% en selecteert u die hier."
+#: class/WC_Twoinc.php:6060
+msgid ""
+"How the surcharge line is taxed. Standard applies your store's default tax "
+"rules to the fee. Specific tax class taxes the fee under a WooCommerce tax "
+"class you select below — to leave the fee untaxed, create a tax class with a "
+"0% rate and select it here."
+msgstr ""
+"Hoe de toeslagregel wordt belast. Standaard past de standaard btw-regels van "
+"uw winkel toe op het bedrag. Specifieke btw-klasse belast het bedrag onder "
+"een WooCommerce-btw-klasse die u hieronder selecteert — om het bedrag "
+"onbelast te laten, maakt u een btw-klasse met een tarief van 0% en "
+"selecteert u die hier."
 
-#: class/WC_Twoinc.php:4765
+#: class/WC_Twoinc.php:6082
 msgid "Surcharge tax class"
 msgstr "Btw-klasse van de toeslag"
 
-#: class/WC_Twoinc.php:4766
-msgid "The WooCommerce tax class applied to the surcharge when the tax treatment is \"Specific tax class\". Manage tax classes under WooCommerce → Settings → Tax."
-msgstr "De WooCommerce-btw-klasse die wordt toegepast op de toeslag wanneer de btw-behandeling \"Specifieke btw-klasse\" is. Beheer btw-klassen onder WooCommerce → Instellingen → Belastingen."
+#: class/WC_Twoinc.php:6083
+msgid ""
+"The WooCommerce tax class applied to the surcharge when the tax treatment is "
+"\"Specific tax class\". Manage tax classes under WooCommerce → Settings → "
+"Tax."
+msgstr ""
+"De WooCommerce-btw-klasse die wordt toegepast op de toeslag wanneer de btw-"
+"behandeling \"Specifieke btw-klasse\" is. Beheer btw-klassen onder "
+"WooCommerce → Instellingen → Belastingen."
 
-#: class/WC_Twoinc.php:4776
+#: class/WC_Twoinc.php:6093
 msgid "Payment surcharge configuration"
 msgstr "Configuratie betalingstoeslag"
 
-#: class/WC_Twoinc.php:4786
+#: class/WC_Twoinc.php:6103
 msgid "Surcharge rounding"
 msgstr "Afronding toeslag"
 
-#: class/WC_Twoinc.php:4787
-msgid "Snap the buyer surcharge line to a clean increment. Select None for standard two-decimal amounts."
-msgstr "Rond de toeslagregel voor de koper af op een nette stapgrootte. Kies \"Geen\" voor standaardbedragen met twee decimalen."
+#: class/WC_Twoinc.php:6104
+msgid ""
+"Snap the buyer surcharge line to a clean increment. Select None for standard "
+"two-decimal amounts."
+msgstr ""
+"Rond de toeslagregel voor de koper af op een nette stapgrootte. Kies "
+"\"Geen\" voor standaardbedragen met twee decimalen."
 
-#: class/WC_Twoinc.php:4791
+#: class/WC_Twoinc.php:6108
 msgid "None"
 msgstr "Geen"
 
-#: class/WC_Twoinc.php:4792
+#: class/WC_Twoinc.php:6109
 msgid "Up"
 msgstr "Omhoog"
 
-#: class/WC_Twoinc.php:4793
+#: class/WC_Twoinc.php:6110
 msgid "Down"
 msgstr "Omlaag"
 
-#: class/WC_Twoinc.php:4794
+#: class/WC_Twoinc.php:6111
 msgid "Standard"
 msgstr "Standaard"
 
-#: class/WC_Twoinc.php:4799
+#: class/WC_Twoinc.php:6116
 msgid "Rounding step"
 msgstr "Afrondingsstap"
 
-#: class/WC_Twoinc.php:4800
-msgid "Increment the surcharge is rounded to (e.g. 1 = whole units, 0.50 = nearest half). Applies only when a rounding direction is selected."
-msgstr "Stapgrootte waarop de toeslag wordt afgerond (bijv. 1 = hele eenheden, 0,50 = halve eenheden). Geldt alleen wanneer een afrondingsrichting is gekozen."
+#: class/WC_Twoinc.php:6117
+msgid ""
+"Increment the surcharge is rounded to (e.g. 1 = whole units, 0.50 = nearest "
+"half). Applies only when a rounding direction is selected."
+msgstr ""
+"Stapgrootte waarop de toeslag wordt afgerond (bijv. 1 = hele eenheden, 0,50 "
+"= halve eenheden). Geldt alleen wanneer een afrondingsrichting is gekozen."
 
-#: class/WC_Twoinc.php:4809
+#: class/WC_Twoinc.php:6126
 msgid "Order management"
 msgstr "Orderbeheer"
 
-#: class/WC_Twoinc.php:4812
+#: class/WC_Twoinc.php:6129
 msgid "Fulfilment trigger statuses"
 msgstr "Statussen die vervulling triggeren"
 
 #. translators: %1$s and %2$s are both the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:4820
+#: class/WC_Twoinc.php:6137
 #, php-format
-msgid "Which order status(es) tell %1$s an order is fulfilled. Defaults to \"Completed\" — add another status here (e.g. a custom status from another plugin) if your workflow never sets an order to Completed, otherwise %2$s is never notified and the order is left un-fulfilled indefinitely."
-msgstr "Welke bestelstatus(sen) %1$s vertellen dat een bestelling is afgehandeld. Standaard is \"Afgerond\" — voeg hier een andere status toe (bijv. een aangepaste status van een andere plugin) als uw workflow een bestelling nooit op Afgerond zet, anders wordt %2$s nooit op de hoogte gebracht en blijft de bestelling onbepaald onafgehandeld."
+msgid ""
+"Which order status(es) tell %1$s an order is fulfilled. Defaults to "
+"\"Completed\" — add another status here (e.g. a custom status from another "
+"plugin) if your workflow never sets an order to Completed, otherwise %2$s is "
+"never notified and the order is left un-fulfilled indefinitely."
+msgstr ""
+"Welke bestelstatus(sen) %1$s vertellen dat een bestelling is afgehandeld. "
+"Standaard is \"Afgerond\" — voeg hier een andere status toe (bijv. een "
+"aangepaste status van een andere plugin) als uw workflow een bestelling "
+"nooit op Afgerond zet, anders wordt %2$s nooit op de hoogte gebracht en "
+"blijft de bestelling onbepaald onafgehandeld."
 
-#: class/WC_Twoinc.php:4827
+#: class/WC_Twoinc.php:6144
 msgid "Validate tax subtotals"
 msgstr "BTW-subtotalen valideren"
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:4832
+#: class/WC_Twoinc.php:6149
 #, php-format
-msgid "When enabled, a breakdown of tax subtotals is included in the order payload sent to %s."
-msgstr "Indien ingeschakeld, wordt een uitsplitsing van btw-subtotalen opgenomen in de bestelgegevens die naar %s worden verzonden."
+msgid ""
+"When enabled, a breakdown of tax subtotals is included in the order payload "
+"sent to %s."
+msgstr ""
+"Indien ingeschakeld, wordt een uitsplitsing van btw-subtotalen opgenomen in "
+"de bestelgegevens die naar %s worden verzonden."
 
-#: class/WC_Twoinc.php:4839
+#: class/WC_Twoinc.php:6156
 msgid "Default shipping tax class"
 msgstr "Standaard btw-klasse voor verzending"
 
-#: class/WC_Twoinc.php:4843
-msgid "Used only when a shipping method's tax rate cannot be resolved from the order itself (e.g. a third-party carrier or click-and-collect module that registers no tax class) but the shipping line was charged tax. Leave unselected to keep reporting an unresolvable rate as untaxed, matching today's behaviour."
-msgstr "Wordt alleen gebruikt wanneer het btw-tarief van een verzendmethode niet kan worden bepaald op basis van de bestelling zelf (bijv. een externe vervoerder of click-and-collect module die geen btw-klasse registreert), maar over de verzendregel wel btw is berekend. Laat leeg om een niet te bepalen tarief te blijven rapporteren als onbelast, zoals nu het geval is."
+#: class/WC_Twoinc.php:6160
+msgid ""
+"Used only when a shipping method's tax rate cannot be resolved from the "
+"order itself (e.g. a third-party carrier or click-and-collect module that "
+"registers no tax class) but the shipping line was charged tax. Leave "
+"unselected to keep reporting an unresolvable rate as untaxed, matching "
+"today's behaviour."
+msgstr ""
+"Wordt alleen gebruikt wanneer het btw-tarief van een verzendmethode niet kan "
+"worden bepaald op basis van de bestelling zelf (bijv. een externe vervoerder "
+"of click-and-collect module die geen btw-klasse registreert), maar over de "
+"verzendregel wel btw is berekend. Laat leeg om een niet te bepalen tarief te "
+"blijven rapporteren als onbelast, zoals nu het geval is."
 
-#: class/WC_Twoinc.php:4849
+#: class/WC_Twoinc.php:6166
 msgid "Diagnostics"
 msgstr "Diagnostiek"
 
-#: class/WC_Twoinc.php:4852
+#: class/WC_Twoinc.php:6169
 msgid "Disable checkout rate limiting"
 msgstr "Snelheidsbeperking in de afrekening uitschakelen"
 
-#: class/WC_Twoinc.php:4853
+#: class/WC_Twoinc.php:6170
 msgid "Serve the checkout AJAX endpoints unmetered"
 msgstr "AJAX-eindpunten van de afrekening onbeperkt bedienen"
 
-#: class/WC_Twoinc.php:4855
-msgid "The checkout AJAX endpoints spend your API key, so each client address is allowed a fixed number of requests per minute. Turn this on only if legitimate buyers are being refused — that happens when the store sits behind a reverse proxy or CDN and every buyer reaches PHP as the same address, which collapses the per-buyer allowance into a store-wide one. The lasting fix is to list the proxy below."
-msgstr "De AJAX-eindpunten van de afrekening verbruiken uw API-sleutel, dus elk clientadres krijgt een vast aantal verzoeken per minuut. Schakel dit alleen in als legitieme kopers worden geweigerd — dat gebeurt wanneer de winkel achter een reverse proxy of CDN staat en elke koper PHP bereikt als hetzelfde adres, waardoor de toegestane hoeveelheid per koper samensmelt tot één voor de hele winkel. De blijvende oplossing is om de proxy hieronder te vermelden."
+#: class/WC_Twoinc.php:6172
+msgid ""
+"The checkout AJAX endpoints spend your API key, so each client address is "
+"allowed a fixed number of requests per minute. Turn this on only if "
+"legitimate buyers are being refused — that happens when the store sits "
+"behind a reverse proxy or CDN and every buyer reaches PHP as the same "
+"address, which collapses the per-buyer allowance into a store-wide one. The "
+"lasting fix is to list the proxy below."
+msgstr ""
+"De AJAX-eindpunten van de afrekening verbruiken uw API-sleutel, dus elk "
+"clientadres krijgt een vast aantal verzoeken per minuut. Schakel dit alleen "
+"in als legitieme kopers worden geweigerd — dat gebeurt wanneer de winkel "
+"achter een reverse proxy of CDN staat en elke koper PHP bereikt als "
+"hetzelfde adres, waardoor de toegestane hoeveelheid per koper samensmelt tot "
+"één voor de hele winkel. De blijvende oplossing is om de proxy hieronder te "
+"vermelden."
 
-#: class/WC_Twoinc.php:4859
+#: class/WC_Twoinc.php:6176
 msgid "Trusted proxy addresses"
 msgstr "Vertrouwde proxyadressen"
 
-#: class/WC_Twoinc.php:4861
-msgid "Addresses of your own reverse proxies, load balancers or CDN egress, as IPs or CIDR ranges, separated by commas or new lines. These IP addresses will be exempt from rate limiting."
-msgstr "Adressen van uw eigen reverse proxy's, load balancers of CDN-uitgangen, als IP's of CIDR-bereiken, gescheiden door komma's of nieuwe regels. Deze IP-adressen zijn uitgesloten van snelheidsbeperking."
+#: class/WC_Twoinc.php:6178
+msgid ""
+"Addresses of your own reverse proxies, load balancers or CDN egress, as IPs "
+"or CIDR ranges, separated by commas or new lines. These IP addresses will be "
+"exempt from rate limiting."
+msgstr ""
+"Adressen van uw eigen reverse proxy's, load balancers of CDN-uitgangen, als "
+"IP's of CIDR-bereiken, gescheiden door komma's of nieuwe regels. Deze IP-"
+"adressen zijn uitgesloten van snelheidsbeperking."
 
-#: class/WC_Twoinc.php:4874
+#: class/WC_Twoinc.php:6183
+msgid "Custom request headers"
+msgstr "Aangepaste verzoekheaders"
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:6187
+#, php-format
+msgid ""
+"If your IT administrator asks you to add headers to the calls your store "
+"makes to the %s API (for example a firewall token), add them here. Every "
+"header listed is sent on all calls your store makes from your server."
+msgstr ""
+"Als je IT-beheerder je vraagt headers toe te voegen aan de aanroepen die je "
+"winkel naar de %s-API doet (bijvoorbeeld een firewalltoken), voeg je ze hier "
+"toe. Elke header in de lijst wordt verzonden bij alle aanroepen die je "
+"winkel vanaf je server doet."
+
+#: class/WC_Twoinc.php:6192
 msgid "Disable SSL verification"
 msgstr "SSL-verificatie uitschakelen"
 
-#: class/WC_Twoinc.php:4875
+#: class/WC_Twoinc.php:6193
 msgid "Skip SSL certificate verification on outbound API requests"
 msgstr "SSL-certificaatverificatie overslaan bij uitgaande API-verzoeken"
 
-#: class/WC_Twoinc.php:4877
-msgid "WARNING: this is unsafe for production and only intended for local/dev debugging behind a corporate proxy with custom SSL certificates. Applies in every environment, including Production, while enabled."
-msgstr "WAARSCHUWING: dit is onveilig voor productie en alleen bedoeld voor lokaal/dev-debuggen achter een bedrijfsproxy met aangepaste SSL-certificaten. Geldt in elke omgeving, inclusief productie, zolang dit is ingeschakeld."
+#: class/WC_Twoinc.php:6195
+msgid ""
+"WARNING: this is unsafe for production and only intended for local/dev "
+"debugging behind a corporate proxy with custom SSL certificates. Applies in "
+"every environment, including Production, while enabled."
+msgstr ""
+"WAARSCHUWING: dit is onveilig voor productie en alleen bedoeld voor lokaal/"
+"dev-debuggen achter een bedrijfsproxy met aangepaste SSL-certificaten. Geldt "
+"in elke omgeving, inclusief productie, zolang dit is ingeschakeld."
 
-#: class/WC_Twoinc.php:4881
+#: class/WC_Twoinc.php:6199
 msgid "Enable debug logging"
 msgstr "API-logging inschakelen"
 
-#: class/WC_Twoinc.php:4882
+#: class/WC_Twoinc.php:6200
 msgid "Log API requests/responses and other diagnostic detail"
 msgstr "Log API-verzoeken/-antwoorden en overige diagnostische details"
 
-#: class/WC_Twoinc.php:4885
+#: class/WC_Twoinc.php:6203
 #, php-format
-msgid "If enabled, API interactions and other diagnostic detail (e.g. surcharge/FX rounding) are logged. This can be useful for debugging. You can view the logs <a href=\"%s\">here</a>."
-msgstr "Indien ingeschakeld, worden API-interacties en overige diagnostische details (bijv. afronding van toeslag/wisselkoers) gelogd. Dit kan nuttig zijn voor het opsporen van fouten. U kunt de logs <a href=\"%s\">hier</a> bekijken."
+msgid ""
+"If enabled, API interactions and other diagnostic detail (e.g. surcharge/FX "
+"rounding) are logged. This can be useful for debugging. You can view the "
+"logs <a href=\"%s\">here</a>."
+msgstr ""
+"Indien ingeschakeld, worden API-interacties en overige diagnostische details "
+"(bijv. afronding van toeslag/wisselkoers) gelogd. Dit kan nuttig zijn voor "
+"het opsporen van fouten. U kunt de logs <a href=\"%s\">hier</a> bekijken."
 
-#: class/WC_Twoinc.php:4891
+#: class/WC_Twoinc.php:6209
 msgid "Error log"
 msgstr "Foutenlogboek"
 
-#: class/WC_Twoinc.php:4895
+#: class/WC_Twoinc.php:6213
 msgid "Skip user validation at order confirmation"
 msgstr "Gebruikersvalidatie overslaan bij orderbevestiging"
 
-#: class/WC_Twoinc.php:4896
-msgid "Accept the confirmation callback without a valid WordPress security token"
-msgstr "De bevestigingscallback accepteren zonder geldig WordPress-beveiligingstoken"
+#: class/WC_Twoinc.php:6214
+msgid ""
+"Accept the confirmation callback without a valid WordPress security token"
+msgstr ""
+"De bevestigingscallback accepteren zonder geldig WordPress-beveiligingstoken"
 
-#: class/WC_Twoinc.php:4898
-msgid "The confirmation callback always checks the order's unique 64-character order reference; this option skips only the additional WordPress security token, which typically expires 12 to 24 hours after the order was placed — and, for a signed-in customer, when their session changes — so a buyer who comes back to a legitimately authorised order can be rejected. The order reference must still match, so the callback is not left open, but the security token's protection against a cross-site request is gone; leave this off unless you are seeing those false rejections."
-msgstr "De bevestigingscallback controleert altijd de unieke orderreferentie van 64 tekens; deze optie slaat alleen het aanvullende WordPress-beveiligingstoken over, die normaal gesproken 12 tot 24 uur na het plaatsen van de order verloopt — en bij een ingelogde klant zodra hun sessie verandert — waardoor een koper die terugkomt op een order die wel degelijk is goedgekeurd, kan worden afgewezen. De orderreferentie moet nog steeds kloppen, dus de callback staat niet open, maar de bescherming van het beveiligingstoken tegen een verzoek vanaf een andere site is weg; laat dit uit staan tenzij je die onterechte afwijzingen ziet."
+#: class/WC_Twoinc.php:6216
+msgid ""
+"The confirmation callback always checks the order's unique 64-character "
+"order reference; this option skips only the additional WordPress security "
+"token, which typically expires 12 to 24 hours after the order was placed — "
+"and, for a signed-in customer, when their session changes — so a buyer who "
+"comes back to a legitimately authorised order can be rejected. The order "
+"reference must still match, so the callback is not left open, but the "
+"security token's protection against a cross-site request is gone; leave this "
+"off unless you are seeing those false rejections."
+msgstr ""
+"De bevestigingscallback controleert altijd de unieke orderreferentie van 64 "
+"tekens; deze optie slaat alleen het aanvullende WordPress-beveiligingstoken "
+"over, die normaal gesproken 12 tot 24 uur na het plaatsen van de order "
+"verloopt — en bij een ingelogde klant zodra hun sessie verandert — waardoor "
+"een koper die terugkomt op een order die wel degelijk is goedgekeurd, kan "
+"worden afgewezen. De orderreferentie moet nog steeds kloppen, dus de "
+"callback staat niet open, maar de bescherming van het beveiligingstoken "
+"tegen een verzoek vanaf een andere site is weg; laat dit uit staan tenzij je "
+"die onterechte afwijzingen ziet."
 
-#: class/WC_Twoinc.php:4902
+#: class/WC_Twoinc.php:6220
 msgid "Clear settings on uninstall of plug-in"
 msgstr "Instellingen wissen bij het deactiveren van de plug-in"
 
-#: class/WC_Twoinc.php:4908
+#: class/WC_Twoinc.php:6226
 msgid "Plugin version"
 msgstr "Pluginversie"
 
-#: class/WC_Twoinc.php:4912
+#: class/WC_Twoinc.php:6230
 msgid "Install health checklist"
 msgstr "Installatie-checklist"
 
-#: class/WC_Twoinc.php:4965
+#: class/WC_Twoinc.php:6234
+msgid "Merchant profile"
+msgstr "Verkopersprofiel"
+
+#: class/WC_Twoinc.php:6293
 msgid "Merchant ID:"
 msgstr "Verkoper-ID:"
 
-#: class/WC_Twoinc.php:4969
+#: class/WC_Twoinc.php:6297
 #, php-format
 msgid "Don't have an API key? Get one by signing up <a href='%s'>here</a>."
-msgstr "Heb je nog geen API-sleutel? Vraag er een aan door je <a href='%s'>hier</a> aan te melden."
+msgstr ""
+"Heb je nog geen API-sleutel? Vraag er een aan door je <a href='%s'>hier</a> "
+"aan te melden."
 
-#: class/WC_Twoinc.php:5057
+#: class/WC_Twoinc.php:6345
+msgid "Header name"
+msgstr "Headernaam"
+
+#: class/WC_Twoinc.php:6346
+msgid "Value"
+msgstr "Waarde"
+
+#: class/WC_Twoinc.php:6347
+msgid "Also send from browser"
+msgstr "Ook vanuit de browser verzenden"
+
+#: class/WC_Twoinc.php:6362 class/WC_Twoinc.php:6368
+msgid ""
+"This entry contains characters this field cannot hold, so it is not shown "
+"and is not being sent. Enter it again."
+msgstr ""
+"Deze invoer bevat tekens die dit veld niet kan bevatten, dus hij wordt niet "
+"weergegeven en niet verzonden. Voer hem opnieuw in."
+
+#: class/WC_Twoinc.php:6371
+msgid ""
+"This row is not being sent, and the settings cannot be saved until it is "
+"corrected or removed."
+msgstr ""
+"Deze rij wordt niet verzonden en de instellingen kunnen niet worden "
+"opgeslagen totdat deze is gecorrigeerd of verwijderd."
+
+#: class/WC_Twoinc.php:6380
+msgid "Add header"
+msgstr "Header toevoegen"
+
+#: class/WC_Twoinc.php:6382
+msgid ""
+"Tick \"Also send from browser\" only if your IT administrator requires the "
+"header on calls from the buyer's browser as well as those from your server. "
+"Its value will be published to the buyer's browser and may be read by anyone."
+msgstr ""
+"Vink \"Ook vanuit de browser verzenden\" alleen aan als je IT-beheerder de "
+"header vereist bij aanroepen vanuit de browser van de koper naast die vanaf "
+"je server. De waarde wordt gepubliceerd naar de browser van de koper en kan "
+"door iedereen worden gelezen."
+
+#: class/WC_Twoinc.php:6412
+msgid "Every custom request header needs a name."
+msgstr "Elke aangepaste verzoekheader heeft een naam nodig."
+
+#. translators: %s: the rejected header name
+#: class/WC_Twoinc.php:6417
+#, php-format
+msgid ""
+"\"%s\" is not a valid HTTP header name. Use letters, digits and hyphens."
+msgstr ""
+"\"%s\" is geen geldige HTTP-headernaam. Gebruik letters, cijfers en "
+"streepjes."
+
+#. translators: %s: the rejected header name
+#: class/WC_Twoinc.php:6425
+#, php-format
+msgid "The header \"%s\" is reserved and cannot be set from this table."
+msgstr ""
+"De header \"%s\" is gereserveerd en kan niet vanuit deze tabel worden "
+"ingesteld."
+
+#. translators: %s: the header name whose value was rejected
+#: class/WC_Twoinc.php:6432
+#, php-format
+msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
+msgstr ""
+"De waarde van \"%s\" moet afdrukbare ASCII-tekst zijn en mag niet leeg zijn."
+
+#. translators: %s: the duplicated header name
+#: class/WC_Twoinc.php:6439
+#, php-format
+msgid "The header \"%s\" is listed more than once."
+msgstr "De header \"%s\" staat meer dan één keer in de lijst."
+
+#: class/WC_Twoinc.php:6517
 msgid "Select image"
 msgstr "Selecteer afbeelding"
 
-#: class/WC_Twoinc.php:5081
+#: class/WC_Twoinc.php:6540
 msgid "View error log"
 msgstr "Foutenlogboek weergeven"
 
-#: class/WC_Twoinc.php:5084
+#: class/WC_Twoinc.php:6543
 msgid "Opens the WooCommerce log viewer filtered to this plugin's log entries."
-msgstr "Opent de WooCommerce-logviewer, gefilterd op de logregels van deze plugin."
+msgstr ""
+"Opent de WooCommerce-logviewer, gefilterd op de logregels van deze plugin."
 
-#: class/WC_Twoinc.php:5128
+#: class/WC_Twoinc.php:6578
+msgid "Refresh merchant profile"
+msgstr "Verkopersprofiel vernieuwen"
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:6584
+#, php-format
+msgid ""
+"Your offerable payment terms, buyer-surcharge cap, minimum order value and "
+"default term are read from %s and cached. They are refreshed every night and "
+"whenever the API key or environment is saved; use this to pull a change "
+"through now. The nightly refresh runs on WP-Cron. With WP-Cron disabled, the "
+"next request more than 24 hours after the last refresh re-reads it, and "
+"while a re-read keeps failing one request a minute retries it."
+msgstr ""
+"De betaaltermijnen die u kunt aanbieden, het maximum voor de kopertoeslag, "
+"de minimale orderwaarde en de standaardtermijn worden bij %s opgehaald en in "
+"de cache bewaard. Ze worden elke nacht vernieuwd en telkens wanneer de API-"
+"sleutel of de omgeving wordt opgeslagen; gebruik dit om een wijziging nu "
+"direct op te halen. De nachtelijke vernieuwing loopt via WP-Cron. Met WP-"
+"Cron uitgeschakeld leest het eerste verzoek meer dan 24 uur na de laatste "
+"vernieuwing ze opnieuw, en zolang een nieuwe leespoging blijft mislukken, "
+"probeert één verzoek per minuut het opnieuw."
+
+#: class/WC_Twoinc.php:6613
 msgid "API key"
 msgstr "API-sleutel"
 
-#: class/WC_Twoinc.php:5129
+#: class/WC_Twoinc.php:6614
 msgid "Configured"
 msgstr "Geconfigureerd"
 
-#: class/WC_Twoinc.php:5129
+#: class/WC_Twoinc.php:6614
 msgid "Not configured"
 msgstr "Niet geconfigureerd"
 
-#: class/WC_Twoinc.php:5138
+#: class/WC_Twoinc.php:6623
 msgid "SSL verification"
 msgstr "SSL-verificatie"
 
-#: class/WC_Twoinc.php:5139
+#: class/WC_Twoinc.php:6624
 msgid "Disabled"
 msgstr "Uitgeschakeld"
 
-#: class/WC_Twoinc.php:5139
+#: class/WC_Twoinc.php:6624
 msgid "Enabled"
 msgstr "Ingeschakeld"
 
-#: class/WC_Twoinc.php:5143
+#: class/WC_Twoinc.php:6628
 msgid "PHP curl extension"
 msgstr "PHP curl-extensie"
 
-#: class/WC_Twoinc.php:5144
+#: class/WC_Twoinc.php:6629
 msgid "Present"
 msgstr "Aanwezig"
 
-#: class/WC_Twoinc.php:5144
+#: class/WC_Twoinc.php:6629
 msgid "Missing"
 msgstr "Ontbreekt"
 
-#: class/WC_Twoinc.php:5166
-msgid "SSL verification is disabled while the environment is not production-hardened; re-check the \"Disable SSL verification\" setting."
-msgstr "SSL-verificatie is uitgeschakeld terwijl de omgeving niet productiegehard is; controleer de instelling \"SSL-verificatie uitschakelen\" opnieuw."
+#: class/WC_Twoinc.php:6638
+msgid "Merchant profile last read"
+msgstr ""
 
-#: class/WC_Twoinc.php:5183 class/WC_Twoinc.php:5213
+#: class/WC_Twoinc.php:6662
+msgid ""
+"SSL verification is disabled while the environment is not production-"
+"hardened; re-check the \"Disable SSL verification\" setting."
+msgstr ""
+"SSL-verificatie is uitgeschakeld terwijl de omgeving niet productiegehard "
+"is; controleer de instelling \"SSL-verificatie uitschakelen\" opnieuw."
+
+#: class/WC_Twoinc.php:6679 class/WC_Twoinc.php:6709
 msgid "Unable to retrieve the order information."
 msgstr "De bestelgegevens kunnen niet worden opgehaald."
 
-#: class/WC_Twoinc.php:5219
+#: class/WC_Twoinc.php:6715
 msgid "Unable to retrieve the order payment information"
 msgstr "Kan de betalingsinformatie van de bestelling niet ophalen"
 
-#: class/WC_Twoinc.php:5225
+#: class/WC_Twoinc.php:6721
 msgid "Missing company ID."
 msgstr "Bedrijfs-ID ontbreekt."
 
-#: class/WC_Twoinc.php:5303
+#: class/WC_Twoinc.php:6799
 #, php-format
 msgid "Could not update the order with %s. Reason: %s"
 msgstr "Kon de bestelling niet bijwerken met %s. Reden: %s"
 
-#: class/WC_Twoinc.php:5331 class/WC_Twoinc.php:5360 class/WC_Twoinc.php:5367
+#: class/WC_Twoinc.php:6827 class/WC_Twoinc.php:6856 class/WC_Twoinc.php:6863
 #, php-format
 msgid "Could not edit the order with %s."
 msgstr "Kon de bestelling met %s niet bewerken."
 
-#: class/WC_Twoinc.php:5382
+#: class/WC_Twoinc.php:6878
 #, php-format
 msgid "The order edit request has been accepted by %s."
-msgstr "Het verzoek tot het bewerken van de bestelling is geaccepteerd door %s ."
+msgstr ""
+"Het verzoek tot het bewerken van de bestelling is geaccepteerd door %s ."
 
-#: class/WC_Twoinc.php:5384
+#: class/WC_Twoinc.php:6880
 #, php-format
 msgid "Order value is now %s."
 msgstr "De orderwaarde is nu %s ."
 
-#: class/WC_Twoinc.php:5546
+#: class/WC_Twoinc.php:7192
 #, php-format
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
 msgstr "Vergroot uw B2B-omzet met Koop nu, betaal later met %s !"
 
-#: class/WC_Twoinc.php:5547
+#: class/WC_Twoinc.php:7193
 #, php-format
-msgid "%s credit approves 90%% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It is quick, easy and gives you immediate access to the %s Merchant Portal."
-msgstr "%s credit keurt 90%% van de zakelijke kopers goed, betaalt u vooraf en minimaliseert uw risico. Om %s aan te bieden in uw checkout, moet u zich registreren. Het is snel, eenvoudig en geeft u direct toegang tot de %s Merchant Portal."
+msgid ""
+"%s credit approves 90%% of business buyers, pays you upfront and minimise "
+"your risk. To offer %s in your checkout, you need to signup. It is quick, "
+"easy and gives you immediate access to the %s Merchant Portal."
+msgstr ""
+"%s credit keurt 90%% van de zakelijke kopers goed, betaalt u vooraf en "
+"minimaliseert uw risico. Om %s aan te bieden in uw checkout, moet u zich "
+"registreren. Het is snel, eenvoudig en geeft u direct toegang tot de %s "
+"Merchant Portal."
 
-#: class/WC_Twoinc.php:5548
+#: class/WC_Twoinc.php:7194
 msgid "Set up my account"
 msgstr "Mijn account instellen"
 
 #. translators: 1: base plugin provenance, e.g. "2.23.9 (eb7bf92cec07, deployed 2026-07-08 11:35 UTC)"
-#: class/WC_Twoinc.php:5641
+#: class/WC_Twoinc.php:7279
 #, php-format
 msgid "Plugin: %s"
 msgstr "Plug-in: %s"
 
 #. translators: 1: overlay plugin slug, 2: overlay provenance
-#: class/WC_Twoinc.php:5649
+#: class/WC_Twoinc.php:7287
 #, php-format
 msgid "Brand overlay: %1$s %2$s"
 msgstr "Merkoverlay: %1$s %2$s"
 
 #. translators: 1: plugin (and overlay) provenance fragments, 2: WooCommerce version, 3: WordPress version
-#: class/WC_Twoinc.php:5656
+#: class/WC_Twoinc.php:7294
 #, php-format
 msgid "%1$s | WooCommerce: %2$s | WordPress: %3$s"
 msgstr "%1$s | WooCommerce: %2$s | WordPress: %3$s"
 
 #. translators: %s: UTC timestamp the code was deployed
-#: class/WC_Twoinc.php:5688
+#: class/WC_Twoinc.php:7326
 #, php-format
 msgid "deployed %s UTC"
 msgstr "uitgerold %s UTC"
 
-#: class/WC_Twoinc.php:5798
+#: class/WC_Twoinc.php:7461
 #, php-format
 msgid "%s API key verified."
 msgstr "%s API-sleutel geverifieerd."
 
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc.php:7464
 #, php-format
 msgid "%s rejected that API key, so the previously saved key was kept."
-msgstr "%s heeft deze API-sleutel geweigerd, dus de eerder opgeslagen sleutel is behouden."
+msgstr ""
+"%s heeft deze API-sleutel geweigerd, dus de eerder opgeslagen sleutel is "
+"behouden."
 
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc.php:7467
 #, php-format
 msgid "API key saved, but %s could not be reached to verify it."
-msgstr "De API-sleutel is opgeslagen, maar %s kon niet worden bereikt om deze te verifiëren."
+msgstr ""
+"De API-sleutel is opgeslagen, maar %s kon niet worden bereikt om deze te "
+"verifiëren."
 
-#: class/WC_Twoinc.php
-msgid "API key saved, but it could not be verified because no environment is configured."
-msgstr "De API-sleutel is opgeslagen, maar kon niet worden geverifieerd omdat er geen omgeving is geconfigureerd."
+#: class/WC_Twoinc.php:7469
+msgid ""
+"API key saved, but it could not be verified because no environment is "
+"configured."
+msgstr ""
+"De API-sleutel is opgeslagen, maar kon niet worden geverifieerd omdat er "
+"geen omgeving is geconfigureerd."
 
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc.php:7471
 #, php-format
 msgid "API key saved, but %s returned an error while verifying it."
-msgstr "De API-sleutel is opgeslagen, maar %s gaf een fout tijdens het verifiëren."
+msgstr ""
+"De API-sleutel is opgeslagen, maar %s gaf een fout tijdens het verifiëren."
 
-#: class/WC_Twoinc_Checkout.php:165 class/WC_Twoinc_Checkout.php:179
-#: class/WC_Twoinc_Checkout.php:193 class/WC_Twoinc_Checkout.php:217
-#: class/WC_Twoinc_Checkout.php:226 class/WC_Twoinc_Helper.php:168
-#: views/woocommerce_order_pay.php:35 views/woocommerce_order_pay.php:44
+#: class/WC_Twoinc_Checkout.php:220 class/WC_Twoinc_Checkout.php:234
+#: class/WC_Twoinc_Checkout.php:248 class/WC_Twoinc_Checkout.php:271
+#: class/WC_Twoinc_Checkout.php:280 class/WC_Twoinc_Helper.php:303
 msgid "Company name"
 msgstr "Bedrijfsnaam"
 
-#: class/WC_Twoinc_Checkout.php:200 class/WC_Twoinc_Checkout.php:240
+#: class/WC_Twoinc_Checkout.php:255 class/WC_Twoinc_Checkout.php:294
 msgid "Company ID"
 msgstr "Bedrijfs-ID"
 
-#: class/WC_Twoinc_Checkout.php:257 class/WC_Twoinc_Helper.php:192
+#: class/WC_Twoinc_Checkout.php:311 class/WC_Twoinc_Helper.php:327
 msgid "Invoice email address"
 msgstr "Factuur e-mailadres"
 
-#: class/WC_Twoinc_Checkout.php:268
+#: class/WC_Twoinc_Checkout.php:322
 msgid "PO Number"
 msgstr "PO-nummer"
 
-#: class/WC_Twoinc_Checkout.php:378
+#: class/WC_Twoinc_Checkout.php:596
 msgid "We require your phone number so we can verify your purchase."
-msgstr "Wij hebben uw telefoonnummer nodig zodat wij uw aankoop kunnen verifiëren."
+msgstr ""
+"Wij hebben uw telefoonnummer nodig zodat wij uw aankoop kunnen verifiëren."
 
-#: class/WC_Twoinc_Checkout.php:379
-msgid "We use your company name to automatically populate your address and register the company that made the purchase."
-msgstr "Wij gebruiken uw bedrijfsnaam om automatisch uw adres in te vullen en het bedrijf te registreren dat de aankoop heeft gedaan."
+#: class/WC_Twoinc_Checkout.php:597
+msgid ""
+"We use your company name to automatically populate your address and register "
+"the company that made the purchase."
+msgstr ""
+"Wij gebruiken uw bedrijfsnaam om automatisch uw adres in te vullen en het "
+"bedrijf te registreren dat de aankoop heeft gedaan."
 
-#: class/WC_Twoinc_Checkout.php:383
+#: class/WC_Twoinc_Checkout.php:601
 msgid "Company search is temporarily unavailable. Please try again."
-msgstr "Zoeken naar bedrijven is tijdelijk niet beschikbaar. Probeer het opnieuw."
+msgstr ""
+"Zoeken naar bedrijven is tijdelijk niet beschikbaar. Probeer het opnieuw."
 
 #. translators: %d: minimum number of characters the buyer must type before the company search runs. Left unresolved here and interpolated in JS from the threshold the widget enforces, so the two cannot disagree.
-#: class/WC_Twoinc_Checkout.php:391
+#: class/WC_Twoinc_Checkout.php:609
 #, php-format
 msgid "Enter %d or more characters"
 msgstr "Voer %d of meer tekens in"
 
-#: class/WC_Twoinc_Checkout.php:398
+#: class/WC_Twoinc_Checkout.php:616
 msgid "Enter manually"
 msgstr "Handmatig invoeren"
 
-#: class/WC_Twoinc_Checkout.php:399
+#: class/WC_Twoinc_Checkout.php:617
 msgid "Search for company"
 msgstr "Zoek naar bedrijf"
 
+#. translators: %d: number of companies the search returned, interpolated in JS.
+#: class/WC_Twoinc_Checkout.php:620
+#, php-format
 msgid "%d results are available, use up and down arrow keys to navigate."
-msgstr "%d resultaten zijn beschikbaar, gebruik de pijltoetsen omhoog en omlaag om te navigeren."
+msgstr ""
+"%d resultaten zijn beschikbaar, gebruik de pijltoetsen omhoog en omlaag om "
+"te navigeren."
 
+#: class/WC_Twoinc_Checkout.php:621
 msgid "1 result is available, use up and down arrow keys to navigate."
-msgstr "1 resultaat is beschikbaar, gebruik de pijltoetsen omhoog en omlaag om te navigeren."
+msgstr ""
+"1 resultaat is beschikbaar, gebruik de pijltoetsen omhoog en omlaag om te "
+"navigeren."
 
-#: class/WC_Twoinc_Checkout.php:444
+#: class/WC_Twoinc_Checkout.php:677
 msgid "Selected payment terms"
 msgstr "Gewenste betaaltermijn"
 
-#: class/WC_Twoinc_Checkout.php:445
-#, php-format
-msgid "Payment Terms %s days"
-msgstr "Betaaltermijn %s dagen"
-
-#: class/WC_Twoinc_Checkout.php:450
+#: class/WC_Twoinc_Checkout.php:683
 #, php-format
 msgid "EOM+%s"
 msgstr "EOM+%s"
 
-#: class/WC_Twoinc_Checkout.php:453
+#: class/WC_Twoinc_Checkout.php:684
 #, php-format
 msgid "EOM+%s: pay %s days after the end of the month"
 msgstr "EOM+%s: betaal %s dagen na het einde van de maand"
 
-#: class/WC_Twoinc_Checkout.php:460
+#: class/WC_Twoinc_Checkout.php:692
 #, php-format
-msgid "EOM+%1$s: pay %1$s days after the end of the month, plus a %2$s surcharge"
-msgstr "EOM+%1$s: betaal %1$s dagen na het einde van de maand, plus %2$s toeslag"
+msgid ""
+"EOM+%1$s: pay %1$s days after the end of the month, plus a %2$s surcharge"
+msgstr ""
+"EOM+%1$s: betaal %1$s dagen na het einde van de maand, plus %2$s toeslag"
 
-#: class/WC_Twoinc_Checkout.php:451
-#, php-format
-msgid "Payment Terms EOM+%s"
-msgstr "Betaaltermijn EOM+%s"
-
-#: class/WC_Twoinc_Checkout.php:469
+#: class/WC_Twoinc_Checkout.php:722
 msgid "Registered company"
 msgstr "Geregistreerd bedrijf"
 
-#: class/WC_Twoinc_Checkout.php:470
+#: class/WC_Twoinc_Checkout.php:723
 msgid "Sole trader"
 msgstr "Eenmanszaak"
 
-#: class/WC_Twoinc_Checkout.php:471
+#: class/WC_Twoinc_Checkout.php:724
 msgid "Click here to login or sign up as a sole trader."
 msgstr "Klik hier om in te loggen of u te registreren als eenmanszaak."
 
-#: class/WC_Twoinc_Checkout.php:477
+#: class/WC_Twoinc_Checkout.php:730
 msgid "Select a different sole trader"
 msgstr "Selecteer een andere eenmanszaak"
 
-#: class/WC_Twoinc_Checkout.php:478
+#: class/WC_Twoinc_Checkout.php:731
 msgid "Something went wrong setting up sole trader checkout. Please try again."
-msgstr "Er is iets misgegaan bij het instellen van het afrekenen als eenmanszaak. Probeer het opnieuw."
+msgstr ""
+"Er is iets misgegaan bij het instellen van het afrekenen als eenmanszaak. "
+"Probeer het opnieuw."
 
-#: class/WC_Twoinc_Helper.php:70
+#: class/WC_Twoinc_Helper.php:205
 #, php-format
 msgid "Negative discount amount calculated for %s."
 msgstr "Negatief kortingsbedrag berekend voor %s."
 
-#: class/WC_Twoinc_Helper.php:89
+#: class/WC_Twoinc_Helper.php:224
 #, php-format
 msgid "Empty response from %s."
 msgstr "Lege respons van %s ."
 
-#: class/WC_Twoinc_Helper.php:93
+#: class/WC_Twoinc_Helper.php:228
 #, php-format
 msgid "Response code from %s: %d"
 msgstr "Antwoordcode van %s : %d"
 
-#: class/WC_Twoinc_Helper.php:136
+#: class/WC_Twoinc_Helper.php:271
 msgid "Buyer and merchant may not be the same company"
 msgstr "Koper en handelaar zijn mogelijk niet hetzelfde bedrijf"
 
-#: class/WC_Twoinc_Helper.php:155
+#: class/WC_Twoinc_Helper.php:290
 #, php-format
 msgid "Please enter a valid %s to pay on invoice"
 msgstr "Voer een geldig %s in om op de factuur te betalen"
 
-#: class/WC_Twoinc_Helper.php:159 class/WC_Twoinc_Helper.php:162
+#: class/WC_Twoinc_Helper.php:294 class/WC_Twoinc_Helper.php:297
 msgid "Phone number"
 msgstr "Telefoonnummer"
 
-#: class/WC_Twoinc_Helper.php:165
+#: class/WC_Twoinc_Helper.php:300
 msgid "Organization number"
 msgstr "Organisatienummer"
 
-#: class/WC_Twoinc_Helper.php:171
+#: class/WC_Twoinc_Helper.php:306
 msgid "First name"
 msgstr "Voornaam"
 
-#: class/WC_Twoinc_Helper.php:174
+#: class/WC_Twoinc_Helper.php:309
 msgid "Last name"
 msgstr "Achternaam"
 
-#: class/WC_Twoinc_Helper.php:177
+#: class/WC_Twoinc_Helper.php:312
 msgid "Email"
 msgstr "E-mail"
 
-#: class/WC_Twoinc_Helper.php:180
+#: class/WC_Twoinc_Helper.php:315
 msgid "Address"
 msgstr "Adres"
 
-#: class/WC_Twoinc_Helper.php:183
+#: class/WC_Twoinc_Helper.php:318
 msgid "City"
 msgstr "Stad"
 
-#: class/WC_Twoinc_Helper.php:186
+#: class/WC_Twoinc_Helper.php:321
 msgid "Country"
 msgstr "Land"
 
-#: class/WC_Twoinc_Helper.php:189
+#: class/WC_Twoinc_Helper.php:324
 msgid "Postal code"
 msgstr "Postcode"
 
-#: class/WC_Twoinc_Payment_Terms.php:858
-msgid "Service charge"
-msgstr "Servicekosten"
-
-#: class/WC_Twoinc_Rate_Limiter.php:421
-#, php-format
-msgid "The %s checkout now meters its AJAX endpoints per client address. Checkout still completes, but if your store sits behind a CDN or load balancer every buyer arrives as the same address, and company search, address autofill and the approval check can be refused. List your proxy under Diagnostics to meter buyers individually."
-msgstr "De %s-checkout meet nu zijn AJAX-endpoints per clientadres. De checkout wordt nog steeds voltooid, maar als uw winkel achter een CDN of load balancer staat, komt elke koper aan als hetzelfde adres en kunnen bedrijf zoeken, automatisch adres aanvullen en de goedkeuringscontrole worden geweigerd. Vermeld uw proxy onder Diagnostiek om kopers afzonderlijk te meten."
-
-#: class/WC_Twoinc_Rate_Limiter.php:430
-msgid "Open Diagnostics settings"
-msgstr "Diagnostiek-instellingen openen"
-
-#: class/WC_Twoinc_Rate_Limiter.php:432
-msgid "Dismiss"
-msgstr "Sluiten"
-
-#: views/woocommerce_order_pay.php:4
-msgid "Phone"
-msgstr "Telefoon"
-
-#: views/woocommerce_order_pay.php:16
-msgid "Country / Region"
-msgstr "Land / Regio"
-
-#: tillit-payment-gateway.php:216
-msgid "Settings"
-msgstr "Instellingen"
-
-#: class/WC_Twoinc.php
-msgid "Custom request headers"
-msgstr "Aangepaste verzoekheaders"
-
-#: class/WC_Twoinc.php
-msgid "Header name"
-msgstr "Headernaam"
-
-#: class/WC_Twoinc.php
-msgid "Value"
-msgstr "Waarde"
-
-#: class/WC_Twoinc.php
-msgid "Also send from browser"
-msgstr "Ook vanuit de browser verzenden"
-
-#: class/WC_Twoinc.php
-msgid "Remove"
-msgstr "Verwijderen"
-
-#: class/WC_Twoinc.php
-msgid "Add header"
-msgstr "Header toevoegen"
-
-#: class/WC_Twoinc.php
-msgid "Every custom request header needs a name."
-msgstr "Elke aangepaste verzoekheader heeft een naam nodig."
-
-#: class/WC_Twoinc.php
-msgid "The header \"%s\" is reserved and cannot be set from this table."
-msgstr "De header \"%s\" is gereserveerd en kan niet vanuit deze tabel worden ingesteld."
-
-#: class/WC_Twoinc.php
-msgid "The header \"%s\" is listed more than once."
-msgstr "De header \"%s\" staat meer dan één keer in de lijst."
-
-#: class/WC_Twoinc.php
-msgid "\"%s\" is not a valid HTTP header name. Use letters, digits and hyphens."
-msgstr "\"%s\" is geen geldige HTTP-headernaam. Gebruik letters, cijfers en streepjes."
-
-#: class/WC_Twoinc.php
-msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
-msgstr "De waarde van \"%s\" moet afdrukbare ASCII-tekst zijn en mag niet leeg zijn."
-
-#: class/WC_Twoinc.php
-msgid "This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again."
-msgstr "Deze invoer bevat tekens die dit veld niet kan bevatten, dus hij wordt niet weergegeven en niet verzonden. Voer hem opnieuw in."
-
-#: class/WC_Twoinc.php
-msgid "This row is not being sent, and the settings cannot be saved until it is corrected or removed."
-msgstr "Deze rij wordt niet verzonden en de instellingen kunnen niet worden opgeslagen totdat deze is gecorrigeerd of verwijderd."
-
-#: class/WC_Twoinc.php
-msgid "If your IT administrator asks you to add headers to the calls your store makes to the %s API (for example a firewall token), add them here. Every header listed is sent on all calls your store makes from your server."
-msgstr "Als je IT-beheerder je vraagt headers toe te voegen aan de aanroepen die je winkel naar de %s-API doet (bijvoorbeeld een firewalltoken), voeg je ze hier toe. Elke header in de lijst wordt verzonden bij alle aanroepen die je winkel vanaf je server doet."
-
-#: class/WC_Twoinc.php
-msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
-msgstr "Vink \"Ook vanuit de browser verzenden\" alleen aan als je IT-beheerder de header vereist bij aanroepen vanuit de browser van de koper naast die vanaf je server. De waarde wordt gepubliceerd naar de browser van de koper en kan door iedereen worden gelezen."
-
-#. translators: 1: submitted value, 2: comma-separated list of valid methods
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Unrecognised surcharge method: %1$s. Choose one of: %2$s."
-msgstr "Onbekende toeslagmethode: %1$s. Kies een van: %2$s."
-
-#: class/WC_Twoinc.php
-msgid "Merchant profile"
-msgstr "Verkopersprofiel"
-
-#: class/WC_Twoinc.php
-msgid "Refresh merchant profile"
-msgstr "Verkopersprofiel vernieuwen"
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Your offerable payment terms, buyer-surcharge cap, minimum order value and default term are read from %s and cached. They are refreshed every night and whenever the API key or environment is saved; use this to pull a change through now. The nightly refresh runs on WP-Cron. With WP-Cron disabled, the next request more than 24 hours after the last refresh re-reads it, and while a re-read keeps failing one request a minute retries it."
-msgstr "De betaaltermijnen die u kunt aanbieden, het maximum voor de kopertoeslag, de minimale orderwaarde en de standaardtermijn worden bij %s opgehaald en in de cache bewaard. Ze worden elke nacht vernieuwd en telkens wanneer de API-sleutel of de omgeving wordt opgeslagen; gebruik dit om een wijziging nu direct op te halen. De nachtelijke vernieuwing loopt via WP-Cron. Met WP-Cron uitgeschakeld leest het eerste verzoek meer dan 24 uur na de laatste vernieuwing ze opnieuw, en zolang een nieuwe leespoging blijft mislukken, probeert één verzoek per minuut het opnieuw."
-
-#: class/WC_Twoinc.php
-msgid "Refreshing…"
-msgstr "Vernieuwen…"
-
-#: class/WC_Twoinc.php
-msgid "Could not refresh the merchant profile."
-msgstr "Het verkopersprofiel kon niet worden vernieuwd."
-
-#: class/WC_Twoinc.php
-msgid "Merchant profile refreshed."
-msgstr "Verkopersprofiel vernieuwd."
-
-#: class/WC_Twoinc.php
-msgid "Custom payment terms (days) can only be removed, not changed."
-msgstr "Aangepaste betalingstermijnen (dagen) kunnen alleen worden verwijderd, niet gewijzigd."
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Custom payment terms (days) holds \"%s\", which is not a usable number of days. Choose Remove on that field to clear it."
-msgstr "Aangepaste betalingstermijnen (dagen) bevat %s, wat geen bruikbaar aantal dagen is. Kies Verwijderen bij dat veld om het te wissen."
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Custom payment terms (days) of %s is now one of the standard terms you offer, so it has been selected under Payment terms and the custom field cleared."
-msgstr "Aangepaste betalingstermijnen (dagen) van %s is nu een van de standaardtermijnen die u aanbiedt, dus deze is geselecteerd onder Betalingstermijnen en het aangepaste veld is gewist."
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Legacy setting. This offers a custom term of %s days from fulfilment. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
-msgstr "Verouderde instelling. Dit biedt een aangepaste termijn van %s dagen vanaf uitvoering. Deze wordt niet langer ondersteund en kan niet worden gewijzigd. Kies Verwijderen om deze in te trekken, of gebruik de betalingstermijnen hierboven om te wijzigen wat u aanbiedt."
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Legacy setting. This offers a custom term of %s days after the end of the month. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
-msgstr "Verouderde instelling. Dit biedt een aangepaste termijn van %s dagen na het einde van de maand. Deze wordt niet langer ondersteund en kan niet worden gewijzigd. Kies Verwijderen om deze in te trekken, of gebruik de betalingstermijnen hierboven om te wijzigen wat u aanbiedt."
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "The last attempt was on %s."
-msgstr "De laatste poging was op %s."
-
-#: class/WC_Twoinc.php
-msgid "No attempt has been made yet."
-msgstr "Er is nog geen poging gedaan."
-
-#: class/WC_Twoinc.php
-msgid "Payment method at checkout"
-msgstr "Betaalmethode in de checkout"
-
-#: class/WC_Twoinc.php
-msgid "Not shown at checkout"
-msgstr "Niet zichtbaar in de checkout"
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "no API key is saved. Check \"%s API key\"."
-msgstr "er is geen API-sleutel opgeslagen. Controleer \"%s API-sleutel\"."
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "the API key was rejected. Check \"%s API key\" and \"Environment\"."
-msgstr "de API-sleutel is geweigerd. Controleer \"%s API-sleutel\" en \"Omgeving\"."
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "no buyer countries are currently enabled for your account. Contact %s to have them enabled."
-msgstr "er zijn momenteel geen landen van de koper geactiveerd voor uw account. Neem contact op met %s om ze te laten activeren."
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "hidden for baskets below %s"
-msgstr "verborgen voor winkelwagens onder %s"
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "hidden for baskets below %1$s or %2$s"
-msgstr "verborgen voor winkelwagens onder %1$s of %2$s"
-
-#: class/WC_Twoinc.php
-msgid "excluding tax"
-msgstr "exclusief btw"
-
-#: class/WC_Twoinc.php
-msgid "including tax"
-msgstr "inclusief btw"
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "Check the \"%s API key\" and \"Environment\" settings."
-msgstr "Controleer de instellingen \"%s API-sleutel\" en \"Omgeving\"."
-
-#: class/WC_Twoinc.php
-msgid "the payment method is disabled. Check \"Turn on/off\"."
-msgstr "de betaalmethode is uitgeschakeld. Controleer \"Aan/uitzetten\"."
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "offered only to buyers billed in %s"
-msgstr "alleen aangeboden aan kopers die worden gefactureerd in %s"
-
-#: class/WC_Twoinc.php
-msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
-msgstr "de opgeslagen toeslagmethode wordt niet herkend. Controleer \"Toeslagmethode\"."
-
-#: class/WC_Twoinc.php
-msgid "Shown at checkout"
-msgstr "Zichtbaar in de checkout"
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "offered only to buyers in %s"
-msgstr "alleen aangeboden aan kopers in %s"
-
-#: class/WC_Twoinc.php
-#, php-format
-msgid "the buyer countries on your account could not be read. Contact %s."
-msgstr "de landen van de koper op uw account konden niet worden gelezen. Neem contact op met %s."
-
-#: class/WC_Twoinc.php
-msgid "minimum order value not known until your profile refreshes"
-msgstr "minimumbestelwaarde nog niet bekend totdat uw profiel is vernieuwd"
-
-#: class/WC_Twoinc.php
-msgid "hidden for baskets in a currency the buyer surcharge cannot be priced in"
-msgstr "verborgen voor winkelwagens in een valuta waarin de toeslag voor de koper niet kan worden berekend"
-
-#: class/WC_Twoinc.php
-msgid "Automatic"
-msgstr "Automatisch"
-
-#: class/WC_Twoinc_Payment_Terms.php
+#: class/WC_Twoinc_Payment_Terms.php:1104
 msgid "Payment terms fee"
 msgstr "Betaaltermijn toeslag"
 
-#: class/WC_Twoinc_Payment_Terms.php
-#, php-format
-msgid "Payment terms fee - %s days"
-msgstr "Betaaltermijn toeslag - %s dagen"
-
-#: class/WC_Twoinc_Payment_Terms.php
+#: class/WC_Twoinc_Payment_Terms.php:1107
 #, php-format
 msgid "Payment terms fee - %s days from end of month"
 msgstr "Betaaltermijn toeslag - %s dagen vanaf het einde van de maand"
 
-#: class/WC_Twoinc.php
-msgid "payment terms"
-msgstr "betaalvoorwaarden"
-
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc_Payment_Terms.php:1108
 #, php-format
-msgid "You must accept %s to place order."
-msgstr "U moet %s accepteren om de bestelling te plaatsen."
+msgid "Payment terms fee - %s days"
+msgstr "Betaaltermijn toeslag - %s dagen"
 
-#: class/WC_Twoinc.php
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Rate_Limiter.php:422
 #, php-format
-msgid "I accept the %1$s and authorize %2$s to process my data automatically."
-msgstr "Ik accepteer de %1$s en geef toestemming aan %2$s voor automatische verwerking van mijn gegevens."
+msgid ""
+"The %s checkout now meters its AJAX endpoints per client address. Checkout "
+"still completes, but if your store sits behind a CDN or load balancer every "
+"buyer arrives as the same address, and company search, address autofill and "
+"the approval check can be refused. List your proxy under Diagnostics to "
+"meter buyers individually."
+msgstr ""
+"De %s-checkout meet nu zijn AJAX-endpoints per clientadres. De checkout "
+"wordt nog steeds voltooid, maar als uw winkel achter een CDN of load "
+"balancer staat, komt elke koper aan als hetzelfde adres en kunnen bedrijf "
+"zoeken, automatisch adres aanvullen en de goedkeuringscontrole worden "
+"geweigerd. Vermeld uw proxy onder Diagnostiek om kopers afzonderlijk te "
+"meten."
+
+#: class/WC_Twoinc_Rate_Limiter.php:432
+msgid "Open Diagnostics settings"
+msgstr "Diagnostiek-instellingen openen"
+
+#: class/WC_Twoinc_Rate_Limiter.php:434
+msgid "Dismiss"
+msgstr "Sluiten"
+
+#: snippets/admin-order-list-columns.php:83
+#: snippets/delivery-date-checkout.php:30
+#: snippets/delivery-date-checkout.php:51
+#: snippets/delivery-date-checkout.php:71
+#: snippets/delivery-date-checkout.php:79
+msgid "Delivery Date"
+msgstr ""
+
+#: snippets/admin-order-list-columns.php:84
+msgid "Customer"
+msgstr ""
+
+#: snippets/delivery-date-checkout.php:27
+msgid "Select Pickup Date"
+msgstr ""
+
+#: snippets/delivery-date-checkout.php:52
+msgid "Select Date"
+msgstr ""
+
+#: snippets/delivery-date-checkout.php:70
+#, php-format
+msgid "%s is a required field."
+msgstr ""
+
+#: snippets/delivery-date-checkout.php:78
+#, php-format
+msgid "%s cannot be parsed."
+msgstr ""
+
+#: tillit-payment-gateway.php:256
+msgid "Settings"
+msgstr "Instellingen"
