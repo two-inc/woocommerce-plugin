@@ -612,3 +612,22 @@ Key Conventions
 8. Use WordPress's hook system for modular and extensible code.
 9. Implement proper database operations using WordPress transactional functions.
 10. Use WordPress's WP_Cron API for scheduling tasks.
+
+## The plugin package contains plugin files only
+
+Two exclusion lists decide what merchants receive, and both must agree:
+
+- `.distignore`: honoured by the WordPress.org deploy in `deploy.yaml`.
+- `.gitattributes` (`export-ignore`): honoured by `git archive`, which `make
+archive` uses.
+
+A file that is repository tooling rather than plugin code (agent instructions,
+CI configs, dev scripts, lint and analysis configs, env examples, version
+markers, stray build output) goes into both lists in the same change that adds
+it. Check before pushing:
+
+    git archive --format tar --worktree-attributes HEAD | tar -t | awk -F/ '{print $1}' | sort -u
+
+The expected top level is `assets brands class languages readme.txt templates
+tillit-payment-gateway.php uninstall.php views`, plus `package.json` and
+`package-lock.json`, which `.distignore` alone removes.
