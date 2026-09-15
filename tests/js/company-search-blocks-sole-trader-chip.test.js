@@ -33,18 +33,26 @@ const SOLE_TRADER_CONFIG = {
   }
 };
 
-/** Blocks' own company rows, and no host for the sole-trader note anywhere. */
-function buildBlocksCheckout() {
-  document.body.innerHTML = [
-    '<div class="wp-block-woocommerce-checkout">',
+function companyRow(role) {
+  return [
     '  <div class="wc-block-components-text-input">',
-    '    <input type="text" id="billing-company" name="billing-company" />',
-    "  </div>",
-    '  <div class="wc-block-components-text-input">',
-    '    <input type="text" id="shipping-company" name="shipping-company" />',
-    "  </div>",
-    "</div>"
+    '    <input type="text" id="' + role + '-company" name="' + role + '-company" />',
+    "  </div>"
   ].join("\n");
+}
+
+/** Blocks' own company rows, and no host for the sole-trader note anywhere. */
+function buildBlocksCheckout(roles) {
+  document.body.innerHTML = ['<div class="wp-block-woocommerce-checkout">']
+    .concat((roles || ["billing", "shipping"]).map(companyRow))
+    .concat("</div>")
+    .join("\n");
+}
+
+/** What "Use same address for billing" being unticked does to this DOM. */
+function addCompanyRow(role) {
+  const root = document.querySelector(".wp-block-woocommerce-checkout");
+  root.insertAdjacentHTML("beforeend", companyRow(role));
 }
 
 const ADDRESS_KEYS = [
@@ -136,13 +144,16 @@ describe("the Sole trader mode chip on a Blocks checkout", () => {
       sole_trader: SOLE_TRADER_CONFIG
     });
     window.sessionStorage.clear();
-    buildBlocksCheckout();
+  });
+
+  function start(roles) {
+    buildBlocksCheckout(roles);
     installBlocksGlobals("GB");
     publishController(ctx);
     ajax = harness.stubAjax(ctx.$);
     // Indirect eval, as the skin's own <script> tag evaluates it.
     (0, eval)(SKIN);
-  });
+  }
 
   afterEach(() => {
     ctx.controls.forEach((search) => {
@@ -151,7 +162,8 @@ describe("the Sole trader mode chip on a Blocks checkout", () => {
       search.soleTrader.stopAllPopupWatchers();
       search.soleTrader.stopTokenRefresh();
     });
-    ajax.restore();
+    if (ajax) ajax.restore();
+    ajax = null;
     harness.releasePanel(ctx.helper);
     harness.releasePanel(ctx.shippingHelper);
     ["wc", "wp", "twoincBlocksName"]
@@ -207,6 +219,7 @@ describe("the Sole trader mode chip on a Blocks checkout", () => {
       description: "a country without sole traders withholds the chip on the delivery form"
     }
   ])("$description", ({ role, available, offered, description }) => {
+    start();
     settleRegistry(["GB"]);
 
     const asked = settleAvailability(available);
@@ -218,6 +231,32 @@ describe("the Sole trader mode chip on a Blocks checkout", () => {
     );
     expect(`${!chip(role, "soletrader").classList.contains("two-hidden")} — ${description}`).toBe(
       `${offered} — ${description}`
+    );
+  });
+
+  test.each([
+    {
+      role: "billing",
+      description: "a billing company row added after bootstrap resolves its own availability"
+    },
+    {
+      role: "shipping",
+      description: "a shipping company row added after bootstrap resolves its own availability"
+    }
+  ])("$description", async ({ role, description }) => {
+    const present = role === "billing" ? "shipping" : "billing";
+    start([present]);
+    settleRegistry(["GB"]);
+    settleAvailability(true);
+
+    addCompanyRow(role);
+    // The skin re-mounts off a MutationObserver, which jsdom delivers async.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const asked = settleAvailability(true);
+    expect(`${asked} asked — ${description}`).toBe(`1 asked — ${description}`);
+    expect(`${!chip(role, "soletrader").classList.contains("two-hidden")} — ${description}`).toBe(
+      `true — ${description}`
     );
   });
 });
