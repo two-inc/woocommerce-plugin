@@ -213,7 +213,7 @@ are out of scope here — they live in the `e2e-tests` repo.
 
 ### Environment
 
-- Store: <http://localhost:8888>, admin at `/wp-admin` (`admin` / `twoinb2b`)
+- Store: <http://localhost:8888>, admin at `/wp-admin` (`exampleuser@two.inc` / `examplepassword123`)
 - Checkout pages: `/checkout/` (classic shortcode) and `/blocks-checkout/`
   (WooCommerce Blocks)
 - Products: "Product 1"–"Product 4" (random prices 100–200) plus "Expensive

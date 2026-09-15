@@ -1,7 +1,7 @@
 export const STORE_URL = "http://localhost:8888";
 export const ADMIN_URL = `${STORE_URL}/wp-admin`;
-export const ADMIN_USER = "admin";
-export const ADMIN_PASSWORD = "twoinb2b";
+export const ADMIN_USER = "exampleuser@two.inc";
+export const ADMIN_PASSWORD = "examplepassword123";
 
 export const API_BASE_URL = process.env.TWO_API_BASE_URL ?? "https://api.staging.two.inc";
 export const API_KEY = process.env.MERCHANT_API_KEY ?? "";
