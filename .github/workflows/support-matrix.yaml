@@ -149,6 +149,21 @@ jobs:
             sleep 5
           done
 
+      # The WordPress image is the floating `latest` tag, so this job silently
+      # follows whatever WordPress ships. Record which version that was, and say
+      # so when readme.txt's `Tested up to` is behind it - that field is the
+      # compatibility claim on the wordpress.org listing, and nothing else keeps
+      # it honest.
+      - name: Report the WordPress version this ran against
+        run: |
+          set -o pipefail
+          wp_version=$(docker exec "cli-$SFX" wp core version)
+          declared=$(sed -n 's/^Tested up to: //p' readme.txt | head -1)
+          echo "Booted WordPress ${wp_version}; readme.txt declares ${declared}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$wp_version" != "$declared" ]; then
+            echo "::warning::support-matrix: booted WordPress ${wp_version} but readme.txt says 'Tested up to: ${declared}' - update it once the checkout flow has been exercised on ${wp_version}"
+          fi
+
       - name: Install plugin HEAD + smoke
         run: |
           set -o pipefail
