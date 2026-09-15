@@ -170,3 +170,4 @@ jobs:
           else
             echo "Version already correct at ${SET_VERSION} — ${REASON}" >> "$GITHUB_STEP_SUMMARY"
           fi
+
