@@ -40,9 +40,8 @@ jobs:
       - name: Fetch secrets
         id: secrets
         run: |
-          # Temporary merchant: tillittestuk has accumulated too much e2e order
-          # volume to pass fraud velocity checks, so every order it places is
-          # declined. Revert to it once CI is trusted again.
+          # Temporary: the usual e2e test account has too much order history to
+          # place orders reliably; revert to it once that is cleared.
           MERCHANT_API_KEY=$(gcloud secrets versions access latest --secret="STAGING_SHOP_MERCHANT_API_KEY_GB" --project=two-beta)
           echo "::add-mask::$MERCHANT_API_KEY"
           echo "MERCHANT_API_KEY=$MERCHANT_API_KEY" >> $GITHUB_OUTPUT
