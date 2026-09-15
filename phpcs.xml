@@ -44,10 +44,12 @@
         <exclude name="PSR1.Classes.ClassDeclaration.MissingNamespace"/>
     </rule>
 
-    <!-- WordPress plugin entry point, drop-in snippets and the test harness
-         are side-effect files by nature. class/ stays gated. -->
+    <!-- WordPress plugin entry point, drop-in snippets, the local-shop
+         mu-plugins and wp-cli eval-files, and the test harness are
+         side-effect files by nature. class/ stays gated. -->
     <rule ref="PSR1.Files.SideEffects">
         <exclude-pattern>tillit-payment-gateway\.php</exclude-pattern>
+        <exclude-pattern>*/docker/*</exclude-pattern>
         <exclude-pattern>*/snippets/*</exclude-pattern>
         <exclude-pattern>*/tests/*</exclude-pattern>
     </rule>

@@ -14,6 +14,8 @@ export async function addProductToCart(page: Page, productName = "Product 1", qu
 }
 
 export async function goToCheckout(page: Page) {
-  await page.goto("/checkout/");
+  // The query arg pins the renderer for the rest of the run: without it the
+  // shop's Blocks default bounces this request to /blocks/checkout/.
+  await page.goto("/classic/checkout/?two-checkout=classic");
   await page.waitForLoadState("load");
 }
