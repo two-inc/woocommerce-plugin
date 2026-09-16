@@ -1,4 +1,6 @@
-export const STORE_URL = "http://localhost:8888";
+// Follows the host port docker-compose published. CI runs a stack per matrix
+// leg on one runner, so each leg sets its own.
+export const STORE_URL = `http://localhost:${process.env.WORDPRESS_PORT ?? "8888"}`;
 export const ADMIN_URL = `${STORE_URL}/wp-admin`;
 export const ADMIN_USER = "exampleuser@two.inc";
 export const ADMIN_PASSWORD = "examplepassword123";

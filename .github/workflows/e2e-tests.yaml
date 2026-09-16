@@ -72,19 +72,14 @@ jobs:
     runs-on: ${{ vars.RUNNER_STANDARD }}
     strategy:
       fail-fast: false
-      # Serial on purpose. The compose harness fixes container names and binds
-      # host port 8888, so two legs on one runner would collide; running them
-      # one at a time leaves that constraint exactly as it was rather than
-      # widening it.
-      max-parallel: 1
       matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     # Namespace the Compose project per leg, the same way support-matrix.yaml
     # and upgrade-smoke.yaml namespace their docker resources by run id. The
     # compose volumes are project-scoped, so a leg landing on a runner that
     # still holds another job's `wordpress_data` would otherwise boot on that
-    # install rather than on the WordPress it asked for. Serial legs alone do
-    # not cover this: the legs need not share a runner, so the teardown below
-    # can run somewhere other than where the next leg starts.
+    # install rather than on the WordPress it asked for. This is needed whether
+    # or not the legs run in parallel: they need not share a runner, so the
+    # teardown below can run somewhere other than where the next leg starts.
     env:
       COMPOSE_PROJECT_NAME: e2e-${{ github.run_id }}-${{ strategy.job-index }}
     # Must exceed Playwright's own worst case, or a fully-failing suite is
@@ -96,6 +91,16 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+
+      # One host port per leg: a port binding is not project-scoped the way the
+      # Compose project name above is, so parallel legs would otherwise collide
+      # on it. Compose publishes this and the e2e suite reads it, so the whole
+      # stack follows from the one variable. Shell arithmetic because `+` is
+      # not a GitHub expression operator.
+      - name: Allocate a host port for this leg
+        env:
+          JOB_INDEX: ${{ strategy.job-index }}
+        run: echo "WORDPRESS_PORT=$((8888 + JOB_INDEX))" >> "$GITHUB_ENV"
 
       - name: Authenticate to Google Cloud
         id: gcp-auth

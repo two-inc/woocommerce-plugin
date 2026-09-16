@@ -100,7 +100,9 @@ cp .env.example .env   # adjust TWO_API_KEY / TWO_API_BASE_URL / TWO_BRAND_CODE
 make install           # docker compose up; first provision takes ~90s (make logs-wpcli)
 ```
 
-Navigate to <http://localhost:8888/>. `make configure` re-applies the
+Navigate to <http://localhost:8888/> (set `WORDPRESS_PORT` in `.env` to publish
+it elsewhere, which is what lets a second stack run alongside this one).
+`make configure` re-applies the
 TWO\_\* env values to the gateway settings after you edit `.env` (run
 `make run` first so the container env is recreated). Other targets:
 `make logs`, `make stop`, `make clean` (full reset), `make test-unit`,
@@ -146,7 +148,7 @@ be used even if it were set.
 account, sandbox otherwise) and docker-compose threads it through as
 `TWOINC_DEV_API_HOST`. A bare `docker compose up -d` does not, which leaves
 that variable empty in the container — harmless on localhost, but check it with
-`docker exec wordpress env | grep TWOINC_DEV` before concluding the key is
+`docker compose exec -T wordpress env | grep TWOINC_DEV` before concluding the key is
 wrong.
 
 ### Clearing a cached API-key verdict
@@ -213,7 +215,8 @@ are out of scope here — they live in the `e2e-tests` repo.
 
 ### Environment
 
-- Store: <http://localhost:8888>, admin at `/wp-admin` (`exampleuser@two.inc` / `examplepassword123`)
+- Store: <http://localhost:8888>, admin at `/wp-admin` (`exampleuser@two.inc` / `examplepassword123`).
+  Set `WORDPRESS_PORT` to move it; the suite reads the same variable, so both follow together
 - Checkout pages: `/blocks/checkout/` (WooCommerce Blocks, the default) and
   `/classic/checkout/` (classic shortcode). The header control picks which one
   every checkout link routes to; the choice is held in a cookie

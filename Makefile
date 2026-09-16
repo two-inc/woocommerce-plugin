@@ -17,6 +17,15 @@ TWO_PORTAL_BASE_URL   ?= https://portal.$(TWO_ENV).two.inc
 TWO_CHECKOUT_BASE_URL ?= https://checkout.$(TWO_ENV).two.inc
 export TWO_API_BASE_URL TWO_PORTAL_BASE_URL TWO_CHECKOUT_BASE_URL
 
+# Host port the shop publishes. Two stacks on one daemon need different values.
+#
+# The export is load-bearing, not tidiness. Make resolves .env over the calling
+# environment (the -include above) while compose resolves it the other way
+# round, so without exporting Make's answer into the recipe the banner below
+# could name one port while compose published another.
+WORDPRESS_PORT ?= 8888
+export WORDPRESS_PORT
+
 .PHONY: help install configure run debug proxy stop clean logs logs-wpcli \
 	test-unit test-js test format archive bump patch minor major \
 	e2e-install e2e-test e2e-test-headed phpcs phpstan check-plugin-mount
@@ -47,8 +56,8 @@ run:
 	@PROXY_URL=$$(./start-proxy.sh url 2>/dev/null); \
 	echo ""; \
 	echo "========================================="; \
-	echo " WordPress store: http://localhost:8888/"; \
-	echo " WP admin:        http://localhost:8888/wp-admin/"; \
+	echo " WordPress store: http://localhost:$(WORDPRESS_PORT)/"; \
+	echo " WP admin:        http://localhost:$(WORDPRESS_PORT)/wp-admin/"; \
 	if [ -n "$$PROXY_URL" ]; then \
 		echo " Proxy store:     $$PROXY_URL/"; \
 		echo " Proxy admin:     $$PROXY_URL/wp-admin/"; \
@@ -70,7 +79,7 @@ debug: run
 	@PROXY_URL=$$(./start-proxy.sh url 2>/dev/null); \
 	echo ""; \
 	echo "========================================="; \
-	echo " WordPress store: http://localhost:8888/"; \
+	echo " WordPress store: http://localhost:$(WORDPRESS_PORT)/"; \
 	if [ -n "$$PROXY_URL" ]; then \
 		echo " Proxy store:     $$PROXY_URL/"; \
 	fi; \

@@ -1,5 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
+// Imported rather than repeated, so the port has one definition on this side.
+import { STORE_URL } from "./config.js";
+
 export default defineConfig({
   testDir: "./tests",
   // Default in CI is the dot reporter, which emits a single character per
@@ -13,7 +16,7 @@ export default defineConfig({
   workers: 1,
   retries: 1,
   use: {
-    baseURL: "http://localhost:8888",
+    baseURL: STORE_URL,
     viewport: { width: 1280, height: 720 },
     actionTimeout: 15_000,
     trace: "retain-on-failure",
