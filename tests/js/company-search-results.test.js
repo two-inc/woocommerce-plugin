@@ -423,6 +423,7 @@ describe("company search hints", () => {
       ["assets/js/company-search-panel.js", "the vendored panel"],
       ["class/WC_Twoinc_Checkout.php", "the localisation array"],
       ["languages/twoinc-payment-gateway.pot", "the template catalogue"],
+      ["languages/twoinc-payment-gateway-es_ES.po", "the es_ES catalogue"],
       ["languages/twoinc-payment-gateway-nb_NO.po", "the nb_NO catalogue"],
       ["languages/twoinc-payment-gateway-nl_NL.po", "the nl_NL catalogue"],
       ["languages/twoinc-payment-gateway-sv_SE.po", "the sv_SE catalogue"]
