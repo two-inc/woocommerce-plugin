@@ -45,8 +45,8 @@
     </rule>
 
     <!-- WordPress plugin entry point, drop-in snippets, the local-shop
-         mu-plugins and wp-cli eval-files, and the test harness are
-         side-effect files by nature. class/ stays gated. -->
+         provisioning scripts and the test harness are side-effect files by
+         nature. class/ stays gated. -->
     <rule ref="PSR1.Files.SideEffects">
         <exclude-pattern>tillit-payment-gateway\.php</exclude-pattern>
         <exclude-pattern>*/docker/*</exclude-pattern>
