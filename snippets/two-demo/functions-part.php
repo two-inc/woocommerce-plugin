@@ -15,20 +15,29 @@ function add_two_due_days($fields)
 {
     $lang = WC_Twoinc_Helper::get_locale();
     $label_text = "Days you'll have to pay your invoice";
+    $days_word = 'days';
     if ($lang === 'sv_SE') {
         $label_text = 'Dagar du kommer ha att betala din faktura';
+        $days_word = 'dagar';
     } elseif ($lang === 'nb_NO') {
         $label_text = 'Dager du må betale fakturaen';
+        $days_word = 'dager';
+    } elseif ($lang === 'nl_NL') {
+        $label_text = 'Aantal dagen om uw factuur te betalen';
+        $days_word = 'dagen';
+    } elseif ($lang === 'es_ES') {
+        $label_text = 'Días de plazo para pagar su factura';
+        $days_word = 'días';
     }
 
     $fields['billing']['billing_due_in_days'] = [
         'label'    => $label_text,
         'type'     => 'select',
         'options'  => array(
-             '14'  => '14 days',
-             '30'  => '30 days',
-             '60'  => '60 days',
-             '90'  => '90 days'
+             '14'  => '14 ' . $days_word,
+             '30'  => '30 ' . $days_word,
+             '60'  => '60 ' . $days_word,
+             '90'  => '90 ' . $days_word
         ),
         'required' => true,
         'priority' => 30
