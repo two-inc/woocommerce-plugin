@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-15T13:38:32+00:00\n"
+"POT-Creation-Date: 2026-09-16T16:59:55+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: twoinc-payment-gateway\n"
@@ -1798,6 +1798,18 @@ msgstr ""
 #: snippets/delivery-date-checkout.php:78
 #, php-format
 msgid "%s cannot be parsed."
+msgstr ""
+
+#. translators: %d: number of days the buyer gets to pay the invoice.
+#: snippets/two-demo/functions-part.php:19
+#, php-format
+msgid "%d day"
+msgid_plural "%d days"
+msgstr[0] ""
+msgstr[1] ""
+
+#: snippets/two-demo/functions-part.php:23
+msgid "Days you'll have to pay your invoice"
 msgstr ""
 
 #: tillit-payment-gateway.php:256

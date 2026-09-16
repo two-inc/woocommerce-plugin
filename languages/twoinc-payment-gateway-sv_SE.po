@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/app\n"
-"POT-Creation-Date: 2026-09-15T13:38:32+00:00\n"
+"POT-Creation-Date: 2026-09-16T16:59:55+00:00\n"
 "PO-Revision-Date: 2025-07-01 10:29+0000\n"
 "Last-Translator: \n"
 "Language-Team: Swedish\n"
@@ -1754,6 +1754,18 @@ msgstr "%s är ett obligatoriskt fält."
 #, php-format
 msgid "%s cannot be parsed."
 msgstr "%s kan inte tolkas."
+
+#. translators: %d: number of days the buyer gets to pay the invoice.
+#: snippets/two-demo/functions-part.php:19
+#, php-format
+msgid "%d day"
+msgid_plural "%d days"
+msgstr[0] "%d dag"
+msgstr[1] "%d dagar"
+
+#: snippets/two-demo/functions-part.php:23
+msgid "Days you'll have to pay your invoice"
+msgstr "Dagar du kommer ha att betala din faktura"
 
 #: tillit-payment-gateway.php:256
 msgid "Settings"
