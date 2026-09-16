@@ -13,32 +13,16 @@ add_filter("two_order_create", "add_two_order_fields");
 
 function add_two_due_days($fields)
 {
-    $lang = WC_Twoinc_Helper::get_locale();
-    $label_text = "Days you'll have to pay your invoice";
-    $days_word = 'days';
-    if ($lang === 'sv_SE') {
-        $label_text = 'Dagar du kommer ha att betala din faktura';
-        $days_word = 'dagar';
-    } elseif ($lang === 'nb_NO') {
-        $label_text = 'Dager du må betale fakturaen';
-        $days_word = 'dager';
-    } elseif ($lang === 'nl_NL') {
-        $label_text = 'Aantal dagen om uw factuur te betalen';
-        $days_word = 'dagen';
-    } elseif ($lang === 'es_ES') {
-        $label_text = 'Días de plazo para pagar su factura';
-        $days_word = 'días';
+    $options = array();
+    foreach (array(14, 30, 60, 90) as $days) {
+        /* translators: %d: number of days the buyer gets to pay the invoice. */
+        $options[(string) $days] = sprintf(_n('%d day', '%d days', $days, 'twoinc-payment-gateway'), $days);
     }
 
     $fields['billing']['billing_due_in_days'] = [
-        'label'    => $label_text,
+        'label'    => __("Days you'll have to pay your invoice", 'twoinc-payment-gateway'),
         'type'     => 'select',
-        'options'  => array(
-             '14'  => '14 ' . $days_word,
-             '30'  => '30 ' . $days_word,
-             '60'  => '60 ' . $days_word,
-             '90'  => '90 ' . $days_word
-        ),
+        'options'  => $options,
         'required' => true,
         'priority' => 30
     ];
