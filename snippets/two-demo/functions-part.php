@@ -16,7 +16,7 @@ function add_two_due_days($fields)
     $options = array();
     foreach (array(14, 30, 60, 90) as $days) {
         /* translators: %d: number of days the buyer gets to pay the invoice. */
-        $options[(string) $days] = sprintf(_n('%d day', '%d days', $days, 'twoinc-payment-gateway'), $days);
+        $options[$days] = sprintf(_n('%d day', '%d days', $days, 'twoinc-payment-gateway'), $days);
     }
 
     $fields['billing']['billing_due_in_days'] = [
