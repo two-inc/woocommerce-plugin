@@ -57,6 +57,16 @@ if (! $page) {
     WP_CLI::error('the shop has no checkout page');
 }
 
+// Residue of the superseded two-page seed — /classic/checkout/ still carries
+// [woocommerce_checkout], which is_checkout() matches. Children first to resolve.
+foreach (array('blocks/checkout', 'classic/checkout', 'blocks', 'classic') as $legacy_path) {
+    $legacy = get_page_by_path($legacy_path);
+    if ($legacy && (int) $legacy->ID !== (int) $page->ID) {
+        wp_delete_post($legacy->ID, true);
+        WP_CLI::log(sprintf('[checkout-renderer] deleted the superseded /%s/', $legacy_path));
+    }
+}
+
 $content = 'blocks' === $renderer ? two_e2e_blocks_checkout_content() : '[woocommerce_checkout]';
 
 $updated = wp_update_post(
@@ -71,6 +81,15 @@ $updated = wp_update_post(
 );
 if (is_wp_error($updated)) {
     WP_CLI::error('could not write the checkout page: ' . $updated->get_error_message());
+}
+
+// wp_update_post() runs wp_unique_post_slug(), which suffixes to checkout-2 rather than failing.
+$slug = get_post_field('post_name', $page->ID);
+if ('checkout' !== $slug) {
+    WP_CLI::error(sprintf(
+        'the checkout page took the slug "%s": another published page already holds /checkout/',
+        $slug
+    ));
 }
 
 update_option('woocommerce_checkout_page_id', $page->ID);
