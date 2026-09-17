@@ -1114,6 +1114,33 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(shadowInput("billing_address_1").value).toBe("Example House");
   });
 
+  test("a write the resolved cart already agreed with opposes nothing after it", async () => {
+    const base = baseGlobals("address_area", { city: "Bergen" });
+    base.resolution.customerData = false;
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    // Given: the write lands before the cart resolves, and the address that
+    // answers already carries it — so there is no value it replaced.
+    shadowInput("billing_city").value = "Bergen";
+    await Promise.resolve();
+    base.resolution.customerData = true;
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // When: the store answers with its own next value.
+    base.address.city = "Oslo";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // Then: that value is the store's, not a revert to re-send.
+    expect(base.calls.patches).toEqual([]);
+    expect(shadowInput("billing_city").value).toBe("Oslo");
+  });
+
   test("a write the store has taken no longer skips the pull for the life of the page", async () => {
     const base = baseGlobals("address_area", { address_1: "", city: "Oslo" });
     const { env } = globals({});
