@@ -137,11 +137,8 @@ export async function fillOrderDetails(page: Page, firstName: string, lastName: 
       (key) => window.wp?.data?.select("wc/store/cart")?.getCustomerData?.()?.[key],
       addressKey
     );
-    expect(address?.company, `cart store ${addressKey}.company after the company pick`).toBeTruthy();
-    expect(
-      address?.address_1,
-      `cart store ${addressKey}.address_1 after the company pick`
-    ).toBeTruthy();
+    expect(address?.company, `cart store ${addressKey}.company`).toBeTruthy();
+    expect(address?.address_1, `cart store ${addressKey}.address_1`).toBeTruthy();
     // Under the 180s per-test timeout, so this reports what did not hold rather
     // than dying as a bare test timeout, and placeOrder is left budget.
   }).toPass({ timeout: 90_000, intervals: [1_000, 2_000, 5_000] });
