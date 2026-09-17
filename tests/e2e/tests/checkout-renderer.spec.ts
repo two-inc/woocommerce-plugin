@@ -3,12 +3,7 @@ import { test, expect } from "@playwright/test";
 import { checkout, expectConfiguredRenderer } from "../pages/renderer.js";
 import * as store from "../pages/store.js";
 
-/**
- * The shop is shaped for one renderer before the suite runs
- * (tests/e2e/provision/checkout-renderer.php) and the whole suite runs once
- * per renderer. These assert that configuration took; placing an order under
- * each renderer is order-flow.spec.ts on each leg of that matrix.
- */
+/** Only that the shop's configured renderer took: ordering under each is order-flow.spec.ts per matrix leg. */
 test(`the shop's checkout renders the ${checkout.renderer} renderer`, async ({ page }) => {
   // Given a shop configured for one renderer; When following its own checkout link
   await store.addProductToCart(page, "Product 1");

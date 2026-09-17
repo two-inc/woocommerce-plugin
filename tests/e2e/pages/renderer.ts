@@ -7,11 +7,7 @@ import * as classic from "./checkout.js";
 /** Renderer-independent: Blocks is a skin over the classic controller's chips. */
 export const MODE_CHIP = classic.MODE_CHIP;
 
-/**
- * The shop has one checkout page, shaped for one renderer before the suite
- * runs (tests/e2e/provision/checkout-renderer.php). Every spec drives it
- * through this, so the same spec covers both legs of the CI matrix.
- */
+/** The shop has one checkout page, shaped for one renderer, so one spec covers both legs of the CI matrix. */
 export type CheckoutDriver = {
   readonly renderer: "blocks" | "classic";
   /** Rendered only by this renderer, so it identifies which one the page ran. */
