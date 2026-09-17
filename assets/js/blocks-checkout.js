@@ -166,7 +166,11 @@
           var address = storedAddress(entry.store);
           // Recorded at the write, not at the push: by then this write is the store's own value.
           var was = address ? String(address[key] == null ? "" : address[key]) : null;
-          (dirty[entry.role] = dirty[entry.role] || {})[key] = { was: was, sends: SENDS };
+          (dirty[entry.role] = dirty[entry.role] || {})[key] = {
+            was: was,
+            sends: SENDS,
+            taken: false
+          };
           schedulePush();
         });
       });
@@ -228,8 +232,9 @@
 
       applying = true;
       ADDRESS_KEYS.forEach(function (key) {
-        // Skipped while this key's own write is unconfirmed; others still follow the store.
-        if (written[key]) return;
+        var held = written[key];
+        // Skipped only until the store holds this write; the record outlives that.
+        if (held && !held.taken) return;
         var input = document.getElementById(entry.role + "_" + key);
         var value = address[key] == null ? "" : String(address[key]);
         if (input && input.value !== value) {
@@ -276,15 +281,20 @@
     return found;
   }
 
-  /** The control repaints the field it owns by assignment plus a `change`, which is no buyer edit. */
-  function ownDisplayField(target) {
-    if (typeof twoincCompanySearchControls === "undefined" || !target || !target.matches) {
-      return false;
-    }
-    return twoincCompanySearchControls.some(function (search) {
+  /**
+   * The control's own repaint of its display field rather than a buyer edit. The
+   * repaint rewrites the name already held, and a buyer edit or clear does not —
+   * which is the only tell available, the control setting no flag of its own.
+   */
+  function isOwnRepaint(target, role, key) {
+    if (typeof twoincCompanySearchControls === "undefined" || !target.matches) return false;
+    var own = twoincCompanySearchControls.some(function (search) {
       var selector = search.companyFieldSelector();
       return !!selector && target.matches(selector);
     });
+    if (!own) return false;
+    var input = document.getElementById(role + "_" + key);
+    return !!input && target.value === input.value;
   }
 
   /**
@@ -294,13 +304,13 @@
   function releaseOnEdit(event) {
     var target = event.target;
     var id = (target && target.id) || "";
-    if (!id || ownDisplayField(target)) return;
+    if (!id) return;
     addressRoles().forEach(function (entry) {
-      var held = dirty[entry.role];
-      if (!held) return;
+      var written = dirty[entry.role];
+      if (!written) return;
       // Blocks renders the contact email once, under its bare key.
       var key = id === "email" ? "email" : editedKey(entry.role, id);
-      if (key) delete held[key];
+      if (key && !isOwnRepaint(target, entry.role, key)) delete written[key];
     });
   }
 
@@ -328,9 +338,10 @@
           var held = written[key];
           var input = document.getElementById(entry.role + "_" + key);
           var stored = address[key] == null ? "" : String(address[key]);
-          // The store holds it: the write landed, and `pull()` owns the field again.
+          // The store holds it, so `pull()` owns the field again — `was` and the
+          // sends left stay, or a revert to `was` after this goes unopposed.
           if (input && input.value === stored) {
-            delete written[key];
+            held.taken = true;
             return;
           }
           // No address to read at the write: the first one to answer is what it replaced.
@@ -340,6 +351,8 @@
             return;
           }
           held.sends -= 1;
+          // Not held any more, so `pull()` must not paint over this re-send.
+          held.taken = false;
           patch = patch || {};
           patch[key] = input.value;
         });

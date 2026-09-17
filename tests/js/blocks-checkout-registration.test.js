@@ -1084,7 +1084,7 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(base.address.city).toBe("Bergen");
   });
 
-  test("a write the store has taken is released rather than defended for good", async () => {
+  test("a write the store has taken is still defended against a revert to what it replaced", async () => {
     const base = baseGlobals("address_area", { address_1: "" });
     const { env } = globals({});
     env.wp.data = base.data;
@@ -1092,18 +1092,54 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     await Promise.resolve();
     base.calls.patches.length = 0;
 
+    // Given: the store has taken the write.
     shadowInput("billing_address_1").value = "Example House";
     await Promise.resolve();
     base.publish("wc/store/cart");
     await Promise.resolve();
 
-    // A later response is the store's own answer, not one older than the write.
+    // When: a response older than the write puts the store back on the value it replaced.
     base.address.address_1 = "";
     base.publish("wc/store/cart");
     await Promise.resolve();
 
-    expect(base.calls.patches).toEqual([{ address_1: "Example House" }]);
-    expect(shadowInput("billing_address_1").value).toBe("");
+    // Then: the field is still the write's, and the revert is re-sent.
+    expect(base.calls.patches).toEqual([
+      { address_1: "Example House" },
+      { address_1: "Example House" }
+    ]);
+    expect(shadowInput("billing_address_1").value).toBe("Example House");
+  });
+
+  test("a write the store has taken no longer skips the pull for the life of the page", async () => {
+    const base = baseGlobals("address_area", { address_1: "", city: "Oslo" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    // Given: the store has taken the write.
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+    base.publish("wc/store/cart");
+
+    // When: a cart response lands mid-dispatch, so the store pass it triggers
+    // repaints with no push of its own before it.
+    env.wp.data.dispatch = () => ({
+      setBillingAddress(patch) {
+        base.calls.patches.push(patch);
+        Object.assign(base.address, patch);
+        base.address.address_1 = "Third House";
+        base.publish("wc/store/cart");
+      },
+      setShippingAddress() {}
+    });
+    shadowInput("billing_city").value = "Bergen";
+    await Promise.resolve();
+
+    // Then: the store answers for that field again.
+    expect(shadowInput("billing_address_1").value).toBe("Third House");
   });
 
   test("a store notifying from inside the dispatch spends one send, not all three", async () => {
@@ -1140,10 +1176,11 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     shadowInput("billing_company").value = "Example Trading Limited";
     await Promise.resolve();
 
-    // What `setDisplayText()` fires when a rebind repaints the field the panel owns.
-    document
-      .getElementById("billing-company")
-      .dispatchEvent(new window.Event("change", { bubbles: true }));
+    // What `setDisplayText()` fires on a rebind: the captured name painted back
+    // into the field, then a `change`.
+    const field = document.getElementById("billing-company");
+    field.value = "Example Trading Limited";
+    field.dispatchEvent(new window.Event("change", { bubbles: true }));
     base.address.company = "";
     base.publish("wc/store/cart");
     await Promise.resolve();
@@ -1153,6 +1190,31 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
       { company: "Example Trading Limited" }
     ]);
     expect(shadowInput("billing_company").value).toBe("Example Trading Limited");
+  });
+
+  test("a buyer clearing the company field is not overruled by the write that filled it", async () => {
+    document.body.innerHTML = '<input id="billing-company">';
+    const base = baseGlobals("address_area", { company: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_company").value = "Example Trading Limited";
+    await Promise.resolve();
+
+    // The control's own field and the control's own event: the value left in it
+    // is what tells a clear apart from a repaint.
+    document
+      .getElementById("billing-company")
+      .dispatchEvent(new window.Event("change", { bubbles: true }));
+    base.address.company = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ company: "Example Trading Limited" }]);
+    expect(shadowInput("billing_company").value).toBe("");
   });
 
   test("an edit to the one input mirrored roles share ends both their writes", async () => {
