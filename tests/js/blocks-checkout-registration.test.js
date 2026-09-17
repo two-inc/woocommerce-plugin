@@ -75,12 +75,24 @@ function globals(overrides) {
   return { env: Object.assign(base, overrides), registered };
 }
 
+/** The skin binds on the document, and every evaluation would otherwise leave its listeners live. */
+const documentListeners = [];
+
 function evaluate(env) {
   Object.keys(env).forEach((key) => {
     window[key] = env[key];
   });
-  // eslint-disable-next-line no-eval
-  (0, eval)(SOURCE);
+  const add = document.addEventListener.bind(document);
+  document.addEventListener = (type, fn, options) => {
+    documentListeners.push([type, fn, options]);
+    add(type, fn, options);
+  };
+  try {
+    // eslint-disable-next-line no-eval
+    (0, eval)(SOURCE);
+  } finally {
+    delete document.addEventListener;
+  }
 }
 
 afterEach(() => {
@@ -101,6 +113,9 @@ afterEach(() => {
     delete window[key];
   });
   Object.keys(bodyHandlers).forEach((key) => delete bodyHandlers[key]);
+  documentListeners
+    .splice(0)
+    .forEach(([type, fn, options]) => document.removeEventListener(type, fn, options));
   consentState.accepted = null;
   document.body.innerHTML = "";
 });
@@ -1105,6 +1120,81 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     await Promise.resolve();
 
     expect(base.calls.patches).toEqual([{ address_1: "Example House" }]);
+  });
+
+  test("the control repainting the company field it owns does not end the write", async () => {
+    document.body.innerHTML = '<input id="billing-company">';
+    const base = baseGlobals("address_area", { company: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_company").value = "Example Trading Limited";
+    await Promise.resolve();
+
+    // What `setDisplayText()` fires when a rebind repaints the field the panel owns.
+    document
+      .getElementById("billing-company")
+      .dispatchEvent(new window.Event("change", { bubbles: true }));
+    base.address.company = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([
+      { company: "Example Trading Limited" },
+      { company: "Example Trading Limited" }
+    ]);
+    expect(shadowInput("billing_company").value).toBe("Example Trading Limited");
+  });
+
+  test("an edit to the one input mirrored roles share ends both their writes", async () => {
+    // "Use same address for billing": Blocks renders the delivery inputs only.
+    document.body.innerHTML = '<input id="shipping-address_1">';
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+
+    document
+      .getElementById("shipping-address_1")
+      .dispatchEvent(new window.Event("input", { bubbles: true }));
+    base.address.address_1 = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ address_1: "Example House" }]);
+    expect(shadowInput("billing_address_1").value).toBe("");
+  });
+
+  test.each([
+    { id: "billing-country", description: "names its control for the key alone" },
+    { id: "billing-country-input", description: "suffixes its control's id" }
+  ])("a country change releases the hold where Blocks $description", async ({ id }) => {
+    document.body.innerHTML = '<select id="' + id + '"></select>';
+    const base = baseGlobals("address_area", { country: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_country").value = "NO";
+    await Promise.resolve();
+
+    document.getElementById(id).dispatchEvent(new window.Event("change", { bubbles: true }));
+    base.address.country = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ country: "NO" }]);
+    expect(shadowInput("billing_country").value).toBe("");
   });
 
   test("a choice that could not be sent is not recorded as sent", () => {

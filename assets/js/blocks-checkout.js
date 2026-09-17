@@ -243,18 +243,55 @@
     return moved;
   }
 
+  /** Blocks names a plain input for its key alone, a widget's for the key plus a suffix. */
+  function keyFromId(suffix) {
+    var found = null;
+    ADDRESS_KEYS.forEach(function (key) {
+      if (suffix === key || suffix.indexOf(key + "-") === 0) found = key;
+    });
+    return found;
+  }
+
+  /** Which of `role`'s held keys the input `id` is the buyer's control for, if any. */
+  function editedKey(role, id) {
+    var found = null;
+    addressRoles().forEach(function (entry) {
+      if (found || id.indexOf(entry.role + "-") !== 0) return;
+      var key = keyFromId(id.slice(entry.role.length + 1));
+      if (!key) return;
+      // Roles Blocks mirrors render one control between them, so that edit is this role's too.
+      if (entry.role === role || !document.getElementById(role + id.slice(entry.role.length))) {
+        found = key;
+      }
+    });
+    return found;
+  }
+
+  /** The control repaints the field it owns by assignment plus a `change`, which is no buyer edit. */
+  function ownDisplayField(target) {
+    if (typeof twoincCompanySearchControls === "undefined" || !target || !target.matches) {
+      return false;
+    }
+    return twoincCompanySearchControls.some(function (search) {
+      var selector = search.companyFieldSelector();
+      return !!selector && target.matches(selector);
+    });
+  }
+
   /**
    * A buyer edit ends that field's write: a field cleared back to what the write
    * replaced is otherwise the stale cart response `push()` defends against.
-   * Blocks names its own inputs `<role>-<key>`, and the contact email once.
    */
   function releaseOnEdit(event) {
-    var id = (event.target && event.target.id) || "";
+    var target = event.target;
+    var id = (target && target.id) || "";
+    if (!id || ownDisplayField(target)) return;
     addressRoles().forEach(function (entry) {
       var held = dirty[entry.role];
       if (!held) return;
-      if (id === "email") delete held.email;
-      if (id.indexOf(entry.role + "-") === 0) delete held[id.slice(entry.role.length + 1)];
+      // Blocks renders the contact email once, under its bare key.
+      var key = id === "email" ? "email" : editedKey(entry.role, id);
+      if (key) delete held[key];
     });
   }
 
