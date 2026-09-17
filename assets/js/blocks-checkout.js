@@ -86,8 +86,10 @@
   /** True while the store's own values are being written into the shadow. */
   var applying = false;
   var pushScheduled = false;
-  /** Per role, address keys the controller has written and the store has not seen yet. */
+  /** Per role, address keys the controller wrote, each with the store value it replaced and its sends left. */
   var dirty = {};
+  /** A cart response in flight when the write landed carries the address it replaced; three sends outlast them. */
+  var SENDS = 3;
   var saveScheduled = false;
   var restored = false;
   var announcedActive = null;
@@ -160,7 +162,10 @@
     addressRoles().forEach(function (entry) {
       ADDRESS_KEYS.forEach(function (key) {
         add(entry.role + "_" + key, function () {
-          (dirty[entry.role] = dirty[entry.role] || {})[key] = true;
+          var address = storedAddress(entry.store);
+          // Recorded at the write, not at the push: by then this write is the store's own value.
+          var was = address ? String(address[key] == null ? "" : address[key]) : null;
+          (dirty[entry.role] = dirty[entry.role] || {})[key] = { was: was, sends: SENDS };
           schedulePush();
         });
       });
@@ -222,7 +227,7 @@
 
       applying = true;
       ADDRESS_KEYS.forEach(function (key) {
-        // Skipped while this key's own write is still queued; others still follow the store.
+        // Skipped while this key's own write is unconfirmed; others still follow the store.
         if (written[key]) return;
         var input = document.getElementById(entry.role + "_" + key);
         var value = address[key] == null ? "" : String(address[key]);
@@ -238,27 +243,52 @@
   }
 
   /**
+   * A buyer edit ends that field's write: a field cleared back to what the write
+   * replaced is otherwise the stale cart response `push()` defends against.
+   * Blocks names its own inputs `<role>-<key>`, and the contact email once.
+   */
+  function releaseOnEdit(event) {
+    var id = (event.target && event.target.id) || "";
+    addressRoles().forEach(function (entry) {
+      var held = dirty[entry.role];
+      if (!held) return;
+      if (id === "email") delete held.email;
+      if (id.indexOf(entry.role + "-") === 0) delete held[id.slice(entry.role.length + 1)];
+    });
+  }
+
+  /**
    * What the controller wrote into those fields, back to the store — and only
    * that. Sending every divergent key would push the buyer's own concurrent
    * edit back to its previous value.
+   *
+   * A key is held until the store holds its value, because nothing
+   * acknowledges a dispatch, and re-sent while the store reads as the value
+   * that write replaced — which is what a cart response older than the write
+   * puts back. It is released to `pull()` on any other store value, on the
+   * sends running out, and on a store with no address to compare against.
    */
   function push() {
     addressRoles().forEach(function (entry) {
-      var written = Object.keys(dirty[entry.role] || {});
-      // Cleared unconditionally: a key left pinned is one `pull()` skips forever.
-      dirty[entry.role] = {};
+      var written = dirty[entry.role] || {};
       var address = storedAddress(entry.store);
-      if (!address) return;
+      if (!address) {
+        dirty[entry.role] = {};
+        return;
+      }
 
       var patch = null;
-      written.forEach(function (key) {
+      Object.keys(written).forEach(function (key) {
         var input = document.getElementById(entry.role + "_" + key);
-        if (!input) return;
         var stored = address[key] == null ? "" : String(address[key]);
-        if (input.value !== stored) {
-          patch = patch || {};
-          patch[key] = input.value;
+        if (input && input.value === stored) return;
+        if (!input || stored !== written[key].was || !written[key].sends) {
+          delete written[key];
+          return;
         }
+        written[key].sends -= 1;
+        patch = patch || {};
+        patch[key] = input.value;
       });
 
       if (patch) wp.data.dispatch("wc/store/cart")[entry.setter](patch);
@@ -517,11 +547,18 @@
     restore();
     resync();
     observeCheckout();
+    // On the document: Blocks re-creates its own inputs, and a select fires only `change`.
+    ["input", "change"].forEach(function (type) {
+      document.addEventListener(type, releaseOnEdit, true);
+    });
     if (!wp.data || !wp.data.subscribe) return;
     wp.data.subscribe(function () {
       // A country change is what the controller re-reads its per-country
       // gates on, the same pass a classic `updated_checkout` triggers.
       pullTotals();
+      // Nothing acknowledges a dispatch, so a store change is the only chance to
+      // notice one was lost — before `pull()`, so a release lands this same pass.
+      push();
       var moved = pull();
       restore();
       if (moved) resync();

@@ -963,6 +963,87 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(base.address.city).toBe("Bergen");
   });
 
+  test.each([
+    {
+      landed: "",
+      shadow: "Example House",
+      patches: [{ address_1: "Example House" }, { address_1: "Example House" }],
+      description: "a store put back to the value the write replaced is re-sent, not painted back"
+    },
+    {
+      landed: "Buyer House",
+      shadow: "Buyer House",
+      patches: [{ address_1: "Example House" }],
+      description: "a store value the write never replaced is the buyer's, and takes the field"
+    }
+  ])("$description", async ({ landed, shadow, patches }) => {
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    // The registry address the controller writes when the buyer picks a company.
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+
+    base.address.address_1 = landed;
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(shadowInput("billing_address_1").value).toBe(shadow);
+    expect(base.calls.patches).toEqual(patches);
+  });
+
+  test("a buyer clearing the field the write filled is not overruled by it", async () => {
+    document.body.innerHTML = '<input id="billing-address_1">';
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+
+    // Clearing Blocks' own field puts the store back on the value the write
+    // replaced, which is the shape of the stale response push() defends against.
+    document
+      .getElementById("billing-address_1")
+      .dispatchEvent(new window.Event("input", { bubbles: true }));
+    base.address.address_1 = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ address_1: "Example House" }]);
+    expect(shadowInput("billing_address_1").value).toBe("");
+  });
+
+  test("a store that keeps refusing a write is left holding the field", async () => {
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      base.address.address_1 = "";
+      base.publish("wc/store/cart");
+      await Promise.resolve();
+    }
+
+    // Three sends, then the store is answering for the field and the buyer sees
+    // what would be submitted rather than a value nothing will carry.
+    expect(base.calls.patches).toHaveLength(3);
+    expect(shadowInput("billing_address_1").value).toBe("");
+  });
+
   test("a choice that could not be sent is not recorded as sent", () => {
     const base = baseGlobals("payment_tile");
     const { env } = globals({});
