@@ -1113,6 +1113,42 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(shadowInput("billing_address_1").value).toBe("Example House");
   });
 
+  test("a re-send the store has not applied yet is not painted over by the revert", async () => {
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    // A Store API that queues the patch instead of applying it in the call, so
+    // the pass that re-sends still reads the value the write is opposing.
+    env.wp.data.dispatch = () => ({
+      setBillingAddress(patch) {
+        base.calls.patches.push(patch);
+      },
+      setShippingAddress() {}
+    });
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    // Given: the store has taken the write.
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+    base.address.address_1 = "Example House";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // When: a response older than the write reverts it.
+    base.address.address_1 = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // Then: the field is still the write's, and the re-send is in flight.
+    expect(base.calls.patches).toEqual([
+      { address_1: "Example House" },
+      { address_1: "Example House" }
+    ]);
+    expect(shadowInput("billing_address_1").value).toBe("Example House");
+  });
+
   test("a write the resolved cart already agreed with opposes nothing after it", async () => {
     const base = baseGlobals("address_area", { city: "Bergen" });
     base.resolution.customerData = false;
@@ -1293,35 +1329,49 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(shadowInput("billing_address_1").value).toBe("");
   });
 
-  test("an edit to one role's control leaves the other's hold, whatever ids Blocks gave them", async () => {
-    // Both address forms render, and Blocks suffixed only one role's widget.
-    document.body.innerHTML =
-      '<select id="billing-country-input"></select><select id="shipping-country"></select>';
-    const base = baseGlobals("address_area", { country: "" }, { country: "" });
-    const { env } = globals({});
-    env.wp.data = base.data;
-    evaluate(env);
-    await Promise.resolve();
+  test.each([
+    {
+      editedId: "billing-country-input",
+      counterpartId: "shipping-country",
+      description: "the edited role's widget carries the suffix"
+    },
+    {
+      editedId: "billing-country",
+      counterpartId: "shipping-country-input",
+      description: "the other role's widget carries the suffix"
+    }
+  ])(
+    "an edit to one role's control leaves the other's hold where $description",
+    async ({ editedId, counterpartId }) => {
+      // Both address forms render, and Blocks suffixed only one role's widget.
+      document.body.innerHTML =
+        '<select id="' + editedId + '"></select><select id="' + counterpartId + '"></select>';
+      const base = baseGlobals("address_area", { country: "" }, { country: "" });
+      const { env } = globals({});
+      env.wp.data = base.data;
+      evaluate(env);
+      await Promise.resolve();
 
-    shadowInput("billing_country").value = "NO";
-    shadowInput("shipping_country").value = "NO";
-    await Promise.resolve();
-    base.calls.patches.length = 0;
-    base.calls.shippingPatches.length = 0;
+      shadowInput("billing_country").value = "NO";
+      shadowInput("shipping_country").value = "NO";
+      await Promise.resolve();
+      base.calls.patches.length = 0;
+      base.calls.shippingPatches.length = 0;
 
-    // When: the invoice country changes, which is not the delivery role's control.
-    document
-      .getElementById("billing-country-input")
-      .dispatchEvent(new window.Event("change", { bubbles: true }));
-    base.address.country = "";
-    base.shippingAddress.country = "";
-    base.publish("wc/store/cart");
-    await Promise.resolve();
+      // When: the invoice country changes, which is not the delivery role's control.
+      document
+        .getElementById(editedId)
+        .dispatchEvent(new window.Event("change", { bubbles: true }));
+      base.address.country = "";
+      base.shippingAddress.country = "";
+      base.publish("wc/store/cart");
+      await Promise.resolve();
 
-    // Then: only the invoice hold ends.
-    expect(base.calls.patches).toEqual([]);
-    expect(base.calls.shippingPatches).toEqual([{ country: "NO" }]);
-  });
+      // Then: only the invoice hold ends.
+      expect(base.calls.patches).toEqual([]);
+      expect(base.calls.shippingPatches).toEqual([{ country: "NO" }]);
+    }
+  );
 
   test("a role whose only node under a key is decoration has no control of its own", async () => {
     // Mirrored render: one country select between the roles, and the error node
