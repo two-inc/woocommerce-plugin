@@ -920,8 +920,7 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     env.wp.data = base.data;
     evaluate(env);
 
-    // Given: the write's own microtask push runs while the store can answer
-    // nothing, which is the ordering an async cart resolution gives.
+    // Given: a write whose microtask push finds no address, as a real resolution gives.
     shadowInput("billing_city").value = "Bergen";
     await Promise.resolve();
 
@@ -931,7 +930,7 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     base.resolution.customerData = true;
     base.publish("wc/store/cart");
 
-    // Then: the address that answered is what the write is measured against.
+    // Then: measured against the address that answered.
     expect(base.calls.patches).toEqual([{ city: "Bergen" }]);
     expect(base.address.city).toBe("Bergen");
     expect(shadowInput("billing_city").value).toBe("Bergen");
@@ -1101,12 +1100,12 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     base.publish("wc/store/cart");
     await Promise.resolve();
 
-    // When: a response older than the write puts the store back on the value it replaced.
+    // When: a response older than the write reverts it.
     base.address.address_1 = "";
     base.publish("wc/store/cart");
     await Promise.resolve();
 
-    // Then: the field is still the write's, and the revert is re-sent.
+    // Then: the field is still the write's and the revert is re-sent.
     expect(base.calls.patches).toEqual([
       { address_1: "Example House" },
       { address_1: "Example House" }
@@ -1123,8 +1122,7 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     await Promise.resolve();
     base.calls.patches.length = 0;
 
-    // Given: the write lands before the cart resolves, and the address that
-    // answers already carries it — so there is no value it replaced.
+    // Given: a write the resolving address already carries, so it replaced nothing.
     shadowInput("billing_city").value = "Bergen";
     await Promise.resolve();
     base.resolution.customerData = true;
@@ -1136,7 +1134,7 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     base.publish("wc/store/cart");
     await Promise.resolve();
 
-    // Then: that value is the store's, not a revert to re-send.
+    // Then: that value is the store's, not a revert.
     expect(base.calls.patches).toEqual([]);
     expect(shadowInput("billing_city").value).toBe("Oslo");
   });
@@ -1154,8 +1152,8 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     await Promise.resolve();
     base.publish("wc/store/cart");
 
-    // When: a cart response lands mid-dispatch, so the store pass it triggers
-    // repaints with no push of its own before it.
+    // When: a response lands mid-dispatch, so the pass it triggers repaints
+    // with no push before it.
     env.wp.data.dispatch = () => ({
       setBillingAddress(patch) {
         base.calls.patches.push(patch);
@@ -1168,7 +1166,7 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     shadowInput("billing_city").value = "Bergen";
     await Promise.resolve();
 
-    // Then: the store answers for that field again.
+    // Then: the store answers for the field again.
     expect(shadowInput("billing_address_1").value).toBe("Third House");
   });
 
@@ -1206,8 +1204,7 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     shadowInput("billing_company").value = "Example Trading Limited";
     await Promise.resolve();
 
-    // What `setDisplayText()` fires on a rebind: the captured name painted back
-    // into the field, then a `change`.
+    // What `setDisplayText()` fires on a rebind: the held name painted back, then `change`.
     const field = document.getElementById("billing-company");
     field.value = "Example Trading Limited";
     field.dispatchEvent(new window.Event("change", { bubbles: true }));
@@ -1234,8 +1231,7 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     shadowInput("billing_company").value = "Example Trading Limited";
     await Promise.resolve();
 
-    // The control's own field and the control's own event: the value left in it
-    // is what tells a clear apart from a repaint.
+    // Same field and same event as a repaint; the value left in it is the only tell.
     document
       .getElementById("billing-company")
       .dispatchEvent(new window.Event("change", { bubbles: true }));
@@ -1252,8 +1248,7 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     const base = baseGlobals("address_area", { address_1: "" });
     const { env } = globals({});
     env.wp.data = base.data;
-    // The controller is a declared script dependency of this file; the settings
-    // object is inlined separately, and a page can carry one without the other.
+    // The controller is a script dependency; its settings object is inlined separately.
     delete window.twoinc;
     evaluate(env);
     await Promise.resolve();
@@ -1269,8 +1264,7 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     base.publish("wc/store/cart");
     await Promise.resolve();
 
-    // A capture-phase listener that throws releases nothing, and the write then
-    // outranks the buyer's own field for three sends.
+    // The listener must reach its release; a throw leaves the write outranking the buyer.
     expect(base.calls.patches).toEqual([{ address_1: "Example House" }]);
     expect(shadowInput("billing_address_1").value).toBe("");
   });
@@ -1315,8 +1309,7 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     base.calls.patches.length = 0;
     base.calls.shippingPatches.length = 0;
 
-    // When: the buyer changes the invoice country, which is not the delivery
-    // role's control — the delivery role renders its own.
+    // When: the invoice country changes, which is not the delivery role's control.
     document
       .getElementById("billing-country-input")
       .dispatchEvent(new window.Event("change", { bubbles: true }));
