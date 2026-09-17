@@ -1355,6 +1355,45 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
   });
 
   test.each([
+    {
+      inBlock: true,
+      resends: 0,
+      shadow: "",
+      description: "the checkout block's own contact email ends the write it holds"
+    },
+    {
+      inBlock: false,
+      resends: 1,
+      shadow: "buyer@example.test",
+      description: "another form's email field on the same page does not"
+    }
+  ])("$description", async ({ inBlock, resends, shadow }) => {
+    const field = '<input id="email">';
+    document.body.innerHTML = inBlock
+      ? '<div class="wp-block-woocommerce-checkout">' + field + "</div>"
+      : field;
+    const base = baseGlobals("address_area", { email: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_email").value = "buyer@example.test";
+    await Promise.resolve();
+    // The write's own send; what follows it is the re-send a surviving hold makes.
+    base.calls.patches.length = 0;
+
+    document.getElementById("email").dispatchEvent(new window.Event("input", { bubbles: true }));
+    base.address.email = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toHaveLength(resends);
+    expect(shadowInput("billing_email").value).toBe(shadow);
+  });
+
+  test.each([
     { id: "billing-country", description: "names its control for the key alone" },
     { id: "billing-country-input", description: "suffixes its control's id" }
   ])("a country change releases the hold where Blocks $description", async ({ id }) => {

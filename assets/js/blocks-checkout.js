@@ -64,6 +64,8 @@
 
   var SHADOW_ID = "twoinc-blocks-shadow";
 
+  var CHECKOUT_BLOCK_CLASS = "wp-block-woocommerce-checkout";
+
   /** What an address key's own id can be carried by; anything else under it is decoration. */
   var CONTROL_TAGS = ["input", "select", "textarea"];
 
@@ -309,6 +311,15 @@
   }
 
   /**
+   * Blocks renders the contact email once, under a bare id any other form on
+   * the page — a newsletter signup, a login — could equally be using.
+   */
+  function isContactEmail(target) {
+    if (target.id !== "email" || !target.closest) return false;
+    return !!target.closest("." + CHECKOUT_BLOCK_CLASS);
+  }
+
+  /**
    * A buyer edit ends that field's write: a field cleared back to what the write
    * replaced is otherwise the stale cart response `push()` defends against.
    */
@@ -319,8 +330,7 @@
     addressRoles().forEach(function (entry) {
       var written = dirty[entry.role];
       if (!written) return;
-      // Blocks renders the contact email once, under its bare key.
-      var key = id === "email" ? "email" : editedKey(entry.role, id);
+      var key = isContactEmail(target) ? "email" : editedKey(entry.role, id);
       if (key && !isOwnRepaint(target, entry.role, key)) delete written[key];
     });
   }
@@ -681,7 +691,7 @@
    * store subscription above and the tile's own mount effect.
    */
   function observeCheckout() {
-    var root = document.querySelector(".wp-block-woocommerce-checkout");
+    var root = document.querySelector("." + CHECKOUT_BLOCK_CLASS);
     if (!root || typeof window.MutationObserver !== "function") return;
     var watched = { childList: true, subtree: true };
     var observer = new window.MutationObserver(function () {
