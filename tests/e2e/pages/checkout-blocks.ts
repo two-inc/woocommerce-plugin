@@ -125,13 +125,26 @@ export async function fillContactDetails(page: Page, firstName: string, lastName
 /** Together, and retried: each of the pair can push the cart store back over the other's writes. */
 export async function fillOrderDetails(page: Page, firstName: string, lastName: string) {
   const prefix = await addressPrefix(page);
+  const addressKey = `${prefix}Address`;
 
   await expect(async () => {
     await fillCompanySearch(page);
     await fillContactDetails(page, firstName, lastName);
-    await expect(page.locator(`#${prefix}-company`)).not.toBeEmpty({ timeout: DEFAULT_TIMEOUT });
-    await expect(page.locator(`#${prefix}-address_1`)).not.toBeEmpty({ timeout: DEFAULT_TIMEOUT });
-  }).toPass({ timeout: LONG_TIMEOUT * 3, intervals: [1_000, 2_000, 5_000] });
+
+    // The order is built from the cart store, not from the inputs, so a filled
+    // field proves nothing about what would be submitted.
+    const address = await page.evaluate(
+      (key) => window.wp?.data?.select("wc/store/cart")?.getCustomerData?.()?.[key],
+      addressKey
+    );
+    expect(address?.company, `cart store ${addressKey}.company after the company pick`).toBeTruthy();
+    expect(
+      address?.address_1,
+      `cart store ${addressKey}.address_1 after the company pick`
+    ).toBeTruthy();
+    // Under the 180s per-test timeout, so this reports what did not hold rather
+    // than dying as a bare test timeout, and placeOrder is left budget.
+  }).toPass({ timeout: 90_000, intervals: [1_000, 2_000, 5_000] });
 }
 
 export async function acceptTerms(page: Page) {
