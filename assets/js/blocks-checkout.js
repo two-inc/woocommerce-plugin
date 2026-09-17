@@ -347,9 +347,8 @@
           var held = written[key];
           var input = document.getElementById(entry.role + "_" + key);
           var stored = address[key] == null ? "" : String(address[key]);
-          // No address to read at the write: the first one to answer is what it
-          // replaced. Ahead of the agreement below, or a `was` still unset there
-          // would make the store's NEXT value the one this write opposes.
+          // No address at the write: the first to answer is what it replaced. Ahead
+          // of the agreement below, which would leave `was` unset for the next value.
           if (held.was === null) held.was = stored;
           // The store holds it, so `pull()` owns the field again — `was` and the
           // sends left stay, or a revert to `was` after this goes unopposed.
