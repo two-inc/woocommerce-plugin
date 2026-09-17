@@ -252,6 +252,15 @@
     return found;
   }
 
+  /**
+   * `role`'s own control for `key`, whichever id Blocks gave it — the bare key
+   * or the key plus a widget suffix, which the two roles need not match on.
+   */
+  function counterpartControl(role, key) {
+    var stem = role + "-" + key;
+    return document.querySelector('[id="' + stem + '"], [id^="' + stem + '-"]');
+  }
+
   /** Which of `role`'s held keys the input `id` is the buyer's control for, if any. */
   function editedKey(role, id) {
     var found = null;
@@ -260,7 +269,7 @@
       var key = keyFromId(id.slice(entry.role.length + 1));
       if (!key) return;
       // Roles Blocks mirrors render one control between them, so that edit is this role's too.
-      if (entry.role === role || !document.getElementById(role + id.slice(entry.role.length))) {
+      if (entry.role === role || !counterpartControl(role, key)) {
         found = key;
       }
     });

@@ -1179,6 +1179,37 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(shadowInput("billing_address_1").value).toBe("");
   });
 
+  test("an edit to one role's control leaves the other's hold, whatever ids Blocks gave them", async () => {
+    // Both address forms render, and Blocks suffixed only one role's widget.
+    document.body.innerHTML =
+      '<select id="billing-country-input"></select><select id="shipping-country"></select>';
+    const base = baseGlobals("address_area", { country: "" }, { country: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+
+    shadowInput("billing_country").value = "NO";
+    shadowInput("shipping_country").value = "NO";
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+    base.calls.shippingPatches.length = 0;
+
+    // When: the buyer changes the invoice country, which is not the delivery
+    // role's control — the delivery role renders its own.
+    document
+      .getElementById("billing-country-input")
+      .dispatchEvent(new window.Event("change", { bubbles: true }));
+    base.address.country = "";
+    base.shippingAddress.country = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // Then: only the invoice hold ends.
+    expect(base.calls.patches).toEqual([]);
+    expect(base.calls.shippingPatches).toEqual([{ country: "NO" }]);
+  });
+
   test.each([
     { id: "billing-country", description: "names its control for the key alone" },
     { id: "billing-country-input", description: "suffixes its control's id" }
