@@ -1323,6 +1323,37 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(base.calls.shippingPatches).toEqual([{ country: "NO" }]);
   });
 
+  test("a role whose only node under a key is decoration has no control of its own", async () => {
+    // Mirrored render: one country select between the roles, and the error node
+    // the other role's key still gets its id from.
+    document.body.innerHTML =
+      '<select id="billing-country"></select><div id="shipping-country-error"></div>';
+    const base = baseGlobals("address_area", { country: "" }, { country: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+
+    shadowInput("billing_country").value = "NO";
+    shadowInput("shipping_country").value = "NO";
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+    base.calls.shippingPatches.length = 0;
+
+    document
+      .getElementById("billing-country")
+      .dispatchEvent(new window.Event("change", { bubbles: true }));
+    base.address.country = "";
+    base.shippingAddress.country = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // Then: the edit is both roles', so neither write outranks the buyer.
+    expect(base.calls.patches).toEqual([]);
+    expect(base.calls.shippingPatches).toEqual([]);
+    expect(shadowInput("shipping_country").value).toBe("");
+  });
+
   test.each([
     { id: "billing-country", description: "names its control for the key alone" },
     { id: "billing-country-input", description: "suffixes its control's id" }

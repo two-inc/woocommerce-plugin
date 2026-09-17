@@ -64,6 +64,9 @@
 
   var SHADOW_ID = "twoinc-blocks-shadow";
 
+  /** What an address key's own id can be carried by; anything else under it is decoration. */
+  var CONTROL_TAGS = ["input", "select", "textarea"];
+
   /** Both roles: Blocks renders delivery first, so mirroring one strands the other's control (ABN-554). */
   function addressRoles() {
     return [
@@ -260,10 +263,15 @@
   /**
    * `role`'s own control for `key`, whichever id Blocks gave it — the bare key
    * or the key plus a widget suffix, which the two roles need not match on.
+   * Form controls only: an error, hint or wrapper node under the same stem
+   * would otherwise read as this role having a control the buyer can edit.
    */
   function counterpartControl(role, key) {
     var stem = role + "-" + key;
-    return document.querySelector('[id="' + stem + '"], [id^="' + stem + '-"]');
+    var selector = CONTROL_TAGS.map(function (tag) {
+      return tag + '[id="' + stem + '"], ' + tag + '[id^="' + stem + '-"]';
+    }).join(", ");
+    return document.querySelector(selector);
   }
 
   /** Which of `role`'s held keys the input `id` is the buyer's control for, if any. */
