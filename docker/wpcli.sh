@@ -38,7 +38,6 @@ fi
 # Env values (TWO_API_KEY / TWO_API_BASE_URL) override the JSON
 bash /opt/tillit-payment-gateway/dev/configure
 wp post update $(wp option get woocommerce_cart_page_id) --post_content='[woocommerce_cart]'
-wp eval-file /opt/tillit-payment-gateway/docker/checkout-pages-seed.php
 wp option update woocommerce_coming_soon no
 wp option update woocommerce_currency $WOOCOM_CURRENCY
 wp option update woocommerce_default_country $WOOCOM_DEFAULT_COUNTRY

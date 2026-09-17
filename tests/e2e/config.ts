@@ -14,5 +14,13 @@ export const BUYER_COMPANY = "RESTAURANT 53 LTD";
 export const RECIPIENT_EMAIL = "bot@two.inc";
 export const PHONE_NUMBER = "+447777777777";
 
+/**
+ * The renderer the shop's one checkout page is configured for. Defaults to
+ * Blocks because that is what WooCommerce's own install writes; a shop shaped
+ * for the classic shortcode has to say so.
+ */
+export const CHECKOUT_RENDERER =
+  process.env.E2E_CHECKOUT_RENDERER === "classic" ? "classic" : "blocks";
+
 export const DEFAULT_TIMEOUT = 15_000;
 export const LONG_TIMEOUT = 60_000;

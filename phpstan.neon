@@ -19,7 +19,6 @@ parameters:
         - snippets
         - views
         - tests/unit
-        - docker/mu-plugins
     scanFiles:
         - dev/stubs/wordpress-stubs.php
         - dev/stubs/woocommerce-stubs.php
