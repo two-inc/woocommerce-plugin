@@ -910,22 +910,28 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(base.calls.selectorAtUserMeta).toBe("#billing-company");
   });
 
-  test("a write made while the cart held no address is not pinned forever", async () => {
+  test("a write made while the cart held no address is sent once it resolves", async () => {
     const base = baseGlobals("address_area", { city: "Oslo" });
     base.resolution.customerData = false;
     const { env } = globals({});
     env.wp.data = base.data;
     evaluate(env);
 
-    // The controller writes while the store can answer nothing; the key must
-    // not stay marked, or the pull skips it for the life of the page.
+    // Given: the write's own microtask push runs while the store can answer
+    // nothing, which is the ordering an async cart resolution gives.
     shadowInput("billing_city").value = "Bergen";
     await Promise.resolve();
 
+    expect(base.calls.patches).toEqual([]);
+
+    // When: the cart resolves a tick later.
     base.resolution.customerData = true;
     base.publish("wc/store/cart");
 
-    expect(shadowInput("billing_city").value).toBe("Oslo");
+    // Then: the address that answered is what the write is measured against.
+    expect(base.calls.patches).toEqual([{ city: "Bergen" }]);
+    expect(base.address.city).toBe("Bergen");
+    expect(shadowInput("billing_city").value).toBe("Bergen");
   });
 
   test("the restore waits for the cart's customer data to resolve", () => {

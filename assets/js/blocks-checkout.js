@@ -311,10 +311,8 @@
       addressRoles().forEach(function (entry) {
         var written = dirty[entry.role] || {};
         var address = storedAddress(entry.store);
-        if (!address) {
-          dirty[entry.role] = {};
-          return;
-        }
+        // Held, not dropped: the cart resolves ticks after the microtask push a write queues.
+        if (!address) return;
 
         var patch = null;
         Object.keys(written).forEach(function (key) {
