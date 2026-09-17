@@ -19,7 +19,7 @@ export const PAYMENT_RADIO = "#radio-control-wc-payment-method-options-woocommer
 export const PLACE_ORDER_BUTTON = ".wc-block-components-checkout-place-order-button";
 
 /** Both address forms carry a popover; the control adopts the first Blocks renders. */
-const COMPANY_WRAP = ".two-company-field-wrap";
+export const COMPANY_WRAP = ".two-company-field-wrap";
 
 export async function selectTwoPayment(page: Page) {
   const radio = page.locator(PAYMENT_RADIO);
@@ -35,12 +35,34 @@ async function addressPrefix(page: Page): Promise<"shipping" | "billing"> {
   return (await page.locator("#shipping-address_1").count()) > 0 ? "shipping" : "billing";
 }
 
-export async function fillCompanySearch(page: Page, companyName = BUYER_COMPANY) {
+/** The mode chips are a DOM child of the popover, so it has to be open first. */
+export function modeChips(page: Page) {
+  return page.locator(COMPANY_WRAP).first().locator(".two-company-mode-chips");
+}
+
+export async function openCompanySearch(page: Page) {
   const wrap = page.locator(COMPANY_WRAP).first();
   await wrap.locator("input").first().click();
+  await wrap
+    .locator(".two-company-dropdown__query")
+    .waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
+}
+
+/** Blocks renders the country as a plain select, so it can be driven directly. */
+export async function setBillingCountry(page: Page, countryName: string) {
+  const prefix = await addressPrefix(page);
+  const select = page.locator(`#${prefix}-country`);
+  await select.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
+  const before = await select.inputValue();
+  await select.selectOption({ label: countryName });
+  await expect(select).not.toHaveValue(before, { timeout: DEFAULT_TIMEOUT });
+}
+
+export async function fillCompanySearch(page: Page, companyName = BUYER_COMPANY) {
+  const wrap = page.locator(COMPANY_WRAP).first();
+  await openCompanySearch(page);
 
   const query = wrap.locator(".two-company-dropdown__query");
-  await query.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
   await query.pressSequentially(companyName, { delay: 50 });
 
   const result = wrap.locator(".two-company-dropdown__row").first();
@@ -49,16 +71,42 @@ export async function fillCompanySearch(page: Page, companyName = BUYER_COMPANY)
 
   const prefix = await addressPrefix(page);
   await expect(page.locator(`#${prefix}-address_1`)).not.toBeEmpty({ timeout: LONG_TIMEOUT });
+
+  // Typing before the store has taken the company address pushes its older,
+  // empty copy back over it.
+  await page.waitForFunction(
+    (addressKey) => {
+      const customer = window.wp?.data?.select("wc/store/cart")?.getCustomerData?.();
+      return !!customer && !!customer[addressKey]?.address_1;
+    },
+    `${prefix}Address`,
+    { timeout: LONG_TIMEOUT }
+  );
 }
 
-/** After the company pick: its address reaches the fields through the cart store, clearing these. */
 export async function fillContactDetails(page: Page, firstName: string, lastName: string) {
   const prefix = await addressPrefix(page);
-  await page.locator("#email").fill(RECIPIENT_EMAIL);
-  await page.locator(`#${prefix}-first_name`).fill(firstName);
-  await page.locator(`#${prefix}-last_name`).fill(lastName);
-  await page.locator(`#${prefix}-phone`).fill(PHONE_NUMBER);
-  await page.locator(`#${prefix}-phone`).blur();
+  const fields: Array<[string, string]> = [
+    ["#email", RECIPIENT_EMAIL],
+    [`#${prefix}-first_name`, firstName],
+    [`#${prefix}-last_name`, lastName],
+    [`#${prefix}-phone`, PHONE_NUMBER]
+  ];
+
+  // Blocks re-renders these from the cart store, so a value only holds once
+  // the store has stopped overwriting it.
+  await expect(async () => {
+    for (const [selector, value] of fields) {
+      const field = page.locator(selector);
+      if ((await field.inputValue()) !== value) {
+        await field.fill(value);
+      }
+    }
+    await page.locator(`#${prefix}-phone`).blur();
+    for (const [selector, value] of fields) {
+      await expect(page.locator(selector)).toHaveValue(value, { timeout: DEFAULT_TIMEOUT });
+    }
+  }).toPass({ timeout: LONG_TIMEOUT, intervals: [1_000, 2_000, 5_000] });
 
   await page.waitForFunction(
     ([last, email, addressKey]) => {
@@ -72,6 +120,28 @@ export async function fillContactDetails(page: Page, firstName: string, lastName
     [lastName, RECIPIENT_EMAIL, `${prefix}Address`],
     { timeout: LONG_TIMEOUT }
   );
+}
+
+/** Together, and retried: each of the pair can push the cart store back over the other's writes. */
+export async function fillOrderDetails(page: Page, firstName: string, lastName: string) {
+  const prefix = await addressPrefix(page);
+  const addressKey = `${prefix}Address`;
+
+  await expect(async () => {
+    await fillCompanySearch(page);
+    await fillContactDetails(page, firstName, lastName);
+
+    // The order is built from the cart store, not from the inputs, so a filled
+    // field proves nothing about what would be submitted.
+    const address = await page.evaluate(
+      (key) => window.wp?.data?.select("wc/store/cart")?.getCustomerData?.()?.[key],
+      addressKey
+    );
+    expect(address?.company, `cart store ${addressKey}.company`).toBeTruthy();
+    expect(address?.address_1, `cart store ${addressKey}.address_1`).toBeTruthy();
+    // Under the 180s per-test timeout, so this reports what did not hold rather
+    // than dying as a bare test timeout, and placeOrder is left budget.
+  }).toPass({ timeout: 90_000, intervals: [1_000, 2_000, 5_000] });
 }
 
 export async function acceptTerms(page: Page) {

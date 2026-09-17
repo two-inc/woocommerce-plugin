@@ -28,7 +28,8 @@ export WORDPRESS_PORT
 
 .PHONY: help install configure run debug proxy stop clean logs logs-wpcli \
 	test-unit test-js test format archive bump patch minor major \
-	e2e-install e2e-test e2e-test-headed phpcs phpstan check-plugin-mount
+	e2e-install e2e-test e2e-test-headed checkout-renderer phpcs phpstan \
+	check-plugin-mount
 
 .DEFAULT_GOAL := help
 
@@ -190,6 +191,12 @@ patch: bumpver-patch
 minor: bumpver-minor
 ## Bump major version (main branch only; prefer `make bump`)
 major: bumpver-major
+
+## Shape the shop's checkout page for one renderer (RENDERER=blocks|classic)
+checkout-renderer:
+	docker compose exec -T wpcli wp eval-file \
+		/opt/tillit-payment-gateway/tests/e2e/provision/checkout-renderer.php \
+		$(RENDERER)
 
 e2e-install:
 	cd tests/e2e && npm install && npx playwright install chromium

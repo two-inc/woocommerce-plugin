@@ -1,18 +1,16 @@
 import { test, expect } from "@playwright/test";
 
 import { triggerFulfilBatch, waitForOrderState } from "../two-api.js";
-import * as checkout from "../pages/checkout.js";
+import { checkout } from "../pages/renderer.js";
 import * as store from "../pages/store.js";
 import * as wpAdmin from "../pages/wp-admin.js";
 
 test("normal order flow: place → fulfil → refund", async ({ page }) => {
   const lastName = `E2EOrder${Date.now().toString(36)}`;
   await store.addProductToCart(page, "Product 1");
-  await store.goToCheckout(page);
+  await checkout.goto(page);
 
-  await checkout.fillBillingDetails(page, "Test", lastName);
-  await checkout.selectTwoPayment(page);
-  await checkout.fillCompanySearch(page);
+  await checkout.completeCheckoutForm(page, "Test", lastName);
   const wcOrderId = await checkout.placeOrder(page);
 
   expect(wcOrderId).toBeTruthy();

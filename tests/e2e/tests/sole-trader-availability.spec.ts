@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 import { LONG_TIMEOUT } from "../config.js";
-import * as checkout from "../pages/checkout.js";
+import { MODE_CHIP, checkout } from "../pages/renderer.js";
 import * as store from "../pages/store.js";
 
 /**
@@ -21,14 +21,14 @@ import * as store from "../pages/store.js";
  */
 test("sole trader mode chooser follows registry country support", async ({ page }) => {
   await store.addProductToCart(page, "Product 1");
-  await store.goToCheckout(page);
+  await checkout.goto(page);
 
-  await checkout.fillBillingDetails(page, "Test", "E2ESoleTrader");
+  await checkout.fillBuyerDetails(page, "Test", "E2ESoleTrader");
   await checkout.selectTwoPayment(page);
 
-  const chips = page.locator(checkout.SOLE_TRADER_TOGGLE);
-  const businessChip = chips.locator(`${checkout.MODE_CHIP}[data-two-chip="registered"]`);
-  const soleTraderChip = chips.locator(`${checkout.MODE_CHIP}[data-two-chip="soletrader"]`);
+  const chips = checkout.modeChips(page);
+  const businessChip = chips.locator(`${MODE_CHIP}[data-two-chip="registered"]`);
+  const soleTraderChip = chips.locator(`${MODE_CHIP}[data-two-chip="soletrader"]`);
 
   // GB is the store's default country and is sole-trader capable.
   await checkout.openCompanySearch(page);

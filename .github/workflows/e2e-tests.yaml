@@ -14,7 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Which WordPress versions the checkout suite runs on (PLAT-2320). The
+  # Which WordPress versions the checkout suite runs on (PLAT-2320), crossed
+  # with the checkout renderer the shop is configured for (TWO-25797). The
   # compose default is the floor this suite has always covered; the current
   # release is what the readme's "Tested up to" claims, and nothing exercised
   # a real checkout there. Discovered at run time so the leg tracks upstream
@@ -58,16 +59,20 @@ jobs:
             echo "::error::e2e: could not resolve the current WordPress release"
             exit 1
           fi
+          # Both renderers on every WordPress leg: which one a shop runs is
+          # its checkout page's content, so each is a separately configured
+          # shop rather than a switch inside one.
+          renderers='"renderer":["classic","blocks"]'
           if [ "$pinned" = "$current" ]; then
             echo "WordPress legs: $current (compose default is already current)"
-            echo "matrix={\"wordpress\":[\"$current\"]}" >> "$GITHUB_OUTPUT"
+            echo "matrix={\"wordpress\":[\"$current\"],$renderers}" >> "$GITHUB_OUTPUT"
           else
             echo "WordPress legs: pinned=$pinned current=$current"
-            echo "matrix={\"wordpress\":[\"$pinned\",\"$current\"]}" >> "$GITHUB_OUTPUT"
+            echo "matrix={\"wordpress\":[\"$pinned\",\"$current\"],$renderers}" >> "$GITHUB_OUTPUT"
           fi
 
   e2e-tests:
-    name: e2e (WordPress ${{ matrix.wordpress }})
+    name: e2e (WordPress ${{ matrix.wordpress }}, ${{ matrix.renderer }} checkout)
     needs: discover
     runs-on: ${{ vars.RUNNER_STANDARD }}
     strategy:
@@ -83,12 +88,12 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: e2e-${{ github.run_id }}-${{ strategy.job-index }}
     # Must exceed Playwright's own worst case, or a fully-failing suite is
-    # killed before it can report: 4 tests x 2 attempts (retries: 1) x the
-    # 180s per-test timeout = 24m of testing, plus ~4m of setup. At 15m the
+    # killed before it can report: 6 tests x 2 attempts (retries: 1) x the
+    # 180s per-test timeout = 36m of testing, plus ~5m of setup. At 15m the
     # job was cancelled mid-run, which discards the reporter output AND the
     # traces, leaving no way to see why a test failed. A passing run still
-    # takes ~5m, so this ceiling only ever costs time on a broken suite.
-    timeout-minutes: 30
+    # takes ~6m, so this ceiling only ever costs time on a broken suite.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 
@@ -173,6 +178,12 @@ jobs:
               ;;
           esac
 
+      - name: Configure the shop for the ${{ matrix.renderer }} checkout
+        run: |
+          docker compose exec -T wpcli wp eval-file \
+            /opt/tillit-payment-gateway/tests/e2e/provision/checkout-renderer.php \
+            ${{ matrix.renderer }}
+
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -187,6 +198,7 @@ jobs:
         env:
           MERCHANT_API_KEY: ${{ steps.secrets.outputs.MERCHANT_API_KEY }}
           TWO_ADMIN_PASSWORD: ${{ steps.secrets.outputs.TWO_ADMIN_PASSWORD }}
+          E2E_CHECKOUT_RENDERER: ${{ matrix.renderer }}
 
       - name: Upload test results
         # always(), not failure(): a job that exceeds timeout-minutes is
@@ -200,7 +212,7 @@ jobs:
           # Per leg: upload-artifact rejects a name already used in the run,
           # so a shared name would fail the second leg on the upload rather
           # than on anything it tested.
-          name: playwright-report-wp${{ matrix.wordpress }}
+          name: playwright-report-wp${{ matrix.wordpress }}-${{ matrix.renderer }}
           path: tests/e2e/test-results/
           retention-days: 7
           if-no-files-found: ignore

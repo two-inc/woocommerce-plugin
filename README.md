@@ -217,9 +217,11 @@ are out of scope here — they live in the `e2e-tests` repo.
 
 - Store: <http://localhost:8888>, admin at `/wp-admin` (`exampleuser@two.inc` / `examplepassword123`).
   Set `WORDPRESS_PORT` to move it; the suite reads the same variable, so both follow together
-- Checkout pages: `/blocks/checkout/` (WooCommerce Blocks, the default) and
-  `/classic/checkout/` (classic shortcode). The header control picks which one
-  every checkout link routes to; the choice is held in a cookie
+- Checkout: one page at `/checkout/`, as a merchant's shop has. Its content
+  decides the renderer — `make checkout-renderer RENDERER=blocks` writes
+  WooCommerce's own Blocks markup, `RENDERER=classic` the
+  `[woocommerce_checkout]` shortcode. A fresh stack comes up on WooCommerce's
+  own install default, which is Blocks
 - Products: "Product 1"–"Product 4" (random prices 100–200) plus "Expensive
   Product" (500000) for the max-limit test
 - Merchant: `demostoregb` (UK). This is a temporary repoint: `tillittestuk`
@@ -248,12 +250,19 @@ make e2e-install
 
 ### Running
 
+The suite drives whichever renderer the shop is configured for, so the shop and
+`E2E_CHECKOUT_RENDERER` have to name the same one. CI runs both as matrix legs.
+
 ```bash
 export MERCHANT_API_KEY=$(gcloud secrets versions access latest --secret=STAGING_SHOP_MERCHANT_API_KEY_GB --project=two-beta)
 export TWO_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=STAGING_TWO_ADMIN_PASSWORD --project=two-beta)
 
-make e2e-test              # headless
-make e2e-test-headed       # with browser visible
+make checkout-renderer RENDERER=blocks
+E2E_CHECKOUT_RENDERER=blocks make e2e-test          # headless
+E2E_CHECKOUT_RENDERER=blocks make e2e-test-headed   # with browser visible
+
+make checkout-renderer RENDERER=classic
+E2E_CHECKOUT_RENDERER=classic make e2e-test
 ```
 
 Or if you have a local `docker/config/staging-demostoregb.json`:
@@ -270,6 +279,7 @@ export MERCHANT_API_KEY=$(python3 -c "import json; print(json.load(open('docker/
 | `cancel-order.spec.ts`             | Place order → cancel via WP admin → verify CANCELLED                                               |
 | `max-limit.spec.ts`                | Add "Expensive Product" → expect rejection on checkout                                             |
 | `sole-trader-availability.spec.ts` | Sole-trader chooser appears only where the registry supports it (GB yes, NO no)                    |
+| `checkout-renderer.spec.ts`        | `/checkout/` renders the configured renderer and only it, and offers Two there                     |
 
 ### Clean restart
 
