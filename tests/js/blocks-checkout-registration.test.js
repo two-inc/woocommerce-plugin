@@ -1149,6 +1149,26 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(shadowInput("billing_address_1").value).toBe("Example House");
   });
 
+  test("a write whose shadow input has gone is released rather than re-sent", async () => {
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    // Given: a recorded write whose field the page then dropped.
+    shadowInput("billing_address_1").value = "Example House";
+    shadowInput("billing_address_1").remove();
+
+    // When: the store answers.
+    await Promise.resolve();
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([]);
+  });
+
   test("a write the resolved cart already agreed with opposes nothing after it", async () => {
     const base = baseGlobals("address_area", { city: "Bergen" });
     base.resolution.customerData = false;

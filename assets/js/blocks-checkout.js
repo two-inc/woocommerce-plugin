@@ -343,8 +343,9 @@
    * Nothing acknowledges a dispatch, so a store reading as the value the write
    * replaced is the only sign a cart response older than the write landed.
    *
-   * A key's record ends here on either of two answers from the store: a third
-   * value, which is nobody's but the buyer's, or `was` again with no sends left.
+   * A key's record ends here on either of two answers from the store — a third
+   * value, which is nobody's but the buyer's, or `was` again with no sends left
+   * — and on its shadow input having gone, which no send can read a value from.
    * The store holding the written value ends the `pull()` skip alone, so the
    * record still opposes a revert after that. A role whose address has not
    * resolved yet is skipped with its records intact.
