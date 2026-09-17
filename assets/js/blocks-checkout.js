@@ -86,9 +86,9 @@
   /** True while the store's own values are being written into the shadow. */
   var applying = false;
   var pushScheduled = false;
-  /** Per role, address keys the controller wrote, each with the store value it replaced and its sends left. */
+  /** Per role, keys the controller wrote: the value replaced, the sends left, whether the store holds it. */
   var dirty = {};
-  /** A cart response in flight when the write landed carries the address it replaced; three sends outlast them. */
+  /** The cap on how often one write is dispatched, its first send included. */
   var SENDS = 3;
   var pushing = false;
   var saveScheduled = false;
@@ -164,7 +164,7 @@
       ADDRESS_KEYS.forEach(function (key) {
         add(entry.role + "_" + key, function () {
           var address = storedAddress(entry.store);
-          // Recorded at the write, not at the push: by then this write is the store's own value.
+          // Null until an address answers, since by the push this write is the store's own value.
           var was = address ? String(address[key] == null ? "" : address[key]) : null;
           (dirty[entry.role] = dirty[entry.role] || {})[key] = {
             was: was,
@@ -282,9 +282,9 @@
   }
 
   /**
-   * The control's own repaint of its display field rather than a buyer edit. The
-   * repaint rewrites the name already held, and a buyer edit or clear does not —
-   * which is the only tell available, the control setting no flag of its own.
+   * The control repainting its display field rather than the buyer editing it. In
+   * address-area placement that field is the buyer's only company input, and the
+   * control sets no flag — the repaint rewriting the held name is the one tell.
    */
   function isOwnRepaint(target, role, key) {
     // `window.twoinc` because `companyFieldSelector()` reads the placement off it.
@@ -324,6 +324,12 @@
    *
    * Nothing acknowledges a dispatch, so a store reading as the value the write
    * replaced is the only sign a cart response older than the write landed.
+   *
+   * A key's record ends here on either of two answers from the store: a third
+   * value, which is nobody's but the buyer's, or `was` again with no sends left.
+   * The store holding the written value ends the `pull()` skip alone, so the
+   * record still opposes a revert after that. A role whose address has not
+   * resolved yet is skipped with its records intact.
    */
   function push() {
     // A dispatch can notify subscribers synchronously: spend a send per store pass, not per notification.
