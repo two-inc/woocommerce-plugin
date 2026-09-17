@@ -287,7 +287,10 @@
    * which is the only tell available, the control setting no flag of its own.
    */
   function isOwnRepaint(target, role, key) {
-    if (typeof twoincCompanySearchControls === "undefined" || !target.matches) return false;
+    // `window.twoinc` because `companyFieldSelector()` reads the placement off it.
+    if (typeof twoincCompanySearchControls === "undefined" || !window.twoinc || !target.matches) {
+      return false;
+    }
     var own = twoincCompanySearchControls.some(function (search) {
       var selector = search.companyFieldSelector();
       return !!selector && target.matches(selector);

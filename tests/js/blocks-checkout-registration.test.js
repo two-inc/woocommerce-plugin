@@ -157,7 +157,10 @@ function baseGlobals(location, billing, shipping) {
       calls.rebinds.push(this.role);
     },
     soleTrader: { refresh() {} },
-    isTileLocation: () => role === "billing" && location === "payment_tile",
+    isTileLocation() {
+      if (this.role !== twoincAddressRoles.primary()) return false;
+      return window.twoinc.company_search_location === "payment_tile";
+    },
     companyFieldSelector() {
       return this.isTileLocation() ? "#twoinc_tile_company_name" : this.addressFieldSelector;
     },
@@ -1215,6 +1218,34 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
 
     expect(base.calls.patches).toEqual([{ company: "Example Trading Limited" }]);
     expect(shadowInput("billing_company").value).toBe("");
+  });
+
+  test("an edit still releases its hold when twoinc.js's settings never inlined", async () => {
+    document.body.innerHTML = '<input id="billing-address_1">';
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    // The controller is a declared script dependency of this file; the settings
+    // object is inlined separately, and a page can carry one without the other.
+    delete window.twoinc;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+
+    document
+      .getElementById("billing-address_1")
+      .dispatchEvent(new window.Event("input", { bubbles: true }));
+    base.address.address_1 = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // A capture-phase listener that throws releases nothing, and the write then
+    // outranks the buyer's own field for three sends.
+    expect(base.calls.patches).toEqual([{ address_1: "Example House" }]);
+    expect(shadowInput("billing_address_1").value).toBe("");
   });
 
   test("an edit to the one input mirrored roles share ends both their writes", async () => {
