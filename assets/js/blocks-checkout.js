@@ -605,8 +605,7 @@
       // A country change is what the controller re-reads its per-country
       // gates on, the same pass a classic `updated_checkout` triggers.
       pullTotals();
-      // Nothing acknowledges a dispatch, so a store change is the only chance to
-      // notice one was lost — before `pull()`, so a release lands this same pass.
+      // Before `pull()`, so a key this pass releases is repainted from the store in it.
       push();
       var moved = pull();
       restore();
