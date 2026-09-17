@@ -90,6 +90,7 @@
   var dirty = {};
   /** A cart response in flight when the write landed carries the address it replaced; three sends outlast them. */
   var SENDS = 3;
+  var pushing = false;
   var saveScheduled = false;
   var restored = false;
   var announcedActive = null;
@@ -262,37 +263,48 @@
    * that. Sending every divergent key would push the buyer's own concurrent
    * edit back to its previous value.
    *
-   * A key is held until the store holds its value, because nothing
-   * acknowledges a dispatch, and re-sent while the store reads as the value
-   * that write replaced — which is what a cart response older than the write
-   * puts back. It is released to `pull()` on any other store value, on the
-   * sends running out, and on a store with no address to compare against.
+   * Nothing acknowledges a dispatch, so a store reading as the value the write
+   * replaced is the only sign a cart response older than the write landed.
    */
   function push() {
-    addressRoles().forEach(function (entry) {
-      var written = dirty[entry.role] || {};
-      var address = storedAddress(entry.store);
-      if (!address) {
-        dirty[entry.role] = {};
-        return;
-      }
-
-      var patch = null;
-      Object.keys(written).forEach(function (key) {
-        var input = document.getElementById(entry.role + "_" + key);
-        var stored = address[key] == null ? "" : String(address[key]);
-        if (input && input.value === stored) return;
-        if (!input || stored !== written[key].was || !written[key].sends) {
-          delete written[key];
+    // A dispatch can notify subscribers synchronously: spend a send per store pass, not per notification.
+    if (pushing) return;
+    pushing = true;
+    try {
+      addressRoles().forEach(function (entry) {
+        var written = dirty[entry.role] || {};
+        var address = storedAddress(entry.store);
+        if (!address) {
+          dirty[entry.role] = {};
           return;
         }
-        written[key].sends -= 1;
-        patch = patch || {};
-        patch[key] = input.value;
-      });
 
-      if (patch) wp.data.dispatch("wc/store/cart")[entry.setter](patch);
-    });
+        var patch = null;
+        Object.keys(written).forEach(function (key) {
+          var held = written[key];
+          var input = document.getElementById(entry.role + "_" + key);
+          var stored = address[key] == null ? "" : String(address[key]);
+          // The store holds it: the write landed, and `pull()` owns the field again.
+          if (input && input.value === stored) {
+            delete written[key];
+            return;
+          }
+          // No address to read at the write: the first one to answer is what it replaced.
+          if (held.was === null) held.was = stored;
+          if (!input || stored !== held.was || !held.sends) {
+            delete written[key];
+            return;
+          }
+          held.sends -= 1;
+          patch = patch || {};
+          patch[key] = input.value;
+        });
+
+        if (patch) wp.data.dispatch("wc/store/cart")[entry.setter](patch);
+      });
+    } finally {
+      pushing = false;
+    }
   }
 
   // -------------------------------------------------------------- mounting

@@ -1044,6 +1044,69 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(shadowInput("billing_address_1").value).toBe("");
   });
 
+  test("a write recorded before the cart resolved still reaches the store", async () => {
+    const base = baseGlobals("address_area", { city: "Oslo" });
+    base.resolution.customerData = false;
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_city").value = "Bergen";
+    // The cart resolves between the write and the microtask push that write queued.
+    base.resolution.customerData = true;
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ city: "Bergen" }]);
+    expect(base.address.city).toBe("Bergen");
+  });
+
+  test("a write the store has taken is released rather than defended for good", async () => {
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // A later response is the store's own answer, not one older than the write.
+    base.address.address_1 = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ address_1: "Example House" }]);
+    expect(shadowInput("billing_address_1").value).toBe("");
+  });
+
+  test("a store notifying from inside the dispatch spends one send, not all three", async () => {
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    // A store that notifies its subscribers synchronously and keeps its own value.
+    env.wp.data.dispatch = () => ({
+      setBillingAddress(patch) {
+        base.calls.patches.push(patch);
+        base.publish("wc/store/cart");
+      },
+      setShippingAddress() {}
+    });
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ address_1: "Example House" }]);
+  });
+
   test("a choice that could not be sent is not recorded as sent", () => {
     const base = baseGlobals("payment_tile");
     const { env } = globals({});
