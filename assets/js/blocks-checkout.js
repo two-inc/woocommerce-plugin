@@ -64,6 +64,11 @@
 
   var SHADOW_ID = "twoinc-blocks-shadow";
 
+  var CHECKOUT_BLOCK_CLASS = "wp-block-woocommerce-checkout";
+
+  /** What an address key's own id can be carried by; anything else under it is decoration. */
+  var CONTROL_TAGS = ["input", "select", "textarea"];
+
   /** Both roles: Blocks renders delivery first, so mirroring one strands the other's control (ABN-554). */
   function addressRoles() {
     return [
@@ -86,8 +91,11 @@
   /** True while the store's own values are being written into the shadow. */
   var applying = false;
   var pushScheduled = false;
-  /** Per role, address keys the controller has written and the store has not seen yet. */
+  /** Per role, keys the controller wrote: the value replaced, the sends left, whether the store holds it. */
   var dirty = {};
+  /** The cap on how often one write is dispatched, its first send included. */
+  var SENDS = 3;
+  var pushing = false;
   var saveScheduled = false;
   var restored = false;
   var announcedActive = null;
@@ -160,7 +168,14 @@
     addressRoles().forEach(function (entry) {
       ADDRESS_KEYS.forEach(function (key) {
         add(entry.role + "_" + key, function () {
-          (dirty[entry.role] = dirty[entry.role] || {})[key] = true;
+          var address = storedAddress(entry.store);
+          // Null until an address answers, since by the push this write is the store's own value.
+          var was = address ? String(address[key] == null ? "" : address[key]) : null;
+          (dirty[entry.role] = dirty[entry.role] || {})[key] = {
+            was: was,
+            sends: SENDS,
+            taken: false
+          };
           schedulePush();
         });
       });
@@ -222,8 +237,9 @@
 
       applying = true;
       ADDRESS_KEYS.forEach(function (key) {
-        // Skipped while this key's own write is still queued; others still follow the store.
-        if (written[key]) return;
+        var held = written[key];
+        // Skipped only until the store holds this write; the record outlives that.
+        if (held && !held.taken) return;
         var input = document.getElementById(entry.role + "_" + key);
         var value = address[key] == null ? "" : String(address[key]);
         if (input && input.value !== value) {
@@ -237,32 +253,144 @@
     return moved;
   }
 
+  /** Blocks names a plain input for its key alone, a widget's for the key plus a suffix. */
+  function keyFromId(suffix) {
+    var found = null;
+    ADDRESS_KEYS.forEach(function (key) {
+      if (suffix === key || suffix.indexOf(key + "-") === 0) found = key;
+    });
+    return found;
+  }
+
+  /**
+   * `role`'s own control for `key`, whichever id Blocks gave it — the bare key
+   * or the key plus a widget suffix, which the two roles need not match on.
+   * Form controls only: an error, hint or wrapper node under the same stem
+   * would otherwise read as this role having a control the buyer can edit.
+   */
+  function counterpartControl(role, key) {
+    var stem = role + "-" + key;
+    var selector = CONTROL_TAGS.map(function (tag) {
+      return tag + '[id="' + stem + '"], ' + tag + '[id^="' + stem + '-"]';
+    }).join(", ");
+    return document.querySelector(selector);
+  }
+
+  /** Which of `role`'s held keys the input `id` is the buyer's control for, if any. */
+  function editedKey(role, id) {
+    var found = null;
+    addressRoles().forEach(function (entry) {
+      if (found || id.indexOf(entry.role + "-") !== 0) return;
+      var key = keyFromId(id.slice(entry.role.length + 1));
+      if (!key) return;
+      // Roles Blocks mirrors render one control between them, so that edit is this role's too.
+      if (entry.role === role || !counterpartControl(role, key)) {
+        found = key;
+      }
+    });
+    return found;
+  }
+
+  /**
+   * The control repainting its display field rather than the buyer editing it. In
+   * address-area placement that field is the buyer's only company input, and the
+   * control sets no flag — the repaint rewriting the held name is the one tell.
+   */
+  function isOwnRepaint(target, role, key) {
+    // `window.twoinc` because `companyFieldSelector()` reads the placement off it.
+    if (typeof twoincCompanySearchControls === "undefined" || !window.twoinc || !target.matches) {
+      return false;
+    }
+    var own = twoincCompanySearchControls.some(function (search) {
+      var selector = search.companyFieldSelector();
+      return !!selector && target.matches(selector);
+    });
+    if (!own) return false;
+    var input = document.getElementById(role + "_" + key);
+    return !!input && target.value === input.value;
+  }
+
+  /**
+   * Blocks renders the contact email once, under a bare id any other form on
+   * the page — a newsletter signup, a login — could equally be using.
+   */
+  function isContactEmail(target) {
+    if (target.id !== "email" || !target.closest) return false;
+    return !!target.closest("." + CHECKOUT_BLOCK_CLASS);
+  }
+
+  /**
+   * A buyer edit ends that field's write: a field cleared back to what the write
+   * replaced is otherwise the stale cart response `push()` defends against.
+   */
+  function releaseOnEdit(event) {
+    var target = event.target;
+    var id = (target && target.id) || "";
+    if (!id) return;
+    addressRoles().forEach(function (entry) {
+      var written = dirty[entry.role];
+      if (!written) return;
+      var key = isContactEmail(target) ? "email" : editedKey(entry.role, id);
+      if (key && !isOwnRepaint(target, entry.role, key)) delete written[key];
+    });
+  }
+
   /**
    * What the controller wrote into those fields, back to the store — and only
    * that. Sending every divergent key would push the buyer's own concurrent
    * edit back to its previous value.
+   *
+   * Nothing acknowledges a dispatch, so a store reading as the value the write
+   * replaced is the only sign a cart response older than the write landed.
+   *
+   * A key's record ends here on either of two answers from the store — a third
+   * value, which is nobody's but the buyer's, or `was` again with no sends left
+   * — and on its shadow input having gone, which no send can read a value from.
+   * The store holding the written value ends the `pull()` skip alone, so the
+   * record still opposes a revert after that. A role whose address has not
+   * resolved yet is skipped with its records intact.
    */
   function push() {
-    addressRoles().forEach(function (entry) {
-      var written = Object.keys(dirty[entry.role] || {});
-      // Cleared unconditionally: a key left pinned is one `pull()` skips forever.
-      dirty[entry.role] = {};
-      var address = storedAddress(entry.store);
-      if (!address) return;
+    // A dispatch can notify subscribers synchronously: spend a send per store pass, not per notification.
+    if (pushing) return;
+    pushing = true;
+    try {
+      addressRoles().forEach(function (entry) {
+        var written = dirty[entry.role] || {};
+        var address = storedAddress(entry.store);
+        // Held, not dropped: the cart resolves ticks after the microtask push a write queues.
+        if (!address) return;
 
-      var patch = null;
-      written.forEach(function (key) {
-        var input = document.getElementById(entry.role + "_" + key);
-        if (!input) return;
-        var stored = address[key] == null ? "" : String(address[key]);
-        if (input.value !== stored) {
+        var patch = null;
+        Object.keys(written).forEach(function (key) {
+          var held = written[key];
+          var input = document.getElementById(entry.role + "_" + key);
+          var stored = address[key] == null ? "" : String(address[key]);
+          // No address at the write: the first to answer is what it replaced. Ahead
+          // of the agreement below, which would leave `was` unset for the next value.
+          if (held.was === null) held.was = stored;
+          // The store holds it, so `pull()` owns the field again — `was` and the
+          // sends left stay, or a revert to `was` after this goes unopposed.
+          if (input && input.value === stored) {
+            held.taken = true;
+            return;
+          }
+          if (!input || stored !== held.was || !held.sends) {
+            delete written[key];
+            return;
+          }
+          held.sends -= 1;
+          // Not held any more, so `pull()` must not paint over this re-send.
+          held.taken = false;
           patch = patch || {};
           patch[key] = input.value;
-        }
-      });
+        });
 
-      if (patch) wp.data.dispatch("wc/store/cart")[entry.setter](patch);
-    });
+        if (patch) wp.data.dispatch("wc/store/cart")[entry.setter](patch);
+      });
+    } finally {
+      pushing = false;
+    }
   }
 
   // -------------------------------------------------------------- mounting
@@ -517,11 +645,17 @@
     restore();
     resync();
     observeCheckout();
+    // On the document: Blocks re-creates its own inputs, and a select fires only `change`.
+    ["input", "change"].forEach(function (type) {
+      document.addEventListener(type, releaseOnEdit, true);
+    });
     if (!wp.data || !wp.data.subscribe) return;
     wp.data.subscribe(function () {
       // A country change is what the controller re-reads its per-country
       // gates on, the same pass a classic `updated_checkout` triggers.
       pullTotals();
+      // Before `pull()`, so a key this pass releases is repainted from the store in it.
+      push();
       var moved = pull();
       restore();
       if (moved) resync();
@@ -558,7 +692,7 @@
    * store subscription above and the tile's own mount effect.
    */
   function observeCheckout() {
-    var root = document.querySelector(".wp-block-woocommerce-checkout");
+    var root = document.querySelector("." + CHECKOUT_BLOCK_CLASS);
     if (!root || typeof window.MutationObserver !== "function") return;
     var watched = { childList: true, subtree: true };
     var observer = new window.MutationObserver(function () {
