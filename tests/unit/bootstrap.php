@@ -1532,6 +1532,7 @@ require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Payment_Terms.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Sole_Trader.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Api_Proxy.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Checkout.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Product_Promo.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc.php';
 
 // Snapshotted before any spec resets the hook registry: loading

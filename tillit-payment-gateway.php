@@ -4,7 +4,7 @@
  * Plugin Name: Two - BNPL for businesses
  * Plugin URI: https://two.inc
  * Description: Integration between WooCommerce and Two
- * Version: 2.24.1
+ * Version: 2.25.0
  * Author: Two
  * Author URI: https://two.inc
  * Text Domain: twoinc-payment-gateway
@@ -80,6 +80,10 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_Sole_Trader.php';
     require_once __DIR__ . '/class/WC_Twoinc_Api_Proxy.php';
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Product_Promo.php';
+    // TWO-25799: opt-in, so the hook is registered but the block
+    // renders nothing until the merchant switches it on.
+    WC_Twoinc_Product_Promo::init();
     require_once __DIR__ . '/class/WC_Twoinc.php';
 
     // The option name is resolved inside the callback: reading the brand here would cache it
