@@ -1,7 +1,0 @@
-.woocommerce-checkout
-  #payment
-  ul.payment_methods
-  li.wc_payment_method.payment_method_woocommerce-gateway-tillit
-  #payment_method_woocommerce-gateway-tillit {
-  display: inline-block !important;
-}
