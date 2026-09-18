@@ -71,6 +71,15 @@ fi
 
 [ -n "$resolved" ] || die "no published wordpress:<version>$suffix image at or below WordPress $current"
 
+# WordPress calls a .0 release "7.1", and the leg asserts the booted core
+# version against this one, so prefer that spelling where it is published too.
+case $resolved in
+    *.*.0)
+        short=${resolved%.0}
+        grep -qxF "$short" <<<"$published" && resolved=$short
+        ;;
+esac
+
 if [ "$resolved" != "$current" ]; then
     warn "WordPress $current is the current release but no wordpress:$current$suffix image is published; this leg runs on $resolved instead. A lag that persists means the Docker Hub publish has stalled."
 fi
