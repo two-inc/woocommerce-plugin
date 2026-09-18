@@ -17006,9 +17006,743 @@ final class ProductPromoSpec
     }
 }
 
+
+/**
+ * The product-page buy button (TWO-25800).
+ *
+ * A separate feature from the promotional message, with its own switch, so
+ * the first thing worth pinning is that neither switch turns the other on.
+ *
+ * The button is a submit control inside WooCommerce's own add-to-cart form,
+ * which is why the chosen variation and quantity survive: core adds the item
+ * from the fields its own button posts, and this feature only decides where
+ * the buyer goes afterwards. That is what these specs exercise — the gates
+ * and the redirect — rather than re-testing core's add to cart.
+ */
+final class ProductButtonSpec
+{
+    public static function runAll(): void
+    {
+        $tests = [
+            'testOffByDefault',
+            'testTheTwoProductPageSwitchesAreIndependent',
+            'testEverySharedGateWithholdsOnItsOwn',
+            'testAnUnrecognisedSwitchValueReadsAsOffRatherThanOn',
+            'testTheLabelNamesTheBrandAndIsNotHardcoded',
+            'testAnUnusableBrandNameWithdrawsTheButton',
+            'testAnOrdinaryAddToCartIsLeftAlone',
+            'testTheButtonRedirectsToCheckoutAndPreselectsTheGateway',
+            'testAnOptedOutShopNeitherRedirectsNorTouchesTheSession',
+            'testTheDecisionNeverReachesTheNetwork',
+            'testTheBlocksPreselectIsCarriedByTheDestinationNotStoredState',
+            'testTheRedirectCarriesTheIntentToTheCheckout',
+            'testTheFilterOnlyActsWhenSomethingWasActuallyAdded',
+            'testTheMarkupCarriesTheFieldCoreActuallyReads',
+            'testAnExternalProductRendersNoButton',
+            'testAGroupedProductIsJudgedByItsChildren',
+            'testTheMarkerIsConsumedEvenWhereTheMethodIsNotOffered',
+            'testAnUnavailableMethodDoesNotStayChosenAndCarryItsSurcharge',
+            'testTheMarkCarriesTheBrandAndTheTextIsOnlyTheFragment',
+            'testABrandWithNoMarkKeepsTheNameAsText',
+        ];
+        foreach ($tests as $test) {
+            self::$test();
+            print("PASS ProductButtonSpec::$test\n");
+        }
+    }
+
+    private static function reset(): void
+    {
+        $GLOBALS['__twoinc_test_product'] = new StubProduct();
+        $GLOBALS['__twoinc_test_http_calls'] = [];
+        WC()->session = new StubSession();
+        unset($_REQUEST[WC_Twoinc_Product_Button::TRIGGER_FIELD]);
+        delete_option(WC_Twoinc_Brand::prefixed_name('supported_buyer_countries'));
+    }
+
+    /** Opted in, with a key nobody has a cached verdict for. */
+    private static function optedInSettings(): array
+    {
+        return [
+            'enabled' => 'yes',
+            'product_page_button_enabled' => 'yes',
+            'api_key' => 'a-key-with-no-cached-verdict',
+        ];
+    }
+
+    /** The whole point of an opt-in: an upgrade renders no purchase control. */
+    private static function testOffByDefault(): void
+    {
+        self::reset();
+
+        TinyAssert::same(
+            false,
+            WC_Twoinc_Product_Button::is_visible(['enabled' => 'yes', 'api_key' => 'k']),
+            'nothing stored means no button'
+        );
+    }
+
+    /**
+     * Two features, two switches. A shop that wanted the message must not
+     * acquire a purchase control it never asked for, and vice versa.
+     */
+    private static function testTheTwoProductPageSwitchesAreIndependent(): void
+    {
+        self::reset();
+        $base = ['enabled' => 'yes', 'api_key' => 'k'];
+
+        $messageOnly = array_merge($base, ['product_page_message_enabled' => 'yes']);
+        TinyAssert::same(
+            false,
+            WC_Twoinc_Product_Button::is_visible($messageOnly),
+            'the message switch alone does not render the button'
+        );
+
+        $buttonOnly = array_merge($base, ['product_page_button_enabled' => 'yes']);
+        TinyAssert::same(
+            false,
+            WC_Twoinc_Product_Promo::is_visible($buttonOnly),
+            'the button switch alone does not render the message'
+        );
+        TinyAssert::same(
+            true,
+            WC_Twoinc_Product_Button::is_visible($buttonOnly),
+            'and the button switch does render the button'
+        );
+    }
+
+    /**
+     * The shared gates, each load-bearing on its own. A purchase control for a
+     * method the buyer cannot use is worse than no control.
+     */
+    private static function testEverySharedGateWithholdsOnItsOwn(): void
+    {
+        self::reset();
+
+        $off = self::optedInSettings();
+        $off['enabled'] = 'no';
+        TinyAssert::same(false, WC_Twoinc_Product_Button::is_visible($off), 'the gateway itself is off');
+
+        $noKey = self::optedInSettings();
+        $noKey['api_key'] = '';
+        TinyAssert::same(false, WC_Twoinc_Product_Button::is_visible($noKey), 'no key at all is definitive');
+
+        $rejected = self::optedInSettings();
+        set_transient(WC_Twoinc::verification_cache_key($rejected['api_key']), ['status' => 'invalid_key']);
+        TinyAssert::same(
+            false,
+            WC_Twoinc_Product_Button::is_visible($rejected),
+            'a key Two rejected withholds the button'
+        );
+        delete_transient(WC_Twoinc::verification_cache_key($rejected['api_key']));
+
+        // A transient blip is NOT definitive and must change nothing.
+        $blip = self::optedInSettings();
+        set_transient(WC_Twoinc::verification_cache_key($blip['api_key']), ['status' => 'unreachable']);
+        TinyAssert::same(
+            true,
+            WC_Twoinc_Product_Button::is_visible($blip),
+            'a transient outage leaves the button up, as it leaves the method on offer'
+        );
+        delete_transient(WC_Twoinc::verification_cache_key($blip['api_key']));
+
+        update_option(WC_Twoinc_Brand::prefixed_name('supported_buyer_countries'), '[]');
+        TinyAssert::same(
+            false,
+            WC_Twoinc_Product_Button::is_visible(self::optedInSettings()),
+            'an allowlist that reaches no country withholds the button'
+        );
+        delete_option(WC_Twoinc_Brand::prefixed_name('supported_buyer_countries'));
+    }
+
+    /**
+     * An imported or hand-edited option can hold anything. Whatever it holds,
+     * it must not be the thing that switches a purchase control ON.
+     */
+    private static function testAnUnrecognisedSwitchValueReadsAsOffRatherThanOn(): void
+    {
+        foreach ([['1'], ['true'], ['on'], [1], [true], [['yes']]] as $case) {
+            self::reset();
+            $settings = self::optedInSettings();
+            $settings['product_page_button_enabled'] = $case[0];
+
+            TinyAssert::same(
+                false,
+                WC_Twoinc_Product_Button::is_visible($settings),
+                'a value outside yes/no reads as off: ' . var_export($case[0], true)
+            );
+        }
+    }
+
+    private static function testTheLabelNamesTheBrandAndIsNotHardcoded(): void
+    {
+        self::reset();
+
+        TinyAssert::same(
+            'Buy with Acme Credit',
+            WC_Twoinc_Product_Button::get_label('Acme Credit'),
+            'a brand overlay gets its own name in the label'
+        );
+
+        TinyAssert::same(
+            'Buy with ' . (string) WC_Twoinc_Brand::get('product_name'),
+            WC_Twoinc_Product_Button::get_label(),
+            'and the default label names the active brand'
+        );
+    }
+
+    /**
+     * A purchase control nobody can attribute has no business on a page, and
+     * `is_visible()` withholds on exactly this resolving to empty.
+     */
+    private static function testAnUnusableBrandNameWithdrawsTheButton(): void
+    {
+        foreach (['', '   ', "\u{00A0}", ['array'], null] as $name) {
+            TinyAssert::same(
+                '',
+                WC_Twoinc_Storefront_Gate::brand_label_from($name),
+                'an unusable brand name resolves to empty, which withdraws the button'
+            );
+        }
+    }
+
+    /**
+     * The redirect filter runs on EVERY add to cart in the shop. An ordinary
+     * Add to Basket must be untouched, or every shop that enables this feature
+     * loses its normal add-to-cart behaviour.
+     */
+    private static function testAnOrdinaryAddToCartIsLeftAlone(): void
+    {
+        self::reset();
+        update_option(
+            'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',
+            self::optedInSettings()
+        );
+
+        $url = WC_Twoinc_Product_Button::redirect_after_add('https://shop.example/cart/', new StubProduct());
+
+        TinyAssert::same(
+            'https://shop.example/cart/',
+            $url,
+            'no trigger field means core decides where the buyer goes'
+        );
+        TinyAssert::same(
+            null,
+            WC()->session->get('chosen_payment_method'),
+            'and nothing is written to the session'
+        );
+
+        delete_option('woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings');
+    }
+
+    private static function testTheButtonRedirectsToCheckoutAndPreselectsTheGateway(): void
+    {
+        self::reset();
+        update_option(
+            'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',
+            self::optedInSettings()
+        );
+        $_REQUEST[WC_Twoinc_Product_Button::TRIGGER_FIELD] = '1';
+
+        $url = WC_Twoinc_Product_Button::redirect_after_add('https://shop.example/cart/', new StubProduct());
+
+        TinyAssert::same(
+            true,
+            strpos($url, 'https://shop.example/checkout/') === 0,
+            'the buyer lands on checkout'
+        );
+        TinyAssert::same(
+            WC_Twoinc_Brand::get('gateway_id'),
+            WC()->session->get('chosen_payment_method'),
+            'with this gateway already chosen, through the key core itself reads'
+        );
+
+        delete_option('woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings');
+    }
+
+    /**
+     * A crafted request carrying the trigger field against a shop that never
+     * enabled this must change nothing at all.
+     */
+    private static function testAnOptedOutShopNeitherRedirectsNorTouchesTheSession(): void
+    {
+        self::reset();
+        update_option(
+            'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',
+            ['enabled' => 'yes', 'api_key' => 'k']
+        );
+        $_REQUEST[WC_Twoinc_Product_Button::TRIGGER_FIELD] = '1';
+
+        $url = WC_Twoinc_Product_Button::redirect_after_add('https://shop.example/cart/', new StubProduct());
+
+        TinyAssert::same('https://shop.example/cart/', $url, 'an opted-out shop redirects nowhere new');
+        TinyAssert::same(
+            null,
+            WC()->session->get('chosen_payment_method'),
+            'and no payment method is chosen on the buyer behalf'
+        );
+
+        delete_option('woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings');
+    }
+
+    /**
+     * Constructing the gateway runs init_form_fields(), whose payment-term
+     * options refresh the merchant record. No render path may, and a product
+     * page is the busiest render path in the shop.
+     */
+    private static function testTheDecisionNeverReachesTheNetwork(): void
+    {
+        self::reset();
+
+        TinyAssert::same(
+            true,
+            WC_Twoinc_Product_Button::is_visible(self::optedInSettings()),
+            'an opted-in shop renders on a cold verdict cache'
+        );
+        TinyAssert::same(
+            0,
+            count($GLOBALS['__twoinc_test_http_calls']),
+            'and reaches the network not once while deciding'
+        );
+    }
+
+    private static function renderedMarkup(): string
+    {
+        ob_start();
+        WC_Twoinc_Product_Button::render();
+        return (string) ob_get_clean();
+    }
+
+    /**
+     * A browser submits ONLY the activated submit control, and core puts
+     * `add-to-cart` on its own button for a simple product. A button named
+     * anything else posts no `add-to-cart`, WC_Form_Handler returns early,
+     * nothing reaches the cart and the redirect filter never runs — the whole
+     * feature silently does nothing on the commonest product type.
+     *
+     * So the button has to BE the add-to-cart control, and the marker has to
+     * travel somewhere a submit button can still carry it.
+     */
+    private static function testTheMarkupCarriesTheFieldCoreActuallyReads(): void
+    {
+        self::reset();
+        $GLOBALS['__twoinc_test_is_singular'] = true;
+        update_option(
+            'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',
+            self::optedInSettings()
+        );
+
+        $html = self::renderedMarkup();
+
+        TinyAssert::same(
+            true,
+            strpos($html, 'name="add-to-cart" value="4242"') !== false,
+            'the button IS the add-to-cart control, carrying the product id core reads'
+        );
+        TinyAssert::same(
+            true,
+            strpos($html, 'twoinc_buy_now=1') !== false,
+            'and the marker travels in formaction, the one place left to it'
+        );
+
+        delete_option('woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings');
+        unset($GLOBALS['__twoinc_test_is_singular']);
+    }
+
+    /**
+     * An external product's form is a GET to the merchant's third-party URL,
+     * so a button inside it would take the buyer off the shop entirely.
+     */
+    /**
+     * The brand appears exactly once, and the mark is what carries it.
+     *
+     * The rendered markup is written to a fixture the Jest suite reads, so the
+     * accessible-name assertion runs against what this actually emits rather
+     * than against a copy that can drift from it. A stale fixture fails here.
+     */
+    /**
+     * A grouped parent is a container: WC_Product_Grouped::is_purchasable()
+     * returns false unconditionally, and the CHILDREN are what get bought.
+     * Asking the parent hid the button on every ordinary grouped product
+     * while the supported-types list said grouped was supported.
+     */
+    private static function testAGroupedProductIsJudgedByItsChildren(): void
+    {
+        self::reset();
+        $GLOBALS['__twoinc_test_is_singular'] = true;
+        update_option(
+            'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',
+            self::optedInSettings()
+        );
+
+        // The parent, exactly as core models one: never purchasable itself.
+        $GLOBALS['__twoinc_test_product'] = new StubProduct(false, true, 'grouped');
+
+        $GLOBALS['__twoinc_test_children'] = [11, 12];
+        $GLOBALS['__twoinc_test_products'] = [
+            11 => new StubProduct(false, true),
+            12 => new StubProduct(true, true),
+        ];
+        TinyAssert::same(
+            true,
+            strpos(self::renderedMarkup(), 'twoinc-product-button') !== false,
+            'one buyable child is enough, even though the parent never is'
+        );
+
+        $GLOBALS['__twoinc_test_products'] = [
+            11 => new StubProduct(true, false),
+            12 => new StubProduct(false, true),
+        ];
+        TinyAssert::same(
+            '',
+            self::renderedMarkup(),
+            'and nothing buyable among them renders no button'
+        );
+
+        unset($GLOBALS['__twoinc_test_children'], $GLOBALS['__twoinc_test_products']);
+        delete_option('woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings');
+        unset($GLOBALS['__twoinc_test_is_singular']);
+    }
+
+    /**
+     * The marker has to be consumed even at a checkout where this method is
+     * not offered, or the buyer picks another one, and a later reload of the
+     * same URL — by which time the cart or address has made this method
+     * available — preselects over that choice.
+     */
+    private static function testTheMarkerIsConsumedEvenWhereTheMethodIsNotOffered(): void
+    {
+        self::reset();
+        StubScripts::reset();
+        // Not opted in, and no usable key: the gateway is nowhere near active.
+        delete_option('woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings');
+        $_GET[WC_Twoinc_Product_Button::TRIGGER_FIELD] = '1';
+
+        WC_Twoinc_Product_Button::consume_marker_on_checkout();
+
+        $inline = StubScripts::inlineFor('twoinc-buy-now-consume');
+        TinyAssert::same(
+            1,
+            count($inline),
+            'the marker is still consumed, because it never depended on the gateway'
+        );
+        TinyAssert::same(
+            true,
+            strpos($inline[0], 'replaceState') !== false
+                && strpos($inline[0], WC_Twoinc_Product_Button::TRIGGER_FIELD) !== false,
+            'and what it consumes is this feature\'s own arg'
+        );
+
+        // A checkout nobody was handed off to rewrites nothing.
+        StubScripts::reset();
+        unset($_GET[WC_Twoinc_Product_Button::TRIGGER_FIELD]);
+        WC_Twoinc_Product_Button::consume_marker_on_checkout();
+        TinyAssert::same(
+            0,
+            StubScripts::handles(),
+            'and an ordinary checkout visit rewrites no history'
+        );
+    }
+
+    private static function testTheMarkCarriesTheBrandAndTheTextIsOnlyTheFragment(): void
+    {
+        self::reset();
+        $GLOBALS['__twoinc_test_is_singular'] = true;
+        update_option(
+            'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',
+            self::optedInSettings()
+        );
+        $brand = (string) WC_Twoinc_Brand::get('product_name');
+
+        $html = self::renderedMarkup();
+
+        TinyAssert::same(
+            true,
+            strpos($html, '>Buy with</span>') !== false,
+            'the visible text is the fragment alone, so the brand is not said twice'
+        );
+        TinyAssert::same(
+            true,
+            strpos($html, 'alt="' . $brand . '"') !== false,
+            'and the mark carries the brand, which is what keeps it in the accessible name'
+        );
+        TinyAssert::same(
+            false,
+            strpos($html, 'aria-hidden') !== false,
+            'the mark is not decorative: it is the only thing naming the brand now'
+        );
+
+        self::assertFixtureMatches('product-button-with-mark.html', $html);
+
+        delete_option('woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings');
+        unset($GLOBALS['__twoinc_test_is_singular']);
+    }
+
+    /**
+     * A brand shipping no mark keeps the name as visible text. No storefront
+     * may end up with a purchase control that names no brand.
+     */
+    private static function testABrandWithNoMarkKeepsTheNameAsText(): void
+    {
+        self::reset();
+        $GLOBALS['__twoinc_test_is_singular'] = true;
+        update_option(
+            'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',
+            self::optedInSettings()
+        );
+
+        $config = WC_Twoinc_Brand::config();
+        $original = $config;
+        unset($config['logo_url']);
+        $cache = new ReflectionProperty(WC_Twoinc_Brand::class, 'config');
+        $cache->setAccessible(true);
+        $cache->setValue(null, $config);
+
+        $html = self::renderedMarkup();
+        $brand = (string) WC_Twoinc_Brand::get('product_name');
+
+        $cache->setValue(null, $original);
+
+        TinyAssert::same(
+            true,
+            strpos($html, '>Buy with ' . $brand . '</span>') !== false,
+            'the visible text names the brand when there is no mark to do it'
+        );
+        TinyAssert::same(false, strpos($html, '<img') !== false, 'and there is no mark');
+
+        self::assertFixtureMatches('product-button-without-mark.html', $html);
+
+        delete_option('woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings');
+        unset($GLOBALS['__twoinc_test_is_singular']);
+    }
+
+    /**
+     * Core applies this filter from two places: after an add, passing the
+     * product, and from WC_Frontend_Scripts on ordinary page loads to build
+     * the ajax script's cart_url, passing null.
+     *
+     * The second one matters because the marker lives in the query string, so
+     * it is present on the checkout this redirects to AND on the product page
+     * a failed add leaves the buyer on. Acting there would write a payment
+     * choice into the session with nothing added, and hand the ajax script
+     * this checkout URL as its cart link.
+     */
+    private static function testTheFilterOnlyActsWhenSomethingWasActuallyAdded(): void
+    {
+        self::reset();
+        update_option(
+            'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',
+            self::optedInSettings()
+        );
+        // The marker is in the URL, as it is on every page this feature sends
+        // the buyer to.
+        $_REQUEST[WC_Twoinc_Product_Button::TRIGGER_FIELD] = '1';
+
+        $cartUrl = WC_Twoinc_Product_Button::redirect_after_add('https://shop.example/cart/', null);
+
+        TinyAssert::same(
+            'https://shop.example/cart/',
+            $cartUrl,
+            'the ajax script keeps its own cart url; nothing was added'
+        );
+        TinyAssert::same(
+            null,
+            WC()->session->get('chosen_payment_method'),
+            'and no payment choice is written on a plain page render'
+        );
+
+        delete_option('woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings');
+    }
+
+    /**
+     * The session key that makes classic preselect is the SAME key the
+     * surcharge is gated on, and that gate asks whether this gateway is
+     * chosen, not whether it is available. A product page cannot know the
+     * minimum order value or the buyer country, so the button can name a
+     * method this checkout does not offer, and the surcharge would then land
+     * on a basket being paid through another gateway.
+     */
+    private static function testAnUnavailableMethodDoesNotStayChosenAndCarryItsSurcharge(): void
+    {
+        $id = WC_Twoinc_Brand::get('gateway_id');
+
+        // Offered here: the buyer's preselection stands.
+        self::reset();
+        $_GET[WC_Twoinc_Product_Button::TRIGGER_FIELD] = '1';
+        WC()->session->set('chosen_payment_method', $id);
+        $GLOBALS['__twoinc_test_available_gateways'] = [$id => new stdClass()];
+        WC_Twoinc_Product_Button::consume_marker_on_checkout();
+        TinyAssert::same(
+            $id,
+            WC()->session->get('chosen_payment_method'),
+            'a method this checkout offers stays chosen'
+        );
+
+        // Filtered out here — below the minimum, unsupported country, whatever
+        // the cart-time gate was. The choice has to be taken back.
+        self::reset();
+        $_GET[WC_Twoinc_Product_Button::TRIGGER_FIELD] = '1';
+        WC()->session->set('chosen_payment_method', $id);
+        $GLOBALS['__twoinc_test_available_gateways'] = ['cod' => new stdClass()];
+        WC_Twoinc_Product_Button::consume_marker_on_checkout();
+        TinyAssert::same(
+            '',
+            WC()->session->get('chosen_payment_method'),
+            'a method this checkout does not offer stops being chosen, so no surcharge follows it'
+        );
+
+        // Somebody else's choice is never blanked.
+        self::reset();
+        $_GET[WC_Twoinc_Product_Button::TRIGGER_FIELD] = '1';
+        WC()->session->set('chosen_payment_method', 'cod');
+        $GLOBALS['__twoinc_test_available_gateways'] = ['bacs' => new stdClass()];
+        WC_Twoinc_Product_Button::consume_marker_on_checkout();
+        TinyAssert::same(
+            'cod',
+            WC()->session->get('chosen_payment_method'),
+            'another gateway\'s choice is left alone even when it is unavailable'
+        );
+
+        unset($GLOBALS['__twoinc_test_available_gateways'], $_GET[WC_Twoinc_Product_Button::TRIGGER_FIELD]);
+    }
+
+    /**
+     * Keeps the Jest fixtures honest, in the only order that can actually fail.
+     *
+     * Writing the file and then comparing against what was just written is a
+     * comparison that cannot fail. The two suites run in separate checkouts,
+     * so a renderer change would leave the PHP job silently regenerating while
+     * Jest asserted the stale committed markup, and both would be green with
+     * the alternative text gone.
+     *
+     * So this compares against the COMMITTED copy and fails on a mismatch.
+     * Regenerating is a separate, deliberate act:
+     *
+     *     TWOINC_UPDATE_FIXTURES=1 php tests/unit/run.php
+     */
+    private static function assertFixtureMatches(string $name, string $html): void
+    {
+        $path = dirname(__DIR__) . '/js/fixtures/' . $name;
+
+        if (getenv('TWOINC_UPDATE_FIXTURES')) {
+            file_put_contents($path, $html);
+        }
+
+        $committed = is_file($path) ? (string) file_get_contents($path) : '';
+
+        TinyAssert::same(
+            $html,
+            $committed,
+            $name . ' is stale; regenerate with TWOINC_UPDATE_FIXTURES=1 php tests/unit/run.php'
+        );
+    }
+
+    private static function testAnExternalProductRendersNoButton(): void
+    {
+        self::reset();
+        $GLOBALS['__twoinc_test_is_singular'] = true;
+        update_option(
+            'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',
+            self::optedInSettings()
+        );
+
+        foreach (['external', 'subscription', 'booking'] as $type) {
+            $GLOBALS['__twoinc_test_product'] = new StubProduct(true, true, $type);
+            TinyAssert::same(
+                '',
+                self::renderedMarkup(),
+                'a ' . $type . ' product renders no button'
+            );
+        }
+
+        foreach (['simple', 'variable', 'grouped'] as $type) {
+            $GLOBALS['__twoinc_test_product'] = new StubProduct(true, true, $type);
+            // A grouped parent is never purchasable itself, so its buyable
+            // child is what makes the form worth a button.
+            $GLOBALS['__twoinc_test_children'] = 'grouped' === $type ? [11] : [];
+            $GLOBALS['__twoinc_test_products'] = ['grouped' === $type ? 11 : 0 => new StubProduct()];
+            TinyAssert::same(
+                true,
+                strpos(self::renderedMarkup(), 'twoinc-product-button') !== false,
+                'a ' . $type . ' product does render one'
+            );
+        }
+        unset($GLOBALS['__twoinc_test_children'], $GLOBALS['__twoinc_test_products']);
+
+        delete_option('woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings');
+        unset($GLOBALS['__twoinc_test_is_singular']);
+    }
+
+    /**
+     * Blocks has no server-side preselect, so its tile reads the same session
+     * key. It must follow the button, and must stop the moment the buyer
+     * chooses something else.
+     */
+    /**
+     * Nothing is stored, so there is nothing to outlive the checkout it was
+     * meant for. The tile reads the request it is rendering.
+     */
+    private static function testTheBlocksPreselectIsCarriedByTheDestinationNotStoredState(): void
+    {
+        self::reset();
+        unset($_GET[WC_Twoinc_Product_Button::TRIGGER_FIELD]);
+
+        TinyAssert::same(
+            false,
+            WC_Twoinc_Product_Button::should_preselect_blocks(),
+            'an ordinary checkout visit preselects nothing'
+        );
+
+        // Core's own key being set is NOT the signal: it persists across
+        // checkouts by design, so reading it would let an abandoned checkout
+        // preselect an unrelated later one.
+        WC()->session->set('chosen_payment_method', WC_Twoinc_Brand::get('gateway_id'));
+        TinyAssert::same(
+            false,
+            WC_Twoinc_Product_Button::should_preselect_blocks(),
+            'and a method left over from an earlier checkout does not either'
+        );
+
+        $_GET[WC_Twoinc_Product_Button::TRIGGER_FIELD] = '1';
+        TinyAssert::same(
+            true,
+            WC_Twoinc_Product_Button::should_preselect_blocks(),
+            'only the checkout this feature sent the buyer to does'
+        );
+        unset($_GET[WC_Twoinc_Product_Button::TRIGGER_FIELD]);
+    }
+
+    /** The destination is where the intent lives, so it has to carry it. */
+    private static function testTheRedirectCarriesTheIntentToTheCheckout(): void
+    {
+        self::reset();
+        update_option(
+            'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings',
+            self::optedInSettings()
+        );
+        $_REQUEST[WC_Twoinc_Product_Button::TRIGGER_FIELD] = '1';
+
+        $url = WC_Twoinc_Product_Button::redirect_after_add('https://shop.example/cart/', new StubProduct());
+
+        TinyAssert::same(
+            true,
+            strpos($url, 'https://shop.example/checkout/') === 0,
+            'the buyer lands on checkout'
+        );
+        TinyAssert::same(
+            true,
+            strpos($url, WC_Twoinc_Product_Button::TRIGGER_FIELD . '=1') !== false,
+            'and the destination says so, rather than anything being stored'
+        );
+
+        delete_option('woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings');
+    }
+}
+
 BrandConfigSpec::runAll();
 AnchorOnlyHtmlSpec::runAll();
 SubtitleSaveValidationSpec::runAll();
 CaptureMemorySpec::runAll();
 ProductPromoSpec::runAll();
+ProductButtonSpec::runAll();
 print("All tests passed.\n");

@@ -64,6 +64,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 = 2.25.0 =
 
 * You can now show a short line about paying by invoice on your product pages, under the add to cart button, so a buyer sees the option before filling a basket. It is off until you switch it on under WooCommerce > Settings > Payments > Two, where you can also replace the wording with your own. Where exactly the line lands on the page depends on your theme.
+* You can also add a buy button beside Add to cart. It adds the item to the basket and opens the checkout with Two already chosen, so a buyer who has decided does not have to find the payment method later. It does not place the order, and the basket they already had is kept. Off until you switch it on in the same place.
 
 = 2.24.0 =
 
@@ -160,7 +161,7 @@ Older releases are listed at https://github.com/two-inc/woocommerce-plugin/relea
 == Upgrade Notice ==
 
 = 2.25.0 =
-Adds an optional line about paying by invoice on your product pages. Nothing changes until you switch it on under WooCommerce > Settings > Payments > Two.
+Adds an optional line about paying by invoice on your product pages, and an optional buy button beside Add to cart. Nothing changes until you switch them on under WooCommerce > Settings > Payments > Two.
 
 = 2.24.0 =
 Adds block-based checkout support and sole-trader checkout. Review the payment-term and surcharge settings after updating.

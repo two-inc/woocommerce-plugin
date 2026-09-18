@@ -838,6 +838,130 @@ describe("blocks-checkout.js reaches the rest of the tile's surfaces", () => {
     updates.forEach((u) => expect(u.namespace).toBe("twoinc-payment-gateway"));
   });
 
+  /**
+   * TWO-25800. A buyer arriving from the product-page buy button has the
+   * gateway named in the session, so the tile selects itself on mount. The
+   * announcement that would otherwise fire first says {active:false} about a
+   * method the buyer is about to be moved off, and neither request is awaited
+   * — if that one settles last, the server clears the chosen method and
+   * recalculates without the surcharge while the tile shows this one selected.
+   */
+  describe("the buy-button preselect", () => {
+    /** A radio the skin can click, wired to move the payment store. */
+    function paymentOption(base) {
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
+      radio.addEventListener("click", () => {
+        base.activeMethod.name = "woocommerce-gateway-tillit";
+        base.publish("wc/store/payment");
+      });
+      document.body.appendChild(radio);
+      return radio;
+    }
+
+    afterEach(() => {
+      delete METHOD_DATA.preselect;
+    });
+
+    test("no {active:false} is announced on the way to selecting this method", () => {
+      METHOD_DATA.preselect = true;
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      paymentOption(base);
+
+      evaluate(env);
+
+      expect(updates.map((u) => u.data)).toEqual([{ active: true }]);
+      expect(base.activeMethod.name).toBe("woocommerce-gateway-tillit");
+    });
+
+    test("a buyer who did not arrive from the button is announced as before", () => {
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      paymentOption(base);
+
+      evaluate(env);
+
+      expect(updates.map((u) => u.data)).toEqual([{ active: false }]);
+      expect(base.activeMethod.name).toBe("cod");
+    });
+
+    test("the store catching up a tick later still announces only {active:true}", async () => {
+      METHOD_DATA.preselect = true;
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      // React does not update the store inside the click handler, so the
+      // realistic case is the store catching up on a later tick. Ordering
+      // alone does not cover this; the announcement has to be held back.
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
+      radio.addEventListener("click", () => {
+        Promise.resolve().then(() => {
+          base.activeMethod.name = "woocommerce-gateway-tillit";
+          base.publish("wc/store/payment");
+        });
+      });
+      document.body.appendChild(radio);
+
+      evaluate(env);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(updates.map((u) => u.data)).toEqual([{ active: true }]);
+    });
+
+    test("the radio mounting later still gets preselected", async () => {
+      METHOD_DATA.preselect = true;
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      // The payment step mounts after bootstrap, which is the ordinary case
+      // for a guest passing through address and shipping first.
+      const root = document.createElement("div");
+      root.className = "wp-block-woocommerce-checkout";
+      document.body.appendChild(root);
+
+      evaluate(env);
+      expect(updates).toEqual([]);
+
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
+      radio.addEventListener("click", () => {
+        base.activeMethod.name = "woocommerce-gateway-tillit";
+        base.publish("wc/store/payment");
+      });
+      root.appendChild(radio);
+      // The observer is asynchronous, so let it deliver.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(base.activeMethod.name).toBe("woocommerce-gateway-tillit");
+      expect(updates.map((u) => u.data)).toEqual([{ active: true }]);
+    });
+
+    test("the option refusing the click does not silence the tile forever", () => {
+      METHOD_DATA.preselect = true;
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      // A radio that swallows the click, as a disabled option would.
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
+      document.body.appendChild(radio);
+
+      evaluate(env);
+      base.publish("wc/store/payment");
+
+      expect(updates.map((u) => u.data)).toEqual([{ active: false }]);
+    });
+  });
+
   test("an unchanged choice is not re-announced — each announcement is a cart request", () => {
     const base = baseGlobals("payment_tile");
     const { env, updates } = withCartApi(base);
