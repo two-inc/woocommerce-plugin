@@ -5,7 +5,7 @@
 # GitHub annotation to stderr.
 #
 # Usage: resolve-wordpress-image-tag.sh <wordpress-version> <tag-suffix>
-#   e.g. resolve-wordpress-image-tag.sh 7.1.1 -php8.2-apache  ->  7.1.0
+#   e.g. resolve-wordpress-image-tag.sh 7.1.1 -php8.2-apache  ->  7.1
 #
 # wordpress.org announces a release the moment it ships and Docker Hub
 # publishes the image for it hours later (ABN-614), so the announced version
