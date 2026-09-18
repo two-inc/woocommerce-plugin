@@ -16832,8 +16832,183 @@ final class CaptureMemorySpec
     }
 }
 
+final class ProductPromoSpec
+{
+    public static function runAll(): void
+    {
+        $tests = [
+            'testTheDefaultCopyIsTheCheckoutPhraseSoTheTwoSurfacesCannotDrift',
+            'testAnOverrideWins',
+            'testAWhitespaceOnlyOverrideFallsBackIncludingUnicodeWhitespace',
+            'testANonScalarStoredValueReadsAsAbsentRatherThanFatalling',
+            'testTheBrandLabelNamesTheProduct',
+            'testAnUnusableBrandNameWithdrawsTheBadgeRatherThanLeavingItUnattributed',
+            'testAThrowingVerificationWithdrawsTheMessageNotThePage',
+            'testAnEmptyBuyerCountryAllowlistWithholdsTheBadge',
+            'testTheDecisionNeverConstructsTheGateway',
+        ];
+        foreach ($tests as $test) {
+            self::$test();
+            print("PASS ProductPromoSpec::$test\n");
+        }
+    }
+
+    /**
+     * The settings array is what production reads, so a fixture holding the
+     * raw stored value exercises the real path - including the shapes a
+     * string-typed fixture cannot express.
+     */
+    private static function withStoredMessage($stored): string
+    {
+        return WC_Twoinc_Product_Promo::get_message(['product_page_message' => $stored]);
+    }
+
+    /** Opted in, with a key nobody has a cached verdict for. */
+    private static function optedInSettings(): array
+    {
+        return [
+            'enabled' => 'yes',
+            'product_page_message_enabled' => 'yes',
+            'api_key' => 'a-key-with-no-cached-verdict',
+        ];
+    }
+
+    private static function testTheDefaultCopyIsTheCheckoutPhraseSoTheTwoSurfacesCannotDrift(): void
+    {
+        TinyAssert::same(
+            'Buy now, receive your goods, pay your invoice later.',
+            self::withStoredMessage(''),
+            'the default is the phrase the checkout tile already ships, so it needs no translation of its own'
+        );
+    }
+
+    private static function testAnOverrideWins(): void
+    {
+        TinyAssert::same('Pay us later', self::withStoredMessage('  Pay us later  '), 'an override is trimmed and wins');
+    }
+
+    private static function testAWhitespaceOnlyOverrideFallsBackIncludingUnicodeWhitespace(): void
+    {
+        $default = 'Buy now, receive your goods, pay your invoice later.';
+        $cases = [
+            '   ' => 'ordinary spaces',
+            "\t\n" => 'tab and newline',
+            "\u{00A0}\u{00A0}" => 'nonbreaking spaces, which trim() leaves behind',
+            "\u{3000}" => 'an ideographic space',
+            "\u{FEFF}" => 'a zero-width no-break space',
+        ];
+        foreach ($cases as $stored => $description) {
+            TinyAssert::same($default, self::withStoredMessage($stored), $description);
+        }
+    }
+
+    /**
+     * An import or a hand-edited option can store an array here. Casting one
+     * to string is a warning that can surface as a fatal on the product page,
+     * so a non-scalar reads as absent.
+     */
+    private static function testANonScalarStoredValueReadsAsAbsentRatherThanFatalling(): void
+    {
+        $default = 'Buy now, receive your goods, pay your invoice later.';
+        foreach ([['Pay us later'], ['a' => ['b' => 'c']], null, new stdClass()] as $stored) {
+            TinyAssert::same($default, self::withStoredMessage($stored), 'a non-scalar stored value reads as absent');
+        }
+    }
+
+    /**
+     * A brand with neither a usable mark nor a usable name must render
+     * nothing: a bare financing sentence attributes the offer to nobody.
+     */
+    private static function testAnUnusableBrandNameWithdrawsTheBadgeRatherThanLeavingItUnattributed(): void
+    {
+        foreach (['', '   ', "\u{00A0}", ['array'], null] as $name) {
+            TinyAssert::same(
+                '',
+                WC_Twoinc_Product_Promo::get_brand_label_from($name),
+                'an unusable brand name resolves to empty, which withdraws the badge'
+            );
+        }
+    }
+
+    /**
+     * A malformed stored key makes verification throw, and this renders on a
+     * product page — the message goes, not the page.
+     */
+    /**
+     * An imported array where a key belongs makes md5() throw inside the
+     * transient lookup. That takes the message, never the product page.
+     */
+    private static function testAThrowingVerificationWithdrawsTheMessageNotThePage(): void
+    {
+        $settings = self::optedInSettings();
+        $settings['api_key'] = ['imported' => 'array'];
+
+        TinyAssert::same(
+            false,
+            WC_Twoinc_Product_Promo::is_visible($settings),
+            'a throwing verification withholds the message instead of fatalling the product page'
+        );
+    }
+
+    /**
+     * Constructing the gateway runs init_form_fields(), whose payment-term
+     * options refresh the merchant record. No render path may, so the whole
+     * decision is answered from stored options and the verdict transient.
+     */
+    private static function testTheDecisionNeverConstructsTheGateway(): void
+    {
+        $GLOBALS['__twoinc_test_http_calls'] = [];
+
+        TinyAssert::same(
+            true,
+            WC_Twoinc_Product_Promo::is_visible(self::optedInSettings()),
+            'an opted-in shop renders on a cold verdict cache'
+        );
+
+        TinyAssert::same(
+            0,
+            count($GLOBALS['__twoinc_test_http_calls']),
+            'and reaches the network not once while deciding'
+        );
+    }
+
+    /**
+     * An allowlist that is present but empty satisfies no country, so the
+     * gateway is withdrawn at every checkout. The badge must not advertise a
+     * method nobody can reach. An absent allowlist is not a restriction.
+     */
+    private static function testAnEmptyBuyerCountryAllowlistWithholdsTheBadge(): void
+    {
+        $settings = self::optedInSettings();
+        $option = WC_Twoinc_Brand::prefixed_name('supported_buyer_countries');
+
+        foreach (
+            [
+                ['[]', false, 'an empty allowlist reaches no buyer, so nothing is advertised'],
+                ['["NO"]', true, 'a real allowlist is a cart-time question, not a product-page one'],
+                ['', true, 'no allowlist at all is no restriction'],
+            ] as [$cached, $expected, $why]
+        ) {
+            update_option($option, $cached);
+            TinyAssert::same($expected, WC_Twoinc_Product_Promo::is_visible($settings), $why);
+        }
+
+        delete_option($option);
+    }
+
+    private static function testTheBrandLabelNamesTheProduct(): void
+    {
+        TinyAssert::same(
+            (string) WC_Twoinc_Brand::get('product_name'),
+            WC_Twoinc_Product_Promo::get_brand_label(),
+            'the label is the brand product name, so the mark has alternative text and a markless brand is still attributed'
+        );
+    }
+}
+
 BrandConfigSpec::runAll();
 AnchorOnlyHtmlSpec::runAll();
 SubtitleSaveValidationSpec::runAll();
 CaptureMemorySpec::runAll();
+ProductPromoSpec::runAll();
 print("All tests passed.\n");

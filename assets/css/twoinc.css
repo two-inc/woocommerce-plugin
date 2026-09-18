@@ -910,3 +910,45 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
 #payment .twoinc-terms-consent {
   padding-bottom: 5px;
 }
+
+/* TWO-25799: opt-in promotional message on the product page.
+   The mark is a real <img> carrying the brand name as its alternative text,
+   so attribution never depends on a brand shipping CSS. */
+.twoinc-product-promo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 25px;
+  padding: 14px 16px;
+  border: 1px solid #d4d4d4;
+  /* Logical, not physical: the accent must follow the document direction
+     on an RTL storefront (TWO-25799). */
+  border-inline-start: 4px solid #1a1a1a;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.twoinc-product-promo__mark {
+  flex: 0 0 auto;
+  /* One dimension only: constraining both squashed the shipped 72x24 mark to
+     52x22. Height sets the scale, width follows the image's own ratio. */
+  width: auto;
+  height: 22px;
+}
+
+.twoinc-product-promo__brand {
+  flex: 0 0 auto;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* min-width and the break rule let a long unbroken override wrap instead of
+   overflowing the column the box sits in. */
+.twoinc-product-promo__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 1em;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #1a1a1a;
+}
