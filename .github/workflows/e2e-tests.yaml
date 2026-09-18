@@ -19,7 +19,8 @@ jobs:
   # compose default is the floor this suite has always covered; the current
   # release is what the readme's "Tested up to" claims, and nothing exercised
   # a real checkout there. Discovered at run time so the leg tracks upstream
-  # instead of going stale as a hand-written pin.
+  # instead of going stale as a hand-written pin — upstream meaning the newest
+  # release whose image is published, see resolve-wordpress-image-tag.sh.
   #
   # Honest-CI convention (TWO-24998): a transport or parse failure FAILS
   # discovery rather than emitting an empty matrix that would skip-green.
@@ -43,6 +44,12 @@ jobs:
             echo "::error::e2e: could not read the WordPress default from docker-compose.yaml"
             exit 1
           fi
+          # From the same line, so the tag probed is the tag compose pulls.
+          suffix=$(sed -n 's/^ *image: wordpress:\${WORDPRESS_VERSION:-[0-9][0-9.]*}\(-php.*\)/\1/p' docker-compose.yaml)
+          if [ -z "$suffix" ]; then
+            echo "::error::e2e: could not read the WordPress image variant from docker-compose.yaml"
+            exit 1
+          fi
           if ! info=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
             "https://api.wordpress.org/core/version-check/1.7/"); then
             echo "::error::e2e: could not query the wordpress.org core version API"
@@ -59,16 +66,25 @@ jobs:
             echo "::error::e2e: could not resolve the current WordPress release"
             exit 1
           fi
+          # The announced release is not a pullable tag until Docker Hub
+          # publishes it (ABN-614). Annotations come back on stderr to keep
+          # them out of the captured version, so re-emit them here.
+          annotations=$(mktemp)
+          if ! newest=$(.github/scripts/resolve-wordpress-image-tag.sh "$current" "$suffix" 2>"$annotations"); then
+            cat "$annotations"
+            exit 1
+          fi
+          cat "$annotations"
           # Both renderers on every WordPress leg: which one a shop runs is
           # its checkout page's content, so each is a separately configured
           # shop rather than a switch inside one.
           renderers='"renderer":["classic","blocks"]'
-          if [ "$pinned" = "$current" ]; then
-            echo "WordPress legs: $current (compose default is already current)"
-            echo "matrix={\"wordpress\":[\"$current\"],$renderers}" >> "$GITHUB_OUTPUT"
+          if [ "$pinned" = "$newest" ]; then
+            echo "WordPress legs: $newest (compose default is already the newest pullable)"
+            echo "matrix={\"wordpress\":[\"$newest\"],$renderers}" >> "$GITHUB_OUTPUT"
           else
-            echo "WordPress legs: pinned=$pinned current=$current"
-            echo "matrix={\"wordpress\":[\"$pinned\",\"$current\"],$renderers}" >> "$GITHUB_OUTPUT"
+            echo "WordPress legs: pinned=$pinned newest-pullable=$newest (wordpress.org current=$current)"
+            echo "matrix={\"wordpress\":[\"$pinned\",\"$newest\"],$renderers}" >> "$GITHUB_OUTPUT"
           fi
 
   e2e-tests:
