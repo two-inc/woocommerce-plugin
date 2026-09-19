@@ -5,3 +5,8 @@ assets/js/company-search-panel.js
 
 # Emitted by tests/unit/run.php; reformatting it here would fail that spec's staleness check.
 tests/js/fixtures/capture-scope.generated.json
+
+# Same again: the buy button's rendered markup, written by tests/unit/run.php so
+# the accessible-name spec runs against what the plugin emits rather than a copy.
+tests/js/fixtures/product-button-with-mark.html
+tests/js/fixtures/product-button-without-mark.html

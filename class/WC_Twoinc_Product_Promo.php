@@ -20,6 +20,9 @@ if (!class_exists('WC_Twoinc_Product_Promo')) {
      */
     class WC_Twoinc_Product_Promo
     {
+        /** Its own switch. The buy button (TWO-25800) has a separate one. */
+        const SWITCH_KEY = 'product_page_message_enabled';
+
         /**
          * After the add-to-cart form closes, so the message sits beside the
          * purchase controls without being part of them.
@@ -44,19 +47,7 @@ if (!class_exists('WC_Twoinc_Product_Promo')) {
          */
         public static function is_product_page_request()
         {
-            if (is_admin()) {
-                return false;
-            }
-
-            if (defined('REST_REQUEST') && REST_REQUEST) {
-                return false;
-            }
-
-            if (function_exists('wp_doing_ajax') && wp_doing_ajax()) {
-                return false;
-            }
-
-            return function_exists('is_singular') && is_singular('product');
+            return WC_Twoinc_Storefront_Gate::is_product_page_request();
         }
 
         /**
@@ -83,18 +74,10 @@ if (!class_exists('WC_Twoinc_Product_Promo')) {
                 $settings = self::read_settings();
             }
 
-            if (!self::opted_in($settings)) {
-                return false;
-            }
-
             // Anything unexpected in a stored shape withholds the message
             // rather than the page.
             try {
-                if (self::key_is_definitely_rejected($settings)) {
-                    return false;
-                }
-
-                if (self::no_buyer_country_is_supported()) {
+                if (!WC_Twoinc_Storefront_Gate::allows($settings, self::SWITCH_KEY)) {
                     return false;
                 }
 
@@ -108,107 +91,9 @@ if (!class_exists('WC_Twoinc_Product_Promo')) {
             }
         }
 
-        /**
-         * The gateway's settings row, which WooCommerce keeps as one option,
-         * so this is a single cached read.
-         */
         private static function read_settings()
         {
-            $gateway_id = WC_Twoinc_Brand::get('gateway_id');
-            if (!is_string($gateway_id) || '' === $gateway_id) {
-                return [];
-            }
-
-            $settings = get_option('woocommerce_' . $gateway_id . '_settings', []);
-
-            return is_array($settings) ? $settings : [];
-        }
-
-        /**
-         * The cached verdict only. No key stored at all is itself definitive;
-         * a verdict nobody has cached yet is not, and is not worth a fetch
-         * from a product page.
-         */
-        private static function key_is_definitely_rejected($settings)
-        {
-            $api_key = isset($settings['api_key']) ? $settings['api_key'] : '';
-            if (!is_string($api_key) || '' === $api_key) {
-                return true;
-            }
-
-            $cached = get_transient(WC_Twoinc::verification_cache_key($api_key));
-
-            return is_array($cached)
-                && isset($cached['status'])
-                && WC_Twoinc::is_definitive_key_failure($cached['status']);
-        }
-
-        /**
-         * Both switches. Absent or malformed reads as off, which is also the
-         * shipped default.
-         */
-        private static function opted_in($settings)
-        {
-            // WooCommerce resolves a missing field through its declared
-            // default, and `enabled` defaults to 'yes'. Defaulting it to 'no'
-            // here would disagree with the gateway on a partially imported
-            // settings array. The promo's own switch still defaults off, so a
-            // fresh install renders nothing.
-            $enabled = isset($settings['enabled']) ? $settings['enabled'] : 'yes';
-            $promo = isset($settings['product_page_message_enabled'])
-                ? $settings['product_page_message_enabled']
-                : 'no';
-
-            // A value outside the known set still reads as off, but it is said
-            // once per request: a merchant whose message disappeared after an
-            // import otherwise has nothing at all to go on. Nothing is priced
-            // on this setting, so it degrades rather than throwing.
-            if (!in_array($promo, ['yes', 'no'], true)) {
-                self::log_unrecognised_switch_once($promo);
-
-                return false;
-            }
-
-            return 'yes' === $enabled && 'yes' === $promo;
-        }
-
-        private static function log_unrecognised_switch_once($value)
-        {
-            static $logged = false;
-
-            if ($logged) {
-                return;
-            }
-
-            $logged = true;
-
-            $reported = is_scalar($value) ? (string) $value : gettype($value);
-            self::log_withheld(new Exception(
-                'unrecognised product_page_message_enabled value "' . $reported . '"'
-            ));
-        }
-
-        /**
-         * An allowlist that is present but empty is the one cached fact that
-         * settles this without a cart: it satisfies no country, so the gateway
-         * is withdrawn at every checkout and the badge would advertise a
-         * method nobody can reach.
-         *
-         * Read straight off the cached option, NOT through
-         * get_supported_buyer_countries(): that one refreshes the merchant
-         * record, and no render path may. An absent or unreadable cache means
-         * no allowlist, which is not a restriction.
-         */
-        private static function no_buyer_country_is_supported()
-        {
-            $cached = get_option(WC_Twoinc_Brand::prefixed_name('supported_buyer_countries'));
-            if (false === $cached || '' === $cached || !is_string($cached)) {
-                return false;
-            }
-
-            $decoded = json_decode($cached, true);
-
-            return is_array($decoded) && [] === $decoded;
+            return WC_Twoinc_Storefront_Gate::read_settings();
         }
 
         /**
@@ -249,7 +134,7 @@ if (!class_exists('WC_Twoinc_Product_Promo')) {
          */
         public static function get_brand_label()
         {
-            return self::get_brand_label_from(WC_Twoinc_Brand::get('product_name'));
+            return WC_Twoinc_Storefront_Gate::brand_label();
         }
 
         /**
@@ -257,7 +142,7 @@ if (!class_exists('WC_Twoinc_Product_Promo')) {
          */
         public static function get_brand_label_from($name)
         {
-            return is_scalar($name) ? self::trim_unicode_whitespace((string) $name) : '';
+            return WC_Twoinc_Storefront_Gate::brand_label_from($name);
         }
 
         /**
@@ -267,9 +152,7 @@ if (!class_exists('WC_Twoinc_Product_Promo')) {
          */
         public static function get_brand_logo_url()
         {
-            $url = WC_Twoinc_Brand::get('logo_url');
-
-            return is_string($url) ? esc_url($url) : '';
+            return WC_Twoinc_Storefront_Gate::brand_logo_url();
         }
 
         public static function render()
@@ -331,12 +214,7 @@ if (!class_exists('WC_Twoinc_Product_Promo')) {
          */
         private static function log_withheld($e)
         {
-            if (function_exists('wc_get_logger')) {
-                wc_get_logger()->debug(
-                    'Two product page message withheld: ' . $e->getMessage(),
-                    ['source' => 'twoinc-product-promo']
-                );
-            }
+            WC_Twoinc_Storefront_Gate::log_withheld($e, 'product-promo');
         }
 
         /**
@@ -345,10 +223,7 @@ if (!class_exists('WC_Twoinc_Product_Promo')) {
          */
         private static function trim_unicode_whitespace($value)
         {
-            $pattern = '/^[\s\x{00A0}\x{1680}\x{2000}-\x{200A}\x{202F}\x{205F}\x{3000}\x{FEFF}]+'
-                . '|[\s\x{00A0}\x{1680}\x{2000}-\x{200A}\x{202F}\x{205F}\x{3000}\x{FEFF}]+$/u';
-
-            return (string) preg_replace($pattern, '', $value);
+            return WC_Twoinc_Storefront_Gate::trim_unicode_whitespace($value);
         }
     }
 }

@@ -41,6 +41,9 @@
       return value;
     };
   var title = decode(data.title || "");
+  /** Latches for the one-shot buy-button preselect (TWO-25800). */
+  var preselected = false;
+  var preselectClicked = false;
 
   // ------------------------------------------------------- shadow address
 
@@ -661,8 +664,53 @@
       if (moved) resync();
       mount();
     }, "wc/store/cart");
+    // Preselect BEFORE the first announcement, or the announcement is about a
+    // method the buyer is about to be moved off (TWO-25800).
+    wp.data.subscribe(preselectOnce, "wc/store/payment");
+    preselectOnce();
     wp.data.subscribe(announceActiveMethod, "wc/store/payment");
     announceActiveMethod();
+  }
+
+  /**
+   * Select this tile once, when the buyer arrived from the product-page buy
+   * button (TWO-25800).
+   *
+   * Classic checkout gets this from core, which reads the same session key the
+   * button wrote. Blocks has no server-side equivalent, so the selection is
+   * made here by clicking the option's own radio: that goes through the same
+   * path the buyer's own click takes, so every effect the block expects
+   * happens, unlike writing to the store directly.
+   *
+   * Once only, and never against the buyer: `preselect` is false as soon as
+   * the session stops naming this gateway, which happens the moment they pick
+   * another one.
+   */
+  function preselectOnce() {
+    if (!data.preselect || preselected) return;
+    var store = wp.data.select("wc/store/payment");
+    if (!store || !store.getActivePaymentMethod) return;
+    // The store has caught up with the click, or this was already ours.
+    if (store.getActivePaymentMethod() === name) {
+      preselected = true;
+      return;
+    }
+    // Clicked once and the store still does not name this method, so the
+    // option refused the click. Stop holding the announcements back.
+    if (preselectClicked) {
+      preselected = true;
+      return;
+    }
+    var radio = document.getElementById("radio-control-wc-payment-method-options-" + name);
+    // Options not rendered yet; the next store change tries again.
+    if (!radio) return;
+    preselectClicked = true;
+    radio.click();
+  }
+
+  /** Whether the buy-button preselect has been asked for and not yet landed. */
+  function preselectOutstanding() {
+    return Boolean(data.preselect) && !preselected;
   }
 
   /**
@@ -672,6 +720,14 @@
    * Announced on change only, since each announcement is a cart request.
    */
   function announceActiveMethod() {
+    // Ordering alone is not enough: the click's store update is not
+    // synchronous, so an announcement between the click and the store
+    // catching up would send {active:false} and race the {active:true} that
+    // follows. Neither is awaited, and if the false one settles last the
+    // server clears the chosen method and recalculates without the surcharge
+    // while the tile shows this one selected. Nothing is suppressed for a
+    // buyer who did not arrive through the button.
+    if (preselectOutstanding()) return;
     var store = wp.data.select("wc/store/payment");
     if (!store || !store.getActivePaymentMethod) return;
     var active = store.getActivePaymentMethod() === name;
@@ -701,6 +757,13 @@
       // through the handler feeds itself forever.
       observer.disconnect();
       mount();
+      // The payment step mounts later than bootstrap() runs, especially for a
+      // guest who passes through address and shipping first, so the radio this
+      // preselects may not exist yet (TWO-25800). This is the signal that it
+      // has appeared. No poll and no timeout: a bound long enough to outlast a
+      // buyer typing an address is not a bound, and a short one loses the
+      // preselect on exactly the slow checkouts it was meant to survive.
+      preselectOnce();
       observer.takeRecords();
       observer.observe(root, watched);
     });
