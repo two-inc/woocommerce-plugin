@@ -2223,6 +2223,37 @@ if (!class_exists('WC_Twoinc')) {
             return trim(stripslashes($value));
         }
 
+        /**
+         * The buy-button switch accepts only what its own checkbox submits
+         * (TWO-25800), for the same reason the message switch does:
+         * WooCommerce's generic checkbox validator turns any non-empty value
+         * into 'yes', so a crafted POST would silently start rendering a
+         * purchase control on every product page.
+         *
+         * @param string $key
+         * @param mixed $value
+         * @return string
+         * @throws Exception
+         */
+        public function validate_product_page_button_enabled_field($key, $value)
+        {
+            if ($value === null || $value === false) {
+                return 'no';
+            }
+
+            if (is_string($value) && in_array($value, ['1', 'yes'], true)) {
+                return 'yes';
+            }
+
+            $reported = is_scalar($value) ? (string) $value : gettype($value);
+
+            throw new Exception(sprintf(
+                /* translators: %s: submitted value */
+                __('Unrecognised value for the product page button switch: %s.', 'twoinc-payment-gateway'),
+                esc_html($reported)
+            ));
+        }
+
         public function validate_surcharge_type_field($key, $value)
         {
             // Judged on the RAW value: a posted false casts to '' but is tampering, not absence.
@@ -5963,6 +5994,16 @@ if (!class_exists('WC_Twoinc')) {
                     'description' => __('Optional. Empty uses the default wording. Avoid naming a number of days unless you are certain of the terms you offer: terms run from fulfilment, and the terms actually available come from your merchant record.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'default'     => ''
+                ],
+                // TWO-25800: a SEPARATE switch from the message above. A shop
+                // may run either, both or neither.
+                'product_page_button_enabled' => [
+                    'title'       => __('Show buy button on product pages', 'twoinc-payment-gateway'),
+                    'description' => __('Adds a button beside Add to cart that adds the item and opens checkout with this payment method already selected. It does not place the order. Off by default. Where it lands depends on your theme.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
                 ],
                 'merchant_minimum_order' => [
                     // The value is interpreted in the store currency, so

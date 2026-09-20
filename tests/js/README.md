@@ -620,3 +620,24 @@ Call `releasePanel(helper)` from `afterEach` BEFORE clearing the DOM: the panel 
 document-level mousedown that wiping `document.body.innerHTML` does not unbind.
 
 Before trusting a new test, break the line it is supposed to pin and watch it fail.
+
+## Fixtures rendered by the PHP suite
+
+`fixtures/product-button-*.html` are the buy button's markup as
+`tests/unit/run.php` renders it, so the accessible-name spec runs against what
+the plugin actually emits rather than a copy of it.
+
+The PHP suite COMPARES against the committed files and fails when they are
+stale. It does not rewrite them as it goes: the two suites run in separate
+checkouts, so a renderer change with a silently regenerated fixture would leave
+the PHP job green against new markup while Jest asserted the old, and a mark
+that had lost its alternative text would pass both.
+
+Regenerating is deliberate:
+
+```bash
+TWOINC_UPDATE_FIXTURES=1 php tests/unit/run.php
+```
+
+They are in `.prettierignore` for the same reason the other generated fixture
+is: reformatting them breaks the byte-for-byte equality with the renderer.
