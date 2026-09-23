@@ -949,7 +949,9 @@ describe("blocks-checkout.js reaches the rest of the tile's surfaces", () => {
       const base = baseGlobals("payment_tile");
       const { env, updates } = withCartApi(base);
       base.activeMethod.name = "cod";
-      // A radio that swallows the click, as a disabled option would.
+      // A radio that accepts the click and does nothing with it: the option
+      // genuinely refuses. A DISABLED radio is a different case and retries
+      // instead - see the test below.
       const radio = document.createElement("input");
       radio.type = "radio";
       radio.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
@@ -958,6 +960,118 @@ describe("blocks-checkout.js reaches the rest of the tile's surfaces", () => {
       evaluate(env);
       base.publish("wc/store/payment");
 
+      expect(updates.map((u) => u.data)).toEqual([{ active: false }]);
+    });
+
+    test("a radio that is only temporarily disabled is retried, not abandoned", async () => {
+      METHOD_DATA.preselect = true;
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      // Blocks disables the options while checkout state resolves. `click()`
+      // on a disabled input is a no-op, so latching the single attempt here
+      // would abandon the preselect for good.
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
+      radio.disabled = true;
+      radio.addEventListener("click", () => {
+        if (radio.disabled) return;
+        base.activeMethod.name = "woocommerce-gateway-tillit";
+        base.publish("wc/store/payment");
+      });
+      document.body.appendChild(radio);
+
+      evaluate(env);
+      base.publish("wc/store/payment");
+
+      // Still not ours, and nothing announced: the attempt was not spent.
+      expect(base.activeMethod.name).toBe("cod");
+      expect(updates).toEqual([]);
+
+      // Checkout state settles and the option becomes usable. Deliberately NO
+      // store publish here: enabling an input already in the DOM is an
+      // attribute change, and neither the store subscription nor the
+      // childList observer need see it. Publishing here would supply the
+      // retry trigger the code is supposed to provide for itself, and the
+      // test would pass while a real checkout hung.
+      radio.disabled = false;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(base.activeMethod.name).toBe("woocommerce-gateway-tillit");
+      expect(updates.map((u) => u.data)).toEqual([{ active: true }]);
+    });
+
+    test("a disabled radio replaced by another disabled one is rebound, not stranded", async () => {
+      METHOD_DATA.preselect = true;
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      const root = document.createElement("div");
+      root.className = "wp-block-woocommerce-checkout";
+      document.body.appendChild(root);
+
+      const makeRadio = () => {
+        const r = document.createElement("input");
+        r.type = "radio";
+        r.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
+        r.disabled = true;
+        r.addEventListener("click", () => {
+          if (r.disabled) return;
+          base.activeMethod.name = "woocommerce-gateway-tillit";
+          base.publish("wc/store/payment");
+        });
+        return r;
+      };
+
+      const first = makeRadio();
+      root.appendChild(first);
+      evaluate(env);
+      base.publish("wc/store/payment");
+      expect(base.activeMethod.name).toBe("cod");
+
+      // Blocks re-renders and swaps the node. A watcher left on `first` would
+      // never fire again, stranding the preselect.
+      root.removeChild(first);
+      const second = makeRadio();
+      root.appendChild(second);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Enabling the REPLACEMENT must be what lands it. No store publish.
+      second.disabled = false;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(base.activeMethod.name).toBe("woocommerce-gateway-tillit");
+      expect(updates.map((u) => u.data)).toEqual([{ active: true }]);
+    });
+
+    test("the gateway being withdrawn releases the preselect rather than hanging", async () => {
+      METHOD_DATA.preselect = true;
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      const root = document.createElement("div");
+      root.className = "wp-block-woocommerce-checkout";
+      document.body.appendChild(root);
+
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
+      radio.disabled = true;
+      root.appendChild(radio);
+
+      evaluate(env);
+      base.publish("wc/store/payment");
+      // Outstanding: nothing announced while the preselect still hopes.
+      expect(updates).toEqual([]);
+
+      // Checkout resolves and withdraws the gateway instead of enabling it —
+      // an unavailable country or basket. Nothing will bring it back, so the
+      // preselect must release and let the session be corrected.
+      root.removeChild(radio);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(base.activeMethod.name).toBe("cod");
       expect(updates.map((u) => u.data)).toEqual([{ active: false }]);
     });
   });
