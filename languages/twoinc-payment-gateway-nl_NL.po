@@ -85,7 +85,7 @@ msgstr "Controleer de instellingen \"%s API-sleutel\" en \"Omgeving\"."
 
 #: class/WC_Twoinc.php:956
 msgid "The plugin retries by itself; \"Refresh merchant profile\" under Diagnostics retries now."
-msgstr "De plugin probeert het vanzelf opnieuw; \\\"Verkopersprofiel vernieuwen\\\" onder Diagnostiek probeert het nu opnieuw."
+msgstr "De plugin probeert het vanzelf opnieuw; \"Verkopersprofiel vernieuwen\" onder Diagnostiek probeert het nu opnieuw."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:968
@@ -155,13 +155,13 @@ msgstr "Nooit"
 #: class/WC_Twoinc.php:1022
 #, php-format
 msgid "%s — the last attempt to refresh these figures failed; use \"Refresh merchant profile\" under Diagnostics to retry"
-msgstr "%s — de laatste poging om deze cijfers te vernieuwen is mislukt; gebruik \\\"Verkopersprofiel vernieuwen\\\" onder Diagnostiek om het opnieuw te proberen"
+msgstr "%s — de laatste poging om deze cijfers te vernieuwen is mislukt; gebruik \"Verkopersprofiel vernieuwen\" onder Diagnostiek om het opnieuw te proberen"
 
 #. translators: %s is a date and time in the site's own format
 #: class/WC_Twoinc.php:1029
 #, php-format
 msgid "%s — these figures are out of date; use \"Refresh merchant profile\" under Diagnostics"
-msgstr "%s — deze cijfers zijn verouderd; gebruik \\\"Verkopersprofiel vernieuwen\\\" onder Diagnostiek"
+msgstr "%s — deze cijfers zijn verouderd; gebruik \"Verkopersprofiel vernieuwen\" onder Diagnostiek"
 
 #: class/WC_Twoinc.php:1051
 msgid "Payment method at checkout"

@@ -86,7 +86,7 @@ msgstr "Kontrollera inställningarna \"%s API-nyckel\" och \"Miljö\"."
 
 #: class/WC_Twoinc.php:956
 msgid "The plugin retries by itself; \"Refresh merchant profile\" under Diagnostics retries now."
-msgstr "Pluginet försöker igen av sig självt; \\\"Uppdatera säljarprofil\\\" under Diagnostik försöker igen nu."
+msgstr "Pluginet försöker igen av sig självt; \"Uppdatera säljarprofil\" under Diagnostik försöker igen nu."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:968
@@ -156,13 +156,13 @@ msgstr "Aldrig"
 #: class/WC_Twoinc.php:1022
 #, php-format
 msgid "%s — the last attempt to refresh these figures failed; use \"Refresh merchant profile\" under Diagnostics to retry"
-msgstr "%s — det senaste försöket att uppdatera dessa siffror misslyckades; använd \\\"Uppdatera säljarprofil\\\" under Diagnostik för att försöka igen"
+msgstr "%s — det senaste försöket att uppdatera dessa siffror misslyckades; använd \"Uppdatera säljarprofil\" under Diagnostik för att försöka igen"
 
 #. translators: %s is a date and time in the site's own format
 #: class/WC_Twoinc.php:1029
 #, php-format
 msgid "%s — these figures are out of date; use \"Refresh merchant profile\" under Diagnostics"
-msgstr "%s — dessa siffror är inaktuella; använd \\\"Uppdatera säljarprofil\\\" under Diagnostik"
+msgstr "%s — dessa siffror är inaktuella; använd \"Uppdatera säljarprofil\" under Diagnostik"
 
 #: class/WC_Twoinc.php:1051
 msgid "Payment method at checkout"

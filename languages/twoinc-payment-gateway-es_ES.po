@@ -85,7 +85,7 @@ msgstr "Compruebe los ajustes \"Clave API de %s\" y \"Entorno\"."
 
 #: class/WC_Twoinc.php:956
 msgid "The plugin retries by itself; \"Refresh merchant profile\" under Diagnostics retries now."
-msgstr "El plugin lo reintenta por sí solo; \\\"Actualizar perfil del comerciante\\\" en Diagnósticos lo reintenta ahora."
+msgstr "El plugin lo reintenta por sí solo; \"Actualizar perfil del comerciante\" en Diagnósticos lo reintenta ahora."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:968
@@ -155,13 +155,13 @@ msgstr "Nunca"
 #: class/WC_Twoinc.php:1022
 #, php-format
 msgid "%s — the last attempt to refresh these figures failed; use \"Refresh merchant profile\" under Diagnostics to retry"
-msgstr "%s — el último intento de actualizar estas cifras ha fallado; usa \\\"Actualizar perfil de comerciante\\\" en Diagnóstico para reintentar"
+msgstr "%s — el último intento de actualizar estas cifras ha fallado; usa \"Actualizar perfil de comerciante\" en Diagnóstico para reintentar"
 
 #. translators: %s is a date and time in the site's own format
 #: class/WC_Twoinc.php:1029
 #, php-format
 msgid "%s — these figures are out of date; use \"Refresh merchant profile\" under Diagnostics"
-msgstr "%s — estas cifras están desactualizadas; usa \\\"Actualizar perfil de comerciante\\\" en Diagnóstico"
+msgstr "%s — estas cifras están desactualizadas; usa \"Actualizar perfil de comerciante\" en Diagnóstico"
 
 #: class/WC_Twoinc.php:1051
 msgid "Payment method at checkout"
@@ -392,7 +392,7 @@ msgstr "⚠ Esta tienda está configurada para dejar el recargo SIN IMPUESTOS pa
 #: class/WC_Twoinc.php:2064
 #, php-format
 msgid "⚠ The previously selected tax class (\"%s\") no longer exists. The surcharge is currently taxed under the Standard treatment — select an existing tax class or change the tax treatment above."
-msgstr "⚠ La clase de impuesto seleccionada anteriormente (\\\"%s\\\") ya no existe. El recargo se grava actualmente con el tratamiento Estándar — selecciona una clase de impuesto existente o cambia el tratamiento fiscal más arriba."
+msgstr "⚠ La clase de impuesto seleccionada anteriormente (\"%s\") ya no existe. El recargo se grava actualmente con el tratamiento Estándar — selecciona una clase de impuesto existente o cambia el tratamiento fiscal más arriba."
 
 #. translators: %s: submitted value
 #: class/WC_Twoinc.php:2193
@@ -570,7 +570,7 @@ msgstr "Los plazos de pago personalizados (días) solo se pueden eliminar, no mo
 #: class/WC_Twoinc.php:2976
 #, php-format
 msgid "Custom payment terms (days) holds \"%s\", which is not a usable number of days. Choose Remove on that field to clear it."
-msgstr "Los plazos de pago personalizados (días) contienen \\\"%s\\\", que no es un número de días utilizable. Elige Eliminar en ese campo para borrarlo."
+msgstr "Los plazos de pago personalizados (días) contienen \"%s\", que no es un número de días utilizable. Elige Eliminar en ese campo para borrarlo."
 
 #. translators: %s is the stored number of days.
 #: class/WC_Twoinc.php:3007
@@ -729,7 +729,7 @@ msgstr "%s no ha podido cancelar el pedido %s."
 #: class/WC_Twoinc.php:4666
 #, php-format
 msgid "Could not update status to \"Fulfilled\" with %s."
-msgstr "No se ha podido actualizar el estado a \\\"Cumplido\\\" con %s."
+msgstr "No se ha podido actualizar el estado a \"Cumplido\" con %s."
 
 #: class/WC_Twoinc.php:4667 class/WC_Twoinc.php:4762 class/WC_Twoinc.php:5667
 #: class/WC_Twoinc.php:6948
@@ -745,7 +745,7 @@ msgstr "No se ha podido adjuntar el número de seguimiento al pedido de %s. La f
 #: class/WC_Twoinc.php:4707 class/WC_Twoinc.php:4719
 #, php-format
 msgid "Could not update order status to \"Fulfilled\" with %s."
-msgstr "No se ha podido actualizar el estado del pedido a \\\"Cumplido\\\" con %s."
+msgstr "No se ha podido actualizar el estado del pedido a \"Cumplido\" con %s."
 
 #: class/WC_Twoinc.php:4711 class/WC_Twoinc.php:4723 class/WC_Twoinc.php:4778
 #: class/WC_Twoinc.php:4786 class/WC_Twoinc.php:5727 class/WC_Twoinc.php:5740
@@ -767,7 +767,7 @@ msgstr "%s ha recibido la solicitud de cumplir el pedido. Se enviará una factur
 
 #: class/WC_Twoinc.php:4761 class/WC_Twoinc.php:4777 class/WC_Twoinc.php:4785
 msgid "Could not update status to \"Cancelled\"."
-msgstr "No se ha podido actualizar el estado a \\\"Cancelado\\\"."
+msgstr "No se ha podido actualizar el estado a \"Cancelado\"."
 
 #: class/WC_Twoinc.php:4769
 #, php-format
@@ -835,7 +835,7 @@ msgstr "Oculta el método de pago por debajo de este valor de pedido (moneda de 
 #: class/WC_Twoinc.php:5160
 #, php-format
 msgid "Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\"."
-msgstr "El subtítulo solo admite texto sin formato y un único enlace; \\\"%1$s\\\" se mostraría como \\\"%2$s\\\"."
+msgstr "El subtítulo solo admite texto sin formato y un único enlace; \"%1$s\" se mostraría como \"%2$s\"."
 
 #: class/WC_Twoinc.php:5193
 msgid "Minimum order value must be a non-negative number."
@@ -1046,7 +1046,7 @@ msgstr "Aprobar al comprador cuando se hayan rellenado el teléfono y el nombre 
 #: class/WC_Twoinc.php:6038
 #, php-format
 msgid "Show \"What is %s\" link in checkout"
-msgstr "Mostrar el enlace \\\"Qué es %s\\\" en el proceso de pago"
+msgstr "Mostrar el enlace \"Qué es %s\" en el proceso de pago"
 
 #: class/WC_Twoinc.php:6044
 msgid "Display input tooltips"
@@ -1199,7 +1199,7 @@ msgstr "Clase de impuestos del recargo"
 
 #: class/WC_Twoinc.php:6203
 msgid "The WooCommerce tax class applied to the surcharge when the tax treatment is \"Specific tax class\". Manage tax classes under WooCommerce → Settings → Tax."
-msgstr "La clase de impuesto de WooCommerce aplicada al recargo cuando el tratamiento fiscal es \\\"Clase de impuesto específica\\\". Gestiona las clases de impuesto en WooCommerce → Ajustes → Impuestos."
+msgstr "La clase de impuesto de WooCommerce aplicada al recargo cuando el tratamiento fiscal es \"Clase de impuesto específica\". Gestiona las clases de impuesto en WooCommerce → Ajustes → Impuestos."
 
 #: class/WC_Twoinc.php:6213
 msgid "Payment surcharge configuration"
@@ -1249,7 +1249,7 @@ msgstr "Estados que activan el cumplimiento"
 #: class/WC_Twoinc.php:6257
 #, php-format
 msgid "Which order status(es) tell %1$s an order is fulfilled. Defaults to \"Completed\" — add another status here (e.g. a custom status from another plugin) if your workflow never sets an order to Completed, otherwise %2$s is never notified and the order is left un-fulfilled indefinitely."
-msgstr "Qué estado(s) de pedido indican a %1$s que un pedido está cumplido. Por defecto \\\"Completed\\\" — añade aquí otro estado (p. ej. un estado personalizado de otro plugin) si tu flujo de trabajo nunca establece un pedido como Completed, de lo contrario nunca se notifica a %2$s y el pedido queda sin cumplir indefinidamente."
+msgstr "Qué estado(s) de pedido indican a %1$s que un pedido está cumplido. Por defecto \"Completed\" — añade aquí otro estado (p. ej. un estado personalizado de otro plugin) si tu flujo de trabajo nunca establece un pedido como Completed, de lo contrario nunca se notifica a %2$s y el pedido queda sin cumplir indefinidamente."
 
 #: class/WC_Twoinc.php:6264
 msgid "Validate tax subtotals"
@@ -1326,7 +1326,7 @@ msgstr "Registrar solicitudes/respuestas de la API y otros detalles de diagnóst
 #: class/WC_Twoinc.php:6323
 #, php-format
 msgid "If enabled, API interactions and other diagnostic detail (e.g. surcharge/FX rounding) are logged. This can be useful for debugging. You can view the logs <a href=\"%s\">here</a>."
-msgstr "Si se activa, se registran las interacciones con la API y otros detalles de diagnóstico (p. ej. redondeo de recargo/divisa). Esto puede ser útil para depurar. Puedes ver los registros <a href=\\\"%s\\\">aquí</a>."
+msgstr "Si se activa, se registran las interacciones con la API y otros detalles de diagnóstico (p. ej. redondeo de recargo/divisa). Esto puede ser útil para depurar. Puedes ver los registros <a href=\"%s\">aquí</a>."
 
 #: class/WC_Twoinc.php:6329
 msgid "Error log"
@@ -1395,7 +1395,7 @@ msgstr "Añadir cabecera"
 
 #: class/WC_Twoinc.php:6502
 msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
-msgstr "Marca \\\"Enviar también desde el navegador\\\" solo si tu administrador de TI requiere el encabezado en las llamadas desde el navegador del comprador además de las que parten de tu servidor. Su valor se publicará en el navegador del comprador y cualquiera podrá leerlo."
+msgstr "Marca \"Enviar también desde el navegador\" solo si tu administrador de TI requiere el encabezado en las llamadas desde el navegador del comprador además de las que parten de tu servidor. Su valor se publicará en el navegador del comprador y cualquiera podrá leerlo."
 
 #: class/WC_Twoinc.php:6532
 msgid "Every custom request header needs a name."
@@ -1405,25 +1405,25 @@ msgstr "Cada cabecera de solicitud personalizada necesita un nombre."
 #: class/WC_Twoinc.php:6537
 #, php-format
 msgid "\"%s\" is not a valid HTTP header name. Use letters, digits and hyphens."
-msgstr "\\\"%s\\\" no es un nombre de encabezado HTTP válido. Usa letras, dígitos y guiones."
+msgstr "\"%s\" no es un nombre de encabezado HTTP válido. Usa letras, dígitos y guiones."
 
 #. translators: %s: the rejected header name
 #: class/WC_Twoinc.php:6545
 #, php-format
 msgid "The header \"%s\" is reserved and cannot be set from this table."
-msgstr "El encabezado \\\"%s\\\" está reservado y no se puede definir desde esta tabla."
+msgstr "El encabezado \"%s\" está reservado y no se puede definir desde esta tabla."
 
 #. translators: %s: the header name whose value was rejected
 #: class/WC_Twoinc.php:6552
 #, php-format
 msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
-msgstr "El valor de \\\"%s\\\" debe ser texto ASCII imprimible y no puede estar vacío."
+msgstr "El valor de \"%s\" debe ser texto ASCII imprimible y no puede estar vacío."
 
 #. translators: %s: the duplicated header name
 #: class/WC_Twoinc.php:6559
 #, php-format
 msgid "The header \"%s\" is listed more than once."
-msgstr "El encabezado \\\"%s\\\" aparece más de una vez."
+msgstr "El encabezado \"%s\" aparece más de una vez."
 
 #: class/WC_Twoinc.php:6637
 msgid "Select image"
@@ -1489,7 +1489,7 @@ msgstr "Última lectura del perfil de comerciante"
 
 #: class/WC_Twoinc.php:6782
 msgid "SSL verification is disabled while the environment is not production-hardened; re-check the \"Disable SSL verification\" setting."
-msgstr "La verificación SSL está desactivada mientras el entorno no está reforzado para producción; vuelve a comprobar el ajuste \\\"Desactivar la verificación SSL\\\"."
+msgstr "La verificación SSL está desactivada mientras el entorno no está reforzado para producción; vuelve a comprobar el ajuste \"Desactivar la verificación SSL\"."
 
 #: class/WC_Twoinc.php:6799 class/WC_Twoinc.php:6829
 msgid "Unable to retrieve the order information."
