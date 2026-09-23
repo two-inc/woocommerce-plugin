@@ -1,7 +1,9 @@
-export const STORE_URL = "http://localhost:8888";
+// Follows the host port docker-compose published. CI runs a stack per matrix
+// leg on one runner, so each leg sets its own.
+export const STORE_URL = `http://localhost:${process.env.WORDPRESS_PORT ?? "8888"}`;
 export const ADMIN_URL = `${STORE_URL}/wp-admin`;
-export const ADMIN_USER = "admin";
-export const ADMIN_PASSWORD = "twoinb2b";
+export const ADMIN_USER = "exampleuser@two.inc";
+export const ADMIN_PASSWORD = "examplepassword123";
 
 export const API_BASE_URL = process.env.TWO_API_BASE_URL ?? "https://api.staging.two.inc";
 export const API_KEY = process.env.MERCHANT_API_KEY ?? "";
@@ -11,6 +13,14 @@ export const TWO_ADMIN_PASSWORD = process.env.TWO_ADMIN_PASSWORD ?? "";
 export const BUYER_COMPANY = "RESTAURANT 53 LTD";
 export const RECIPIENT_EMAIL = "bot@two.inc";
 export const PHONE_NUMBER = "+447777777777";
+
+/**
+ * The renderer the shop's one checkout page is configured for. Defaults to
+ * Blocks because that is what WooCommerce's own install writes; a shop shaped
+ * for the classic shortcode has to say so.
+ */
+export const CHECKOUT_RENDERER =
+  process.env.E2E_CHECKOUT_RENDERER === "classic" ? "classic" : "blocks";
 
 export const DEFAULT_TIMEOUT = 15_000;
 export const LONG_TIMEOUT = 60_000;

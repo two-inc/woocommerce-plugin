@@ -2162,6 +2162,98 @@ if (!class_exists('WC_Twoinc')) {
          * Refuse a surcharge method outside the known set, and refuse
          * enabling surcharges with no valid tax treatment selected.
          */
+        /**
+         * The product-page switch accepts only what its own checkbox submits
+         * (TWO-25799).
+         *
+         * WooCommerce's generic checkbox validator turns any non-empty value
+         * into 'yes', so a crafted POST of `product_page_message_enabled=bogus`
+         * would silently start advertising on every product page. Judged on
+         * the RAW submission: absent is the unset default and stays valid.
+         *
+         * @param string $key
+         * @param mixed $value
+         * @return string
+         * @throws Exception
+         */
+        public function validate_product_page_message_enabled_field($key, $value)
+        {
+            if ($value === null || $value === false) {
+                return 'no';
+            }
+
+            if (is_string($value) && in_array($value, ['1', 'yes'], true)) {
+                return 'yes';
+            }
+
+            $reported = is_scalar($value) ? (string) $value : gettype($value);
+
+            throw new Exception(sprintf(
+                /* translators: %s: submitted value */
+                __('Unrecognised value for the product page message switch: %s.', 'twoinc-payment-gateway'),
+                esc_html($reported)
+            ));
+        }
+
+        /**
+         * The wording is free text, but only text: an array or object posted
+         * into this field would be cast on the storefront and advertise
+         * something the merchant never typed.
+         *
+         * @param string $key
+         * @param mixed  $value
+         *
+         * @return string
+         * @throws Exception
+         */
+        public function validate_product_page_message_field($key, $value)
+        {
+            if ($value === null || $value === false) {
+                return '';
+            }
+
+            if (!is_string($value)) {
+                throw new Exception(sprintf(
+                    /* translators: %s: the type of the submitted value */
+                    __('Product page message accepts text only; a %s was submitted.', 'twoinc-payment-gateway'),
+                    esc_html(gettype($value))
+                ));
+            }
+
+            return trim(stripslashes($value));
+        }
+
+        /**
+         * The buy-button switch accepts only what its own checkbox submits
+         * (TWO-25800), for the same reason the message switch does:
+         * WooCommerce's generic checkbox validator turns any non-empty value
+         * into 'yes', so a crafted POST would silently start rendering a
+         * purchase control on every product page.
+         *
+         * @param string $key
+         * @param mixed $value
+         * @return string
+         * @throws Exception
+         */
+        public function validate_product_page_button_enabled_field($key, $value)
+        {
+            if ($value === null || $value === false) {
+                return 'no';
+            }
+
+            if (is_string($value) && in_array($value, ['1', 'yes'], true)) {
+                return 'yes';
+            }
+
+            $reported = is_scalar($value) ? (string) $value : gettype($value);
+
+            throw new Exception(sprintf(
+                /* translators: %s: submitted value */
+                __('Unrecognised value for the product page button switch: %s.', 'twoinc-payment-gateway'),
+                esc_html($reported)
+            ));
+        }
+
         public function validate_surcharge_type_field($key, $value)
         {
             // Judged on the RAW value: a posted false casts to '' but is tampering, not absence.
@@ -3607,7 +3699,7 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @return string
          */
-        private static function verification_cache_key($api_key)
+        public static function verification_cache_key($api_key)
         {
             return WC_Twoinc_Brand::prefixed_name('api_key_status_' . md5($api_key));
         }
@@ -5884,6 +5976,34 @@ if (!class_exists('WC_Twoinc')) {
                     'description' => __('Optional subtitle shown beneath the title at checkout.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'default'     => ''
+                ],
+                // TWO-25799: two keys, never one. The boolean decides whether
+                // the message renders; the wording field is inert when empty,
+                // meaning "use the default copy" rather than "off".
+                'product_page_message_enabled' => [
+                    'title'       => __('Show message on product pages', 'twoinc-payment-gateway'),
+                    'description' => __('Shows a short promotional line on product pages, beneath the add to cart button. Off by default. Where it lands depends on your theme.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
+                ],
+                'product_page_message' => [
+                    'title'       => __('Product page message', 'twoinc-payment-gateway'),
+                    'type'        => 'text',
+                    'description' => __('Optional. Empty uses the default wording. Avoid naming a number of days unless you are certain of the terms you offer: terms run from fulfilment, and the terms actually available come from your merchant record.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'default'     => ''
+                ],
+                // TWO-25800: a SEPARATE switch from the message above. A shop
+                // may run either, both or neither.
+                'product_page_button_enabled' => [
+                    'title'       => __('Show buy button on product pages', 'twoinc-payment-gateway'),
+                    'description' => __('Adds a button beside Add to cart that adds the item and opens checkout with this payment method already selected. It does not place the order. Off by default. Where it lands depends on your theme.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
                 ],
                 'merchant_minimum_order' => [
                     // The value is interpreted in the store currency, so

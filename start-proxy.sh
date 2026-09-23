@@ -19,7 +19,9 @@ TWO_API_BASE_URL="${_TWO_API_BASE_URL_OVERRIDE:-${TWO_API_BASE_URL}}"
 # Define environment variables
 PROXY_USER="${PROXY_USER:-$USER}"
 export HOST="${HOST:-127.0.0.1}"
-export PORT="${PORT:-8888}"
+# Follows WORDPRESS_PORT (the host port compose published) so the tunnel
+# reaches the shop wherever it was bound; PORT still overrides both.
+export PORT="${PORT:-${WORDPRESS_PORT:-8888}}"
 PIDFILE=".frpc.pid"
 
 # Sanitize PROXY_USER for subdomain use: lowercase, replace invalid chars with hyphens, clean up hyphens

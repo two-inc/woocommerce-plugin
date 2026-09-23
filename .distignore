@@ -34,4 +34,3 @@ start-proxy.sh
 phpcs.xml
 phpstan.neon
 phpstan-baseline.neon
-messages.mo

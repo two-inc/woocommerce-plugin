@@ -45,7 +45,8 @@
     </rule>
 
     <!-- WordPress plugin entry point, drop-in snippets and the test harness
-         are side-effect files by nature. class/ stays gated. -->
+         (including its wp-cli eval-files) are side-effect files by nature.
+         class/ stays gated. -->
     <rule ref="PSR1.Files.SideEffects">
         <exclude-pattern>tillit-payment-gateway\.php</exclude-pattern>
         <exclude-pattern>*/snippets/*</exclude-pattern>

@@ -12,8 +12,3 @@ export async function addProductToCart(page: Page, productName = "Product 1", qu
   await page.locator("button.single_add_to_cart_button").click();
   await expect(page.locator(".woocommerce-message")).toBeVisible();
 }
-
-export async function goToCheckout(page: Page) {
-  await page.goto("/checkout/");
-  await page.waitForLoadState("load");
-}

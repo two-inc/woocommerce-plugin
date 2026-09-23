@@ -75,12 +75,24 @@ function globals(overrides) {
   return { env: Object.assign(base, overrides), registered };
 }
 
+/** The skin binds on the document, and every evaluation would otherwise leave its listeners live. */
+const documentListeners = [];
+
 function evaluate(env) {
   Object.keys(env).forEach((key) => {
     window[key] = env[key];
   });
-  // eslint-disable-next-line no-eval
-  (0, eval)(SOURCE);
+  const add = document.addEventListener.bind(document);
+  document.addEventListener = (type, fn, options) => {
+    documentListeners.push([type, fn, options]);
+    add(type, fn, options);
+  };
+  try {
+    // eslint-disable-next-line no-eval
+    (0, eval)(SOURCE);
+  } finally {
+    delete document.addEventListener;
+  }
 }
 
 afterEach(() => {
@@ -101,6 +113,9 @@ afterEach(() => {
     delete window[key];
   });
   Object.keys(bodyHandlers).forEach((key) => delete bodyHandlers[key]);
+  documentListeners
+    .splice(0)
+    .forEach(([type, fn, options]) => document.removeEventListener(type, fn, options));
   consentState.accepted = null;
   document.body.innerHTML = "";
 });
@@ -141,7 +156,11 @@ function baseGlobals(location, billing, shipping) {
     rebindUnlessManual() {
       calls.rebinds.push(this.role);
     },
-    isTileLocation: () => role === "billing" && location === "payment_tile",
+    soleTrader: { refresh() {} },
+    isTileLocation() {
+      if (this.role !== twoincAddressRoles.primary()) return false;
+      return window.twoinc.company_search_location === "payment_tile";
+    },
     companyFieldSelector() {
       return this.isTileLocation() ? "#twoinc_tile_company_name" : this.addressFieldSelector;
     },
@@ -819,6 +838,244 @@ describe("blocks-checkout.js reaches the rest of the tile's surfaces", () => {
     updates.forEach((u) => expect(u.namespace).toBe("twoinc-payment-gateway"));
   });
 
+  /**
+   * TWO-25800. A buyer arriving from the product-page buy button has the
+   * gateway named in the session, so the tile selects itself on mount. The
+   * announcement that would otherwise fire first says {active:false} about a
+   * method the buyer is about to be moved off, and neither request is awaited
+   * — if that one settles last, the server clears the chosen method and
+   * recalculates without the surcharge while the tile shows this one selected.
+   */
+  describe("the buy-button preselect", () => {
+    /** A radio the skin can click, wired to move the payment store. */
+    function paymentOption(base) {
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
+      radio.addEventListener("click", () => {
+        base.activeMethod.name = "woocommerce-gateway-tillit";
+        base.publish("wc/store/payment");
+      });
+      document.body.appendChild(radio);
+      return radio;
+    }
+
+    afterEach(() => {
+      delete METHOD_DATA.preselect;
+    });
+
+    test("no {active:false} is announced on the way to selecting this method", () => {
+      METHOD_DATA.preselect = true;
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      paymentOption(base);
+
+      evaluate(env);
+
+      expect(updates.map((u) => u.data)).toEqual([{ active: true }]);
+      expect(base.activeMethod.name).toBe("woocommerce-gateway-tillit");
+    });
+
+    test("a buyer who did not arrive from the button is announced as before", () => {
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      paymentOption(base);
+
+      evaluate(env);
+
+      expect(updates.map((u) => u.data)).toEqual([{ active: false }]);
+      expect(base.activeMethod.name).toBe("cod");
+    });
+
+    test("the store catching up a tick later still announces only {active:true}", async () => {
+      METHOD_DATA.preselect = true;
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      // React does not update the store inside the click handler, so the
+      // realistic case is the store catching up on a later tick. Ordering
+      // alone does not cover this; the announcement has to be held back.
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
+      radio.addEventListener("click", () => {
+        Promise.resolve().then(() => {
+          base.activeMethod.name = "woocommerce-gateway-tillit";
+          base.publish("wc/store/payment");
+        });
+      });
+      document.body.appendChild(radio);
+
+      evaluate(env);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(updates.map((u) => u.data)).toEqual([{ active: true }]);
+    });
+
+    test("the radio mounting later still gets preselected", async () => {
+      METHOD_DATA.preselect = true;
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      // The payment step mounts after bootstrap, which is the ordinary case
+      // for a guest passing through address and shipping first.
+      const root = document.createElement("div");
+      root.className = "wp-block-woocommerce-checkout";
+      document.body.appendChild(root);
+
+      evaluate(env);
+      expect(updates).toEqual([]);
+
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
+      radio.addEventListener("click", () => {
+        base.activeMethod.name = "woocommerce-gateway-tillit";
+        base.publish("wc/store/payment");
+      });
+      root.appendChild(radio);
+      // The observer is asynchronous, so let it deliver.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(base.activeMethod.name).toBe("woocommerce-gateway-tillit");
+      expect(updates.map((u) => u.data)).toEqual([{ active: true }]);
+    });
+
+    test("the option refusing the click does not silence the tile forever", () => {
+      METHOD_DATA.preselect = true;
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      // A radio that accepts the click and does nothing with it: the option
+      // genuinely refuses. A DISABLED radio is a different case and retries
+      // instead - see the test below.
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
+      document.body.appendChild(radio);
+
+      evaluate(env);
+      base.publish("wc/store/payment");
+
+      expect(updates.map((u) => u.data)).toEqual([{ active: false }]);
+    });
+
+    test("a radio that is only temporarily disabled is retried, not abandoned", async () => {
+      METHOD_DATA.preselect = true;
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      // Blocks disables the options while checkout state resolves. `click()`
+      // on a disabled input is a no-op, so latching the single attempt here
+      // would abandon the preselect for good.
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
+      radio.disabled = true;
+      radio.addEventListener("click", () => {
+        if (radio.disabled) return;
+        base.activeMethod.name = "woocommerce-gateway-tillit";
+        base.publish("wc/store/payment");
+      });
+      document.body.appendChild(radio);
+
+      evaluate(env);
+      base.publish("wc/store/payment");
+
+      // Still not ours, and nothing announced: the attempt was not spent.
+      expect(base.activeMethod.name).toBe("cod");
+      expect(updates).toEqual([]);
+
+      // Checkout state settles and the option becomes usable. Deliberately NO
+      // store publish here: enabling an input already in the DOM is an
+      // attribute change, and neither the store subscription nor the
+      // childList observer need see it. Publishing here would supply the
+      // retry trigger the code is supposed to provide for itself, and the
+      // test would pass while a real checkout hung.
+      radio.disabled = false;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(base.activeMethod.name).toBe("woocommerce-gateway-tillit");
+      expect(updates.map((u) => u.data)).toEqual([{ active: true }]);
+    });
+
+    test("a disabled radio replaced by another disabled one is rebound, not stranded", async () => {
+      METHOD_DATA.preselect = true;
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      const root = document.createElement("div");
+      root.className = "wp-block-woocommerce-checkout";
+      document.body.appendChild(root);
+
+      const makeRadio = () => {
+        const r = document.createElement("input");
+        r.type = "radio";
+        r.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
+        r.disabled = true;
+        r.addEventListener("click", () => {
+          if (r.disabled) return;
+          base.activeMethod.name = "woocommerce-gateway-tillit";
+          base.publish("wc/store/payment");
+        });
+        return r;
+      };
+
+      const first = makeRadio();
+      root.appendChild(first);
+      evaluate(env);
+      base.publish("wc/store/payment");
+      expect(base.activeMethod.name).toBe("cod");
+
+      // Blocks re-renders and swaps the node. A watcher left on `first` would
+      // never fire again, stranding the preselect.
+      root.removeChild(first);
+      const second = makeRadio();
+      root.appendChild(second);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Enabling the REPLACEMENT must be what lands it. No store publish.
+      second.disabled = false;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(base.activeMethod.name).toBe("woocommerce-gateway-tillit");
+      expect(updates.map((u) => u.data)).toEqual([{ active: true }]);
+    });
+
+    test("the gateway being withdrawn releases the preselect rather than hanging", async () => {
+      METHOD_DATA.preselect = true;
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      base.activeMethod.name = "cod";
+      const root = document.createElement("div");
+      root.className = "wp-block-woocommerce-checkout";
+      document.body.appendChild(root);
+
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.id = "radio-control-wc-payment-method-options-woocommerce-gateway-tillit";
+      radio.disabled = true;
+      root.appendChild(radio);
+
+      evaluate(env);
+      base.publish("wc/store/payment");
+      // Outstanding: nothing announced while the preselect still hopes.
+      expect(updates).toEqual([]);
+
+      // Checkout resolves and withdraws the gateway instead of enabling it —
+      // an unavailable country or basket. Nothing will bring it back, so the
+      // preselect must release and let the session be corrected.
+      root.removeChild(radio);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(base.activeMethod.name).toBe("cod");
+      expect(updates.map((u) => u.data)).toEqual([{ active: false }]);
+    });
+  });
+
   test("an unchanged choice is not re-announced — each announcement is a cart request", () => {
     const base = baseGlobals("payment_tile");
     const { env, updates } = withCartApi(base);
@@ -894,22 +1151,27 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(base.calls.selectorAtUserMeta).toBe("#billing-company");
   });
 
-  test("a write made while the cart held no address is not pinned forever", async () => {
+  test("a write made while the cart held no address is sent once it resolves", async () => {
     const base = baseGlobals("address_area", { city: "Oslo" });
     base.resolution.customerData = false;
     const { env } = globals({});
     env.wp.data = base.data;
     evaluate(env);
 
-    // The controller writes while the store can answer nothing; the key must
-    // not stay marked, or the pull skips it for the life of the page.
+    // Given: a write whose microtask push finds no address, as a real resolution gives.
     shadowInput("billing_city").value = "Bergen";
     await Promise.resolve();
 
+    expect(base.calls.patches).toEqual([]);
+
+    // When: the cart resolves a tick later.
     base.resolution.customerData = true;
     base.publish("wc/store/cart");
 
-    expect(shadowInput("billing_city").value).toBe("Oslo");
+    // Then: measured against the address that answered.
+    expect(base.calls.patches).toEqual([{ city: "Bergen" }]);
+    expect(base.address.city).toBe("Bergen");
+    expect(shadowInput("billing_city").value).toBe("Bergen");
   });
 
   test("the restore waits for the cart's customer data to resolve", () => {
@@ -960,6 +1222,507 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
 
     expect(base.calls.patches).toEqual([{ company: "EXAMPLE TRADING LIMITED" }]);
     expect(base.address.city).toBe("Bergen");
+  });
+
+  test.each([
+    {
+      landed: "",
+      shadow: "Example House",
+      patches: [{ address_1: "Example House" }, { address_1: "Example House" }],
+      description: "a store put back to the value the write replaced is re-sent, not painted back"
+    },
+    {
+      landed: "Buyer House",
+      shadow: "Buyer House",
+      patches: [{ address_1: "Example House" }],
+      description: "a store value the write never replaced is the buyer's, and takes the field"
+    }
+  ])("$description", async ({ landed, shadow, patches }) => {
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    // The registry address the controller writes when the buyer picks a company.
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+
+    base.address.address_1 = landed;
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(shadowInput("billing_address_1").value).toBe(shadow);
+    expect(base.calls.patches).toEqual(patches);
+  });
+
+  test("a buyer clearing the field the write filled is not overruled by it", async () => {
+    document.body.innerHTML = '<input id="billing-address_1">';
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+
+    // Clearing Blocks' own field puts the store back on the value the write
+    // replaced, which is the shape of the stale response push() defends against.
+    document
+      .getElementById("billing-address_1")
+      .dispatchEvent(new window.Event("input", { bubbles: true }));
+    base.address.address_1 = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ address_1: "Example House" }]);
+    expect(shadowInput("billing_address_1").value).toBe("");
+  });
+
+  test("a store that keeps refusing a write is left holding the field", async () => {
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      base.address.address_1 = "";
+      base.publish("wc/store/cart");
+      await Promise.resolve();
+    }
+
+    // Three sends, then the store is answering for the field and the buyer sees
+    // what would be submitted rather than a value nothing will carry.
+    expect(base.calls.patches).toHaveLength(3);
+    expect(shadowInput("billing_address_1").value).toBe("");
+  });
+
+  test("a write recorded before the cart resolved still reaches the store", async () => {
+    const base = baseGlobals("address_area", { city: "Oslo" });
+    base.resolution.customerData = false;
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_city").value = "Bergen";
+    // The cart resolves between the write and the microtask push that write queued.
+    base.resolution.customerData = true;
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ city: "Bergen" }]);
+    expect(base.address.city).toBe("Bergen");
+  });
+
+  test("a write the store has taken is still defended against a revert to what it replaced", async () => {
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    // Given: the store has taken the write.
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // When: a response older than the write reverts it.
+    base.address.address_1 = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // Then: the field is still the write's and the revert is re-sent.
+    expect(base.calls.patches).toEqual([
+      { address_1: "Example House" },
+      { address_1: "Example House" }
+    ]);
+    expect(shadowInput("billing_address_1").value).toBe("Example House");
+  });
+
+  test("a re-send the store has not applied yet is not painted over by the revert", async () => {
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    // A Store API that queues the patch instead of applying it in the call, so
+    // the pass that re-sends still reads the value the write is opposing.
+    env.wp.data.dispatch = () => ({
+      setBillingAddress(patch) {
+        base.calls.patches.push(patch);
+      },
+      setShippingAddress() {}
+    });
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    // Given: the store has taken the write.
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+    base.address.address_1 = "Example House";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // When: a response older than the write reverts it.
+    base.address.address_1 = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // Then: the field is still the write's, and the re-send is in flight.
+    expect(base.calls.patches).toEqual([
+      { address_1: "Example House" },
+      { address_1: "Example House" }
+    ]);
+    expect(shadowInput("billing_address_1").value).toBe("Example House");
+  });
+
+  test("a write whose shadow input has gone is released rather than re-sent", async () => {
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    // Given: a recorded write whose field the page then dropped.
+    shadowInput("billing_address_1").value = "Example House";
+    shadowInput("billing_address_1").remove();
+
+    // When: the store answers.
+    await Promise.resolve();
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([]);
+  });
+
+  test("a write the resolved cart already agreed with opposes nothing after it", async () => {
+    const base = baseGlobals("address_area", { city: "Bergen" });
+    base.resolution.customerData = false;
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    // Given: a write the resolving address already carries, so it replaced nothing.
+    shadowInput("billing_city").value = "Bergen";
+    await Promise.resolve();
+    base.resolution.customerData = true;
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // When: the store answers with its own next value.
+    base.address.city = "Oslo";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // Then: that value is the store's, not a revert.
+    expect(base.calls.patches).toEqual([]);
+    expect(shadowInput("billing_city").value).toBe("Oslo");
+  });
+
+  test("a write the store has taken no longer skips the pull for the life of the page", async () => {
+    const base = baseGlobals("address_area", { address_1: "", city: "Oslo" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    // Given: the store has taken the write.
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+    base.publish("wc/store/cart");
+
+    // When: a response lands mid-dispatch, so the pass it triggers repaints
+    // with no push before it.
+    env.wp.data.dispatch = () => ({
+      setBillingAddress(patch) {
+        base.calls.patches.push(patch);
+        Object.assign(base.address, patch);
+        base.address.address_1 = "Third House";
+        base.publish("wc/store/cart");
+      },
+      setShippingAddress() {}
+    });
+    shadowInput("billing_city").value = "Bergen";
+    await Promise.resolve();
+
+    // Then: the store answers for the field again.
+    expect(shadowInput("billing_address_1").value).toBe("Third House");
+  });
+
+  test("a store notifying from inside the dispatch spends one send, not all three", async () => {
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    // A store that notifies its subscribers synchronously and keeps its own value.
+    env.wp.data.dispatch = () => ({
+      setBillingAddress(patch) {
+        base.calls.patches.push(patch);
+        base.publish("wc/store/cart");
+      },
+      setShippingAddress() {}
+    });
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ address_1: "Example House" }]);
+  });
+
+  test("the control repainting the company field it owns does not end the write", async () => {
+    document.body.innerHTML = '<input id="billing-company">';
+    const base = baseGlobals("address_area", { company: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_company").value = "Example Trading Limited";
+    await Promise.resolve();
+
+    // What `setDisplayText()` fires on a rebind: the held name painted back, then `change`.
+    const field = document.getElementById("billing-company");
+    field.value = "Example Trading Limited";
+    field.dispatchEvent(new window.Event("change", { bubbles: true }));
+    base.address.company = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([
+      { company: "Example Trading Limited" },
+      { company: "Example Trading Limited" }
+    ]);
+    expect(shadowInput("billing_company").value).toBe("Example Trading Limited");
+  });
+
+  test("a buyer clearing the company field is not overruled by the write that filled it", async () => {
+    document.body.innerHTML = '<input id="billing-company">';
+    const base = baseGlobals("address_area", { company: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_company").value = "Example Trading Limited";
+    await Promise.resolve();
+
+    // Same field and same event as a repaint; the value left in it is the only tell.
+    document
+      .getElementById("billing-company")
+      .dispatchEvent(new window.Event("change", { bubbles: true }));
+    base.address.company = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ company: "Example Trading Limited" }]);
+    expect(shadowInput("billing_company").value).toBe("");
+  });
+
+  test("an edit still releases its hold when twoinc.js's settings never inlined", async () => {
+    document.body.innerHTML = '<input id="billing-address_1">';
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    // The controller is a script dependency; its settings object is inlined separately.
+    delete window.twoinc;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+
+    document
+      .getElementById("billing-address_1")
+      .dispatchEvent(new window.Event("input", { bubbles: true }));
+    base.address.address_1 = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // The listener must reach its release; a throw leaves the write outranking the buyer.
+    expect(base.calls.patches).toEqual([{ address_1: "Example House" }]);
+    expect(shadowInput("billing_address_1").value).toBe("");
+  });
+
+  test("an edit to the one input mirrored roles share ends both their writes", async () => {
+    // "Use same address for billing": Blocks renders the delivery inputs only.
+    document.body.innerHTML = '<input id="shipping-address_1">';
+    const base = baseGlobals("address_area", { address_1: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_address_1").value = "Example House";
+    await Promise.resolve();
+
+    document
+      .getElementById("shipping-address_1")
+      .dispatchEvent(new window.Event("input", { bubbles: true }));
+    base.address.address_1 = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ address_1: "Example House" }]);
+    expect(shadowInput("billing_address_1").value).toBe("");
+  });
+
+  test.each([
+    {
+      editedId: "billing-country-input",
+      counterpartId: "shipping-country",
+      description: "the edited role's widget carries the suffix"
+    },
+    {
+      editedId: "billing-country",
+      counterpartId: "shipping-country-input",
+      description: "the other role's widget carries the suffix"
+    }
+  ])(
+    "an edit to one role's control leaves the other's hold where $description",
+    async ({ editedId, counterpartId }) => {
+      // Both address forms render, and Blocks suffixed only one role's widget.
+      document.body.innerHTML =
+        '<select id="' + editedId + '"></select><select id="' + counterpartId + '"></select>';
+      const base = baseGlobals("address_area", { country: "" }, { country: "" });
+      const { env } = globals({});
+      env.wp.data = base.data;
+      evaluate(env);
+      await Promise.resolve();
+
+      shadowInput("billing_country").value = "NO";
+      shadowInput("shipping_country").value = "NO";
+      await Promise.resolve();
+      base.calls.patches.length = 0;
+      base.calls.shippingPatches.length = 0;
+
+      // When: the invoice country changes, which is not the delivery role's control.
+      document
+        .getElementById(editedId)
+        .dispatchEvent(new window.Event("change", { bubbles: true }));
+      base.address.country = "";
+      base.shippingAddress.country = "";
+      base.publish("wc/store/cart");
+      await Promise.resolve();
+
+      // Then: only the invoice hold ends.
+      expect(base.calls.patches).toEqual([]);
+      expect(base.calls.shippingPatches).toEqual([{ country: "NO" }]);
+    }
+  );
+
+  test("a role whose only node under a key is decoration has no control of its own", async () => {
+    // Mirrored render: one country select between the roles, and the error node
+    // the other role's key still gets its id from.
+    document.body.innerHTML =
+      '<select id="billing-country"></select><div id="shipping-country-error"></div>';
+    const base = baseGlobals("address_area", { country: "" }, { country: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+
+    shadowInput("billing_country").value = "NO";
+    shadowInput("shipping_country").value = "NO";
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+    base.calls.shippingPatches.length = 0;
+
+    document
+      .getElementById("billing-country")
+      .dispatchEvent(new window.Event("change", { bubbles: true }));
+    base.address.country = "";
+    base.shippingAddress.country = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    // Then: the edit is both roles', so neither write outranks the buyer.
+    expect(base.calls.patches).toEqual([]);
+    expect(base.calls.shippingPatches).toEqual([]);
+    expect(shadowInput("shipping_country").value).toBe("");
+  });
+
+  test.each([
+    {
+      inBlock: true,
+      resends: 0,
+      shadow: "",
+      description: "the checkout block's own contact email ends the write it holds"
+    },
+    {
+      inBlock: false,
+      resends: 1,
+      shadow: "buyer@example.test",
+      description: "another form's email field on the same page does not"
+    }
+  ])("$description", async ({ inBlock, resends, shadow }) => {
+    const field = '<input id="email">';
+    document.body.innerHTML = inBlock
+      ? '<div class="wp-block-woocommerce-checkout">' + field + "</div>"
+      : field;
+    const base = baseGlobals("address_area", { email: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_email").value = "buyer@example.test";
+    await Promise.resolve();
+    // The write's own send; what follows it is the re-send a surviving hold makes.
+    base.calls.patches.length = 0;
+
+    document.getElementById("email").dispatchEvent(new window.Event("input", { bubbles: true }));
+    base.address.email = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toHaveLength(resends);
+    expect(shadowInput("billing_email").value).toBe(shadow);
+  });
+
+  test.each([
+    { id: "billing-country", description: "names its control for the key alone" },
+    { id: "billing-country-input", description: "suffixes its control's id" }
+  ])("a country change releases the hold where Blocks $description", async ({ id }) => {
+    document.body.innerHTML = '<select id="' + id + '"></select>';
+    const base = baseGlobals("address_area", { country: "" });
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_country").value = "NO";
+    await Promise.resolve();
+
+    document.getElementById(id).dispatchEvent(new window.Event("change", { bubbles: true }));
+    base.address.country = "";
+    base.publish("wc/store/cart");
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ country: "NO" }]);
+    expect(shadowInput("billing_country").value).toBe("");
   });
 
   test("a choice that could not be sent is not recorded as sent", () => {

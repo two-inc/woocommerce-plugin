@@ -1,9 +1,9 @@
 === Two - BNPL for businesses ===
 Tags: payment request, woocommerce
 Requires at least: 6.0
-Tested up to: 6.8.1
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.24.0
+Stable tag: 2.25.0
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 Two - BNPL for businesses is a WooCommerce plugin that simplifies B2B shopping, allowing merchants to safely offer invoices as a payment method.
@@ -60,6 +60,11 @@ Find the WordPress installation guide [here](https://wordpress.org/support/artic
 Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for any assistance related to the plugin.
 
 == Changelog ==
+
+= 2.25.0 =
+
+* You can now show a short line about paying by invoice on your product pages, under the add to cart button, so a buyer sees the option before filling a basket. It is off until you switch it on under WooCommerce > Settings > Payments > Two, where you can also replace the wording with your own. Where exactly the line lands on the page depends on your theme.
+* You can also add a buy button beside Add to cart. It adds the item to the basket and opens the checkout with Two already chosen, so a buyer who has decided does not have to find the payment method later. It does not place the order, and the basket they already had is kept. Off until you switch it on in the same place.
 
 = 2.24.0 =
 
@@ -154,6 +159,9 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 Older releases are listed at https://github.com/two-inc/woocommerce-plugin/releases
 
 == Upgrade Notice ==
+
+= 2.25.0 =
+Adds an optional line about paying by invoice on your product pages, and an optional buy button beside Add to cart. Nothing changes until you switch them on under WooCommerce > Settings > Payments > Two.
 
 = 2.24.0 =
 Adds block-based checkout support and sole-trader checkout. Review the payment-term and surcharge settings after updating.

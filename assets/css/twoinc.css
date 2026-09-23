@@ -910,3 +910,159 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
 #payment .twoinc-terms-consent {
   padding-bottom: 5px;
 }
+
+/* TWO-25799: opt-in promotional message on the product page.
+   The mark is a real <img> carrying the brand name as its alternative text,
+   so attribution never depends on a brand shipping CSS. */
+.twoinc-product-promo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 25px;
+  padding: 14px 16px;
+  border: 1px solid #d4d4d4;
+  /* Logical, not physical: the accent must follow the document direction
+     on an RTL storefront (TWO-25799). */
+  border-inline-start: 4px solid #1a1a1a;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.twoinc-product-promo__mark {
+  flex: 0 0 auto;
+  /* One dimension only: constraining both squashed the shipped 72x24 mark to
+     52x22. Height sets the scale, width follows the image's own ratio. */
+  width: auto;
+  height: 22px;
+}
+
+.twoinc-product-promo__brand {
+  flex: 0 0 auto;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* min-width and the break rule let a long unbroken override wrap instead of
+   overflowing the column the box sits in. */
+.twoinc-product-promo__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 1em;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #1a1a1a;
+}
+
+/* The product-page buy button (TWO-25800).
+
+   Its own line BENEATH the add-to-cart row, which is what the merchant's
+   reference screenshot shows: the express buttons sit under the full-width
+   add-to-basket control, not beside it.
+
+   The control has to stay inside the add-to-cart form, because it carries the
+   `add-to-cart` field core reads, so it cannot be moved out to a hook below
+   the form. Storefront floats `div.quantity` left and lets the add-to-cart
+   button sit inline beside it, so without clearing that float this shares the
+   row, gets squeezed, and the label wraps. Clearing is therefore the fix, not
+   a different hook.
+
+   Selectors are qualified by the element on purpose. The theme's stylesheet is
+   enqueued AFTER the plugin's, so its `.button` rules beat a bare
+   `.twoinc-product-button` on source order alone and the control renders in
+   the theme's pale default. `button.twoinc-product-button` outranks them. */
+button.twoinc-product-button {
+  /* Every declaration here is `!important`, which is deliberate and is the
+     only thing that works. A merchant's theme is arbitrary: Astra paints all
+     buttons from its customizer with selectors like
+     `.woocommerce-js div.product form.cart .button.single_add_to_cart_button`
+     (specificity 0,4,2) and enqueues them AFTER the plugin, so the control
+     rendered as a filled salmon pill with an uppercased, wrapped label and an
+     unconstrained mark. Raising specificity only wins against the theme you
+     tested; the next theme is a new bug. This control carries the brand's own
+     artwork, so it has to look the same everywhere. */
+  clear: both !important;
+  float: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  box-sizing: border-box !important;
+  /* Sized to its own content rather than the column, so it reads as a pair
+     with the theme's add to cart above it rather than as a banner. */
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  margin-top: 12px !important;
+  padding: 0.7em 1em !important;
+  /* Outlined rather than filled: a distinct control beside the theme's
+     add-to-cart, not a lesser version of it. Matches the PrestaShop sibling
+     and the Magento button, and keeps the mark legible on a known surface
+     rather than whatever colour the theme paints buttons. */
+  border: 2px solid #1a1a1a !important;
+  border-radius: 4px !important;
+  background: #fff !important;
+  background-image: none !important;
+  color: #1a1a1a !important;
+  font-weight: 600 !important;
+  /* Set against the MARK's height, not the theme's body copy: "Buy with" and
+     the brand's logo are one phrase, and a label the theme sizes smaller than
+     the artwork beside it reads as a caption on the logo. */
+  font-size: 19px !important;
+  line-height: 1.2 !important;
+  /* Astra and friends uppercase and letter-space buttons. "Buy with" is a
+     phrase that continues into the logo, so it stays as written. */
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  text-decoration: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+/* Hover and focus change the control's own surface only. Deliberately nothing
+   that touches the mark: filtering or inverting it would misrender the brand's
+   own colours, and it is the only thing naming the brand on this button. */
+button.twoinc-product-button:hover,
+button.twoinc-product-button:focus {
+  background: #f2f2f2 !important;
+  background-image: none !important;
+  color: #1a1a1a !important;
+  border-color: #1a1a1a !important;
+}
+
+/* The surface change above is nowhere near enough on its own to show keyboard
+   focus: #fff to #f2f2f2 is about 1.03:1. The rule above also sets
+   `box-shadow: none`, which on themes that reset the native outline and paint
+   focus with a shadow would otherwise remove the only indicator there is.
+   So the indicator is stated explicitly here rather than inherited from a
+   theme that may or may not provide one.
+
+   `:focus-visible`, not `:focus`, so a pointer click does not leave a ring
+   behind. The offset keeps it clear of the 2px border. */
+button.twoinc-product-button:focus-visible {
+  outline: 2px solid #091030 !important;
+  outline-offset: 2px !important;
+}
+
+.twoinc-product-button__mark {
+  /* `!important` for the same reason as the control above: themes carry broad
+     `div.product img` rules that beat a single class and blow the mark up to
+     its natural size. */
+  flex: 0 0 auto !important;
+  display: block !important;
+  /* One dimension only, as with the promo badge: constraining both squashes
+     the shipped 72x24 mark. */
+  width: auto !important;
+  height: 20px !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+/* Two short words. It must never wrap: wrapping made the control taller than
+   the button beside it and was the visible symptom of the layout bug above. */
+.twoinc-product-button__label {
+  white-space: nowrap !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  font-size: inherit !important;
+  color: inherit !important;
+}

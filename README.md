@@ -100,7 +100,9 @@ cp .env.example .env   # adjust TWO_API_KEY / TWO_API_BASE_URL / TWO_BRAND_CODE
 make install           # docker compose up; first provision takes ~90s (make logs-wpcli)
 ```
 
-Navigate to <http://localhost:8888/>. `make configure` re-applies the
+Navigate to <http://localhost:8888/> (set `WORDPRESS_PORT` in `.env` to publish
+it elsewhere, which is what lets a second stack run alongside this one).
+`make configure` re-applies the
 TWO\_\* env values to the gateway settings after you edit `.env` (run
 `make run` first so the container env is recreated). Other targets:
 `make logs`, `make stop`, `make clean` (full reset), `make test-unit`,
@@ -146,7 +148,7 @@ be used even if it were set.
 account, sandbox otherwise) and docker-compose threads it through as
 `TWOINC_DEV_API_HOST`. A bare `docker compose up -d` does not, which leaves
 that variable empty in the container — harmless on localhost, but check it with
-`docker exec wordpress env | grep TWOINC_DEV` before concluding the key is
+`docker compose exec -T wordpress env | grep TWOINC_DEV` before concluding the key is
 wrong.
 
 ### Clearing a cached API-key verdict
@@ -213,9 +215,13 @@ are out of scope here — they live in the `e2e-tests` repo.
 
 ### Environment
 
-- Store: <http://localhost:8888>, admin at `/wp-admin` (`admin` / `twoinb2b`)
-- Checkout pages: `/checkout/` (classic shortcode) and `/blocks-checkout/`
-  (WooCommerce Blocks)
+- Store: <http://localhost:8888>, admin at `/wp-admin` (`exampleuser@two.inc` / `examplepassword123`).
+  Set `WORDPRESS_PORT` to move it; the suite reads the same variable, so both follow together
+- Checkout: one page at `/checkout/`, as a merchant's shop has. Its content
+  decides the renderer — `make checkout-renderer RENDERER=blocks` writes
+  WooCommerce's own Blocks markup, `RENDERER=classic` the
+  `[woocommerce_checkout]` shortcode. A fresh stack comes up on WooCommerce's
+  own install default, which is Blocks
 - Products: "Product 1"–"Product 4" (random prices 100–200) plus "Expensive
   Product" (500000) for the max-limit test
 - Merchant: `demostoregb` (UK). This is a temporary repoint: `tillittestuk`
@@ -244,12 +250,19 @@ make e2e-install
 
 ### Running
 
+The suite drives whichever renderer the shop is configured for, so the shop and
+`E2E_CHECKOUT_RENDERER` have to name the same one. CI runs both as matrix legs.
+
 ```bash
 export MERCHANT_API_KEY=$(gcloud secrets versions access latest --secret=STAGING_SHOP_MERCHANT_API_KEY_GB --project=two-beta)
 export TWO_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=STAGING_TWO_ADMIN_PASSWORD --project=two-beta)
 
-make e2e-test              # headless
-make e2e-test-headed       # with browser visible
+make checkout-renderer RENDERER=blocks
+E2E_CHECKOUT_RENDERER=blocks make e2e-test          # headless
+E2E_CHECKOUT_RENDERER=blocks make e2e-test-headed   # with browser visible
+
+make checkout-renderer RENDERER=classic
+E2E_CHECKOUT_RENDERER=classic make e2e-test
 ```
 
 Or if you have a local `docker/config/staging-demostoregb.json`:
@@ -266,6 +279,7 @@ export MERCHANT_API_KEY=$(python3 -c "import json; print(json.load(open('docker/
 | `cancel-order.spec.ts`             | Place order → cancel via WP admin → verify CANCELLED                                               |
 | `max-limit.spec.ts`                | Add "Expensive Product" → expect rejection on checkout                                             |
 | `sole-trader-availability.spec.ts` | Sole-trader chooser appears only where the registry supports it (GB yes, NO no)                    |
+| `checkout-renderer.spec.ts`        | `/checkout/` renders the configured renderer and only it, and offers Two there                     |
 
 ### Clean restart
 

@@ -41,6 +41,13 @@
       return value;
     };
   var title = decode(data.title || "");
+  /** Latches for the one-shot buy-button preselect (TWO-25800). */
+  var preselected = false;
+  var preselectClicked = false;
+  /** Watches a disabled payment radio for the moment it becomes usable. */
+  var enableWatcher = null;
+  /** The node `enableWatcher` is attached to, so a replacement can rebind. */
+  var enableWatchedRadio = null;
 
   // ------------------------------------------------------- shadow address
 
@@ -64,6 +71,11 @@
 
   var SHADOW_ID = "twoinc-blocks-shadow";
 
+  var CHECKOUT_BLOCK_CLASS = "wp-block-woocommerce-checkout";
+
+  /** What an address key's own id can be carried by; anything else under it is decoration. */
+  var CONTROL_TAGS = ["input", "select", "textarea"];
+
   /** Both roles: Blocks renders delivery first, so mirroring one strands the other's control (ABN-554). */
   function addressRoles() {
     return [
@@ -86,8 +98,11 @@
   /** True while the store's own values are being written into the shadow. */
   var applying = false;
   var pushScheduled = false;
-  /** Per role, address keys the controller has written and the store has not seen yet. */
+  /** Per role, keys the controller wrote: the value replaced, the sends left, whether the store holds it. */
   var dirty = {};
+  /** The cap on how often one write is dispatched, its first send included. */
+  var SENDS = 3;
+  var pushing = false;
   var saveScheduled = false;
   var restored = false;
   var announcedActive = null;
@@ -160,7 +175,14 @@
     addressRoles().forEach(function (entry) {
       ADDRESS_KEYS.forEach(function (key) {
         add(entry.role + "_" + key, function () {
-          (dirty[entry.role] = dirty[entry.role] || {})[key] = true;
+          var address = storedAddress(entry.store);
+          // Null until an address answers, since by the push this write is the store's own value.
+          var was = address ? String(address[key] == null ? "" : address[key]) : null;
+          (dirty[entry.role] = dirty[entry.role] || {})[key] = {
+            was: was,
+            sends: SENDS,
+            taken: false
+          };
           schedulePush();
         });
       });
@@ -222,8 +244,9 @@
 
       applying = true;
       ADDRESS_KEYS.forEach(function (key) {
-        // Skipped while this key's own write is still queued; others still follow the store.
-        if (written[key]) return;
+        var held = written[key];
+        // Skipped only until the store holds this write; the record outlives that.
+        if (held && !held.taken) return;
         var input = document.getElementById(entry.role + "_" + key);
         var value = address[key] == null ? "" : String(address[key]);
         if (input && input.value !== value) {
@@ -237,32 +260,144 @@
     return moved;
   }
 
+  /** Blocks names a plain input for its key alone, a widget's for the key plus a suffix. */
+  function keyFromId(suffix) {
+    var found = null;
+    ADDRESS_KEYS.forEach(function (key) {
+      if (suffix === key || suffix.indexOf(key + "-") === 0) found = key;
+    });
+    return found;
+  }
+
+  /**
+   * `role`'s own control for `key`, whichever id Blocks gave it — the bare key
+   * or the key plus a widget suffix, which the two roles need not match on.
+   * Form controls only: an error, hint or wrapper node under the same stem
+   * would otherwise read as this role having a control the buyer can edit.
+   */
+  function counterpartControl(role, key) {
+    var stem = role + "-" + key;
+    var selector = CONTROL_TAGS.map(function (tag) {
+      return tag + '[id="' + stem + '"], ' + tag + '[id^="' + stem + '-"]';
+    }).join(", ");
+    return document.querySelector(selector);
+  }
+
+  /** Which of `role`'s held keys the input `id` is the buyer's control for, if any. */
+  function editedKey(role, id) {
+    var found = null;
+    addressRoles().forEach(function (entry) {
+      if (found || id.indexOf(entry.role + "-") !== 0) return;
+      var key = keyFromId(id.slice(entry.role.length + 1));
+      if (!key) return;
+      // Roles Blocks mirrors render one control between them, so that edit is this role's too.
+      if (entry.role === role || !counterpartControl(role, key)) {
+        found = key;
+      }
+    });
+    return found;
+  }
+
+  /**
+   * The control repainting its display field rather than the buyer editing it. In
+   * address-area placement that field is the buyer's only company input, and the
+   * control sets no flag — the repaint rewriting the held name is the one tell.
+   */
+  function isOwnRepaint(target, role, key) {
+    // `window.twoinc` because `companyFieldSelector()` reads the placement off it.
+    if (typeof twoincCompanySearchControls === "undefined" || !window.twoinc || !target.matches) {
+      return false;
+    }
+    var own = twoincCompanySearchControls.some(function (search) {
+      var selector = search.companyFieldSelector();
+      return !!selector && target.matches(selector);
+    });
+    if (!own) return false;
+    var input = document.getElementById(role + "_" + key);
+    return !!input && target.value === input.value;
+  }
+
+  /**
+   * Blocks renders the contact email once, under a bare id any other form on
+   * the page — a newsletter signup, a login — could equally be using.
+   */
+  function isContactEmail(target) {
+    if (target.id !== "email" || !target.closest) return false;
+    return !!target.closest("." + CHECKOUT_BLOCK_CLASS);
+  }
+
+  /**
+   * A buyer edit ends that field's write: a field cleared back to what the write
+   * replaced is otherwise the stale cart response `push()` defends against.
+   */
+  function releaseOnEdit(event) {
+    var target = event.target;
+    var id = (target && target.id) || "";
+    if (!id) return;
+    addressRoles().forEach(function (entry) {
+      var written = dirty[entry.role];
+      if (!written) return;
+      var key = isContactEmail(target) ? "email" : editedKey(entry.role, id);
+      if (key && !isOwnRepaint(target, entry.role, key)) delete written[key];
+    });
+  }
+
   /**
    * What the controller wrote into those fields, back to the store — and only
    * that. Sending every divergent key would push the buyer's own concurrent
    * edit back to its previous value.
+   *
+   * Nothing acknowledges a dispatch, so a store reading as the value the write
+   * replaced is the only sign a cart response older than the write landed.
+   *
+   * A key's record ends here on either of two answers from the store — a third
+   * value, which is nobody's but the buyer's, or `was` again with no sends left
+   * — and on its shadow input having gone, which no send can read a value from.
+   * The store holding the written value ends the `pull()` skip alone, so the
+   * record still opposes a revert after that. A role whose address has not
+   * resolved yet is skipped with its records intact.
    */
   function push() {
-    addressRoles().forEach(function (entry) {
-      var written = Object.keys(dirty[entry.role] || {});
-      // Cleared unconditionally: a key left pinned is one `pull()` skips forever.
-      dirty[entry.role] = {};
-      var address = storedAddress(entry.store);
-      if (!address) return;
+    // A dispatch can notify subscribers synchronously: spend a send per store pass, not per notification.
+    if (pushing) return;
+    pushing = true;
+    try {
+      addressRoles().forEach(function (entry) {
+        var written = dirty[entry.role] || {};
+        var address = storedAddress(entry.store);
+        // Held, not dropped: the cart resolves ticks after the microtask push a write queues.
+        if (!address) return;
 
-      var patch = null;
-      written.forEach(function (key) {
-        var input = document.getElementById(entry.role + "_" + key);
-        if (!input) return;
-        var stored = address[key] == null ? "" : String(address[key]);
-        if (input.value !== stored) {
+        var patch = null;
+        Object.keys(written).forEach(function (key) {
+          var held = written[key];
+          var input = document.getElementById(entry.role + "_" + key);
+          var stored = address[key] == null ? "" : String(address[key]);
+          // No address at the write: the first to answer is what it replaced. Ahead
+          // of the agreement below, which would leave `was` unset for the next value.
+          if (held.was === null) held.was = stored;
+          // The store holds it, so `pull()` owns the field again — `was` and the
+          // sends left stay, or a revert to `was` after this goes unopposed.
+          if (input && input.value === stored) {
+            held.taken = true;
+            return;
+          }
+          if (!input || stored !== held.was || !held.sends) {
+            delete written[key];
+            return;
+          }
+          held.sends -= 1;
+          // Not held any more, so `pull()` must not paint over this re-send.
+          held.taken = false;
           patch = patch || {};
           patch[key] = input.value;
-        }
-      });
+        });
 
-      if (patch) wp.data.dispatch("wc/store/cart")[entry.setter](patch);
-    });
+        if (patch) wp.data.dispatch("wc/store/cart")[entry.setter](patch);
+      });
+    } finally {
+      pushing = false;
+    }
   }
 
   // -------------------------------------------------------------- mounting
@@ -302,6 +437,7 @@
     var id = search.addressFieldSelector.slice(1) + "_field";
     if (row.id !== id) row.id = id;
     nativeRow(search, row);
+    noteSlot(search, row);
   }
 
   /**
@@ -321,6 +457,24 @@
       native.className = "hidden";
     }
     if (native.parentElement !== row) row.appendChild(native);
+  }
+
+  /**
+   * A per-role host for the sole-trader note, which is what the controller
+   * asks for per-country availability behind. Neither classic host is on a
+   * Blocks page: the invoice role's sits in the gateway description, rendered
+   * only for the selected method, and the delivery role's comes from a
+   * classic-only hook (TWO-25776).
+   */
+  function noteSlot(search, row) {
+    var cls = "twoinc-sole-trader-note-slot-blocks-" + search.role;
+    search.soleTraderNoteSlotClass = cls;
+    if (row.querySelector("." + cls)) return;
+    var slot = document.createElement("div");
+    slot.className = "twoinc-sole-trader-note-slot-blocks " + cls + " hidden";
+    row.appendChild(slot);
+    // Any refresh that ran before this host existed answered "no sole trader" and cached nothing.
+    search.soleTrader.refresh();
   }
 
   function mount() {
@@ -498,18 +652,163 @@
     restore();
     resync();
     observeCheckout();
+    // On the document: Blocks re-creates its own inputs, and a select fires only `change`.
+    ["input", "change"].forEach(function (type) {
+      document.addEventListener(type, releaseOnEdit, true);
+    });
     if (!wp.data || !wp.data.subscribe) return;
     wp.data.subscribe(function () {
       // A country change is what the controller re-reads its per-country
       // gates on, the same pass a classic `updated_checkout` triggers.
       pullTotals();
+      // Before `pull()`, so a key this pass releases is repainted from the store in it.
+      push();
       var moved = pull();
       restore();
       if (moved) resync();
       mount();
     }, "wc/store/cart");
+    // Preselect BEFORE the first announcement, or the announcement is about a
+    // method the buyer is about to be moved off (TWO-25800).
+    wp.data.subscribe(preselectOnce, "wc/store/payment");
+    preselectOnce();
     wp.data.subscribe(announceActiveMethod, "wc/store/payment");
     announceActiveMethod();
+  }
+
+  /**
+   * Select this tile once, when the buyer arrived from the product-page buy
+   * button (TWO-25800).
+   *
+   * Classic checkout gets this from core, which reads the same session key the
+   * button wrote. Blocks has no server-side equivalent, so the selection is
+   * made here by clicking the option's own radio: that goes through the same
+   * path the buyer's own click takes, so every effect the block expects
+   * happens, unlike writing to the store directly.
+   *
+   * Once only, and never against the buyer: `preselect` is false as soon as
+   * the session stops naming this gateway, which happens the moment they pick
+   * another one.
+   */
+  /**
+   * Retry the preselect when a disabled radio becomes enabled.
+   *
+   * Returns whether the wait is now being watched for. One observer at a time,
+   * disconnected as soon as it fires, because `preselectOnce` re-runs from
+   * here and may spend the attempt.
+   */
+  function watchForEnable(radio) {
+    if (typeof window.MutationObserver !== "function") return false;
+    // Already watching this exact node.
+    if (enableWatcher && enableWatchedRadio === radio) return true;
+    // Blocks can replace the radio while checkout resolves. An observer left
+    // on the old, now-disconnected node never fires again, so the preselect
+    // would hang outstanding with announcements suppressed behind it. Rebind
+    // onto whichever node is live.
+    stopWatchingForEnable();
+    enableWatcher = new window.MutationObserver(function () {
+      if (radio.disabled) return;
+      stopWatchingForEnable();
+      preselectOnce();
+    });
+    enableWatchedRadio = radio;
+    enableWatcher.observe(radio, { attributes: true, attributeFilter: ["disabled"] });
+    return true;
+  }
+
+  /**
+   * The one way to reach a terminal state, so no path can land or abandon
+   * while leaving an observer attached to a node nobody looks at again.
+   */
+  function finishPreselect() {
+    preselected = true;
+    stopWatchingForEnable();
+    // Reaching a terminal state is exactly when the suppression lifts, so
+    // reconcile now rather than waiting for a store change that a withdrawn
+    // gateway may never produce. Idempotent: announceActiveMethod() drops an
+    // unchanged choice.
+    announceActiveMethod();
+  }
+
+  function stopWatchingForEnable() {
+    if (!enableWatcher) return;
+    enableWatcher.disconnect();
+    enableWatcher = null;
+    enableWatchedRadio = null;
+  }
+
+  /**
+   * INVARIANT: every exit from this function leaves the preselect in exactly
+   * one of three states, and never any other.
+   *
+   *   LANDED     `preselected` true, the store names this method.
+   *   ABANDONED  `preselected` true on purpose, which releases
+   *              announceActiveMethod() so the session can be corrected.
+   *   WAITING    something live will call this again: the payment-store
+   *              subscription, observeCheckout()'s childList observer, or
+   *              enableWatcher on a radio's `disabled` attribute.
+   *
+   * A fourth state — outstanding with nothing left to wake it — is the bug
+   * this shape exists to prevent. `preselected` stays false while
+   * announcements are suppressed, so the session can go on naming this
+   * gateway and charging its surcharge while the buyer is shown another
+   * method. Any new early return here needs to say which of the three it is.
+   */
+  function preselectOnce() {
+    if (!data.preselect || preselected) return;
+    var store = wp.data.select("wc/store/payment");
+    // WAITING: the store subscription calls back when it exists.
+    if (!store || !store.getActivePaymentMethod) return;
+    // LANDED: the store has caught up with the click, or this was already ours.
+    if (store.getActivePaymentMethod() === name) {
+      finishPreselect();
+      return;
+    }
+    // ABANDONED: clicked once and the store still does not name this method,
+    // so the option refused the click. Stop holding the announcements back.
+    if (preselectClicked) {
+      finishPreselect();
+      return;
+    }
+    var radio = document.getElementById("radio-control-wc-payment-method-options-" + name);
+    if (!radio) {
+      // ABANDONED: we were watching a radio and it is gone rather than
+      // enabled, so checkout resolution withdrew this gateway — an
+      // unavailable country or basket, say. Nothing will bring it back on its
+      // own, and leaving it outstanding keeps the session on Two with its
+      // surcharge while another method is displayed.
+      if (enableWatchedRadio) {
+        finishPreselect();
+        return;
+      }
+      // WAITING: not rendered yet. observeCheckout() fires when it mounts.
+      return;
+    }
+    // Rendered but disabled, which Blocks does while checkout state resolves.
+    // `click()` on a disabled input is a no-op, so latching here would burn the
+    // single attempt on a click that never happened and the branch above would
+    // then give up for good.
+    //
+    // Returning alone is not enough, though: nothing already running is a
+    // retry trigger for this. The store subscription fires on payment-store
+    // changes and observeCheckout() watches childList only, but enabling an
+    // input that is already in the DOM is an ATTRIBUTE change and need not
+    // touch either. So watch that attribute directly, or the preselect stays
+    // outstanding forever with announceActiveMethod() suppressed behind it.
+    if (radio.disabled) {
+      // WAITING: enableWatcher fires when `disabled` is removed.
+      if (watchForEnable(radio)) return;
+      // No MutationObserver to watch with. Fall through and spend the attempt
+      // rather than suppress announcements indefinitely: giving up is worse
+      // than preselecting, but hanging is worse than both.
+    }
+    preselectClicked = true;
+    radio.click();
+  }
+
+  /** Whether the buy-button preselect has been asked for and not yet landed. */
+  function preselectOutstanding() {
+    return Boolean(data.preselect) && !preselected;
   }
 
   /**
@@ -519,6 +818,14 @@
    * Announced on change only, since each announcement is a cart request.
    */
   function announceActiveMethod() {
+    // Ordering alone is not enough: the click's store update is not
+    // synchronous, so an announcement between the click and the store
+    // catching up would send {active:false} and race the {active:true} that
+    // follows. Neither is awaited, and if the false one settles last the
+    // server clears the chosen method and recalculates without the surcharge
+    // while the tile shows this one selected. Nothing is suppressed for a
+    // buyer who did not arrive through the button.
+    if (preselectOutstanding()) return;
     var store = wp.data.select("wc/store/payment");
     if (!store || !store.getActivePaymentMethod) return;
     var active = store.getActivePaymentMethod() === name;
@@ -539,7 +846,7 @@
    * store subscription above and the tile's own mount effect.
    */
   function observeCheckout() {
-    var root = document.querySelector(".wp-block-woocommerce-checkout");
+    var root = document.querySelector("." + CHECKOUT_BLOCK_CLASS);
     if (!root || typeof window.MutationObserver !== "function") return;
     var watched = { childList: true, subtree: true };
     var observer = new window.MutationObserver(function () {
@@ -548,6 +855,13 @@
       // through the handler feeds itself forever.
       observer.disconnect();
       mount();
+      // The payment step mounts later than bootstrap() runs, especially for a
+      // guest who passes through address and shipping first, so the radio this
+      // preselects may not exist yet (TWO-25800). This is the signal that it
+      // has appeared. No poll and no timeout: a bound long enough to outlast a
+      // buyer typing an address is not a bound, and a short one loses the
+      // preselect on exactly the slow checkouts it was meant to survive.
+      preselectOnce();
       observer.takeRecords();
       observer.observe(root, watched);
     });

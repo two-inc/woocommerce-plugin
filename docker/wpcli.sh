@@ -7,16 +7,16 @@ wp core install --url="$WORDPRESS_URL" --title="$WORDPRESS_TITLE" --admin_user=$
 wp theme install storefront --activate
 wp plugin install loco-translate --activate
 wp plugin install woocommerce --version=$WOOCOM_VERSION --activate --force
-existing_products=$(wp wc product list --user=admin --format=count 2>/dev/null || echo 0)
+existing_products=$(wp wc product list --user="$WORDPRESS_ADMIN_USER" --format=count 2>/dev/null || echo 0)
 if [ "$existing_products" -lt 4 ]; then
   for i in 1 2 3 4; do
     random_price=$(shuf -i 100-200 -n 1)
-    wp wc product create --user=admin --name="Product ${i}" --type=simple --regular_price=$random_price --manage_stock=true --stock_quantity=999 --status=publish
+    wp wc product create --user="$WORDPRESS_ADMIN_USER" --name="Product ${i}" --type=simple --regular_price=$random_price --manage_stock=true --stock_quantity=999 --status=publish
   done
 fi
-expensive_exists=$(wp wc product list --user=admin --search="Expensive Product" --format=count 2>/dev/null || echo 0)
+expensive_exists=$(wp wc product list --user="$WORDPRESS_ADMIN_USER" --search="Expensive Product" --format=count 2>/dev/null || echo 0)
 if [ "$expensive_exists" -lt 1 ]; then
-  wp wc product create --user=admin --name="Expensive Product" --type=simple --regular_price=500000 --manage_stock=true --stock_quantity=999 --status=publish
+  wp wc product create --user="$WORDPRESS_ADMIN_USER" --name="Expensive Product" --type=simple --regular_price=500000 --manage_stock=true --stock_quantity=999 --status=publish
 fi
 wp option update permalink_structure /%year%/%monthnum%/%day%/%postname%/
 set +e
@@ -37,19 +37,7 @@ else
 fi
 # Env values (TWO_API_KEY / TWO_API_BASE_URL) override the JSON
 bash /opt/tillit-payment-gateway/dev/configure
-wp post update $(wp option get woocommerce_checkout_page_id) --post_content='[woocommerce_checkout]'
 wp post update $(wp option get woocommerce_cart_page_id) --post_content='[woocommerce_cart]'
-blocks_checkout_exists=$(wp post list --post_type=page --name=blocks-checkout --format=count 2>/dev/null || echo 0)
-if [ "$blocks_checkout_exists" -lt 1 ]; then
-  # Second checkout page so both renderers are reachable at once (ABN-554); the content comes from
-  # WooCommerce because the checkout block renders nothing without its inner blocks.
-  blocks_checkout_content=$(wp eval '$m = new ReflectionMethod( "WC_Install", "get_checkout_block_content" ); $m->setAccessible( true ); echo $m->invoke( null );' 2>/dev/null || true)
-  if [ -n "$blocks_checkout_content" ]; then
-    wp post create --post_type=page --post_status=publish --post_title='Blocks Checkout' --post_name=blocks-checkout --post_content="$blocks_checkout_content"
-  else
-    echo "Warning: WooCommerce did not yield Blocks checkout content, skipping the blocks-checkout page"
-  fi
-fi
 wp option update woocommerce_coming_soon no
 wp option update woocommerce_currency $WOOCOM_CURRENCY
 wp option update woocommerce_default_country $WOOCOM_DEFAULT_COUNTRY

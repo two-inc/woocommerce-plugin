@@ -2,21 +2,28 @@
 # file) shares one Compose project identity. Without this, the project name
 # defaults to the current directory's basename, so `make stop`/`make clean`
 # run from a different worktree than the one that started the stack sees no
-# running containers at all (Compose matches by project label, not just
-# container_name) - and running `make install` from a second worktree hits a
-# "container name already in use" conflict against the first's containers
-# instead of managing them.
+# running containers at all (Compose matches by project label), and `make
+# install` from a second worktree starts a rival stack that then fails to
+# bind the host port instead of managing the first's containers.
+#
+# COMPOSE_PROJECT_NAME overrides this (it beats a compose-file `name:`), which
+# is how CI runs a stack per matrix leg. Nothing else here is global to the
+# daemon: container names are project-scoped and the host port is a variable,
+# so N stacks coexist as long as each gets its own project name and port.
 name: woocommerce-plugin-dev
 
 services:
   wordpress:
-    container_name: wordpress
     extra_hosts:
       - "portal.localhost:host-gateway"
-    image: wordpress:6.8-php8.2-apache
+    # Pinned by default so a local stack stays deterministic. CI's e2e matrix
+    # overrides it to run the same suite on the current WordPress release, so
+    # the readme's "Tested up to" claim rests on a real checkout (PLAT-2320).
+    # upgrade-smoke.yaml mirrors this default; move both together.
+    image: wordpress:${WORDPRESS_VERSION:-6.8}-php8.2-apache
     restart: always
     ports:
-      - 8888:80
+      - "${WORDPRESS_PORT:-8888}:80"
     environment:
       WORDPRESS_DB_HOST: mariadb
       WORDPRESS_DB_USER: twocommerce
@@ -66,8 +73,12 @@ services:
     volumes:
       - wordpress_data:/var/www/html
       - .:/var/www/html/wp-content/plugins/tillit-payment-gateway
-      - ./docker/mu-plugins:/var/www/html/wp-content/mu-plugins
       - apache_log:/var/log/apache2/
+      # Storefront's sticky add-to-cart calls is_purchasable() on a string
+      # after order processing and fatals on the pinned WooCommerce. The
+      # mu-plugin here unhooks it. TWO-25797 removed this mount along with
+      # the obsolete checkout-selector mu-plugin; only that one was dead.
+      - ./docker/mu-plugins:/var/www/html/wp-content/mu-plugins
     depends_on:
       mariadb:
         condition: service_healthy
@@ -78,7 +89,6 @@ services:
       retries: 10
 
   wpcli:
-    container_name: wpcli
     image: wordpress:cli-2.11.0-php8.2
     user: "33:33"
     entrypoint: /opt/tillit-payment-gateway/docker/wpcli.sh
@@ -88,11 +98,14 @@ services:
       WORDPRESS_DB_USER: twocommerce
       WORDPRESS_DB_PASSWORD: twocommerce
       WORDPRESS_DB_NAME: twocommerce
-      WORDPRESS_URL: "http://localhost:8888"
+      # The WordPress siteurl written at first provision. Must carry whatever
+      # host port the stack published, or the storefront 301s to :8888 and a
+      # probe passes on the redirect without ever rendering the shop.
+      WORDPRESS_URL: "http://localhost:${WORDPRESS_PORT:-8888}"
       WORDPRESS_TITLE: "Twocommerce Wordpress"
-      WORDPRESS_ADMIN_USER: admin
-      WORDPRESS_ADMIN_PASSWORD: twoinb2b
-      WORDPRESS_ADMIN_EMAIL: admin@two.inc
+      WORDPRESS_ADMIN_USER: exampleuser@two.inc
+      WORDPRESS_ADMIN_PASSWORD: examplepassword123
+      WORDPRESS_ADMIN_EMAIL: exampleuser@two.inc
       WOOCOM_PLUGIN_CONFIG_JSON: "${WOOCOM_PLUGIN_CONFIG_JSON:-docker/config/local.json}"
       WOOCOM_CURRENCY: "${WOOCOM_CURRENCY:-GBP}"
       WOOCOM_DEFAULT_COUNTRY: "${WOOCOM_DEFAULT_COUNTRY:-GB}"
@@ -111,7 +124,6 @@ services:
         condition: service_healthy
 
   mariadb:
-    container_name: mariadb
     image: mariadb:10.2
     restart: always
     environment:

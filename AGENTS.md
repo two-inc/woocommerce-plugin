@@ -71,6 +71,16 @@ WordPress and WooCommerce Best Practices
 - Check for WooCommerce activation and version compatibility.
 - Gracefully disable functionality if requirements aren't met.
 - Use WooCommerce's translation functions for text strings.
+- Regenerate the `.pot` with WP-CLI, never by hand (TWO-25766):
+  `docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/app" -w /app wordpress:cli-2.12.0-php8.2 wp i18n make-pot . languages/twoinc-payment-gateway.pot`
+  then per locale `msgmerge --no-wrap --no-fuzzy-matching --backup=none --update <po> <pot>`
+  and `msgattrib --no-wrap --no-obsolete`. `--no-fuzzy-matching` stops msgmerge
+  guessing a translation for a new string from a similar old one; `--no-wrap` is
+  required because the unit suite matches catalogue content by literal substring
+  and a wrapped `msgstr` reads as untranslated.
+- A string reaching `__()` as a variable — an API error body, `fee_line_label`,
+  the merchant-configured Title — is invisible to `make-pot`, so its catalogue
+  entry is live despite having no `#:` reference. Check before deleting one.
 - After editing any `languages/*.po`, recompile its `.mo` — WordPress reads only
   the compiled catalogue: `for po in languages/*.po; do msgfmt -o "${po%.po}.mo" "$po"; done`.
   CI fails when a `.mo` disagrees with its `.po` (`.github/scripts/check-catalogues.sh`).
@@ -614,6 +624,31 @@ Key Conventions
 8. Use WordPress's hook system for modular and extensible code.
 9. Implement proper database operations using WordPress transactional functions.
 10. Use WordPress's WP_Cron API for scheduling tasks.
+
+## readme.txt changelog entries are merchant copy on the public listing
+
+`readme.txt`'s `== Changelog ==` and `== Upgrade Notice ==` render on the
+wordpress.org listing, and the upgrade notice is what a merchant sees in their
+admin when the update is offered. Merchant copy, not an engineering changelog.
+
+- **No Linear ticket ids and no internal references.** They mean nothing to a
+  merchant and this listing is public.
+- **Describe changes against the last RELEASED version, not against
+  development.** A bug introduced and fixed while a feature was being built is
+  not news: nobody ever had it. `git grep -l <feature> <previous-tag>` settles
+  whether the feature shipped before.
+- **Write what changes in their shop**, then what it means for them, naming
+  real admin paths. Not a feature name, not a commit subject.
+- **A release with nothing merchant-visible says so** ("maintenance release")
+  rather than dressing up a chore.
+- The sections wordpress.org recognises are `== Description ==`,
+  `== Installation ==`, `== Frequently Asked Questions ==`, `== Screenshots ==`,
+  `== Changelog ==`, `== Upgrade Notice ==`. A Markdown `##` heading is not a
+  section: it renders inside whichever section precedes it, which is why the
+  whole listing was one Description block until 2.24.0.
+
+`release.yml` builds the GitHub Release body with `--generate-notes`, which is
+a pull request list for engineers and separate from the above.
 
 ## The plugin package contains plugin files only
 

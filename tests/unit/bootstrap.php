@@ -355,6 +355,17 @@ function WC()
             public $customer;
             public $session;
 
+            /** The gateways this checkout offers; a spec sets the global. */
+            public function payment_gateways()
+            {
+                return new class () {
+                    public function get_available_payment_gateways()
+                    {
+                        return $GLOBALS['__twoinc_test_available_gateways'] ?? [];
+                    }
+                };
+            }
+
             public function __construct()
             {
                 $this->countries = new class () {
@@ -1266,6 +1277,124 @@ function is_singular($post_types = '')
     return $GLOBALS['__twoinc_test_is_singular'] ?? false;
 }
 
+function wc_get_checkout_url()
+{
+    return $GLOBALS['__twoinc_test_checkout_url'] ?? 'https://shop.example/checkout/';
+}
+
+/**
+ * The product the buy button (TWO-25800) asks about. A spec sets
+ * $GLOBALS['__twoinc_test_product'] to a StubProduct, or leaves it unset for
+ * "no product here", which is what a hook fired outside a product page sees.
+ */
+function wc_get_product($product = null)
+{
+    if ($product !== null && isset($GLOBALS['__twoinc_test_products'][$product])) {
+        return $GLOBALS['__twoinc_test_products'][$product];
+    }
+
+    return $GLOBALS['__twoinc_test_product'] ?? null;
+}
+
+
+/**
+ * What the script API was asked to emit. A typed recorder rather than a
+ * $GLOBALS array: phpstan rejects `??` and `unset` on $GLOBALS offsets, and a
+ * spec should not have to dodge that to read its own fixture.
+ */
+class StubScripts
+{
+    /** @var array<string, list<string>> inline code by handle */
+    public static $inline = [];
+
+    /** @var list<string> */
+    public static $enqueued = [];
+
+    public static function reset(): void
+    {
+        self::$inline = [];
+        self::$enqueued = [];
+    }
+
+    /** @return list<string> */
+    public static function inlineFor(string $handle): array
+    {
+        return array_key_exists($handle, self::$inline) ? self::$inline[$handle] : [];
+    }
+
+    public static function handles(): int
+    {
+        return count(self::$inline);
+    }
+}
+
+function wp_register_script($handle, $src = '', $deps = [], $ver = false, $args = [])
+{
+    if (!array_key_exists($handle, StubScripts::$inline)) {
+        StubScripts::$inline[$handle] = [];
+    }
+    return true;
+}
+
+function wp_enqueue_script($handle, $src = '', $deps = [], $ver = false, $args = [])
+{
+    StubScripts::$enqueued[] = $handle;
+    return true;
+}
+
+function wp_add_inline_script($handle, $data, $position = 'after')
+{
+    StubScripts::$inline[$handle][] = $data;
+    return true;
+}
+
+class StubProduct
+{
+    private $purchasable;
+    private $in_stock;
+    private $type;
+    private $id;
+
+    public function __construct($purchasable = true, $in_stock = true, $type = 'simple', $id = 4242)
+    {
+        $this->purchasable = $purchasable;
+        $this->in_stock = $in_stock;
+        $this->type = $type;
+        $this->id = $id;
+    }
+
+    public function is_purchasable()
+    {
+        return $this->purchasable;
+    }
+
+    public function is_in_stock()
+    {
+        return $this->in_stock;
+    }
+
+    public function get_type()
+    {
+        return $this->type;
+    }
+
+    public function get_id()
+    {
+        return $this->id;
+    }
+
+    public function get_permalink()
+    {
+        return 'https://shop.example/product/thing/';
+    }
+
+    /** Grouped parents hold their children here; every other type has none. */
+    public function get_children()
+    {
+        return $GLOBALS['__twoinc_test_children'] ?? [];
+    }
+}
+
 function has_block($block_name, $post = null)
 {
     return in_array($block_name, $GLOBALS['__twoinc_test_page_blocks'] ?? [], true);
@@ -1305,11 +1434,22 @@ function admin_url($path = '')
 }
 
 // One argument means "the current request", as in WordPress.
-function add_query_arg($args, $url = null)
+/**
+ * Core accepts BOTH signatures: add_query_arg(array $args, $url) and
+ * add_query_arg($key, $value, $url). The stub used to model only the first,
+ * so production code written against the second threw here and nowhere else.
+ */
+function add_query_arg($args, $url = null, $maybe_url = null)
 {
+    if (!is_array($args)) {
+        $args = [$args => $url];
+        $url = $maybe_url;
+    }
+
     if ($url === null) {
         $url = $_SERVER['REQUEST_URI'] ?? '';
     }
+
     return $url . (strpos($url, '?') === false ? '?' : '&') . http_build_query($args);
 }
 
@@ -1532,6 +1672,9 @@ require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Payment_Terms.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Sole_Trader.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Api_Proxy.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Checkout.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Storefront_Gate.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Product_Promo.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Product_Button.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc.php';
 
 // Snapshotted before any spec resets the hook registry: loading
