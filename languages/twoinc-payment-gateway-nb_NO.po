@@ -16,6 +16,13 @@ msgstr ""
 "X-Domain: twoinc-payment-gateway\n"
 
 #. Plugin Name of the plugin
+#. A brand overlay supplies this as `fee_line_label` and it reaches
+#. `__()` as a variable, so make-pot cannot see it and regeneration
+#. drops it. Live entry despite having no source reference; do not
+#. delete. TWO-25800
+msgid "Service charge"
+msgstr "Servicegebyr"
+
 #: tillit-payment-gateway.php
 msgid "Two - BNPL for businesses"
 msgstr "Two - BNPL for bedrifter"

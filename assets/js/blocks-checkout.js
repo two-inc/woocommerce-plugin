@@ -44,6 +44,10 @@
   /** Latches for the one-shot buy-button preselect (TWO-25800). */
   var preselected = false;
   var preselectClicked = false;
+  /** Watches a disabled payment radio for the moment it becomes usable. */
+  var enableWatcher = null;
+  /** The node `enableWatcher` is attached to, so a replacement can rebind. */
+  var enableWatchedRadio = null;
 
   // ------------------------------------------------------- shadow address
 
@@ -686,24 +690,118 @@
    * the session stops naming this gateway, which happens the moment they pick
    * another one.
    */
+  /**
+   * Retry the preselect when a disabled radio becomes enabled.
+   *
+   * Returns whether the wait is now being watched for. One observer at a time,
+   * disconnected as soon as it fires, because `preselectOnce` re-runs from
+   * here and may spend the attempt.
+   */
+  function watchForEnable(radio) {
+    if (typeof window.MutationObserver !== "function") return false;
+    // Already watching this exact node.
+    if (enableWatcher && enableWatchedRadio === radio) return true;
+    // Blocks can replace the radio while checkout resolves. An observer left
+    // on the old, now-disconnected node never fires again, so the preselect
+    // would hang outstanding with announcements suppressed behind it. Rebind
+    // onto whichever node is live.
+    stopWatchingForEnable();
+    enableWatcher = new window.MutationObserver(function () {
+      if (radio.disabled) return;
+      stopWatchingForEnable();
+      preselectOnce();
+    });
+    enableWatchedRadio = radio;
+    enableWatcher.observe(radio, { attributes: true, attributeFilter: ["disabled"] });
+    return true;
+  }
+
+  /**
+   * The one way to reach a terminal state, so no path can land or abandon
+   * while leaving an observer attached to a node nobody looks at again.
+   */
+  function finishPreselect() {
+    preselected = true;
+    stopWatchingForEnable();
+    // Reaching a terminal state is exactly when the suppression lifts, so
+    // reconcile now rather than waiting for a store change that a withdrawn
+    // gateway may never produce. Idempotent: announceActiveMethod() drops an
+    // unchanged choice.
+    announceActiveMethod();
+  }
+
+  function stopWatchingForEnable() {
+    if (!enableWatcher) return;
+    enableWatcher.disconnect();
+    enableWatcher = null;
+    enableWatchedRadio = null;
+  }
+
+  /**
+   * INVARIANT: every exit from this function leaves the preselect in exactly
+   * one of three states, and never any other.
+   *
+   *   LANDED     `preselected` true, the store names this method.
+   *   ABANDONED  `preselected` true on purpose, which releases
+   *              announceActiveMethod() so the session can be corrected.
+   *   WAITING    something live will call this again: the payment-store
+   *              subscription, observeCheckout()'s childList observer, or
+   *              enableWatcher on a radio's `disabled` attribute.
+   *
+   * A fourth state — outstanding with nothing left to wake it — is the bug
+   * this shape exists to prevent. `preselected` stays false while
+   * announcements are suppressed, so the session can go on naming this
+   * gateway and charging its surcharge while the buyer is shown another
+   * method. Any new early return here needs to say which of the three it is.
+   */
   function preselectOnce() {
     if (!data.preselect || preselected) return;
     var store = wp.data.select("wc/store/payment");
+    // WAITING: the store subscription calls back when it exists.
     if (!store || !store.getActivePaymentMethod) return;
-    // The store has caught up with the click, or this was already ours.
+    // LANDED: the store has caught up with the click, or this was already ours.
     if (store.getActivePaymentMethod() === name) {
-      preselected = true;
+      finishPreselect();
       return;
     }
-    // Clicked once and the store still does not name this method, so the
-    // option refused the click. Stop holding the announcements back.
+    // ABANDONED: clicked once and the store still does not name this method,
+    // so the option refused the click. Stop holding the announcements back.
     if (preselectClicked) {
-      preselected = true;
+      finishPreselect();
       return;
     }
     var radio = document.getElementById("radio-control-wc-payment-method-options-" + name);
-    // Options not rendered yet; the next store change tries again.
-    if (!radio) return;
+    if (!radio) {
+      // ABANDONED: we were watching a radio and it is gone rather than
+      // enabled, so checkout resolution withdrew this gateway — an
+      // unavailable country or basket, say. Nothing will bring it back on its
+      // own, and leaving it outstanding keeps the session on Two with its
+      // surcharge while another method is displayed.
+      if (enableWatchedRadio) {
+        finishPreselect();
+        return;
+      }
+      // WAITING: not rendered yet. observeCheckout() fires when it mounts.
+      return;
+    }
+    // Rendered but disabled, which Blocks does while checkout state resolves.
+    // `click()` on a disabled input is a no-op, so latching here would burn the
+    // single attempt on a click that never happened and the branch above would
+    // then give up for good.
+    //
+    // Returning alone is not enough, though: nothing already running is a
+    // retry trigger for this. The store subscription fires on payment-store
+    // changes and observeCheckout() watches childList only, but enabling an
+    // input that is already in the DOM is an ATTRIBUTE change and need not
+    // touch either. So watch that attribute directly, or the preselect stays
+    // outstanding forever with announceActiveMethod() suppressed behind it.
+    if (radio.disabled) {
+      // WAITING: enableWatcher fires when `disabled` is removed.
+      if (watchForEnable(radio)) return;
+      // No MutationObserver to watch with. Fall through and spend the attempt
+      // rather than suppress announcements indefinitely: giving up is worse
+      // than preselecting, but hanging is worse than both.
+    }
     preselectClicked = true;
     radio.click();
   }
