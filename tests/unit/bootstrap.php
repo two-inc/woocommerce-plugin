@@ -976,15 +976,17 @@ class StubOrderTaxItem implements ArrayAccess
 /** WC_Order_Item_Shipping stub: $taxes is the per-rate-id 'total' map core stores on the item. */
 class StubShippingItem
 {
+    public $meta;
     private $net;
     private $tax;
     private $taxes;
 
-    public function __construct(float $net, float $tax, array $taxes = [])
+    public function __construct(float $net, float $tax, array $taxes = [], array $meta = [])
     {
         $this->net = $net;
         $this->tax = $tax;
         $this->taxes = $taxes;
+        $this->meta = $meta;
     }
 
     public function get_name()
@@ -1011,20 +1013,28 @@ class StubShippingItem
     {
         return 'taxable';
     }
+
+    public function get_meta($key)
+    {
+        return $this->meta[$key] ?? '';
+    }
+
+    public function update_meta_data($key, $value)
+    {
+        $this->meta[$key] = $value;
+    }
 }
 
-/** WC_Order_Refund stub: its own tax rows (as core's update_taxes() restamps them) and a parent id. */
+/** WC_Order_Refund stub: its own tax rows, as core's update_taxes() restamps them from the live rate table. */
 class StubRefund
 {
     private $items;
     private $taxes;
-    private $parent_id;
 
-    public function __construct(array $items, array $taxes, int $parent_id)
+    public function __construct(array $items, array $taxes)
     {
         $this->items = $items;
         $this->taxes = $taxes;
-        $this->parent_id = $parent_id;
     }
 
     public function get_items($type = 'line_item')
@@ -1037,11 +1047,6 @@ class StubRefund
         return $this->taxes;
     }
 
-    public function get_parent_id()
-    {
-        return $this->parent_id;
-    }
-
     public function get_id()
     {
         return 99;
@@ -1050,6 +1055,66 @@ class StubRefund
     public function get_item_subtotal($item, $inc_tax = false, $round = true)
     {
         return $item['line_subtotal'];
+    }
+}
+
+/** WC_Order stub for tax resolution: tax rows, meta, cart item classes, product count and items by id. */
+class StubTaxOrder
+{
+    public $location = ['country' => 'NO', 'state' => '', 'postcode' => '0150', 'city' => 'Oslo'];
+    private $taxes;
+    private $meta;
+    private $item_classes;
+    private $products;
+    private $items;
+
+    public function __construct(array $taxes, array $meta = [], array $item_classes = [], int $products = 1, array $items = [])
+    {
+        $this->taxes = $taxes;
+        $this->meta = $meta;
+        $this->item_classes = $item_classes;
+        $this->products = $products;
+        $this->items = $items;
+    }
+
+    public function get_taxes()
+    {
+        return $this->taxes;
+    }
+
+    public function get_meta($key)
+    {
+        return $this->meta[$key] ?? '';
+    }
+
+    public function get_taxable_location()
+    {
+        return $this->location;
+    }
+
+    public function get_items_tax_classes()
+    {
+        return $this->item_classes;
+    }
+
+    public function get_items()
+    {
+        return array_fill(0, $this->products, null);
+    }
+
+    public function get_item($id)
+    {
+        return $this->items[$id] ?? false;
+    }
+
+    public function get_currency()
+    {
+        return 'EUR';
+    }
+
+    public function get_id()
+    {
+        return 7;
     }
 }
 

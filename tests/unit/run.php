@@ -1968,160 +1968,167 @@ final class BrandConfigSpec
         $standard25 = ['' => [1 => $row(25.0)]];
         $reduced12 = ['reduced-rate' => [2 => $row(12.0)]];
         $compound = ['gst-qst' => [3 => $row(5.0), 4 => $row(10.0, 'yes', 'yes')]];
-
-        $order = static function (array $orderTaxes, array $itemClasses) {
-            return new class ($orderTaxes, $itemClasses) {
-                private $orderTaxes;
-                private $itemClasses;
-                public function __construct($orderTaxes, $itemClasses)
-                {
-                    $this->orderTaxes = $orderTaxes;
-                    $this->itemClasses = $itemClasses;
-                }
-                public function get_taxes()
-                {
-                    return $this->orderTaxes;
-                }
-                public function get_taxable_location()
-                {
-                    return ['country' => 'NO', 'state' => '', 'postcode' => '0150', 'city' => 'Oslo'];
-                }
-                public function get_items_tax_classes()
-                {
-                    return $this->itemClasses;
-                }
-                public function get_id()
-                {
-                    return 1;
-                }
-            };
-        };
-
-        $mismatch = 'does not match';
-        $noRate = 'no tax rate recorded';
-        // [shop-rate fallback enabled, item taxes by rate id, order tax rows, net, tax, woocommerce_shipping_tax_class (null = unset), cart item classes, shop rates, expected rate or refusal text, description]
+        $rows25 = [[1, 25.0, false]];
+        $meta = WC_Twoinc_Brand::meta_key('shipping_tax_rate');
+        $stored12 = [$meta => ['rate' => 0.12, 'name' => 'VAT']];
+        $placed = [WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order'];
+        $base = ['country' => 'GB', 'state' => '', 'postcode' => 'EC1A', 'city' => 'London'];
+        $mismatch = 'refused: does not match';
+        $noRate = 'refused: no tax rate recorded';
+        $defaults = [
+            'fallback' => false, 'orderMeta' => [], 'orderTaxes' => [], 'lines' => [[10.0, 0.0, []]], 'shopClass' => null,
+            'filter' => null, 'itemClasses' => [], 'products' => 1, 'shopRates' => [], 'location' => null,
+        ];
+        // [overrides of $defaults; lines are [net, tax, item taxes by rate id, item meta], expected rate(s) or refusal, description]
         $cases = [
-            [false, [1 => 2.5], [[1, 25.0, false]], 10.0, 2.5, null, [], [], 0.25, 'WC-engine-taxed shipping keeps its declared rate'],
-            [true, [], [], 10.0, 1.2, 'reduced-rate', [], $reduced12, 0.12, 'fallback on: third-party tax with no rate row resolves from the shop shipping tax class'],
-            [false, [], [], 10.0, 1.2, 'reduced-rate', [], $reduced12, $noRate, 'fallback off: third-party tax with no rate row is refused by name, never 0%'],
-            [true, [], [], 10.0, 2.5, '', [], $standard25, 0.25, 'shop shipping tax class Standard'],
-            [true, [], [], 10.0, 1.2, 'inherit', ['reduced-rate'], $standard25 + $reduced12, 0.12, 'based on cart items takes the cart item class'],
-            [true, [], [], 10.0, 2.5, 'inherit', ['reduced-rate', ''], $standard25 + $reduced12, 0.25, 'based on cart items prefers Standard when a cart item uses it, as core does'],
-            [false, [1 => 2.0], [[1, 25.0, false]], 10.0, 2.0, null, [], [], $mismatch, 'fallback off: declared rate that does not match the tax charged is refused'],
-            [true, [1 => 2.0], [[1, 25.0, false]], 10.0, 2.0, null, [], [], $mismatch, 'fallback on: declared rate that does not match the tax charged is refused'],
-            [true, [], [], 10.0, 3.0, 'reduced-rate', [], $reduced12, $mismatch, 'shop rate that does not match the tax charged is refused'],
-            [false, [1 => 2.52], [[1, 25.0, false]], 10.0, 2.52, null, [], [], 0.25, 'rounding within the 0.02 tolerance reconciles'],
-            [false, [1 => 0.5, 2 => 1.05], [[1, 5.0, false], [2, 10.0, true]], 10.0, 1.55, null, [], [], 0.155, 'compound order tax rows combine as a + b + ab'],
-            [true, [], [], 10.0, 1.55, 'gst-qst', [], $compound, 0.155, 'compound shop rates combine as a + b + ab'],
-            [false, [], [], 10.0, 0.0, null, [], [], 0.0, 'zero-tax shipping stays untaxed'],
-            [true, [], [], 10.0, 2.5, null, [], [], $mismatch, 'taxed line, shop setting unset and no matching rate: refused, never 0%'],
-            [true, [], [], 10.0, 1.2, 'reduced-rate', [], ['reduced-rate' => [2 => $row(12.0, 'no')]], $mismatch, 'taxed line whose only matching rate excludes shipping is refused'],
-            [true, [], [], 10.0, 1.2, 'inherit', [], $reduced12, $mismatch, 'based on cart items with no taxable cart item leaves shipping untaxed, so a taxed line is refused'],
+            [['lines' => [[10.0, 2.5, [1 => 2.5]]], 'orderTaxes' => $rows25], 0.25, 'WC-engine-taxed shipping keeps its declared rate'],
+            [['fallback' => true, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], 0.12, 'fallback on: third-party tax with no rate row resolves from the shop shipping tax class'],
+            [['lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], $noRate, 'fallback off: third-party tax with no rate row is refused by name, never 0%'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, []]], 'shopClass' => '', 'shopRates' => $standard25], 0.25, 'shop shipping tax class Standard'],
+            [['fallback' => true, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'inherit', 'itemClasses' => ['reduced-rate'], 'shopRates' => $standard25 + $reduced12], 0.12, 'based on cart items takes the cart item class'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, []]], 'shopClass' => 'inherit', 'itemClasses' => ['reduced-rate', ''], 'shopRates' => $standard25 + $reduced12], 0.25, 'based on cart items prefers Standard when a cart item uses it, as core does'],
+            [['lines' => [[10.0, 2.0, [1 => 2.0]]], 'orderTaxes' => $rows25], $mismatch, 'fallback off: declared rate that does not match the tax charged is refused'],
+            [['fallback' => true, 'lines' => [[10.0, 2.0, [1 => 2.0]]], 'orderTaxes' => $rows25], $mismatch, 'fallback on: declared rate that does not match the tax charged is refused'],
+            [['fallback' => true, 'lines' => [[10.0, 3.0, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], $mismatch, 'shop rate that does not match the tax charged is refused'],
+            [['lines' => [[10.0, 2.52, [1 => 2.52]]], 'orderTaxes' => $rows25], 0.25, 'rounding within the 0.02 tolerance reconciles'],
+            [['lines' => [[10.0, 1.55, [1 => 0.5, 2 => 1.05]]], 'orderTaxes' => [[1, 5.0, false], [2, 10.0, true]]], 0.155, 'compound order tax rows combine as a + b + ab'],
+            [['fallback' => true, 'lines' => [[10.0, 1.55, []]], 'shopClass' => 'gst-qst', 'shopRates' => $compound], 0.155, 'compound shop rates combine as a + b + ab'],
+            [[], 0.0, 'zero-tax shipping stays untaxed'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, []]]], $mismatch, 'taxed line, shop setting unset and no matching rate: refused, never 0%'],
+            [['fallback' => true, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => ['reduced-rate' => [2 => $row(12.0, 'no')]]], $mismatch, 'taxed line whose only matching rate excludes shipping is refused'],
+            [['fallback' => true, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'inherit', 'shopRates' => $reduced12], $mismatch, 'based on cart items with no taxable cart item leaves shipping untaxed, so a taxed line is refused'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, []]], 'shopClass' => 'inherit', 'products' => 0, 'shopRates' => $standard25], 0.25, 'based on cart items with no product items falls back to Standard, as core does'],
+            [['fallback' => true, 'lines' => [[10.0, 1.2, []]], 'shopClass' => '', 'filter' => 'reduced-rate', 'shopRates' => $standard25 + $reduced12], 0.12, 'the woocommerce_shipping_tax_class filter overrides the class, as core applies it'],
+            [['lines' => [[0.0, 0.0, []]]], [], 'free shipping with a coupon sends no shipping line'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, [1 => 2.5]], [5.0, 0.6, []]], 'orderTaxes' => $rows25, 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], [0.25, 0.12], 'multiple shipping lines each resolve their own rate'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, []]], 'shopClass' => '', 'shopRates' => $standard25, 'location' => $base], 0.25, 'guest with no address resolves at the tax location core defaults to (shop base)'],
+            [['orderMeta' => $placed, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], 0.12, 'edit sync of a placed 2.x order resolves the shop rate without the option, and reconciles'],
+            [['orderMeta' => $placed, 'lines' => [[10.0, 3.0, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], $mismatch, 'edit sync of a placed 2.x order whose tax does not reconcile is refused by name'],
+            [['orderMeta' => $placed, 'lines' => [[10.0, 1.2, [], $stored12]], 'shopClass' => '', 'shopRates' => $standard25], 0.12, 'edit sync of a fallback order uses the rate stored at checkout, not live config'],
         ];
 
         $GLOBALS['__twoinc_test_tax_classes'] = ['Reduced rate', 'GST QST'];
         $failures = [];
         $flag = WC_Twoinc_Brand::prefixed_name('shipping_tax_from_shop_rates');
-        foreach ($cases as [$fallback, $itemTaxes, $orderTaxRows, $net, $tax, $shopClass, $itemClasses, $shopRates, $expected, $description]) {
-            $GLOBALS['__twoinc_test_options'][$flag] = $fallback ? 'yes' : 'no';
-            $GLOBALS['__twoinc_test_find_rates'] = $shopRates;
+        foreach ($cases as [$overrides, $expected, $description]) {
+            $c = array_merge($defaults, $overrides);
+            self::setShippingTaxShop($c['fallback'], $c['shopClass'], $c['shopRates']);
+            remove_all_filters('woocommerce_shipping_tax_class');
+            if ($c['filter'] !== null) {
+                add_filter('woocommerce_shipping_tax_class', static function () use ($c) {
+                    return $c['filter'];
+                });
+            }
             unset($GLOBALS['__twoinc_test_find_rates_args']);
-            if ($shopClass === null) {
-                unset($GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class']);
-            } else {
-                $GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'] = $shopClass;
-            }
-            $orderTaxes = array_map(static function ($r) {
-                return new StubOrderTaxItem(...$r);
-            }, $orderTaxRows);
+            $order = new StubTaxOrder(self::stubTaxRows($c['orderTaxes']), $c['orderMeta'], $c['itemClasses'], $c['products']);
+            $order->location = $c['location'] ?? $order->location;
+            $shippings = array_map(static function ($l) {
+                return new StubShippingItem(...$l);
+            }, $c['lines']);
 
-            try {
-                $lines = WC_Twoinc_Helper::get_line_items([], [new StubShippingItem($net, $tax, $itemTaxes)], [], $order($orderTaxes, $itemClasses));
-                $actual = $lines[0]['tax_rate'];
-            } catch (Exception $e) {
-                $actual = 'refused: ' . $e->getMessage();
-            }
-            $want = is_string($expected) ? 'refused: ...' . $expected . '...' : WC_Twoinc_Helper::round_rate($expected);
-            if (is_string($expected) ? strpos($actual, 'refused: ') !== 0 || strpos($actual, $expected) === false : $actual !== $want) {
-                $failures[] = sprintf('%s: expected %s, got %s', $description, $want, $actual);
-            }
-            $location = $GLOBALS['__twoinc_test_find_rates_args'] ?? null;
-            if ($location !== null && $location['country'] !== 'NO') {
+            $failures[] = self::shippingRateCaseFailure($expected, static function () use ($shippings, $order) {
+                return implode(',', array_column(WC_Twoinc_Helper::get_line_items([], $shippings, [], $order), 'tax_rate'));
+            }, $description);
+            $looked_up = $GLOBALS['__twoinc_test_find_rates_args'] ?? null;
+            if ($looked_up !== null && $looked_up['country'] !== $order->location['country']) {
                 $failures[] = $description . ': shop rates looked up away from the order tax location';
             }
+            if ($c['fallback'] && $c['orderMeta'] === [] && $expected === 0.12 && abs(($shippings[0]->meta[$meta]['rate'] ?? 0) - 0.12) > 1e-9) {
+                $failures[] = $description . ': fallback rate not stored on the shipping item';
+            }
         }
-        unset($GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'], $GLOBALS['__twoinc_test_options'][$flag]);
+        remove_all_filters('woocommerce_shipping_tax_class');
+        self::setShippingTaxShop(false, null, []);
 
-        TinyAssert::same([], $failures, "Failing cases:\n  " . implode("\n  ", $failures));
+        TinyAssert::same([], array_values(array_filter($failures)), "Failing cases:\n  " . implode("\n  ", array_filter($failures)));
     }
 
-    /** TWO-26072: refund rates come from the parent order, never the refund's restamped rows or live shop config. */
+    /** TWO-26072: a refund line takes the rate of the parent line it refunds, never the refund's restamped rows. */
     private static function testRefundTaxRatesComeFromTheParentOrder(): void
     {
         $parent24 = [[1, 24.0, false]];
-        $compound = [[1, 5.0, false], [2, 10.0, true]];
-        $line = static function (string $type, array $taxes, float $net, float $tax) {
-            if ($type === 'line_item') {
-                return new StubProductLineItem(['line_total' => $net, 'line_subtotal' => $net, 'line_tax' => $tax, 'taxes' => $taxes]);
-            }
-            return new StubShippingItem($net, $tax, $taxes);
-        };
-
-        // [line type, parent order tax rows, refund's own tax rows, item taxes by rate id, net, tax, expected rate or refusal text, description]
+        $restamped = [[1, 25.5, false]];
+        $meta = WC_Twoinc_Brand::meta_key('shipping_tax_rate');
+        $mismatch = 'refused: does not match';
+        $defaults = ['type' => 'shipping', 'parentRows' => $parent24, 'refundRows' => $restamped, 'parent' => [10.0, 2.4, [1 => 2.4]], 'refund' => [-10.0, -2.4, [1 => -2.4]]];
+        // [overrides of $defaults; parent and refund lines are [net, tax, item taxes by rate id, item meta], expected rate or refusal, description]
         $cases = [
-            ['line_item', $parent24, [[1, 25.5, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'product refund after a rate change keeps the charged rate'],
-            ['fee', $parent24, [[1, 25.5, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'fee refund after a rate change keeps the charged rate'],
-            ['shipping', $parent24, [[1, 25.5, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'shipping refund after a rate change keeps the charged rate'],
-            ['line_item', $parent24, [[1, 0.0, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'product refund after the rate row is deleted keeps the charged rate'],
-            ['fee', $parent24, [[1, 0.0, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'fee refund after the rate row is deleted keeps the charged rate'],
-            ['shipping', $parent24, [[1, 0.0, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'shipping refund after the rate row is deleted keeps the charged rate'],
-            ['shipping', $compound, [[1, 5.0, false], [2, 0.0, false]], [1 => -0.5, 2 => -1.05], -10.0, -1.55, 0.155, 'compound shipping refund combines the parent rates'],
-            ['shipping', $parent24, [[1, 24.0, false]], [1 => -5.0], -10.0, -5.0, 'does not match', 'refund shipping tax that does not match the charged rate is refused'],
-            ['shipping', [], [], [], -10.0, -1.2, 'no tax rate recorded', 'refund never resolves a missing shipping rate from live shop config, even with the fallback on'],
+            [['type' => 'line_item'], 0.24, 'product refund after a rate change keeps the charged rate'],
+            [['type' => 'fee'], 0.24, 'fee refund after a rate change keeps the charged rate'],
+            [[], 0.24, 'shipping refund after a rate change keeps the charged rate'],
+            [['type' => 'line_item', 'refundRows' => [[1, 0.0, false]]], 0.24, 'product refund after the rate row is deleted keeps the charged rate'],
+            [['type' => 'fee', 'refundRows' => [[1, 0.0, false]]], 0.24, 'fee refund after the rate row is deleted keeps the charged rate'],
+            [['refundRows' => [[1, 0.0, false]]], 0.24, 'shipping refund after the rate row is deleted keeps the charged rate'],
+            [['parentRows' => [[1, 5.0, false], [2, 10.0, true]], 'refundRows' => [[1, 5.0, false], [2, 0.0, false]], 'parent' => [10.0, 1.55, [1 => 0.5, 2 => 1.05]], 'refund' => [-10.0, -1.55, [1 => -0.5, 2 => -1.05]]], 0.155, 'compound shipping refund combines the parent rates'],
+            [['refund' => [-10.0, -5.0, [1 => -5.0]]], $mismatch, 'refund shipping tax that does not match the charged rate is refused'],
+            [['refund' => [-4.0, -0.96, [1 => -0.96]]], 0.24, 'partial shipping refund'],
+            [['refund' => [0.0, -2.4, [1 => -2.4]]], 0.24, 'tax-only shipping refund (VAT charged to a reverse-charge buyer) is sent at the charged rate'],
+            [['refund' => [-10.0, 0.0, []]], 0.24, 'net-only shipping refund is sent at the charged rate'],
+            [['type' => 'fee', 'refund' => [0.0, -2.4, [1 => -2.4]]], 0.24, 'tax-only fee refund is sent, not dropped'],
+            [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, [], [$meta => ['rate' => 0.12, 'name' => 'VAT']]], 'refund' => [-10.0, -1.2, []]], 0.12, 'refund of a fallback order uses the rate stored at checkout'],
+            [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, []], 'refund' => [-10.0, -1.2, []]], 0.12, 'refund of a 2.x order with no rate row resolves the shop rate and reconciles it against the parent line'],
+            [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 3.0, []], 'refund' => [-10.0, -3.0, []]], $mismatch, 'refund of a 2.x order whose parent tax does not reconcile with the shop rate is refused by name'],
         ];
 
-        $flag = WC_Twoinc_Brand::prefixed_name('shipping_tax_from_shop_rates');
-        $GLOBALS['__twoinc_test_options'][$flag] = 'yes';
-        $GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'] = 'reduced-rate';
-        $GLOBALS['__twoinc_test_find_rates'] = ['reduced-rate' => [2 => ['rate' => 12.0, 'shipping' => 'yes', 'compound' => 'no', 'label' => 'VAT']]];
-        $toTaxItems = static function (array $rows) {
-            return array_map(static function ($r) {
-                return new StubOrderTaxItem(...$r);
-            }, $rows);
-        };
+        // Option off: neither the stored-rate nor the 2.x path depends on it.
+        self::setShippingTaxShop(false, 'reduced-rate', ['reduced-rate' => [2 => ['rate' => 12.0, 'shipping' => 'yes', 'compound' => 'no', 'label' => 'VAT']]]);
         $failures = [];
-        foreach ($cases as [$type, $parentRows, $refundRows, $itemTaxes, $net, $tax, $expected, $description]) {
-            $parent = new class ($toTaxItems($parentRows)) {
-                private $taxes;
-                public function __construct($taxes)
-                {
-                    $this->taxes = $taxes;
-                }
-                public function get_taxes()
-                {
-                    return $this->taxes;
-                }
-                public function get_id()
-                {
-                    return 7;
-                }
-            };
-            $GLOBALS['__twoinc_test_wc_orders'][7] = $parent;
-            $refund = new StubRefund([$type => [$line($type, $itemTaxes, $net, $tax)]], $toTaxItems($refundRows), 7);
+        foreach ($cases as [$overrides, $expected, $description]) {
+            $c = array_merge($defaults, $overrides);
+            [$net, $tax, $taxes] = $c['refund'];
+            if ($c['type'] === 'line_item') {
+                $item = new StubProductLineItem(['line_total' => $net, 'line_subtotal' => $net, 'line_tax' => $tax, 'taxes' => $taxes]);
+            } else {
+                $item = new StubShippingItem($net, $tax, $taxes, ['_refunded_item_id' => 5]);
+            }
+            $parent = new StubTaxOrder(self::stubTaxRows($c['parentRows']), [WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order'], [], 1, [5 => new StubShippingItem(...$c['parent'])]);
+            $refund = new StubRefund([$c['type'] => [$item]], self::stubTaxRows($c['refundRows']));
 
-            try {
-                $actual = WC_Twoinc_Helper::compose_twoinc_refund($refund, 10.0, 'EUR')['line_items'][0]['tax_rate'];
-            } catch (Exception $e) {
-                $actual = 'refused: ' . $e->getMessage();
-            }
-            $want = is_string($expected) ? 'refused: ...' . $expected . '...' : WC_Twoinc_Helper::round_rate($expected);
-            if (is_string($expected) ? strpos($actual, 'refused: ') !== 0 || strpos($actual, $expected) === false : $actual !== $want) {
-                $failures[] = sprintf('%s: expected %s, got %s', $description, $want, $actual);
-            }
+            $failures[] = self::shippingRateCaseFailure($expected, static function () use ($refund, $parent, $net, $tax) {
+                $lines = WC_Twoinc_Helper::compose_twoinc_refund($refund, $net + $tax, $parent)['line_items'];
+                if (round(array_sum(array_column($lines, 'gross_amount')), 2) !== round($net + $tax, 2)) {
+                    return 'lines that do not sum to the refund';
+                }
+                return $lines[0]['tax_rate'];
+            }, $description);
         }
-        unset($GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'], $GLOBALS['__twoinc_test_options'][$flag], $GLOBALS['__twoinc_test_wc_orders'][7]);
+        self::setShippingTaxShop(false, null, []);
 
-        TinyAssert::same([], $failures, "Failing cases:\n  " . implode("\n  ", $failures));
+        TinyAssert::same([], array_values(array_filter($failures)), "Failing cases:\n  " . implode("\n  ", array_filter($failures)));
+    }
+
+    private static function setShippingTaxShop(bool $fallback, ?string $shopClass, array $shopRates): void
+    {
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('shipping_tax_from_shop_rates')] = $fallback ? 'yes' : 'no';
+        $GLOBALS['__twoinc_test_find_rates'] = $shopRates;
+        unset($GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class']);
+        if ($shopClass !== null) {
+            $GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'] = $shopClass;
+        }
+    }
+
+    private static function stubTaxRows(array $rows): array
+    {
+        return array_map(static function ($r) {
+            return new StubOrderTaxItem(...$r);
+        }, $rows);
+    }
+
+    /** @param float|float[]|string $expected rate(s), or 'refused: <text>' */
+    private static function shippingRateCaseFailure($expected, callable $run, string $description): ?string
+    {
+        try {
+            $actual = $run();
+        } catch (Exception $e) {
+            $actual = 'refused: ' . $e->getMessage();
+        }
+        if (is_string($expected)) {
+            $ok = strpos($actual, 'refused: ') === 0 && strpos($actual, substr($expected, 9)) !== false;
+        } else {
+            $expected = implode(',', array_map([WC_Twoinc_Helper::class, 'round_rate'], (array) $expected));
+            $ok = $actual === $expected;
+        }
+        return $ok ? null : sprintf('%s: expected %s, got %s', $description, $expected, $actual);
     }
 
     /** TWO-26072: the plugin's own shipping tax class setting is gone, and an upgraded install drops its stored value. */
@@ -2140,9 +2147,11 @@ final class BrandConfigSpec
         $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
         $drop->setAccessible(true);
         $GLOBALS['__twoinc_test_options'][$key] = ['default_shipping_tax_class' => 'reduced-rate', 'api_key' => 'keep-me'];
+        $GLOBALS['__twoinc_test_logs'] = [];
         $gateway->init_settings();
         $drop->invoke($gateway);
         TinyAssert::same(['api_key' => 'keep-me'], $GLOBALS['__twoinc_test_options'][$key], 'stored value dropped on upgrade');
+        self::assertLogged('notice', '"reduced-rate"');
     }
 
     private static function testLegacyOrderCreateFilterRunsBeforeOrderPayload(): void
