@@ -54,6 +54,7 @@ final class BrandConfigSpec
             'testShippingDetailsFilterGarbageDiscarded',
             'testShippingTaxRateComesFromShopRatesAndReconciles',
             'testRefundTaxRatesComeFromTheParentOrder',
+            'testTaxHelpersKeepTheirPre300CallForms',
             'testDefaultShippingTaxClassSettingIsRemoved',
             'testLegacyOrderCreateFilterRunsBeforeOrderPayload',
             'testBrandFileReturningNonArrayFallsBackToDefaults',
@@ -2050,7 +2051,8 @@ final class BrandConfigSpec
         $restamped = [[1, 25.5, false]];
         $meta = WC_Twoinc_Brand::meta_key('shipping_tax_rate');
         $mismatch = 'refused: does not match';
-        $defaults = ['type' => 'shipping', 'parentRows' => $parent24, 'refundRows' => $restamped, 'parent' => [10.0, 2.4, [1 => 2.4]], 'refund' => [-10.0, -2.4, [1 => -2.4]]];
+        $noParent = 'refused: Shipping "Carrier" cannot be refunded';
+        $defaults = ['type' => 'shipping', 'refundedId' => 5, 'parentRows' => $parent24, 'refundRows' => $restamped, 'parent' => [10.0, 2.4, [1 => 2.4]], 'refund' => [-10.0, -2.4, [1 => -2.4]]];
         // [overrides of $defaults; parent and refund lines are [net, tax, item taxes by rate id, item meta], expected rate or refusal, description]
         $cases = [
             [['type' => 'line_item'], 0.24, 'product refund after a rate change keeps the charged rate'],
@@ -2068,6 +2070,11 @@ final class BrandConfigSpec
             [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, [], [$meta => ['rate' => 0.12, 'name' => 'VAT']]], 'refund' => [-10.0, -1.2, []]], 0.12, 'refund of a fallback order uses the rate stored at checkout'],
             [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, []], 'refund' => [-10.0, -1.2, []]], 0.12, 'refund of a 2.x order with no rate row resolves the shop rate and reconciles it against the parent line'],
             [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 3.0, []], 'refund' => [-10.0, -3.0, []]], $mismatch, 'refund of a 2.x order whose parent tax does not reconcile with the shop rate is refused by name'],
+            [['refundedId' => null], $noParent, 'shipping refund with no parent line (another plugin built the refund) is refused by name'],
+            [['refundedId' => 6], $noParent, 'shipping refund whose parent line was deleted is refused by name'],
+            [['type' => 'line_item', 'refund' => [-10.0, 0.0, []]], 0.24, 'net-only product refund is sent at the charged rate'],
+            [['type' => 'fee', 'refund' => [-10.0, 0.0, []]], 0.24, 'net-only fee refund is sent at the charged rate'],
+            [['type' => 'line_item', 'refundedId' => null], 0.24, 'product refund with no parent line keeps its own tax rows'],
         ];
 
         // Option off: neither the stored-rate nor the 2.x path depends on it.
@@ -2076,10 +2083,11 @@ final class BrandConfigSpec
         foreach ($cases as [$overrides, $expected, $description]) {
             $c = array_merge($defaults, $overrides);
             [$net, $tax, $taxes] = $c['refund'];
+            $itemMeta = $c['refundedId'] ? ['_refunded_item_id' => $c['refundedId']] : [];
             if ($c['type'] === 'line_item') {
-                $item = new StubProductLineItem(['line_total' => $net, 'line_subtotal' => $net, 'line_tax' => $tax, 'taxes' => $taxes]);
+                $item = new StubProductLineItem(['line_total' => $net, 'line_subtotal' => $net, 'line_tax' => $tax, 'taxes' => $taxes, 'meta' => $itemMeta]);
             } else {
-                $item = new StubShippingItem($net, $tax, $taxes, ['_refunded_item_id' => 5]);
+                $item = new StubShippingItem($net, $tax, $taxes, $itemMeta);
             }
             $parent = new StubTaxOrder(self::stubTaxRows($c['parentRows']), [WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order'], [], 1, [5 => new StubShippingItem(...$c['parent'])]);
             $refund = new StubRefund([$c['type'] => [$item]], self::stubTaxRows($c['refundRows']));
@@ -2095,6 +2103,26 @@ final class BrandConfigSpec
         self::setShippingTaxShop(false, null, []);
 
         TinyAssert::same([], array_values(array_filter($failures)), "Failing cases:\n  " . implode("\n  ", array_filter($failures)));
+    }
+
+    /** TWO-26072: callers written against 2.x keep working after the 3.0.0 signature changes. */
+    private static function testTaxHelpersKeepTheirPre300CallForms(): void
+    {
+        $order = new StubTaxOrder(self::stubTaxRows([[1, 25.0, false]]), [], [], 1, [5 => new StubShippingItem(10.0, 2.5, [1 => 2.5])]);
+        $GLOBALS['__twoinc_test_wc_orders'][7] = $order;
+        $refund = new StubRefund(['shipping' => [new StubShippingItem(-10.0, -2.5, [1 => -2.5], ['_refunded_item_id' => 5])]], []);
+        try {
+            $subtotals = WC_Twoinc_Helper::get_tax_subtotals([], [new StubShippingItem(10.0, 2.5, [1 => 2.5])], [], $order);
+            $body = WC_Twoinc_Helper::compose_twoinc_refund($refund, -12.5, 'SEK');
+        } catch (Throwable $e) {
+            TinyAssert::same('no error', get_class($e) . ': ' . $e->getMessage(), 'pre-3.0.0 call forms');
+            return;
+        } finally {
+            unset($GLOBALS['__twoinc_test_wc_orders'][7]);
+        }
+        TinyAssert::same(WC_Twoinc_Helper::round_rate(0.25), $subtotals[0]['tax_rate'], 'get_tax_subtotals resolves shipping rates when none are passed');
+        TinyAssert::same('SEK', $body['currency'], 'a currency third argument is still the currency');
+        TinyAssert::same(WC_Twoinc_Helper::round_rate(0.25), $body['line_items'][0]['tax_rate'], 'a currency third argument still takes rates from the parent order');
     }
 
     private static function setShippingTaxShop(bool $fallback, ?string $shopClass, array $shopRates): void
@@ -2121,6 +2149,8 @@ final class BrandConfigSpec
             $actual = $run();
         } catch (Exception $e) {
             $actual = 'refused: ' . $e->getMessage();
+        } catch (Throwable $e) {
+            $actual = get_class($e) . ': ' . $e->getMessage();
         }
         if (is_string($expected)) {
             $ok = strpos($actual, 'refused: ') === 0 && strpos($actual, substr($expected, 9)) !== false;

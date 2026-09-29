@@ -433,7 +433,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
             foreach ($line_items as $line_item) {
                 $product_simple = WC_Twoinc_Helper::get_product($line_item);
 
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $rate_order);
+                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate(
+                    self::get_rate_line($line_item, $rate_order, $is_refund),
+                    $rate_order
+                );
 
                 if (! is_object($product_simple)) {
                     $name = method_exists($line_item, 'get_name') ? $line_item->get_name() : 'Item';
@@ -539,7 +542,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 if (self::is_zero_line($fee)) {
                     continue;
                 }
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($fee, $rate_order);
+                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate(
+                    self::get_rate_line($fee, $rate_order, $is_refund),
+                    $rate_order
+                );
                 $fee_line = [
                     // Already the resolved, translated, brand-correct label;
                     // no hardcoded prefix — 'type' => 'SERVICE' below carries
@@ -583,12 +589,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * @param array $shipping_rates the rates get_line_items() resolved, so shipping is not resolved twice.
+         * @param array|null $shipping_rates the rates get_line_items() resolved, so shipping is not resolved twice.
          *
          * @return array
          */
-        public static function get_tax_subtotals($line_items, $shippings, $fees, $order, $shipping_rates)
+        public static function get_tax_subtotals($line_items, $shippings, $fees, $order, $shipping_rates = null)
         {
+            if ($shipping_rates === null) {
+                self::get_line_items([], $shippings, [], $order, false, null, $shipping_rates);
+            }
 
             $tax_subtotal_dict = array();
             $tax_subtotals = [];
@@ -1009,14 +1018,20 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * @param mixed $order the parent order; a currency string (the pre-3.0.0 form) is still accepted.
+         *
          * @return array
          */
         public static function compose_twoinc_refund($order_refund, $amount, $order)
         {
+            $currency = is_string($order) ? $order : $order->get_currency();
+            if (is_string($order)) {
+                $order = wc_get_order($order_refund->get_parent_id()) ?: null;
+            }
 
             $req_body = [
                 'amount' => strval(WC_Twoinc_Helper::round_amt($amount)),
-                'currency' => $order->get_currency(),
+                'currency' => $currency,
                 'line_items' => WC_Twoinc_Helper::get_line_items(
                     $order_refund->get_items(),
                     $order_refund->get_items('shipping'),
@@ -1445,7 +1460,21 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         private static function get_shipping_tax_rate($shipping, $order, $is_refund = false)
         {
-            $charged = $is_refund ? $order->get_item((int) $shipping->get_meta('_refunded_item_id')) : $shipping;
+            $charged = $is_refund ? self::get_refunded_line($shipping, $order) : $shipping;
+            if (!$charged) {
+                self::refuse(
+                    sprintf(
+                        'Refund of shipping "%s" on order %s has no parent line to take the charged tax rate from.',
+                        $shipping->get_name(),
+                        $order->get_id()
+                    ),
+                    sprintf(
+                        /* translators: %s: shipping method name */
+                        __('Shipping "%s" cannot be refunded: the order line it refunds was not found.', 'twoinc-payment-gateway'),
+                        $shipping->get_name()
+                    )
+                );
+            }
             $resolved = self::get_item_tax_rate($charged, $order);
             if (!$resolved['rate'] && round((float) $charged->get_total_tax(), 2) !== 0.0) {
                 $resolved = self::get_undeclared_shipping_tax_rate($charged, $order);
@@ -1456,6 +1485,27 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 self::assert_tax_reconciles($shipping, $resolved['rate']);
             }
             return $resolved;
+        }
+
+        /**
+         * The order line a refund line refunds, or false when the refund records none or it was deleted.
+         *
+         * @return mixed
+         */
+        private static function get_refunded_line($line, $order)
+        {
+            $id = (int) $line->get_meta('_refunded_item_id');
+            return $id ? $order->get_item($id) : false;
+        }
+
+        /**
+         * A net-only refund line has no tax rows, so it takes the parent's; with no parent it keeps its own.
+         *
+         * @return mixed
+         */
+        private static function get_rate_line($line, $order, $is_refund)
+        {
+            return ($is_refund ? self::get_refunded_line($line, $order) : false) ?: $line;
         }
 
         /**

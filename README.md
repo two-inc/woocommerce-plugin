@@ -305,7 +305,9 @@ wp option update twoinc_shipping_tax_from_shop_rates yes
 `wp option delete twoinc_shipping_tax_from_shop_rates` turns it off again.
 Either way, an order whose shipping tax does not match its declared rate
 (beyond 0.02) is refused, and refunds always use the rates the order was
-charged at.
+charged at. That includes a shipping line with zero net but non-zero tax: it
+is refused at checkout with an error naming the line. A fee line with zero net
+but non-zero tax is sent with its tax rather than dropped.
 
 A rate taken from the shop's rates is recorded on the shipping line at
 checkout, so refunds and order edits of that order use it even if the shop's

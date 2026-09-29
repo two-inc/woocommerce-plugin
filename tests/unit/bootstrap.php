@@ -919,6 +919,11 @@ class StubProductLineItem implements ArrayAccess
     {
         return ['total' => $this->data['taxes'] ?? []];
     }
+
+    public function get_meta($key)
+    {
+        return $this->data['meta'][$key] ?? '';
+    }
 }
 
 /** WC_Order_Item_Tax stub: one order-level tax row, read both as an object and via ['label']. */
@@ -1050,6 +1055,11 @@ class StubRefund
     public function get_id()
     {
         return 99;
+    }
+
+    public function get_parent_id()
+    {
+        return 7;
     }
 
     public function get_item_subtotal($item, $inc_tax = false, $round = true)
