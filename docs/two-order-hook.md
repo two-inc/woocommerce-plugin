@@ -1,3 +1,7 @@
+> **Deprecated.** `two_order_create`, `two_order_edit`, `twoinc_order_payload` and `twoinc_payment_terms_line`
+> still run, but new code should use `twoinc_order_postprocessing`, the stable contract described in the
+> README ("Stable extension contract: order postprocessing"). Their output now passes the same consistency checks.
+
 ### Custom parameters for order create requests
 
 **Option 1: Hardcode a new parameter to the request body of Two order create**
