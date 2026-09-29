@@ -488,18 +488,28 @@ class WC_Tax
     }
 
     /**
-     * Address-aware rate lookup (the shipping-tax-fallback seam), unlike
-     * get_rates_for_class() above which resolves against the current
-     * customer rather than an arbitrary address. Row shape mirrors core:
-     * ['rate' => percent float, 'shipping' => 'yes'|'no', ...]. Controlled
-     * by $GLOBALS['__twoinc_test_find_rates'], keyed by tax_class ('' =
-     * Standard); absent/unset means no matching rate, same as core with no
-     * rate table row for that destination.
+     * Address-aware rate lookup, unlike get_rates_for_class() above which
+     * resolves against the current customer rather than an arbitrary
+     * address. Row shape mirrors core: ['rate' => percent float,
+     * 'shipping' => 'yes'|'no', 'compound' => 'yes'|'no', 'label' => ...].
+     * Controlled by $GLOBALS['__twoinc_test_find_rates'], keyed by tax_class
+     * ('' = Standard; core casts false to ''); absent/unset means no
+     * matching rate, same as core with no rate table row for that
+     * destination. The last args are recorded for location assertions.
      */
     public static function find_rates($args = [])
     {
+        $GLOBALS['__twoinc_test_find_rates_args'] = $args;
         $class = (string) ($args['tax_class'] ?? '');
         return $GLOBALS['__twoinc_test_find_rates'][$class] ?? [];
+    }
+
+    /** Core's filter: only rows flagged for shipping. */
+    public static function find_shipping_rates($args = [])
+    {
+        return array_filter(self::find_rates($args), static function ($rate) {
+            return 'yes' === $rate['shipping'];
+        });
     }
 }
 
@@ -907,8 +917,220 @@ class StubProductLineItem implements ArrayAccess
 
     public function get_taxes()
     {
-        return ['total' => []];
+        return ['total' => $this->data['taxes'] ?? []];
     }
+
+    public function get_meta($key)
+    {
+        return $this->data['meta'][$key] ?? '';
+    }
+}
+
+/** WC_Order_Item_Tax stub: one order-level tax row, read both as an object and via ['label']. */
+class StubOrderTaxItem implements ArrayAccess
+{
+    private $rate_id;
+    private $percent;
+    private $compound;
+
+    public function __construct(int $rate_id, float $percent, bool $compound = false)
+    {
+        $this->rate_id = $rate_id;
+        $this->percent = $percent;
+        $this->compound = $compound;
+    }
+
+    public function get_rate_id()
+    {
+        return $this->rate_id;
+    }
+
+    public function get_rate_percent()
+    {
+        return $this->percent;
+    }
+
+    public function get_compound()
+    {
+        return $this->compound;
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetExists($offset)
+    {
+        return $offset === 'label';
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetGet($offset)
+    {
+        return $offset === 'label' ? 'Tax ' . $this->rate_id : null;
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetSet($offset, $value)
+    {
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetUnset($offset)
+    {
+    }
+}
+
+/** WC_Order_Item_Shipping stub: $taxes is the per-rate-id 'total' map core stores on the item. */
+class StubShippingItem
+{
+    public $meta;
+    private $net;
+    private $tax;
+    private $taxes;
+
+    public function __construct(float $net, float $tax, array $taxes = [], array $meta = [])
+    {
+        $this->net = $net;
+        $this->tax = $tax;
+        $this->taxes = $taxes;
+        $this->meta = $meta;
+    }
+
+    public function get_name()
+    {
+        return 'Carrier';
+    }
+
+    public function get_total()
+    {
+        return $this->net;
+    }
+
+    public function get_total_tax()
+    {
+        return $this->tax;
+    }
+
+    public function get_taxes()
+    {
+        return ['total' => $this->taxes];
+    }
+
+    public function get_tax_status()
+    {
+        return 'taxable';
+    }
+
+    public function get_meta($key)
+    {
+        return $this->meta[$key] ?? '';
+    }
+
+    public function update_meta_data($key, $value)
+    {
+        $this->meta[$key] = $value;
+    }
+}
+
+/** WC_Order_Refund stub: its own tax rows, as core's update_taxes() restamps them from the live rate table. */
+class StubRefund
+{
+    private $items;
+    private $taxes;
+
+    public function __construct(array $items, array $taxes)
+    {
+        $this->items = $items;
+        $this->taxes = $taxes;
+    }
+
+    public function get_items($type = 'line_item')
+    {
+        return $this->items[$type] ?? [];
+    }
+
+    public function get_taxes()
+    {
+        return $this->taxes;
+    }
+
+    public function get_id()
+    {
+        return 99;
+    }
+
+    public function get_parent_id()
+    {
+        return 7;
+    }
+
+    public function get_item_subtotal($item, $inc_tax = false, $round = true)
+    {
+        return $item['line_subtotal'];
+    }
+}
+
+/** WC_Order stub for tax resolution: tax rows, meta, cart item classes, product count and items by id. */
+class StubTaxOrder
+{
+    public $location = ['country' => 'NO', 'state' => '', 'postcode' => '0150', 'city' => 'Oslo'];
+    private $taxes;
+    private $meta;
+    private $item_classes;
+    private $products;
+    private $items;
+
+    public function __construct(array $taxes, array $meta = [], array $item_classes = [], int $products = 1, array $items = [])
+    {
+        $this->taxes = $taxes;
+        $this->meta = $meta;
+        $this->item_classes = $item_classes;
+        $this->products = $products;
+        $this->items = $items;
+    }
+
+    public function get_taxes()
+    {
+        return $this->taxes;
+    }
+
+    public function get_meta($key)
+    {
+        return $this->meta[$key] ?? '';
+    }
+
+    public function get_taxable_location()
+    {
+        return $this->location;
+    }
+
+    public function get_items_tax_classes()
+    {
+        return $this->item_classes;
+    }
+
+    public function get_items()
+    {
+        return array_fill(0, $this->products, null);
+    }
+
+    public function get_item($id)
+    {
+        return $this->items[$id] ?? false;
+    }
+
+    public function get_currency()
+    {
+        return 'EUR';
+    }
+
+    public function get_id()
+    {
+        return 7;
+    }
+}
+
+function wc_tax_enabled()
+{
+    return true;
 }
 
 class StubOrder

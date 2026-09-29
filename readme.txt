@@ -3,7 +3,8 @@ Tags: payment request, woocommerce
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.25.0
+WC requires at least: 7.6
+Stable tag: 3.0.0
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 Two - BNPL for businesses is a WooCommerce plugin that simplifies B2B shopping, allowing merchants to safely offer invoices as a payment method.
@@ -39,6 +40,7 @@ Simply put, Two is customer-centric, with less friction and higher conversion ra
 The plugin has been tested for compatibility with WooCommerce version 10.3.5 with
 [HPOS](https://woocommerce.com/document/high-performance-order-storage/) enabled, on both the
 classic shortcode checkout and the [block-based checkout](https://woocommerce.com/checkout-blocks/).
+It requires WooCommerce 7.6 or later.
 
 == Installation ==
 
@@ -60,6 +62,16 @@ Find the WordPress installation guide [here](https://wordpress.org/support/artic
 Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for any assistance related to the plugin.
 
 == Changelog ==
+
+= 3.0.0 =
+
+* Breaking: the "Default shipping tax class" setting has been removed and there is no migration. Its stored value is not carried over anywhere.
+* A shipping line charged tax without a recorded tax rate is now refused at checkout with a named error, rather than sent as untaxed. Shops that need such lines can have the rate taken from WooCommerce's own shipping tax class (WooCommerce > Settings > Tax, including "based on cart items") by running `wp option update twoinc_shipping_tax_from_shop_rates yes`.
+* An order whose shipping tax does not match its declared rate is refused at checkout.
+* Compound tax rates are declared at their true combined rate.
+* A refund declares the tax rates the order was charged at, not the shop's current rates, and its shipping tax is checked against them. A refund of the tax alone, or of the net alone, is sent as such.
+* Refunds and order edits of an order whose shipping rate came from the shop's rates use the rate recorded at checkout. For an order placed before 3.0.0 whose shipping was taxed with no tax rate recorded, the rate is taken from the shop's shipping tax class and must match the tax the order was charged, or the refund is refused with a named error.
+* Requires WooCommerce 7.6 or later.
 
 = 2.25.0 =
 
@@ -159,6 +171,9 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 Older releases are listed at https://github.com/two-inc/woocommerce-plugin/releases
 
 == Upgrade Notice ==
+
+= 3.0.0 =
+Removes the "Default shipping tax class" setting, with no migration. A shipping line charged tax without a recorded tax rate is now refused at checkout; see the changelog for the WP-CLI option that takes the rate from WooCommerce's shipping tax class instead.
 
 = 2.25.0 =
 Adds an optional line about paying by invoice on your product pages, and an optional buy button beside Add to cart. Nothing changes until you switch them on under WooCommerce > Settings > Payments > Two.
