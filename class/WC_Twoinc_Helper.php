@@ -14,6 +14,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         private const SHIPPING_TAX_RATE_META = 'shipping_tax_rate';
 
+        public const ORDER_POSTPROCESSING_CONTRACT_VERSION = 1;
+
         /**
          * Reduces buyer-facing copy to text plus links: an `<a>` with an
          * http(s) href survives, every other tag is dropped and its text kept,
@@ -1046,6 +1048,444 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * The order-intent body, from the same line builder as the order so intent and create declare the same
+         * lines. `$order` is the unsaved order build_intent_order_from_cart() assembles from the cart.
+         *
+         * @param WC_Order $order
+         * @param array    $buyer
+         *
+         * @return array
+         */
+        public static function compose_twoinc_intent($order, $buyer)
+        {
+            return [
+                'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),
+                'net_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() - $order->get_total_tax())),
+                'tax_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_tax())),
+                'invoice_type' => 'FUNDED_INVOICE',
+                'buyer' => $buyer,
+                'currency' => $order->get_currency(),
+                'line_items' => WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order),
+            ];
+        }
+
+        /**
+         * An unsaved order carrying the live cart's lines, totals and tax rows, so the intent reuses the order's
+         * line builder. Nothing is persisted.
+         *
+         * @return WC_Order|null null when there is no cart to build from
+         */
+        public static function build_intent_order_from_cart()
+        {
+            if (!WC()->cart || WC()->cart->is_empty()) {
+                return null;
+            }
+            // Fees and shipping packages are not held in the session, only recomputed.
+            WC()->cart->calculate_totals();
+            $order = new WC_Order();
+            $order->set_currency(get_woocommerce_currency());
+            $order->set_prices_include_tax('yes' === get_option('woocommerce_prices_include_tax'));
+            $customer = WC()->customer;
+            if ($customer) {
+                foreach (['billing', 'shipping'] as $role) {
+                    foreach (['company', 'address_1', 'address_2', 'postcode', 'city', 'state', 'country'] as $field) {
+                        $order->{"set_{$role}_{$field}"}($customer->{"get_{$role}_{$field}"}());
+                    }
+                }
+            }
+            WC()->checkout()->set_data_from_cart($order);
+            return $order;
+        }
+
+        /**
+         * The context `twoinc_order_postprocessing` subscribers receive (TWO-26092). Keys are part of the stable
+         * contract documented in the README: add, never remove or rename.
+         *
+         * @param string                    $request_type
+         * @param string                    $trigger
+         * @param string                    $endpoint
+         * @param WC_Order                  $order
+         * @param WC_Order_Refund|null      $refund
+         *
+         * @return array
+         */
+        public static function order_postprocessing_context($request_type, $trigger, $endpoint, $order, $refund = null)
+        {
+            $rate = self::get_configured_shipping_tax_rate($order);
+            $fallback_option = WC_Twoinc_Brand::prefixed_name(WC_Twoinc::SHIPPING_TAX_FROM_SHOP_RATES_OPTION);
+
+            return [
+                'request_type' => $request_type,
+                'trigger' => $trigger,
+                'endpoint' => $endpoint,
+                'order' => $order,
+                'refund' => $refund,
+                'shipping_tax_rate' => $rate,
+                'fallback_shipping_tax_rate' => 'yes' === get_option($fallback_option) ? $rate : null,
+                'contract_version' => self::ORDER_POSTPROCESSING_CONTRACT_VERSION,
+            ];
+        }
+
+        /**
+         * The one choke point every outbound order request passes before it is sent (TWO-26092): fires
+         * `twoinc_order_postprocessing`, runs the consistency gates on what it returns, and records any change.
+         * Never recomputes anything after the hook.
+         *
+         * @param array $payload the body exactly as it would be sent; [] for a request with no body
+         * @param array $context from order_postprocessing_context()
+         * @param bool  $record  false for a payload that is only hashed, never sent
+         *
+         * @return array the payload to send
+         * @throws WC_Twoinc_Order_Postprocessing_Exception when a subscriber threw or broke a gate
+         * @throws Exception when a gate fails on a payload no subscriber changed
+         */
+        public static function postprocess_order_request(array $payload, array $context, $record = true)
+        {
+            try {
+                /**
+                 * Stable extension contract, see README "Stable extension contract: order postprocessing".
+                 *
+                 * @param array $payload The complete request body.
+                 * @param array $context request_type, trigger, endpoint, order, refund, shipping_tax_rate,
+                 *                       fallback_shipping_tax_rate, contract_version.
+                 */
+                $processed = apply_filters('twoinc_order_postprocessing', $payload, $context);
+            } catch (Throwable $e) {
+                self::refuse_postprocessing('TWO_ORDER_POSTPROCESSING_HOOK_FAILED', $context, 'subscriber threw ' . get_class($e) . ': ' . $e->getMessage(), []);
+            }
+            if (!is_array($processed)) {
+                self::refuse_postprocessing('TWO_ORDER_POSTPROCESSING_HOOK_FAILED', $context, 'subscriber returned ' . gettype($processed) . ', not an array', []);
+            }
+
+            $diff = self::payload_diff($payload, $processed);
+            $failure = self::find_order_gate_failure($context['request_type'], $payload === [], $processed);
+            if ($failure !== null) {
+                if ($diff !== []) {
+                    self::refuse_postprocessing($failure['code'], $context, $failure['detail'], $diff);
+                }
+                if (function_exists('wc_get_logger')) {
+                    wc_get_logger()->error(
+                        sprintf('%s request refused: %s', $context['request_type'], $failure['detail']),
+                        ['source' => 'twoinc-payment-gateway']
+                    );
+                }
+                throw new Exception($failure['message']);
+            }
+
+            if ($diff !== [] && $record) {
+                $summary = self::describe_payload_diff($diff);
+                if (function_exists('wc_get_logger')) {
+                    wc_get_logger()->info(
+                        sprintf('Order postprocessing changed the %s request: %s', $context['request_type'], $summary),
+                        ['source' => 'twoinc-payment-gateway']
+                    );
+                }
+                $order = $context['order'];
+                if ($order && $order->get_id()) {
+                    $order->add_order_note(sprintf(
+                        /* translators: 1: request type (e.g. order_update). 2: product name (e.g. Two). 3: changed fields with before and after values. */
+                        __('Order postprocessing changed the %1$s request sent to %2$s: %3$s', 'twoinc-payment-gateway'),
+                        $context['request_type'],
+                        WC_Twoinc_Brand::get('product_name'),
+                        $summary
+                    ));
+                }
+            }
+
+            return $processed;
+        }
+
+        /**
+         * Opt-in for `twoinc_order_postprocessing` subscribers (TWO-26092): rebuilds the order totals, the tax
+         * subtotals and a refund's amount from the payload's own line items, touching only the fields the payload
+         * already carries. Arithmetic only; part of the stable contract.
+         *
+         * @param array $payload
+         *
+         * @return array
+         */
+        public static function recompute_totals_from_lines(array $payload)
+        {
+            $lines = isset($payload['line_items']) && is_array($payload['line_items']) ? $payload['line_items'] : [];
+            $sums = self::sum_lines($lines);
+            if (array_key_exists('gross_amount', $payload)) {
+                $payload['net_amount'] = self::format_amount($sums['net']);
+                $payload['tax_amount'] = self::format_amount($sums['tax']);
+                $payload['gross_amount'] = self::format_amount($sums['gross']);
+            }
+            if (array_key_exists('tax_subtotals', $payload)) {
+                $payload['tax_subtotals'] = [];
+                foreach (self::sum_lines_by_rate($lines) as $rate => $bucket) {
+                    $payload['tax_subtotals'][] = [
+                        'tax_amount' => self::format_amount($bucket['tax']),
+                        'tax_rate' => $rate,
+                        'taxable_amount' => self::format_amount($bucket['net']),
+                    ];
+                }
+            }
+            if (array_key_exists('amount', $payload) && $lines !== []) {
+                $sign = (float) $payload['amount'] < 0 ? -1 : 1;
+                $payload['amount'] = self::format_amount($sign * abs($sums['gross']));
+            }
+            return $payload;
+        }
+
+        /**
+         * The plugin's consistency gates (TWO-26092), run on the final payload whoever produced it.
+         *
+         * @param string $request_type
+         * @param bool   $bodyless     the request is defined with no body
+         * @param array  $payload
+         *
+         * @return array|null ['code', 'message', 'detail'] for the first failure, null when every gate passes
+         */
+        private static function find_order_gate_failure($request_type, $bodyless, array $payload)
+        {
+            if ($bodyless) {
+                return $payload === [] ? null : self::gate_failure(
+                    'TWO_ORDER_POSTPROCESSING_BODY_NOT_ACCEPTED',
+                    __('This request is sent without a body.', 'twoinc-payment-gateway'),
+                    'a body was added to a request the API defines with none'
+                );
+            }
+
+            $lines = isset($payload['line_items']) && is_array($payload['line_items']) ? $payload['line_items'] : [];
+            foreach ($lines as $index => $line) {
+                $failure = self::find_line_failure($index, is_array($line) ? $line : [], $request_type === 'refund');
+                if ($failure !== null) {
+                    return $failure;
+                }
+            }
+            if ($lines === []) {
+                return null;
+            }
+            // Each line is rounded on its own, so a sum may drift a cent per line from the rounded total.
+            $tolerance = max(self::TAX_RECONCILE_TOLERANCE, 0.01 * count($lines));
+            $sums = self::sum_lines($lines);
+
+            if (isset($payload['tax_subtotals']) && is_array($payload['tax_subtotals'])) {
+                $declared = [];
+                foreach ($payload['tax_subtotals'] as $subtotal) {
+                    $rate = self::round_rate((float) ($subtotal['tax_rate'] ?? 0));
+                    $declared[$rate]['net'] = ($declared[$rate]['net'] ?? 0.0) + (float) ($subtotal['taxable_amount'] ?? 0);
+                    $declared[$rate]['tax'] = ($declared[$rate]['tax'] ?? 0.0) + (float) ($subtotal['tax_amount'] ?? 0);
+                }
+                $from_lines = self::sum_lines_by_rate($lines);
+                foreach (array_unique(array_merge(array_keys($declared), array_keys($from_lines))) as $rate) {
+                    $want = $from_lines[$rate] ?? ['net' => 0.0, 'tax' => 0.0];
+                    $have = $declared[$rate] ?? ['net' => 0.0, 'tax' => 0.0];
+                    if (abs($want['net'] - $have['net']) > $tolerance + 1e-9 || abs($want['tax'] - $have['tax']) > $tolerance + 1e-9) {
+                        return self::gate_failure(
+                            'TWO_ORDER_POSTPROCESSING_SUBTOTALS_INCONSISTENT',
+                            __('The tax subtotals do not match the order lines.', 'twoinc-payment-gateway'),
+                            sprintf(
+                                'tax subtotal at rate %s declares net %s, tax %s; the lines at that rate sum to net %s, tax %s',
+                                $rate,
+                                self::format_amount($have['net']),
+                                self::format_amount($have['tax']),
+                                self::format_amount($want['net']),
+                                self::format_amount($want['tax'])
+                            )
+                        );
+                    }
+                }
+            }
+
+            if (array_key_exists('gross_amount', $payload)) {
+                $net = (float) ($payload['net_amount'] ?? 0);
+                $tax = (float) ($payload['tax_amount'] ?? 0);
+                $gross = (float) $payload['gross_amount'];
+                if (
+                    abs($net + $tax - $gross) > self::TAX_RECONCILE_TOLERANCE + 1e-9
+                    || abs($sums['net'] - $net) > $tolerance + 1e-9
+                    || abs($sums['tax'] - $tax) > $tolerance + 1e-9
+                    || abs($sums['gross'] - $gross) > $tolerance + 1e-9
+                ) {
+                    return self::gate_failure(
+                        'TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT',
+                        __('The order totals do not match the order lines.', 'twoinc-payment-gateway'),
+                        sprintf(
+                            'order declares net %s, tax %s, gross %s; the lines sum to net %s, tax %s, gross %s',
+                            self::format_amount($net),
+                            self::format_amount($tax),
+                            self::format_amount($gross),
+                            self::format_amount($sums['net']),
+                            self::format_amount($sums['tax']),
+                            self::format_amount($sums['gross'])
+                        )
+                    );
+                }
+            }
+
+            if (array_key_exists('amount', $payload) && abs(abs((float) $payload['amount']) - abs($sums['gross'])) > $tolerance + 1e-9) {
+                return self::gate_failure(
+                    'TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT',
+                    __('The refund amount does not match the refunded lines.', 'twoinc-payment-gateway'),
+                    sprintf('refund amount %s; the lines sum to gross %s', $payload['amount'], self::format_amount($sums['gross']))
+                );
+            }
+
+            return null;
+        }
+
+        /**
+         * @return array|null
+         */
+        private static function find_line_failure($index, array $line, $is_refund)
+        {
+            $name = (string) ($line['name'] ?? '');
+            $net = round((float) ($line['net_amount'] ?? 0), 2);
+            $tax = round((float) ($line['tax_amount'] ?? 0), 2);
+            $gross = round((float) ($line['gross_amount'] ?? 0), 2);
+            // Epsilon: 0.02 itself is not exactly representable.
+            if (abs($net + $tax - $gross) > self::TAX_RECONCILE_TOLERANCE + 1e-9) {
+                return self::gate_failure(
+                    'TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT',
+                    sprintf(
+                        /* translators: %s: order line name */
+                        __('The amounts on "%s" do not add up.', 'twoinc-payment-gateway'),
+                        $name
+                    ),
+                    sprintf('line %d "%s": net %s + tax %s != gross %s', $index, $name, $net, $tax, $gross)
+                );
+            }
+            // A refund may return only the net or only the tax (e.g. VAT charged to a reverse-charge buyer).
+            if (!isset($line['tax_rate']) || ($is_refund && (!$net || !$tax))) {
+                return null;
+            }
+            $rate = (float) $line['tax_rate'];
+            $expected = round($net * $rate, 2);
+            if (abs($tax - $expected) <= self::TAX_RECONCILE_TOLERANCE + 1e-9) {
+                return null;
+            }
+            return self::gate_failure(
+                'TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT',
+                sprintf(
+                    /* translators: %s: order line name */
+                    __('The tax charged on "%s" does not match the shop\'s tax rates.', 'twoinc-payment-gateway'),
+                    $name
+                ),
+                sprintf(
+                    'declared tax rate does not reconcile with the tax charged on line %d "%s": rate %s, net %s, tax %s, expected tax %s. Check the shop tax rates for this line.',
+                    $index,
+                    $name,
+                    self::round_rate($rate),
+                    $net,
+                    $tax,
+                    $expected
+                )
+            );
+        }
+
+        /**
+         * @return array
+         */
+        private static function gate_failure($code, $message, $detail)
+        {
+            return ['code' => $code, 'message' => $message, 'detail' => $detail];
+        }
+
+        /**
+         * @return never
+         * @throws WC_Twoinc_Order_Postprocessing_Exception
+         */
+        private static function refuse_postprocessing($code, array $context, $detail, array $diff)
+        {
+            if (function_exists('wc_get_logger')) {
+                wc_get_logger()->error(
+                    sprintf(
+                        '%s: %s request refused after order postprocessing: %s. Changed: %s',
+                        $code,
+                        $context['request_type'],
+                        $detail,
+                        $diff === [] ? 'nothing' : self::describe_payload_diff($diff)
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
+            throw new WC_Twoinc_Order_Postprocessing_Exception(
+                $code,
+                sprintf(
+                    /* translators: 1: request type (e.g. order_update). 2: product name (e.g. Two). 3: refusal code. */
+                    __('The %1$s request was not sent to %2$s: the order postprocessing hook produced a payload that failed a consistency check (%3$s).', 'twoinc-payment-gateway'),
+                    $context['request_type'],
+                    WC_Twoinc_Brand::get('product_name'),
+                    $code
+                )
+            );
+        }
+
+        /**
+         * Leaf-level changes as JSON pointers; key order is not a change, list order is.
+         *
+         * @return array list of ['path', 'before', 'after']
+         */
+        private static function payload_diff($before, $after, $path = '')
+        {
+            if (!is_array($before) || !is_array($after)) {
+                return $before === $after ? [] : [['path' => $path, 'before' => $before, 'after' => $after]];
+            }
+            $diff = [];
+            foreach (array_unique(array_merge(array_keys($before), array_keys($after)), SORT_REGULAR) as $key) {
+                $sub = $path . '/' . str_replace(['~', '/'], ['~0', '~1'], (string) $key);
+                if (!array_key_exists($key, $before)) {
+                    $diff[] = ['path' => $sub, 'before' => null, 'after' => $after[$key]];
+                } elseif (!array_key_exists($key, $after)) {
+                    $diff[] = ['path' => $sub, 'before' => $before[$key], 'after' => null];
+                } else {
+                    $diff = array_merge($diff, self::payload_diff($before[$key], $after[$key], $sub));
+                }
+            }
+            return $diff;
+        }
+
+        /**
+         * @return string
+         */
+        private static function describe_payload_diff(array $diff)
+        {
+            return implode('; ', array_map(static function ($entry) {
+                return sprintf('%s: %s -> %s', $entry['path'], json_encode($entry['before']), json_encode($entry['after']));
+            }, $diff));
+        }
+
+        /**
+         * @return array ['net', 'tax', 'gross'] as floats
+         */
+        private static function sum_lines(array $lines)
+        {
+            $sums = ['net' => 0.0, 'tax' => 0.0, 'gross' => 0.0];
+            foreach ($lines as $line) {
+                $sums['net'] += (float) ($line['net_amount'] ?? 0);
+                $sums['tax'] += (float) ($line['tax_amount'] ?? 0);
+                $sums['gross'] += (float) ($line['gross_amount'] ?? 0);
+            }
+            return $sums;
+        }
+
+        /**
+         * @return array rate (6dp string) => ['net', 'tax'], in first-seen order
+         */
+        private static function sum_lines_by_rate(array $lines)
+        {
+            $buckets = [];
+            foreach ($lines as $line) {
+                $rate = self::round_rate((float) ($line['tax_rate'] ?? 0));
+                $buckets[$rate]['net'] = ($buckets[$rate]['net'] ?? 0.0) + (float) ($line['net_amount'] ?? 0);
+                $buckets[$rate]['tax'] = ($buckets[$rate]['tax'] ?? 0.0) + (float) ($line['tax_amount'] ?? 0);
+            }
+            return $buckets;
+        }
+
+        /**
+         * @return string
+         */
+        private static function format_amount($amount)
+        {
+            return number_format(round((float) $amount, 2) + 0.0, 2, '.', '');
+        }
+
+        /**
          * @return void
          */
         public static function append_admin_force_reload()
@@ -1377,7 +1817,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 '',
                 true
             );
-            return WC_Twoinc_Helper::hash_obj($twoinc_order);
+            $context = self::order_postprocessing_context('order_create', 'change_hash', '/v1/order', $order);
+            return WC_Twoinc_Helper::hash_obj(self::postprocess_order_request($twoinc_order, $context, false));
         }
 
         /**
@@ -1479,11 +1920,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if (!$resolved['rate'] && round((float) $charged->get_total_tax(), 2) !== 0.0) {
                 $resolved = self::get_undeclared_shipping_tax_rate($charged, $order);
             }
-            // A refund may return only the net or only the tax (e.g. VAT charged to a reverse-charge buyer).
-            $partial = !round((float) $shipping->get_total(), 2) || !round((float) $shipping->get_total_tax(), 2);
-            if (!$is_refund || !$partial) {
-                self::assert_tax_reconciles($shipping, $resolved['rate']);
-            }
             return $resolved;
         }
 
@@ -1558,6 +1994,39 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         private static function get_shop_shipping_tax_rate($shipping, $order)
         {
+            $tax_class = self::get_shop_shipping_tax_class($order);
+            $rates = [];
+            if (null !== $tax_class && wc_tax_enabled() && 'taxable' === $shipping->get_tax_status()) {
+                $rates = WC_Tax::find_shipping_rates(array_merge($order->get_taxable_location(), ['tax_class' => $tax_class]));
+            }
+            return self::get_tax_rate_from_tax_list(self::shop_rate_list($rates));
+        }
+
+        /**
+         * The rate WooCommerce's shipping tax class setting would apply at the order's tax address, whether or not
+         * its shipping was taxed; null when none is configured. Deliberately separate from the reconciliation
+         * resolvers above: this reports configuration, they describe the tax actually charged.
+         *
+         * @return float|null
+         */
+        public static function get_configured_shipping_tax_rate($order)
+        {
+            $tax_class = self::get_shop_shipping_tax_class($order);
+            if (null === $tax_class || !wc_tax_enabled()) {
+                return null;
+            }
+            $rates = WC_Tax::find_shipping_rates(array_merge($order->get_taxable_location(), ['tax_class' => $tax_class]));
+            if (!$rates) {
+                return null;
+            }
+            return (float) self::get_tax_rate_from_tax_list(self::shop_rate_list($rates))['rate'];
+        }
+
+        /**
+         * @return string|null null when "based on cart items" finds no taxable item to follow
+         */
+        private static function get_shop_shipping_tax_class($order)
+        {
             $tax_class = get_option('woocommerce_shipping_tax_class');
             if ('inherit' === $tax_class) {
                 $found_classes = array_intersect(
@@ -1566,20 +2035,23 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 );
                 $tax_class = count($found_classes) ? current($found_classes) : (count($order->get_items()) ? null : '');
             }
-            $location = $order->get_taxable_location();
-            if (null !== $tax_class) {
-                $tax_class = apply_filters(
-                    'woocommerce_shipping_tax_class',
-                    $tax_class,
-                    null,
-                    null,
-                    array_values($location)
-                );
+            if (null === $tax_class) {
+                return null;
             }
-            $rates = [];
-            if (null !== $tax_class && wc_tax_enabled() && 'taxable' === $shipping->get_tax_status()) {
-                $rates = WC_Tax::find_shipping_rates(array_merge($location, ['tax_class' => $tax_class]));
-            }
+            return apply_filters(
+                'woocommerce_shipping_tax_class',
+                $tax_class,
+                null,
+                null,
+                array_values($order->get_taxable_location())
+            );
+        }
+
+        /**
+         * @return array
+         */
+        private static function shop_rate_list($rates)
+        {
             $tax_rate_list = [];
             foreach ($rates as $rate) {
                 $tax_rate_list[] = [
@@ -1588,11 +2060,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'compound' => 'yes' === $rate['compound'],
                 ];
             }
-            return self::get_tax_rate_from_tax_list($tax_rate_list);
+            return $tax_rate_list;
         }
 
         /**
-         * Same check and tolerance as the PrestaShop and Magento plugins.
+         * Guards a rate resolved from the shop's configuration against the tax the line was charged.
          *
          * @throws Exception
          */

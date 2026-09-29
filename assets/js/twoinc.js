@@ -5182,12 +5182,6 @@ class Twoinc {
       // one POST per second against a 30s timeout — up to thirty
       // outstanding requests, all but the last already unwanted.
       inFlightXhr: null,
-      // Ticks spent waiting for a readable cart total. The interval body
-      // cannot proceed without one and used to retry forever, leaking a
-      // 1s timer for the life of the page. See the `!gross_amount` branch.
-      // Reset in exactly one place — where a check is armed — because
-      // that is the only place it can be stale by the time it matters.
-      priceWaitTicks: 0,
       // The timer that waits out a WooCommerce checkout re-render before
       // painting a verdict. Held here rather than in a local, so that
       // abandonOrderIntentCheck() can cancel it: it used to be unreachable, and
@@ -5594,8 +5588,7 @@ class Twoinc {
    *
    * NOT used where a check ends before its request goes out: no loading state is
    * up then, so there is nothing to take down and the blanket reset below would
-   * only wipe whatever else the tile was showing. The cart-total give-up disarms
-   * quietly for exactly that reason.
+   * only wipe whatever else the tile was showing.
    *
    * `togglePaySubtitleDesc()` with no argument is the blanket hide-every-pay-box
    * reset, which is the right end state: there is no verdict to show, and
@@ -5745,74 +5738,19 @@ class Twoinc {
       return;
     }
 
-    this.orderIntentCheck.priceWaitTicks = 0;
     this.orderIntentCheck.interval = setInterval(function () {
-      let gross_amount = twoincDomHelper.getPrice("order-total");
-      let tax_amount = twoincDomHelper.getPrice("tax-rate");
-      if (!gross_amount) {
-        // Bounded, not forever: there are carts where a total never
-        // succeeds (a 100%-discounted order's total of 0 is falsy every
-        // tick; a theme whose totals markup `getPrice()` can't read never
-        // yields one). An unbounded interval would leak for the life of
-        // the page and keep `pendingCheck` re-entering the 3s poller.
-        //
-        // Ten ticks: the only legitimate reason to wait is a totals block
-        // WooCommerce is still re-rendering, which is sub-second. Giving
-        // up costs nothing — the next blur or `updated_checkout` arms a
-        // fresh check.
-        if (++Twoinc.getInstance().orderIntentCheck.priceWaitTicks < 10) return;
-        // Disarm quietly: no loading state is up during the price wait —
-        // it goes up with the request — so there is nothing of this
-        // check's to take off screen, and abandonOrderIntentCheck()'s
-        // blanket reset would instead wipe whatever else was there.
-        // Deliberately does not touch an outstanding request either —
-        // that is a live question this wait knows nothing about.
-        clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
-        Twoinc.getInstance().orderIntentCheck.interval = null;
-        Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
-        return;
-      }
-      if (!tax_amount) {
-        tax_amount = 0;
-      }
-      let net_amount = gross_amount - tax_amount;
-
-      // Merchant identity is not sent: the proxy resolves it server-side.
+      // Only the buyer is sent: the server composes amounts and lines from the cart (TWO-26092).
       let jsonBody = JSON.stringify({
-        gross_amount: gross_amount.toFixed(2),
-        net_amount: net_amount.toFixed(2),
-        tax_amount: tax_amount.toFixed(2),
-        invoice_type: "FUNDED_INVOICE",
         buyer: {
           company: Twoinc.getInstance().customerCompany,
           representative: Twoinc.getInstance().customerRepresentative
-        },
-        currency: window.twoinc.currency,
-        line_items: [
-          {
-            name: "Cart",
-            description: "",
-            gross_amount: gross_amount.toFixed(2),
-            net_amount: net_amount.toFixed(2),
-            discount_amount: "0",
-            tax_amount: tax_amount.toFixed(2),
-            tax_class_name: "VAT " + ((100.0 * tax_amount) / net_amount).toFixed(2) + "%",
-            tax_rate: "" + ((1.0 * tax_amount) / net_amount).toFixed(6),
-            unit_price: net_amount.toFixed(2),
-            quantity: 1,
-            quantity_unit: "item",
-            image_url: "",
-            product_page_url: "",
-            type: "PHYSICAL",
-            details: {
-              categories: [],
-              barcodes: []
-            }
-          }
-        ]
+        }
       });
 
-      let hashedBody = twoincUtilHelper.getUnsecuredHash(jsonBody);
+      // The displayed total keys the verdict cache, so a changed cart is asked about again.
+      let hashedBody = twoincUtilHelper.getUnsecuredHash(
+        jsonBody + "|" + twoincDomHelper.getPrice("order-total")
+      );
       if (Twoinc.getInstance().orderIntentLog[hashedBody]) {
         // This body has already been answered — render the cached verdict
         // and disarm: leaving the interval running would re-render the
@@ -5856,8 +5794,7 @@ class Twoinc {
       }
 
       // Re-asserted rather than relied upon from getApproval(): a `pendingCheck`
-      // re-arm comes straight back here, and the run of ticks spent waiting for
-      // a cart total sits between the two.
+      // re-arm comes straight back here.
       twoincDomHelper.togglePaySubtitleDesc("checking-intent");
 
       // Retire the previous request before issuing this one: the interval

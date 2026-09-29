@@ -4693,7 +4693,7 @@ if (!class_exists('WC_Twoinc')) {
             $shipping_details = WC_Twoinc_Helper::get_shipping_details($order);
             if (isset($shipping_details['tracking_number']) && $shipping_details['tracking_number'] !== '') {
                 $twoinc_meta = $this->get_save_twoinc_meta($order);
-                $tracking_synced = $twoinc_meta && $this->process_update_twoinc_order($order, $twoinc_meta);
+                $tracking_synced = $twoinc_meta && $this->process_update_twoinc_order($order, $twoinc_meta, false, 'tracking_number');
                 if (!$tracking_synced) {
                     // The generic edit-failure note already added downstream
                     // says "contact support"; this one says what was
@@ -4705,7 +4705,12 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
 
-            $response = $this->make_request("/v1/order/{$twoinc_order_id}/fulfillments");
+            try {
+                $response = $this->make_order_request('capture', 'status_change', "/v1/order/{$twoinc_order_id}/fulfillments", [], 'POST', $order);
+            } catch (WC_Twoinc_Order_Postprocessing_Exception $e) {
+                $order->add_order_note($e->getMessage());
+                return false;
+            }
 
             if (is_wp_error($response)) {
                 $error_message = sprintf(
@@ -4776,7 +4781,12 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
-            $response = $this->make_request("/v1/order/{$twoinc_order_id}/cancel");
+            try {
+                $response = $this->make_order_request('cancel', 'status_change', "/v1/order/{$twoinc_order_id}/cancel", [], 'POST', $order);
+            } catch (WC_Twoinc_Order_Postprocessing_Exception $e) {
+                $order->add_order_note($e->getMessage());
+                return false;
+            }
 
             if (is_wp_error($response)) {
                 $error_message = __('Could not update status to "Cancelled".', 'twoinc-payment-gateway');
@@ -5554,7 +5564,7 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
 
-            $response = $this->make_request('/v1/order', WC_Twoinc_Helper::compose_twoinc_order(
+            $create_body = WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $order_reference,
                 $company_id,
@@ -5570,7 +5580,15 @@ if (!class_exists('WC_Twoinc')) {
                 $tracking_id,
                 false,
                 $payment_terms
-            ));
+            );
+            try {
+                $response = $this->make_order_request('order_create', 'checkout', '/v1/order', $create_body, 'POST', $order);
+            } catch (WC_Twoinc_Order_Postprocessing_Exception $e) {
+                $order->add_order_note($e->getMessage());
+                $error_message = sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
+                WC_Twoinc_Helper::display_ajax_error($error_message);
+                return self::payment_failure($error_message);
+            }
 
             if (is_wp_error($response)) {
                 $error_message = sprintf(__('Failed to request order creation with %s.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
@@ -5710,11 +5728,20 @@ if (!class_exists('WC_Twoinc')) {
                 );
             }
 
-            $response = $this->make_request(
-                "/v1/order/{$twoinc_order_id}/refund",
-                WC_Twoinc_Helper::compose_twoinc_refund($order_refund, $amount, $order),
-                'POST'
-            );
+            try {
+                $response = $this->make_order_request(
+                    'refund',
+                    'order_refund',
+                    "/v1/order/{$twoinc_order_id}/refund",
+                    WC_Twoinc_Helper::compose_twoinc_refund($order_refund, $amount, $order),
+                    'POST',
+                    $order,
+                    $order_refund
+                );
+            } catch (WC_Twoinc_Order_Postprocessing_Exception $e) {
+                $order->add_order_note($e->getMessage());
+                return new WP_Error('invalid_twoinc_refund', $e->getMessage());
+            }
 
             if (is_wp_error($response)) {
                 $error_message = sprintf(__('Failed to request order refund with %s.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
@@ -5887,7 +5914,12 @@ if (!class_exists('WC_Twoinc')) {
                 wp_die($error_message);
             }
 
-            $response = $this->make_request("/v1/order/{$twoinc_order_id}/confirm", [], 'POST');
+            try {
+                $response = $this->make_order_request('order_confirm', 'confirmation_redirect', "/v1/order/{$twoinc_order_id}/confirm", [], 'POST', $order);
+            } catch (WC_Twoinc_Order_Postprocessing_Exception $e) {
+                $order->add_order_note($e->getMessage());
+                return wp_specialchars_decode($order->get_cancel_order_url());
+            }
 
             // Stop if request error or $response['response']['code'] < 400
             if (is_wp_error($response)) {
@@ -6880,7 +6912,7 @@ if (!class_exists('WC_Twoinc')) {
          *                 or no update needed), false when an update was
          *                 attempted and failed or the state forbids edits.
          */
-        private function process_update_twoinc_order($order, $twoinc_meta, $forced_reload = false)
+        private function process_update_twoinc_order($order, $twoinc_meta, $forced_reload = false, $trigger = 'admin_edit')
         {
             $state = $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
             if (in_array($state, self::TERMINAL_ORDER_STATES)) {
@@ -6898,7 +6930,7 @@ if (!class_exists('WC_Twoinc')) {
                 $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
                 $updated = true;
                 if (!$twoinc_order_hash || $twoinc_order_hash != $twoinc_updated_order_hash) {
-                    $updated = $this->update_twoinc_order($order, $twoinc_meta);
+                    $updated = $this->update_twoinc_order($order, $twoinc_meta, $trigger);
                     if ($updated) {
                         $order->update_meta_data(WC_Twoinc_Brand::meta_key('req_body_hash'), $twoinc_updated_order_hash);
                         $order->save();
@@ -6932,7 +6964,7 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @return boolean
          */
-        private function update_twoinc_order($order, $twoinc_meta = null)
+        private function update_twoinc_order($order, $twoinc_meta = null, $trigger = 'admin_edit')
         {
 
             $twoinc_order_id = $this->get_twoinc_order_id($order);
@@ -6953,7 +6985,9 @@ if (!class_exists('WC_Twoinc')) {
 
             // 2. Edit the order
             $order = wc_get_order($order->get_id());
-            $response = $this->make_request(
+            $response = $this->make_order_request(
+                'order_update',
+                $trigger,
                 "/v1/order/{$twoinc_order_id}",
                 WC_Twoinc_Helper::compose_twoinc_edit_order(
                     $order,
@@ -6962,7 +6996,8 @@ if (!class_exists('WC_Twoinc')) {
                     $twoinc_meta['purchase_order_number'],
                     $twoinc_meta['vendor_name']
                 ),
-                'PUT'
+                'PUT',
+                $order
             );
 
             if (is_wp_error($response)) {
@@ -7199,6 +7234,23 @@ if (!class_exists('WC_Twoinc')) {
                 'authorization',
                 'cookie',
             ];
+        }
+
+        /**
+         * Every order request is sent through here, so `twoinc_order_postprocessing` and its gates see each one
+         * (TWO-26092).
+         *
+         * @param WC_Order             $order  the order, or for an intent the unsaved order built from the cart
+         * @param WC_Order_Refund|null $refund
+         *
+         * @return WP_Error|array
+         * @throws WC_Twoinc_Order_Postprocessing_Exception
+         * @throws Exception when a gate fails on a payload no subscriber changed
+         */
+        public function make_order_request($request_type, $trigger, $endpoint, array $payload, $method, $order, $refund = null)
+        {
+            $context = WC_Twoinc_Helper::order_postprocessing_context($request_type, $trigger, $endpoint, $order, $refund);
+            return $this->make_request($endpoint, WC_Twoinc_Helper::postprocess_order_request($payload, $context), $method);
         }
 
         /**

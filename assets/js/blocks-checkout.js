@@ -196,7 +196,7 @@
 
   /**
    * The order total and tax, in the markup `twoincDomHelper.getPrice()`
-   * reads. The order-intent check polls for them before it will ask, and
+   * reads. The order-intent check keys its verdict cache on the total, and
    * Blocks' own totals carry none of the classic classes.
    */
   function priceNodes() {

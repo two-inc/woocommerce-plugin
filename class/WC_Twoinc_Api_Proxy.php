@@ -8,20 +8,6 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
      */
     class WC_Twoinc_Api_Proxy
     {
-        /**
-         * The order-intent fields the browser is trusted to supply. Everything
-         * else it sends is dropped: the relay spends the merchant's API key.
-         */
-        private const INTENT_FIELDS = [
-            'gross_amount',
-            'net_amount',
-            'tax_amount',
-            'invoice_type',
-            'buyer',
-            'currency',
-            'line_items',
-        ];
-
         /** @return WC_Twoinc|null Null when the request was already refused. */
         private static function authorize(string $handler, string $route)
         {
@@ -158,11 +144,25 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
                 wp_send_json_error('Buyer country not supported');
                 return;
             }
-            $payload = array_intersect_key($posted, array_flip(self::INTENT_FIELDS));
+            $order = WC_Twoinc_Helper::build_intent_order_from_cart();
+            if (!$order) {
+                self::log_refusal('order intent', 'no cart to compose the intent from');
+                wp_send_json_error('Invalid order intent payload');
+                return;
+            }
+            // Only the buyer comes from the browser: the relay spends the merchant's API key.
+            $buyer = is_array($posted['buyer'] ?? null) ? $posted['buyer'] : [];
+            $payload = WC_Twoinc_Helper::compose_twoinc_intent($order, $buyer);
             // Merchant identity is resolved here, never read from the request.
             $payload['merchant_id'] = (string) $gateway->get_merchant_id();
             $payload['merchant_short_name'] = (string) $gateway->get_option('merchant_short_name');
-            $response = $gateway->make_request('/v1/order_intent', $payload, 'POST');
+            try {
+                $response = $gateway->make_order_request('order_intent', 'checkout', '/v1/order_intent', $payload, 'POST', $order);
+            } catch (Exception $e) {
+                self::log_refusal('order intent', $e->getMessage());
+                wp_send_json_error('Order intent refused');
+                return;
+            }
             self::record_verdict($company, $response);
             self::relay($response);
         }
