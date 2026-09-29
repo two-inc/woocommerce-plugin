@@ -61,6 +61,11 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 
 == Changelog ==
 
+= 2.25.1 =
+
+* A shipping line charged tax without a recorded rate now declares the rate WooCommerce itself charges shipping at (WooCommerce > Settings > Tax > Shipping tax class, including "based on cart items"). An order whose shipping tax does not match its rate is refused at checkout rather than sent as untaxed. The plugin's own "Default shipping tax class" setting is removed and its stored value dropped on upgrade.
+* Compound tax rates are declared at their true combined rate.
+
 = 2.25.0 =
 
 * You can now show a short line about paying by invoice on your product pages, under the add to cart button, so a buyer sees the option before filling a basket. It is off until you switch it on under WooCommerce > Settings > Payments > Two, where you can also replace the wording with your own. Where exactly the line lands on the page depends on your theme.

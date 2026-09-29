@@ -1325,6 +1325,8 @@ if (!class_exists('WC_Twoinc')) {
          * - `enable_company_name`: renamed to `enable_company_search`. Runs
          *   AFTER migrate_legacy_company_search_key(), so the value is
          *   already carried over by the time the key is dropped.
+         * - `default_shipping_tax_class` (TWO-26072): shipping tax now comes
+         *   from WooCommerce's own shipping tax class setting.
          */
         private function drop_removed_settings()
         {
@@ -1336,6 +1338,7 @@ if (!class_exists('WC_Twoinc')) {
                 'firewall_token',
                 'firewall_token_browser',
                 'enable_company_name',
+                'default_shipping_tax_class',
             ];
             $present = [];
             foreach ($removed as $key) {
@@ -2366,19 +2369,6 @@ if (!class_exists('WC_Twoinc')) {
             }
             if (!array_key_exists($value, $this->get_surcharge_tax_class_options())) {
                 throw new Exception(__('Surcharge tax class must be one of the store\'s existing tax classes.', 'twoinc-payment-gateway'));
-            }
-            return $value;
-        }
-
-        /** Same guard as validate_surcharge_tax_class_field, for the shipping-fallback field's own tax-class select. */
-        public function validate_default_shipping_tax_class_field($key, $value)
-        {
-            $value = trim((string) $value);
-            if ($value === '') {
-                return '';
-            }
-            if (!array_key_exists($value, $this->get_surcharge_tax_class_options())) {
-                throw new Exception(__('Default shipping tax class must be one of the store\'s existing tax classes.', 'twoinc-payment-gateway'));
             }
             return $value;
         }
@@ -6271,14 +6261,6 @@ if (!class_exists('WC_Twoinc')) {
                     ),
                     'desc_tip'    => true,
                     'default'     => 'yes'
-                ],
-                'default_shipping_tax_class' => [
-                    'title'       => __('Default shipping tax class', 'twoinc-payment-gateway'),
-                    'type'        => 'select',
-                    'options'     => $this->get_surcharge_tax_class_options(),
-                    'default'     => '',
-                    'description' => __('Used only when a shipping method\'s tax rate cannot be resolved from the order itself (e.g. a third-party carrier or click-and-collect module that registers no tax class) but the shipping line was charged tax. Leave unselected to keep reporting an unresolvable rate as untaxed, matching today\'s behaviour.', 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
                 ],
                 // ── F. Diagnostics ──────────────────────────────────────
                 'section_diagnostics' => [

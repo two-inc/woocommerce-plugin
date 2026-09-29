@@ -52,8 +52,8 @@ final class BrandConfigSpec
             'testShippingDetailsCarriedByCreateAndEditBodies',
             'testShippingDetailsFilterOverrides',
             'testShippingDetailsFilterGarbageDiscarded',
-            'testDefaultShippingTaxClassFallbackOnlyAppliesWhenNoRateIsDeclared',
-            'testDefaultShippingTaxClassFieldValidatesAgainstLiveTaxClasses',
+            'testShippingTaxRateComesFromShopRatesAndReconciles',
+            'testDefaultShippingTaxClassSettingIsRemoved',
             'testLegacyOrderCreateFilterRunsBeforeOrderPayload',
             'testBrandFileReturningNonArrayFallsBackToDefaults',
             'testMetaKeysDeriveFromBrandPrefix',
@@ -1086,7 +1086,7 @@ final class BrandConfigSpec
         WC()->cart = null;
         WC()->customer = null;
         WC()->session = null;
-        unset($GLOBALS['__twoinc_test_tax_classes'], $GLOBALS['__twoinc_test_tax_rates'], $GLOBALS['__twoinc_test_find_rates'], $GLOBALS['__twoinc_test_display_incl_tax']);
+        unset($GLOBALS['__twoinc_test_tax_classes'], $GLOBALS['__twoinc_test_tax_rates'], $GLOBALS['__twoinc_test_find_rates'], $GLOBALS['__twoinc_test_find_rates_args'], $GLOBALS['__twoinc_test_display_incl_tax']);
         unset($GLOBALS['__twoinc_test_located_template']);
         remove_all_filters('woocommerce_locate_template');
         foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'twoinc_payment_validation_error', 'twoinc_sole_trader_signup_url', 'twoinc_shipping_details'] as $tag) {
@@ -1958,99 +1958,36 @@ final class BrandConfigSpec
         TinyAssert::true(isset($body['shipping_details']['expected_delivery_date']));
     }
 
-    /**
-     * TWO-25498: "Default shipping tax class" fills the gap
-     * magento-plugin's configured shipping-tax-rate fallback and
-     * prestashop-plugin's PS_TWO_DEFAULT_SHIPPING_TAX_RULES_GROUP already
-     * close — a shipping method WooCommerce declares no tax rate for (e.g. a
-     * carrier/click-and-collect module with no tax class of its own) but
-     * which was genuinely charged tax. A declared rate always wins; a
-     * genuinely untaxed line stays untaxed; the fallback is consulted only
-     * in the gap between those two, and only a rate-table row flagged for
-     * shipping counts.
-     */
-    private static function testDefaultShippingTaxClassFallbackOnlyAppliesWhenNoRateIsDeclared(): void
+    /** TWO-26072: shipping rate from the order's tax rows, else WooCommerce's own shipping tax class; a mismatch refuses. */
+    private static function testShippingTaxRateComesFromShopRatesAndReconciles(): void
     {
-        $method = new ReflectionMethod(WC_Twoinc_Helper::class, 'get_shipping_tax_rate');
-        $method->setAccessible(true);
-        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
-        $prop->setAccessible(true);
-
-        $declaredTaxRow = new class () implements ArrayAccess {
-            public function get_rate_id()
-            {
-                return 7;
-            }
-            public function get_rate_percent()
-            {
-                return 20.0;
-            }
-            #[\ReturnTypeWillChange]
-            public function offsetExists($offset)
-            {
-                return false;
-            }
-            #[\ReturnTypeWillChange]
-            public function offsetGet($offset)
-            {
-                return null;
-            }
-            #[\ReturnTypeWillChange]
-            public function offsetSet($offset, $value)
-            {
-            }
-            #[\ReturnTypeWillChange]
-            public function offsetUnset($offset)
-            {
-            }
+        $row = static function (float $percent, string $shipping = 'yes', string $compound = 'no') {
+            return ['rate' => $percent, 'shipping' => $shipping, 'compound' => $compound, 'label' => 'VAT'];
         };
+        $standard25 = ['' => [1 => $row(25.0)]];
+        $reduced12 = ['reduced-rate' => [2 => $row(12.0)]];
+        $compound = ['gst-qst' => [3 => $row(5.0), 4 => $row(10.0, 'yes', 'yes')]];
 
-        $shippingItem = static function (array $declaredTaxes, float $totalTax) {
-            return new class ($declaredTaxes, $totalTax) {
-                private $declaredTaxes;
-                private $totalTax;
-                public function __construct($declaredTaxes, $totalTax)
-                {
-                    $this->declaredTaxes = $declaredTaxes;
-                    $this->totalTax = $totalTax;
-                }
-                public function get_taxes()
-                {
-                    return ['total' => $this->declaredTaxes];
-                }
-                public function get_total_tax()
-                {
-                    return $this->totalTax;
-                }
-            };
-        };
-
-        $order = static function (array $orderTaxes) {
-            return new class ($orderTaxes) {
+        $order = static function (array $orderTaxes, array $itemClasses) {
+            return new class ($orderTaxes, $itemClasses) {
                 private $orderTaxes;
-                public function __construct($orderTaxes)
+                private $itemClasses;
+                public function __construct($orderTaxes, $itemClasses)
                 {
                     $this->orderTaxes = $orderTaxes;
+                    $this->itemClasses = $itemClasses;
                 }
                 public function get_taxes()
                 {
                     return $this->orderTaxes;
                 }
-                public function get_shipping_country()
+                public function get_taxable_location()
                 {
-                    return 'NO';
+                    return ['country' => 'NO', 'state' => '', 'postcode' => '0150', 'city' => 'Oslo'];
                 }
-                public function get_shipping_state()
+                public function get_items_tax_classes()
                 {
-                    return '';
-                }
-                public function get_shipping_postcode()
-                {
-                    return '0150';
-                }
-                public function get_shipping_city()
-                {
-                    return 'Oslo';
+                    return $this->itemClasses;
                 }
                 public function get_id()
                 {
@@ -2059,50 +1996,77 @@ final class BrandConfigSpec
             };
         };
 
+        // [item taxes by rate id, order tax rows, net, tax, woocommerce_shipping_tax_class (null = unset), cart item classes, shop rates, expected rate (null = refused), description]
         $cases = [
-            [[], [], 0.0, '', [], 0.0, 'NA', 'genuinely untaxed shipping stays untaxed, no fallback configured'],
-            [[7 => 5.0], [$declaredTaxRow], 5.0, 'reduced-rate', ['reduced-rate' => [['rate' => 12.0, 'shipping' => 'yes']]], 0.2, '', 'a declared rate always wins over the fallback'],
-            [[], [], 3.0, '', [], 0.0, 'NA', "taxed but unresolved, no fallback configured — stays untaxed (today's behaviour)"],
-            [[], [], 3.0, 'reduced-rate', [], 0.0, 'NA', 'taxed but unresolved, fallback class configured but no matching rate — stays untaxed'],
-            [[], [], 3.0, 'reduced-rate', ['reduced-rate' => [['rate' => 12.0, 'shipping' => 'no']]], 0.0, 'NA', 'a matching rate that excludes shipping is not used'],
-            [[], [], 3.0, 'reduced-rate', ['reduced-rate' => [['rate' => 12.0, 'shipping' => 'yes']]], 0.12, 'Default shipping tax class', 'taxed and unresolved, fallback class has a matching shipping rate'],
-            [[], [], 3.0, 'reduced-rate', ['reduced-rate' => [['rate' => 8.0, 'shipping' => 'yes'], ['rate' => 4.0, 'shipping' => 'yes']]], 0.12, 'Default shipping tax class', 'multiple matching shipping rates sum additively'],
+            [[1 => 2.5], [[1, 25.0, false]], 10.0, 2.5, null, [], [], 0.25, 'WC-engine-taxed shipping keeps its declared rate'],
+            [[], [], 10.0, 1.2, 'reduced-rate', [], $reduced12, 0.12, 'third-party tax with no rate row resolves from the shop shipping tax class'],
+            [[], [], 10.0, 2.5, '', [], $standard25, 0.25, 'shop shipping tax class Standard'],
+            [[], [], 10.0, 1.2, 'inherit', ['reduced-rate'], $standard25 + $reduced12, 0.12, 'based on cart items takes the cart item class'],
+            [[], [], 10.0, 2.5, 'inherit', ['reduced-rate', ''], $standard25 + $reduced12, 0.25, 'based on cart items prefers Standard when a cart item uses it, as core does'],
+            [[1 => 2.0], [[1, 25.0, false]], 10.0, 2.0, null, [], [], null, 'declared rate that does not match the tax charged is refused'],
+            [[], [], 10.0, 3.0, 'reduced-rate', [], $reduced12, null, 'shop rate that does not match the tax charged is refused'],
+            [[1 => 2.52], [[1, 25.0, false]], 10.0, 2.52, null, [], [], 0.25, 'rounding within the 0.02 tolerance reconciles'],
+            [[1 => 0.5, 2 => 1.05], [[1, 5.0, false], [2, 10.0, true]], 10.0, 1.55, null, [], [], 0.155, 'compound order tax rows combine as a + b + ab'],
+            [[], [], 10.0, 1.55, 'gst-qst', [], $compound, 0.155, 'compound shop rates combine as a + b + ab'],
+            [[], [], 10.0, 0.0, null, [], [], 0.0, 'zero-tax shipping stays untaxed'],
+            [[], [], 10.0, 2.5, null, [], [], null, 'taxed line, shop setting unset and no matching rate: refused, never 0%'],
+            [[], [], 10.0, 1.2, 'reduced-rate', [], ['reduced-rate' => [2 => $row(12.0, 'no')]], null, 'taxed line whose only matching rate excludes shipping is refused'],
+            [[], [], 10.0, 1.2, 'inherit', [], $reduced12, null, 'based on cart items with no taxable cart item leaves shipping untaxed, so a taxed line is refused'],
         ];
 
-        foreach ($cases as [$declaredTaxes, $orderTaxes, $totalTax, $taxClass, $findRates, $expectedRate, $expectedName, $description]) {
-            $GLOBALS['__twoinc_test_find_rates'] = $findRates;
-            $prop->setValue(null, self::fulfilmentTriggerGateway(['default_shipping_tax_class' => $taxClass]));
+        $GLOBALS['__twoinc_test_tax_classes'] = ['Reduced rate', 'GST QST'];
+        $failures = [];
+        foreach ($cases as [$itemTaxes, $orderTaxRows, $net, $tax, $shopClass, $itemClasses, $shopRates, $expected, $description]) {
+            $GLOBALS['__twoinc_test_find_rates'] = $shopRates;
+            unset($GLOBALS['__twoinc_test_find_rates_args']);
+            if ($shopClass === null) {
+                unset($GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class']);
+            } else {
+                $GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'] = $shopClass;
+            }
+            $orderTaxes = array_map(static function ($r) {
+                return new StubOrderTaxItem(...$r);
+            }, $orderTaxRows);
 
-            $result = $method->invoke(null, $shippingItem($declaredTaxes, $totalTax), $order($orderTaxes));
-
-            self::assertClose($expectedRate, (float) $result['rate'], $description);
-            TinyAssert::same($expectedName, $result['name'], $description);
+            try {
+                $lines = WC_Twoinc_Helper::get_line_items([], [new StubShippingItem($net, $tax, $itemTaxes)], [], $order($orderTaxes, $itemClasses));
+                $actual = $lines[0]['tax_rate'];
+            } catch (Exception $e) {
+                $actual = 'refused: ' . $e->getMessage();
+            }
+            $want = $expected === null ? 'refused' : WC_Twoinc_Helper::round_rate($expected);
+            if ($expected === null ? strpos($actual, 'refused: ') !== 0 : $actual !== $want) {
+                $failures[] = sprintf('%s: expected %s, got %s', $description, $want, $actual);
+            }
+            $location = $GLOBALS['__twoinc_test_find_rates_args'] ?? null;
+            if ($location !== null && $location['country'] !== 'NO') {
+                $failures[] = $description . ': shop rates looked up away from the order tax location';
+            }
         }
+        unset($GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class']);
 
-        $prop->setValue(null, null);
+        TinyAssert::same([], $failures, "Failing cases:\n  " . implode("\n  ", $failures));
     }
 
-    /** Same guard the surcharge tax class field already has: a stale/tampered selection must not silently save. */
-    private static function testDefaultShippingTaxClassFieldValidatesAgainstLiveTaxClasses(): void
+    /** TWO-26072: the plugin's own shipping tax class setting is gone, and an upgraded install drops its stored value. */
+    private static function testDefaultShippingTaxClassSettingIsRemoved(): void
     {
-        $GLOBALS['__twoinc_test_tax_classes'] = ['Reduced rate'];
         $gateway = new class () extends WC_Twoinc {
             public function __construct()
             {
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
             }
         };
+        $gateway->init_form_fields();
+        TinyAssert::same(false, array_key_exists('default_shipping_tax_class', $gateway->form_fields), 'no admin field');
 
-        TinyAssert::same('', $gateway->validate_default_shipping_tax_class_field('default_shipping_tax_class', ''), 'no selection is always valid');
-        TinyAssert::same('reduced-rate', $gateway->validate_default_shipping_tax_class_field('default_shipping_tax_class', 'reduced-rate'), 'a live tax class saves');
-
-        $threw = false;
-        try {
-            $gateway->validate_default_shipping_tax_class_field('default_shipping_tax_class', 'deleted-class');
-        } catch (Exception $e) {
-            $threw = true;
-        }
-        TinyAssert::true($threw, 'a tax class that no longer exists must be refused, not silently saved');
+        $key = $gateway->get_option_key();
+        $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
+        $drop->setAccessible(true);
+        $GLOBALS['__twoinc_test_options'][$key] = ['default_shipping_tax_class' => 'reduced-rate', 'api_key' => 'keep-me'];
+        $gateway->init_settings();
+        $drop->invoke($gateway);
+        TinyAssert::same(['api_key' => 'keep-me'], $GLOBALS['__twoinc_test_options'][$key], 'stored value dropped on upgrade');
     }
 
     private static function testLegacyOrderCreateFilterRunsBeforeOrderPayload(): void

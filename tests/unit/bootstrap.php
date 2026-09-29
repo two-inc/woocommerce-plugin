@@ -488,18 +488,28 @@ class WC_Tax
     }
 
     /**
-     * Address-aware rate lookup (the shipping-tax-fallback seam), unlike
-     * get_rates_for_class() above which resolves against the current
-     * customer rather than an arbitrary address. Row shape mirrors core:
-     * ['rate' => percent float, 'shipping' => 'yes'|'no', ...]. Controlled
-     * by $GLOBALS['__twoinc_test_find_rates'], keyed by tax_class ('' =
-     * Standard); absent/unset means no matching rate, same as core with no
-     * rate table row for that destination.
+     * Address-aware rate lookup, unlike get_rates_for_class() above which
+     * resolves against the current customer rather than an arbitrary
+     * address. Row shape mirrors core: ['rate' => percent float,
+     * 'shipping' => 'yes'|'no', 'compound' => 'yes'|'no', 'label' => ...].
+     * Controlled by $GLOBALS['__twoinc_test_find_rates'], keyed by tax_class
+     * ('' = Standard; core casts false to ''); absent/unset means no
+     * matching rate, same as core with no rate table row for that
+     * destination. The last args are recorded for location assertions.
      */
     public static function find_rates($args = [])
     {
+        $GLOBALS['__twoinc_test_find_rates_args'] = $args;
         $class = (string) ($args['tax_class'] ?? '');
         return $GLOBALS['__twoinc_test_find_rates'][$class] ?? [];
+    }
+
+    /** Core's filter: only rows flagged for shipping. */
+    public static function find_shipping_rates($args = [])
+    {
+        return array_filter(self::find_rates($args), static function ($rate) {
+            return 'yes' === $rate['shipping'];
+        });
     }
 }
 
@@ -909,6 +919,103 @@ class StubProductLineItem implements ArrayAccess
     {
         return ['total' => []];
     }
+}
+
+/** WC_Order_Item_Tax stub: one order-level tax row, read both as an object and via ['label']. */
+class StubOrderTaxItem implements ArrayAccess
+{
+    private $rate_id;
+    private $percent;
+    private $compound;
+
+    public function __construct(int $rate_id, float $percent, bool $compound = false)
+    {
+        $this->rate_id = $rate_id;
+        $this->percent = $percent;
+        $this->compound = $compound;
+    }
+
+    public function get_rate_id()
+    {
+        return $this->rate_id;
+    }
+
+    public function get_rate_percent()
+    {
+        return $this->percent;
+    }
+
+    public function get_compound()
+    {
+        return $this->compound;
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetExists($offset)
+    {
+        return $offset === 'label';
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetGet($offset)
+    {
+        return $offset === 'label' ? 'Tax ' . $this->rate_id : null;
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetSet($offset, $value)
+    {
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetUnset($offset)
+    {
+    }
+}
+
+/** WC_Order_Item_Shipping stub: $taxes is the per-rate-id 'total' map core stores on the item. */
+class StubShippingItem
+{
+    private $net;
+    private $tax;
+    private $taxes;
+
+    public function __construct(float $net, float $tax, array $taxes = [])
+    {
+        $this->net = $net;
+        $this->tax = $tax;
+        $this->taxes = $taxes;
+    }
+
+    public function get_name()
+    {
+        return 'Carrier';
+    }
+
+    public function get_total()
+    {
+        return $this->net;
+    }
+
+    public function get_total_tax()
+    {
+        return $this->tax;
+    }
+
+    public function get_taxes()
+    {
+        return ['total' => $this->taxes];
+    }
+
+    public function get_tax_status()
+    {
+        return 'taxable';
+    }
+}
+
+function wc_tax_enabled()
+{
+    return true;
 }
 
 class StubOrder
