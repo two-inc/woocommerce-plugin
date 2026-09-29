@@ -61,9 +61,11 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 
 == Changelog ==
 
-= 2.25.1 =
+= 3.0.0 =
 
-* A shipping line charged tax without a recorded rate now declares the rate WooCommerce itself charges shipping at (WooCommerce > Settings > Tax > Shipping tax class, including "based on cart items"). An order whose shipping tax does not match its rate is refused at checkout rather than sent as untaxed. The plugin's own "Default shipping tax class" setting is removed and its stored value dropped on upgrade.
+* Breaking: the "Default shipping tax class" setting has been removed and there is no migration. Its stored value is not carried over anywhere.
+* A shipping line charged tax without a recorded tax rate is now refused at checkout with a named error, rather than sent as untaxed. Shops that need such lines can have the rate taken from WooCommerce's own shipping tax class (WooCommerce > Settings > Tax, including "based on cart items") by running `wp option update twoinc_shipping_tax_from_shop_rates yes`.
+* An order whose shipping tax does not match its declared rate is refused at checkout.
 * Compound tax rates are declared at their true combined rate.
 * A refund declares the tax rates the order was charged at, not the shop's current rates, and its shipping tax is checked against them.
 
@@ -165,6 +167,9 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 Older releases are listed at https://github.com/two-inc/woocommerce-plugin/releases
 
 == Upgrade Notice ==
+
+= 3.0.0 =
+Removes the "Default shipping tax class" setting, with no migration. A shipping line charged tax without a recorded tax rate is now refused at checkout; see the changelog for the WP-CLI option that takes the rate from WooCommerce's shipping tax class instead.
 
 = 2.25.0 =
 Adds an optional line about paying by invoice on your product pages, and an optional buy button beside Add to cart. Nothing changes until you switch them on under WooCommerce > Settings > Payments > Two.
