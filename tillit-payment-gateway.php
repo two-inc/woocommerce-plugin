@@ -12,6 +12,7 @@
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Requires Plugins: woocommerce
+ * WC requires at least: 7.6
  */
 
 // Make sure WooCommerce is active

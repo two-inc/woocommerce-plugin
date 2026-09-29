@@ -1352,6 +1352,18 @@ if (!class_exists('WC_Twoinc')) {
             if (count($present) === 0) {
                 return;
             }
+            $old_shipping_class = (string) ($this->settings['default_shipping_tax_class'] ?? '');
+            if ($old_shipping_class !== '' && function_exists('wc_get_logger')) {
+                wc_get_logger()->notice(
+                    sprintf(
+                        'Removed the "Default shipping tax class" setting (was "%s"). If shipping is taxed by a module'
+                            . ' that records no tax rate, run: wp option update %s yes',
+                        $old_shipping_class,
+                        WC_Twoinc_Brand::prefixed_name(self::SHIPPING_TAX_FROM_SHOP_RATES_OPTION)
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
             foreach ($present as $key) {
                 unset($this->settings[$key]);
             }
@@ -5700,11 +5712,7 @@ if (!class_exists('WC_Twoinc')) {
 
             $response = $this->make_request(
                 "/v1/order/{$twoinc_order_id}/refund",
-                WC_Twoinc_Helper::compose_twoinc_refund(
-                    $order_refund,
-                    $amount,
-                    $order->get_currency()
-                ),
+                WC_Twoinc_Helper::compose_twoinc_refund($order_refund, $amount, $order),
                 'POST'
             );
 

@@ -307,6 +307,18 @@ Either way, an order whose shipping tax does not match its declared rate
 (beyond 0.02) is refused, and refunds always use the rates the order was
 charged at.
 
+A rate taken from the shop's rates is recorded on the shipping line at
+checkout, so refunds and order edits of that order use it even if the shop's
+rates change later. An order placed before 3.0.0 whose shipping was taxed with
+no tax rate recorded has no such record: its refunds and edits take the rate
+from the shop's shipping tax class at the order's tax location, and go through
+only if that rate matches the tax the order was charged. Otherwise they are
+refused with an error naming the shipping line. This does not need the option
+above.
+
+If an upgrade removes a non-empty "Default shipping tax class" value, the plugin
+logs a notice naming the old class (source `twoinc-payment-gateway`).
+
 ## Post installation optional steps
 
 Once Wordpress has been set up, a recommended plugin theme to install is:

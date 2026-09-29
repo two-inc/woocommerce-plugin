@@ -3,6 +3,7 @@ Tags: payment request, woocommerce
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
+WC requires at least: 7.6
 Stable tag: 3.0.0
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -39,6 +40,7 @@ Simply put, Two is customer-centric, with less friction and higher conversion ra
 The plugin has been tested for compatibility with WooCommerce version 10.3.5 with
 [HPOS](https://woocommerce.com/document/high-performance-order-storage/) enabled, on both the
 classic shortcode checkout and the [block-based checkout](https://woocommerce.com/checkout-blocks/).
+It requires WooCommerce 7.6 or later.
 
 == Installation ==
 
@@ -67,7 +69,9 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 * A shipping line charged tax without a recorded tax rate is now refused at checkout with a named error, rather than sent as untaxed. Shops that need such lines can have the rate taken from WooCommerce's own shipping tax class (WooCommerce > Settings > Tax, including "based on cart items") by running `wp option update twoinc_shipping_tax_from_shop_rates yes`.
 * An order whose shipping tax does not match its declared rate is refused at checkout.
 * Compound tax rates are declared at their true combined rate.
-* A refund declares the tax rates the order was charged at, not the shop's current rates, and its shipping tax is checked against them.
+* A refund declares the tax rates the order was charged at, not the shop's current rates, and its shipping tax is checked against them. A refund of the tax alone, or of the net alone, is sent as such.
+* Refunds and order edits of an order whose shipping rate came from the shop's rates use the rate recorded at checkout. For an order placed before 3.0.0 whose shipping was taxed with no tax rate recorded, the rate is taken from the shop's shipping tax class and must match the tax the order was charged, or the refund is refused with a named error.
+* Requires WooCommerce 7.6 or later.
 
 = 2.25.0 =
 
