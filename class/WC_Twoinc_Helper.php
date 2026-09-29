@@ -408,11 +408,20 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @param bool $is_refund refund line items carry negated amounts, so
          *                        the negative-discount guard below does not
          *                        apply to them.
+         * @param mixed $rate_order order whose tax rows declare the rates; a refund passes its parent,
+         *                          because core restamps the refund's own rows from the live rate table.
          *
          * @return array
          */
-        public static function get_line_items($line_items, $shippings, $fees, $order, $is_refund = false)
-        {
+        public static function get_line_items(
+            $line_items,
+            $shippings,
+            $fees,
+            $order,
+            $is_refund = false,
+            $rate_order = null
+        ) {
+            $rate_order = $rate_order ?? $order;
 
             $items = [];
 
@@ -420,7 +429,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             foreach ($line_items as $line_item) {
                 $product_simple = WC_Twoinc_Helper::get_product($line_item);
 
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $order);
+                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $rate_order);
 
                 if (! is_object($product_simple)) {
                     $name = method_exists($line_item, 'get_name') ? $line_item->get_name() : 'Item';
@@ -499,7 +508,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 if ($shipping->get_total() == 0) {
                     continue;
                 }
-                $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $order, !$is_refund);
+                $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $rate_order, !$is_refund);
                 $shipping_line = [
                     'name' => 'Shipping - ' . $shipping->get_name(),
                     'description' => '',
@@ -524,7 +533,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 if ($fee->get_total() == 0) {
                     continue;
                 }
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($fee, $order);
+                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($fee, $rate_order);
                 $fee_line = [
                     // Already the resolved, translated, brand-correct label;
                     // no hardcoded prefix — 'type' => 'SERVICE' below carries
@@ -995,7 +1004,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $req_body = [
                 'amount' => strval(WC_Twoinc_Helper::round_amt($amount)),
                 'currency' => $currency,
-                'line_items' => WC_Twoinc_Helper::get_line_items($order_refund->get_items(), $order_refund->get_items('shipping'), $order_refund->get_items('fee'), $order_refund, true)
+                'line_items' => WC_Twoinc_Helper::get_line_items(
+                    $order_refund->get_items(),
+                    $order_refund->get_items('shipping'),
+                    $order_refund->get_items('fee'),
+                    $order_refund,
+                    true,
+                    wc_get_order($order_refund->get_parent_id())
+                )
             ];
 
             return $req_body;
@@ -1409,19 +1425,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Refunds skip reconciling: the merchant types refund net and tax independently.
+         * A refund never falls back to live shop config: it may have changed since the order was charged.
          *
          * @return array
          */
-        private static function get_shipping_tax_rate($shipping, $order, $reconcile = true)
+        private static function get_shipping_tax_rate($shipping, $order, $use_shop_rates = true)
         {
             $resolved = self::get_item_tax_rate($shipping, $order);
-            if (!$resolved['rate'] && round((float) $shipping->get_total_tax(), 2) !== 0.0) {
+            if ($use_shop_rates && !$resolved['rate'] && round((float) $shipping->get_total_tax(), 2) !== 0.0) {
                 $resolved = self::get_shop_shipping_tax_rate($shipping, $order);
             }
-            if ($reconcile) {
-                self::assert_tax_reconciles($shipping, $resolved['rate']);
-            }
+            self::assert_tax_reconciles($shipping, $resolved['rate']);
             return $resolved;
         }
 

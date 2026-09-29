@@ -53,6 +53,7 @@ final class BrandConfigSpec
             'testShippingDetailsFilterOverrides',
             'testShippingDetailsFilterGarbageDiscarded',
             'testShippingTaxRateComesFromShopRatesAndReconciles',
+            'testRefundTaxRatesComeFromTheParentOrder',
             'testDefaultShippingTaxClassSettingIsRemoved',
             'testLegacyOrderCreateFilterRunsBeforeOrderPayload',
             'testBrandFileReturningNonArrayFallsBackToDefaults',
@@ -2044,6 +2045,73 @@ final class BrandConfigSpec
             }
         }
         unset($GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class']);
+
+        TinyAssert::same([], $failures, "Failing cases:\n  " . implode("\n  ", $failures));
+    }
+
+    /** TWO-26072: refund rates come from the parent order, never the refund's restamped rows or live shop config. */
+    private static function testRefundTaxRatesComeFromTheParentOrder(): void
+    {
+        $parent24 = [[1, 24.0, false]];
+        $compound = [[1, 5.0, false], [2, 10.0, true]];
+        $line = static function (string $type, array $taxes, float $net, float $tax) {
+            if ($type === 'line_item') {
+                return new StubProductLineItem(['line_total' => $net, 'line_subtotal' => $net, 'line_tax' => $tax, 'taxes' => $taxes]);
+            }
+            return new StubShippingItem($net, $tax, $taxes);
+        };
+
+        // [line type, parent order tax rows, refund's own tax rows, item taxes by rate id, net, tax, expected rate (null = refused), description]
+        $cases = [
+            ['line_item', $parent24, [[1, 25.5, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'product refund after a rate change keeps the charged rate'],
+            ['fee', $parent24, [[1, 25.5, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'fee refund after a rate change keeps the charged rate'],
+            ['shipping', $parent24, [[1, 25.5, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'shipping refund after a rate change keeps the charged rate'],
+            ['line_item', $parent24, [[1, 0.0, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'product refund after the rate row is deleted keeps the charged rate'],
+            ['fee', $parent24, [[1, 0.0, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'fee refund after the rate row is deleted keeps the charged rate'],
+            ['shipping', $parent24, [[1, 0.0, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'shipping refund after the rate row is deleted keeps the charged rate'],
+            ['shipping', $compound, [[1, 5.0, false], [2, 0.0, false]], [1 => -0.5, 2 => -1.05], -10.0, -1.55, 0.155, 'compound shipping refund combines the parent rates'],
+            ['shipping', $parent24, [[1, 24.0, false]], [1 => -5.0], -10.0, -5.0, null, 'refund shipping tax that does not match the charged rate is refused'],
+            ['shipping', [], [], [], -10.0, -1.2, null, 'refund never resolves a missing shipping rate from live shop config'],
+        ];
+
+        $GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'] = 'reduced-rate';
+        $GLOBALS['__twoinc_test_find_rates'] = ['reduced-rate' => [2 => ['rate' => 12.0, 'shipping' => 'yes', 'compound' => 'no', 'label' => 'VAT']]];
+        $toTaxItems = static function (array $rows) {
+            return array_map(static function ($r) {
+                return new StubOrderTaxItem(...$r);
+            }, $rows);
+        };
+        $failures = [];
+        foreach ($cases as [$type, $parentRows, $refundRows, $itemTaxes, $net, $tax, $expected, $description]) {
+            $parent = new class ($toTaxItems($parentRows)) {
+                private $taxes;
+                public function __construct($taxes)
+                {
+                    $this->taxes = $taxes;
+                }
+                public function get_taxes()
+                {
+                    return $this->taxes;
+                }
+                public function get_id()
+                {
+                    return 7;
+                }
+            };
+            $GLOBALS['__twoinc_test_wc_orders'][7] = $parent;
+            $refund = new StubRefund([$type => [$line($type, $itemTaxes, $net, $tax)]], $toTaxItems($refundRows), 7);
+
+            try {
+                $actual = WC_Twoinc_Helper::compose_twoinc_refund($refund, 10.0, 'EUR')['line_items'][0]['tax_rate'];
+            } catch (Exception $e) {
+                $actual = 'refused: ' . $e->getMessage();
+            }
+            $want = $expected === null ? 'refused' : WC_Twoinc_Helper::round_rate($expected);
+            if ($expected === null ? strpos($actual, 'refused: ') !== 0 : $actual !== $want) {
+                $failures[] = sprintf('%s: expected %s, got %s', $description, $want, $actual);
+            }
+        }
+        unset($GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'], $GLOBALS['__twoinc_test_wc_orders'][7]);
 
         TinyAssert::same([], $failures, "Failing cases:\n  " . implode("\n  ", $failures));
     }

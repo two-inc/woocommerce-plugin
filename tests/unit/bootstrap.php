@@ -917,7 +917,7 @@ class StubProductLineItem implements ArrayAccess
 
     public function get_taxes()
     {
-        return ['total' => []];
+        return ['total' => $this->data['taxes'] ?? []];
     }
 }
 
@@ -1010,6 +1010,46 @@ class StubShippingItem
     public function get_tax_status()
     {
         return 'taxable';
+    }
+}
+
+/** WC_Order_Refund stub: its own tax rows (as core's update_taxes() restamps them) and a parent id. */
+class StubRefund
+{
+    private $items;
+    private $taxes;
+    private $parent_id;
+
+    public function __construct(array $items, array $taxes, int $parent_id)
+    {
+        $this->items = $items;
+        $this->taxes = $taxes;
+        $this->parent_id = $parent_id;
+    }
+
+    public function get_items($type = 'line_item')
+    {
+        return $this->items[$type] ?? [];
+    }
+
+    public function get_taxes()
+    {
+        return $this->taxes;
+    }
+
+    public function get_parent_id()
+    {
+        return $this->parent_id;
+    }
+
+    public function get_id()
+    {
+        return 99;
+    }
+
+    public function get_item_subtotal($item, $inc_tax = false, $round = true)
+    {
+        return $item['line_subtotal'];
     }
 }
 

@@ -65,6 +65,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 
 * A shipping line charged tax without a recorded rate now declares the rate WooCommerce itself charges shipping at (WooCommerce > Settings > Tax > Shipping tax class, including "based on cart items"). An order whose shipping tax does not match its rate is refused at checkout rather than sent as untaxed. The plugin's own "Default shipping tax class" setting is removed and its stored value dropped on upgrade.
 * Compound tax rates are declared at their true combined rate.
+* A refund declares the tax rates the order was charged at, not the shop's current rates, and its shipping tax is checked against them.
 
 = 2.25.0 =
 
