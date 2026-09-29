@@ -30,6 +30,9 @@ if (!class_exists('WC_Twoinc')) {
         // page view, so this is what keeps the log bounded.
         public const NOTICE_FORMAT_LOG_THROTTLE = 86400;
 
+        // Hidden, WP-CLI only (TWO-26082): `wp option update twoinc_shipping_tax_from_shop_rates yes`.
+        public const SHIPPING_TAX_FROM_SHOP_RATES_OPTION = 'shipping_tax_from_shop_rates';
+
         // BC-frozen: external integrations may read these constants, but all
         // runtime reads go through WC_Twoinc_Brand so overlays can rebrand.
         // They mirror brands/two.php; tests/unit pins them against drift.
@@ -7357,6 +7360,7 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
             delete_option($settings_option);
+            delete_option(WC_Twoinc_Brand::prefixed_name(self::SHIPPING_TAX_FROM_SHOP_RATES_OPTION));
             // The merchant-record caches (terms, days-on-invoice, platform
             // minimum) live outside the settings blob in dedicated
             // wp_options — clear them too, or "clear settings on uninstall"

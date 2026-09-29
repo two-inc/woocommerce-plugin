@@ -508,7 +508,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 if ($shipping->get_total() == 0) {
                     continue;
                 }
-                $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $rate_order, !$is_refund);
+                $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $rate_order, $is_refund);
                 $shipping_line = [
                     'name' => 'Shipping - ' . $shipping->get_name(),
                     'description' => '',
@@ -1428,15 +1428,48 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * A refund never falls back to live shop config: it may have changed since the order was charged.
          *
          * @return array
+         * @throws Exception
          */
-        private static function get_shipping_tax_rate($shipping, $order, $use_shop_rates = true)
+        private static function get_shipping_tax_rate($shipping, $order, $is_refund = false)
         {
             $resolved = self::get_item_tax_rate($shipping, $order);
-            if ($use_shop_rates && !$resolved['rate'] && round((float) $shipping->get_total_tax(), 2) !== 0.0) {
+            if (!$resolved['rate'] && round((float) $shipping->get_total_tax(), 2) !== 0.0) {
+                $option = WC_Twoinc_Brand::prefixed_name(WC_Twoinc::SHIPPING_TAX_FROM_SHOP_RATES_OPTION);
+                if ($is_refund || 'yes' !== get_option($option)) {
+                    self::refuse_missing_shipping_tax_rate($shipping, $order, $is_refund ? '' : $option);
+                }
                 $resolved = self::get_shop_shipping_tax_rate($shipping, $order);
             }
             self::assert_tax_reconciles($shipping, $resolved['rate']);
             return $resolved;
+        }
+
+        /**
+         * @throws Exception
+         */
+        private static function refuse_missing_shipping_tax_rate($shipping, $order, $option)
+        {
+            if (function_exists('wc_get_logger')) {
+                wc_get_logger()->error(
+                    sprintf(
+                        'Shipping "%s" on order %s was charged tax but has no tax rate recorded.%s',
+                        $shipping->get_name(),
+                        $order->get_id(),
+                        $option === '' ? '' : sprintf(
+                            ' To take the rate from the WooCommerce shipping tax class, run: wp option update %s yes',
+                            $option
+                        )
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
+            throw new Exception(
+                sprintf(
+                    /* translators: %s: shipping method name */
+                    __('Shipping "%s" was charged tax but has no tax rate recorded.', 'twoinc-payment-gateway'),
+                    $shipping->get_name()
+                )
+            );
         }
 
         /**

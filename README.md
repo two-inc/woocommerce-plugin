@@ -289,6 +289,24 @@ If products stop showing or the store behaves oddly between runs:
 make clean && make run
 ```
 
+## Shipping tax from the shop's rates
+
+A shipping line charged tax with no tax rate recorded (typically a third-party
+shipping module that adds tax without a WooCommerce rate row) refuses the order
+by default. For a merchant who needs it, the plugin can instead take the rate
+WooCommerce itself charges shipping at: the "Shipping tax class" setting under
+WooCommerce > Settings > Tax, including "based on cart items", at the order's
+tax location. There is no admin setting; enable it per shop with WP-CLI:
+
+```bash
+wp option update twoinc_shipping_tax_from_shop_rates yes
+```
+
+`wp option delete twoinc_shipping_tax_from_shop_rates` turns it off again.
+Either way, an order whose shipping tax does not match its declared rate
+(beyond 0.02) is refused, and refunds always use the rates the order was
+charged at.
+
 ## Post installation optional steps
 
 Once Wordpress has been set up, a recommended plugin theme to install is:

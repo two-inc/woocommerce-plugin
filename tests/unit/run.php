@@ -1997,27 +1997,33 @@ final class BrandConfigSpec
             };
         };
 
-        // [item taxes by rate id, order tax rows, net, tax, woocommerce_shipping_tax_class (null = unset), cart item classes, shop rates, expected rate (null = refused), description]
+        $mismatch = 'does not match';
+        $noRate = 'no tax rate recorded';
+        // [shop-rate fallback enabled, item taxes by rate id, order tax rows, net, tax, woocommerce_shipping_tax_class (null = unset), cart item classes, shop rates, expected rate or refusal text, description]
         $cases = [
-            [[1 => 2.5], [[1, 25.0, false]], 10.0, 2.5, null, [], [], 0.25, 'WC-engine-taxed shipping keeps its declared rate'],
-            [[], [], 10.0, 1.2, 'reduced-rate', [], $reduced12, 0.12, 'third-party tax with no rate row resolves from the shop shipping tax class'],
-            [[], [], 10.0, 2.5, '', [], $standard25, 0.25, 'shop shipping tax class Standard'],
-            [[], [], 10.0, 1.2, 'inherit', ['reduced-rate'], $standard25 + $reduced12, 0.12, 'based on cart items takes the cart item class'],
-            [[], [], 10.0, 2.5, 'inherit', ['reduced-rate', ''], $standard25 + $reduced12, 0.25, 'based on cart items prefers Standard when a cart item uses it, as core does'],
-            [[1 => 2.0], [[1, 25.0, false]], 10.0, 2.0, null, [], [], null, 'declared rate that does not match the tax charged is refused'],
-            [[], [], 10.0, 3.0, 'reduced-rate', [], $reduced12, null, 'shop rate that does not match the tax charged is refused'],
-            [[1 => 2.52], [[1, 25.0, false]], 10.0, 2.52, null, [], [], 0.25, 'rounding within the 0.02 tolerance reconciles'],
-            [[1 => 0.5, 2 => 1.05], [[1, 5.0, false], [2, 10.0, true]], 10.0, 1.55, null, [], [], 0.155, 'compound order tax rows combine as a + b + ab'],
-            [[], [], 10.0, 1.55, 'gst-qst', [], $compound, 0.155, 'compound shop rates combine as a + b + ab'],
-            [[], [], 10.0, 0.0, null, [], [], 0.0, 'zero-tax shipping stays untaxed'],
-            [[], [], 10.0, 2.5, null, [], [], null, 'taxed line, shop setting unset and no matching rate: refused, never 0%'],
-            [[], [], 10.0, 1.2, 'reduced-rate', [], ['reduced-rate' => [2 => $row(12.0, 'no')]], null, 'taxed line whose only matching rate excludes shipping is refused'],
-            [[], [], 10.0, 1.2, 'inherit', [], $reduced12, null, 'based on cart items with no taxable cart item leaves shipping untaxed, so a taxed line is refused'],
+            [false, [1 => 2.5], [[1, 25.0, false]], 10.0, 2.5, null, [], [], 0.25, 'WC-engine-taxed shipping keeps its declared rate'],
+            [true, [], [], 10.0, 1.2, 'reduced-rate', [], $reduced12, 0.12, 'fallback on: third-party tax with no rate row resolves from the shop shipping tax class'],
+            [false, [], [], 10.0, 1.2, 'reduced-rate', [], $reduced12, $noRate, 'fallback off: third-party tax with no rate row is refused by name, never 0%'],
+            [true, [], [], 10.0, 2.5, '', [], $standard25, 0.25, 'shop shipping tax class Standard'],
+            [true, [], [], 10.0, 1.2, 'inherit', ['reduced-rate'], $standard25 + $reduced12, 0.12, 'based on cart items takes the cart item class'],
+            [true, [], [], 10.0, 2.5, 'inherit', ['reduced-rate', ''], $standard25 + $reduced12, 0.25, 'based on cart items prefers Standard when a cart item uses it, as core does'],
+            [false, [1 => 2.0], [[1, 25.0, false]], 10.0, 2.0, null, [], [], $mismatch, 'fallback off: declared rate that does not match the tax charged is refused'],
+            [true, [1 => 2.0], [[1, 25.0, false]], 10.0, 2.0, null, [], [], $mismatch, 'fallback on: declared rate that does not match the tax charged is refused'],
+            [true, [], [], 10.0, 3.0, 'reduced-rate', [], $reduced12, $mismatch, 'shop rate that does not match the tax charged is refused'],
+            [false, [1 => 2.52], [[1, 25.0, false]], 10.0, 2.52, null, [], [], 0.25, 'rounding within the 0.02 tolerance reconciles'],
+            [false, [1 => 0.5, 2 => 1.05], [[1, 5.0, false], [2, 10.0, true]], 10.0, 1.55, null, [], [], 0.155, 'compound order tax rows combine as a + b + ab'],
+            [true, [], [], 10.0, 1.55, 'gst-qst', [], $compound, 0.155, 'compound shop rates combine as a + b + ab'],
+            [false, [], [], 10.0, 0.0, null, [], [], 0.0, 'zero-tax shipping stays untaxed'],
+            [true, [], [], 10.0, 2.5, null, [], [], $mismatch, 'taxed line, shop setting unset and no matching rate: refused, never 0%'],
+            [true, [], [], 10.0, 1.2, 'reduced-rate', [], ['reduced-rate' => [2 => $row(12.0, 'no')]], $mismatch, 'taxed line whose only matching rate excludes shipping is refused'],
+            [true, [], [], 10.0, 1.2, 'inherit', [], $reduced12, $mismatch, 'based on cart items with no taxable cart item leaves shipping untaxed, so a taxed line is refused'],
         ];
 
         $GLOBALS['__twoinc_test_tax_classes'] = ['Reduced rate', 'GST QST'];
         $failures = [];
-        foreach ($cases as [$itemTaxes, $orderTaxRows, $net, $tax, $shopClass, $itemClasses, $shopRates, $expected, $description]) {
+        $flag = WC_Twoinc_Brand::prefixed_name('shipping_tax_from_shop_rates');
+        foreach ($cases as [$fallback, $itemTaxes, $orderTaxRows, $net, $tax, $shopClass, $itemClasses, $shopRates, $expected, $description]) {
+            $GLOBALS['__twoinc_test_options'][$flag] = $fallback ? 'yes' : 'no';
             $GLOBALS['__twoinc_test_find_rates'] = $shopRates;
             unset($GLOBALS['__twoinc_test_find_rates_args']);
             if ($shopClass === null) {
@@ -2035,8 +2041,8 @@ final class BrandConfigSpec
             } catch (Exception $e) {
                 $actual = 'refused: ' . $e->getMessage();
             }
-            $want = $expected === null ? 'refused' : WC_Twoinc_Helper::round_rate($expected);
-            if ($expected === null ? strpos($actual, 'refused: ') !== 0 : $actual !== $want) {
+            $want = is_string($expected) ? 'refused: ...' . $expected . '...' : WC_Twoinc_Helper::round_rate($expected);
+            if (is_string($expected) ? strpos($actual, 'refused: ') !== 0 || strpos($actual, $expected) === false : $actual !== $want) {
                 $failures[] = sprintf('%s: expected %s, got %s', $description, $want, $actual);
             }
             $location = $GLOBALS['__twoinc_test_find_rates_args'] ?? null;
@@ -2044,7 +2050,7 @@ final class BrandConfigSpec
                 $failures[] = $description . ': shop rates looked up away from the order tax location';
             }
         }
-        unset($GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class']);
+        unset($GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'], $GLOBALS['__twoinc_test_options'][$flag]);
 
         TinyAssert::same([], $failures, "Failing cases:\n  " . implode("\n  ", $failures));
     }
@@ -2061,7 +2067,7 @@ final class BrandConfigSpec
             return new StubShippingItem($net, $tax, $taxes);
         };
 
-        // [line type, parent order tax rows, refund's own tax rows, item taxes by rate id, net, tax, expected rate (null = refused), description]
+        // [line type, parent order tax rows, refund's own tax rows, item taxes by rate id, net, tax, expected rate or refusal text, description]
         $cases = [
             ['line_item', $parent24, [[1, 25.5, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'product refund after a rate change keeps the charged rate'],
             ['fee', $parent24, [[1, 25.5, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'fee refund after a rate change keeps the charged rate'],
@@ -2070,10 +2076,12 @@ final class BrandConfigSpec
             ['fee', $parent24, [[1, 0.0, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'fee refund after the rate row is deleted keeps the charged rate'],
             ['shipping', $parent24, [[1, 0.0, false]], [1 => -2.4], -10.0, -2.4, 0.24, 'shipping refund after the rate row is deleted keeps the charged rate'],
             ['shipping', $compound, [[1, 5.0, false], [2, 0.0, false]], [1 => -0.5, 2 => -1.05], -10.0, -1.55, 0.155, 'compound shipping refund combines the parent rates'],
-            ['shipping', $parent24, [[1, 24.0, false]], [1 => -5.0], -10.0, -5.0, null, 'refund shipping tax that does not match the charged rate is refused'],
-            ['shipping', [], [], [], -10.0, -1.2, null, 'refund never resolves a missing shipping rate from live shop config'],
+            ['shipping', $parent24, [[1, 24.0, false]], [1 => -5.0], -10.0, -5.0, 'does not match', 'refund shipping tax that does not match the charged rate is refused'],
+            ['shipping', [], [], [], -10.0, -1.2, 'no tax rate recorded', 'refund never resolves a missing shipping rate from live shop config, even with the fallback on'],
         ];
 
+        $flag = WC_Twoinc_Brand::prefixed_name('shipping_tax_from_shop_rates');
+        $GLOBALS['__twoinc_test_options'][$flag] = 'yes';
         $GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'] = 'reduced-rate';
         $GLOBALS['__twoinc_test_find_rates'] = ['reduced-rate' => [2 => ['rate' => 12.0, 'shipping' => 'yes', 'compound' => 'no', 'label' => 'VAT']]];
         $toTaxItems = static function (array $rows) {
@@ -2106,12 +2114,12 @@ final class BrandConfigSpec
             } catch (Exception $e) {
                 $actual = 'refused: ' . $e->getMessage();
             }
-            $want = $expected === null ? 'refused' : WC_Twoinc_Helper::round_rate($expected);
-            if ($expected === null ? strpos($actual, 'refused: ') !== 0 : $actual !== $want) {
+            $want = is_string($expected) ? 'refused: ...' . $expected . '...' : WC_Twoinc_Helper::round_rate($expected);
+            if (is_string($expected) ? strpos($actual, 'refused: ') !== 0 || strpos($actual, $expected) === false : $actual !== $want) {
                 $failures[] = sprintf('%s: expected %s, got %s', $description, $want, $actual);
             }
         }
-        unset($GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'], $GLOBALS['__twoinc_test_wc_orders'][7]);
+        unset($GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'], $GLOBALS['__twoinc_test_options'][$flag], $GLOBALS['__twoinc_test_wc_orders'][7]);
 
         TinyAssert::same([], $failures, "Failing cases:\n  " . implode("\n  ", $failures));
     }
@@ -3840,8 +3848,9 @@ final class BrandConfigSpec
         $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
         $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on');
         $attempted_option = WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on');
+        $fallback_option = WC_Twoinc_Brand::prefixed_name('shipping_tax_from_shop_rates');
 
-        $seed = static function (?string $clear) use ($settings_option, $terms_option, $checked_option, $attempted_option) {
+        $seed = static function (?string $clear) use ($settings_option, $terms_option, $checked_option, $attempted_option, $fallback_option) {
             $settings = ['api_key' => 'key'];
             if ($clear !== null) {
                 $settings['clear_options_on_uninstall'] = $clear;
@@ -3851,6 +3860,7 @@ final class BrandConfigSpec
                 $terms_option => '[30,60]',
                 $checked_option => 999,
                 $attempted_option => 998,
+                $fallback_option => 'yes',
             ];
         };
 
@@ -3879,6 +3889,7 @@ final class BrandConfigSpec
         TinyAssert::same(false, array_key_exists($terms_option, $GLOBALS['__twoinc_test_options']));
         TinyAssert::same(false, array_key_exists($checked_option, $GLOBALS['__twoinc_test_options']));
         TinyAssert::same(false, array_key_exists($attempted_option, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::same(false, array_key_exists($fallback_option, $GLOBALS['__twoinc_test_options']));
     }
 
     /**
