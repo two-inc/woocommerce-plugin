@@ -5747,11 +5747,16 @@ class Twoinc {
         }
       });
 
-      // The displayed total keys the verdict cache, so a changed cart is asked about again.
-      let hashedBody = twoincUtilHelper.getUnsecuredHash(
-        jsonBody + "|" + twoincDomHelper.getPrice("order-total")
-      );
-      if (Twoinc.getInstance().orderIntentLog[hashedBody]) {
+      // Posted beside the body: the server applies it before recalculating the cart's surcharge.
+      const selectedTerm = jQuery("input[name='two_selected_term']").first().val() || "";
+      // The displayed total and term key the verdict cache, so a changed cart is asked about again.
+      // With no readable total every cart would share one key, so nothing is cached.
+      const total = twoincDomHelper.getPrice("order-total");
+      const hashedBody =
+        total == null
+          ? null
+          : twoincUtilHelper.getUnsecuredHash(jsonBody + "|" + total + "|" + selectedTerm);
+      if (hashedBody && Twoinc.getInstance().orderIntentLog[hashedBody]) {
         // This body has already been answered — render the cached verdict
         // and disarm: leaving the interval running would re-render the
         // cached verdict every second forever, and leave `pendingCheck`
@@ -5844,7 +5849,11 @@ class Twoinc {
         // rest of the page. A timeout arrives as a `.fail` with status 0,
         // which paints the generic decline and is deliberately not cached.
         timeout: 30000,
-        data: { csrf_token: twoincUtilHelper.proxyCsrfToken(), intent: jsonBody }
+        data: {
+          csrf_token: twoincUtilHelper.proxyCsrfToken(),
+          intent: jsonBody,
+          two_selected_term: selectedTerm
+        }
       });
       Twoinc.getInstance().orderIntentCheck.inFlightXhr = approvalResponse;
 

@@ -5642,7 +5642,18 @@ if (!class_exists('WC_Twoinc')) {
             // Store the Twoinc Order Id for future use
             $order->update_meta_data(WC_Twoinc_Brand::prefixed_name('order_id'), $body['id']);
             $twoinc_meta = $this->get_save_twoinc_meta($order, $body['id']);
-            $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
+            try {
+                $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
+            } catch (Exception $e) {
+                // The Two order exists, so its id must be saved; an empty hash only makes the next save sync it.
+                $twoinc_updated_order_hash = '';
+                if (function_exists('wc_get_logger')) {
+                    wc_get_logger()->error(
+                        sprintf('Order %s: created, but no change hash could be taken: %s', $order->get_id(), $e->getMessage()),
+                        ['source' => 'twoinc-payment-gateway']
+                    );
+                }
+            }
             $order->update_meta_data(WC_Twoinc_Brand::meta_key('req_body_hash'), $twoinc_updated_order_hash);
 
             if (isset($body['state'])) {
