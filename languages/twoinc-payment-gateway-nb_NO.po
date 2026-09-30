@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/app\n"
-"POT-Creation-Date: 2026-09-30T14:47:09+00:00\n"
+"POT-Creation-Date: 2026-09-30T22:23:01+00:00\n"
 "PO-Revision-Date: 2025-07-01 10:29+0000\n"
 "Last-Translator: \n"
 "Language-Team: Norwegian (Bokmål)\n"
@@ -1729,25 +1729,19 @@ msgid "Postal code"
 msgstr "Postkode"
 
 #. translators: 1: request type (e.g. order_update). 2: product name (e.g. Two). 3: what went wrong.
-#: class/WC_Twoinc_Helper.php:1309
+#: class/WC_Twoinc_Helper.php:1310
 #, php-format
 msgid "The %1$s request was not sent to %2$s: the twoinc_order_postprocessing filter failed (%3$s)."
 msgstr ""
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:1812
+#: class/WC_Twoinc_Helper.php:1822
 #, php-format
 msgid "Shipping \"%s\" cannot be refunded: the order line it refunds was not found."
 msgstr "Frakten «%s» kan ikke refunderes: ordrelinjen den refunderer ble ikke funnet."
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:1879
-#, php-format
-msgid "Shipping \"%s\" was charged tax but has no tax rate recorded."
-msgstr "Frakten «%s» ble belastet avgift, men har ingen registrert avgiftssats."
-
-#. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:1996
+#: class/WC_Twoinc_Helper.php:1995
 #, php-format
 msgid "The tax charged on \"%s\" does not match the shop's tax rates."
 msgstr "Avgiften belastet på «%s» samsvarer ikke med butikkens avgiftssatser."

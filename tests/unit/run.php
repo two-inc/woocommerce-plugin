@@ -56,6 +56,7 @@ final class BrandConfigSpec
             'testShippingDetailsCarriedByCreateAndEditBodies',
             'testShippingDetailsFilterOverrides',
             'testShippingDetailsFilterGarbageDiscarded',
+            'testShippingRateFollowsTheControlTable',
             'testShippingTaxRateComesFromShopRatesAndReconciles',
             'testRefundTaxRatesComeFromTheParentOrder',
             'testTaxHelpersKeepTheirPre300CallForms',
@@ -1964,7 +1965,7 @@ final class BrandConfigSpec
         TinyAssert::true(isset($body['shipping_details']['expected_delivery_date']));
     }
 
-    /** TWO-26072: shipping rate from the order's tax rows, else WooCommerce's own shipping tax class; a mismatch refuses. */
+    /** TWO-26072: shipping rate from the order's tax rows, else (option on) WooCommerce's own shipping tax class, which must reconcile. */
     private static function testShippingTaxRateComesFromShopRatesAndReconciles(): void
     {
         $row = static function (float $percent, string $shipping = 'yes', string $compound = 'no') {
@@ -1979,7 +1980,6 @@ final class BrandConfigSpec
         $placed = [WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order'];
         $base = ['country' => 'GB', 'state' => '', 'postcode' => 'EC1A', 'city' => 'London'];
         $mismatch = 'refused: does not match';
-        $noRate = 'refused: no tax rate recorded';
         $defaults = [
             'fallback' => false, 'orderMeta' => [], 'orderTaxes' => [], 'lines' => [[10.0, 0.0, []]], 'shopClass' => null,
             'filter' => null, 'itemClasses' => [], 'products' => 1, 'shopRates' => [], 'location' => null,
@@ -1988,14 +1988,12 @@ final class BrandConfigSpec
         $cases = [
             [['lines' => [[10.0, 2.5, [1 => 2.5]]], 'orderTaxes' => $rows25], 0.25, 'WC-engine-taxed shipping keeps its declared rate'],
             [['fallback' => true, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], 0.12, 'fallback on: third-party tax with no rate row resolves from the shop shipping tax class'],
-            [['lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], $noRate, 'fallback off: third-party tax with no rate row is refused by name, never 0%'],
+            [['lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], 0.0, 'fallback off: third-party tax with no rate row is sent as charged at 0%, for the API to validate'],
             [['fallback' => true, 'lines' => [[10.0, 2.5, []]], 'shopClass' => '', 'shopRates' => $standard25], 0.25, 'shop shipping tax class Standard'],
             [['fallback' => true, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'inherit', 'itemClasses' => ['reduced-rate'], 'shopRates' => $standard25 + $reduced12], 0.12, 'based on cart items takes the cart item class'],
             [['fallback' => true, 'lines' => [[10.0, 2.5, []]], 'shopClass' => 'inherit', 'itemClasses' => ['reduced-rate', ''], 'shopRates' => $standard25 + $reduced12], 0.25, 'based on cart items prefers Standard when a cart item uses it, as core does'],
-            [['lines' => [[10.0, 2.0, [1 => 2.0]]], 'orderTaxes' => $rows25], $mismatch, 'fallback off: declared rate that does not match the tax charged is refused'],
-            [['fallback' => true, 'lines' => [[10.0, 2.0, [1 => 2.0]]], 'orderTaxes' => $rows25], $mismatch, 'fallback on: declared rate that does not match the tax charged is refused'],
             [['fallback' => true, 'lines' => [[10.0, 3.0, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], $mismatch, 'shop rate that does not match the tax charged is refused'],
-            [['lines' => [[10.0, 2.52, [1 => 2.52]]], 'orderTaxes' => $rows25], 0.25, 'rounding within the 0.02 tolerance reconciles'],
+            [['fallback' => true, 'lines' => [[10.0, 2.52, []]], 'shopClass' => '', 'shopRates' => $standard25], 0.25, 'rounding within the 0.02 tolerance reconciles'],
             [['lines' => [[10.0, 1.55, [1 => 0.5, 2 => 1.05]]], 'orderTaxes' => [[1, 5.0, false], [2, 10.0, true]]], 0.155, 'compound order tax rows combine as a + b + ab'],
             [['fallback' => true, 'lines' => [[10.0, 1.55, []]], 'shopClass' => 'gst-qst', 'shopRates' => $compound], 0.155, 'compound shop rates combine as a + b + ab'],
             [[], 0.0, 'zero-tax shipping stays untaxed'],
@@ -2007,14 +2005,55 @@ final class BrandConfigSpec
             [['lines' => [[0.0, 0.0, []]]], [], 'free shipping with a coupon sends no shipping line'],
             [['fallback' => true, 'lines' => [[10.0, 2.5, [1 => 2.5]], [5.0, 0.6, []]], 'orderTaxes' => $rows25, 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], [0.25, 0.12], 'multiple shipping lines each resolve their own rate'],
             [['fallback' => true, 'lines' => [[10.0, 2.5, []]], 'shopClass' => '', 'shopRates' => $standard25, 'location' => $base], 0.25, 'guest with no address resolves at the tax location core defaults to (shop base)'],
-            [['orderMeta' => $placed, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], 0.12, 'edit sync of a placed 2.x order resolves the shop rate without the option, and reconciles'],
-            [['orderMeta' => $placed, 'lines' => [[10.0, 3.0, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], $mismatch, 'edit sync of a placed 2.x order whose tax does not reconcile is refused by name'],
+            [['orderMeta' => $placed, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], 0.0, 'edit sync of a placed order with no stored rate is sent as charged at 0%, without reading the shop'],
+            [['fallback' => true, 'orderMeta' => $placed, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], 0.0, 'edit sync of a placed order with no stored rate ignores the option turned on since'],
+            [['orderMeta' => $placed, 'lines' => [[10.0, 3.0, [], $stored12]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], $mismatch, 'edit sync of a fallback order whose tax no longer reconciles with the stored rate is refused'],
             [['orderMeta' => $placed, 'lines' => [[10.0, 1.2, [], $stored12]], 'shopClass' => '', 'shopRates' => $standard25], 0.12, 'edit sync of a fallback order uses the rate stored at checkout, not live config'],
         ];
 
+        self::assertShippingRateCases($defaults, $cases);
+    }
+
+    /**
+     * TWO-26117: one row per cell of the shipping rate table. "Populated" is the shop-rates option on; the line's
+     * rate row, or its absence, is what the shop recorded. Rate provided, including 0%: sent as is, unchecked.
+     * No rate, control blank: sent as charged at 0%, unchecked. No rate, control populated: resolved from the
+     * control and reconciled, whatever the line's tax.
+     */
+    private static function testShippingRateFollowsTheControlTable(): void
+    {
+        $shop25 = ['' => [1 => ['rate' => 25.0, 'shipping' => 'yes', 'compound' => 'no', 'label' => 'VAT']]];
+        $rows = [[1, 25.0, false], [2, 0.0, false]];
+        $defaults = [
+            'fallback' => false, 'orderMeta' => [], 'orderTaxes' => $rows, 'lines' => [[10.0, 0.0, []]], 'shopClass' => '',
+            'filter' => null, 'itemClasses' => [], 'products' => 1, 'shopRates' => $shop25, 'location' => null,
+        ];
+        $mismatch = 'refused: does not match';
+        // [overrides of $defaults; lines are [net, tax, item taxes by rate id, item meta, tax status], expected rate or refusal, description]
+        $cases = [
+            [['lines' => [[10.0, 2.5, [1 => 2.5]]]], 0.25, 'rate provided, control blank: sent as declared'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, [1 => 2.5]]]], 0.25, 'rate provided, control populated: sent as declared'],
+            [['lines' => [[10.0, 2.0, [1 => 2.0]]]], 0.25, 'rate provided that does not reconcile, control blank: sent unchecked'],
+            [['fallback' => true, 'lines' => [[10.0, 2.0, [1 => 2.0]]]], 0.25, 'rate provided that does not reconcile, control populated: sent unchecked'],
+            [['lines' => [[10.0, 0.0, [2 => 0.0]]]], 0.0, 'explicit 0% rate, control blank: sent at 0%'],
+            [['fallback' => true, 'lines' => [[10.0, 0.0, [2 => 0.0]]]], 0.0, 'explicit 0% rate, control populated: sent at 0%, not resolved from the control'],
+            [['lines' => [[10.0, 1.2, [2 => 0.0]]]], 0.0, 'explicit 0% rate with tax charged, control blank: sent as charged, unchecked'],
+            [['fallback' => true, 'lines' => [[10.0, 1.2, [2 => 0.0]]]], 0.0, 'explicit 0% rate with tax charged, control populated: sent as charged, unchecked'],
+            [[], 0.0, 'no rate and no tax, control blank: sent at 0%'],
+            [['fallback' => true], $mismatch, 'no rate and no tax, control populated at 25%: resolved from the control and refused'],
+            [['lines' => [[10.0, 2.5, []]]], 0.0, 'no rate with tax charged, control blank: sent as charged at 0%, unchecked'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, []]]], 0.25, 'no rate with tax charged, control populated: resolved from the control'],
+            [['fallback' => true, 'lines' => [[10.0, 2.0, []]]], $mismatch, 'no rate with tax that does not reconcile, control populated: refused'],
+            [['fallback' => true, 'lines' => [[10.0, 0.0, [], [], 'none']]], 0.0, 'non-taxable shipping method, control populated: no rate, resolves to 0% and reconciles'],
+        ];
+        self::assertShippingRateCases($defaults, $cases);
+    }
+
+    private static function assertShippingRateCases(array $defaults, array $cases): void
+    {
+        $meta = WC_Twoinc_Brand::meta_key('shipping_tax_rate');
         $GLOBALS['__twoinc_test_tax_classes'] = ['Reduced rate', 'GST QST'];
         $failures = [];
-        $flag = WC_Twoinc_Brand::prefixed_name('shipping_tax_from_shop_rates');
         foreach ($cases as [$overrides, $expected, $description]) {
             $c = array_merge($defaults, $overrides);
             self::setShippingTaxShop($c['fallback'], $c['shopClass'], $c['shopRates']);
@@ -2066,14 +2105,15 @@ final class BrandConfigSpec
             [['type' => 'fee', 'refundRows' => [[1, 0.0, false]]], 0.24, 'fee refund after the rate row is deleted keeps the charged rate'],
             [['refundRows' => [[1, 0.0, false]]], 0.24, 'shipping refund after the rate row is deleted keeps the charged rate'],
             [['parentRows' => [[1, 5.0, false], [2, 10.0, true]], 'refundRows' => [[1, 5.0, false], [2, 0.0, false]], 'parent' => [10.0, 1.55, [1 => 0.5, 2 => 1.05]], 'refund' => [-10.0, -1.55, [1 => -0.5, 2 => -1.05]]], 0.155, 'compound shipping refund combines the parent rates'],
-            [['refund' => [-10.0, -5.0, [1 => -5.0]]], $mismatch, 'refund shipping tax that does not match the charged rate is refused'],
+            [['refund' => [-10.0, -5.0, [1 => -5.0]]], 0.24, 'refund of shipping with a rate provided is sent at the charged rate, unchecked'],
+            [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, [], [$meta => ['rate' => 0.12, 'name' => 'VAT']]], 'refund' => [-10.0, -3.0, []]], $mismatch, 'refund of a fallback order whose tax does not reconcile with the stored rate is refused'],
             [['refund' => [-4.0, -0.96, [1 => -0.96]]], 0.24, 'partial shipping refund'],
             [['refund' => [0.0, -2.4, [1 => -2.4]]], 0.24, 'tax-only shipping refund (VAT charged to a reverse-charge buyer) is sent at the charged rate'],
             [['refund' => [-10.0, 0.0, []]], 0.24, 'net-only shipping refund is sent at the charged rate'],
             [['type' => 'fee', 'refund' => [0.0, -2.4, [1 => -2.4]]], 0.24, 'tax-only fee refund is sent, not dropped'],
             [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, [], [$meta => ['rate' => 0.12, 'name' => 'VAT']]], 'refund' => [-10.0, -1.2, []]], 0.12, 'refund of a fallback order uses the rate stored at checkout'],
-            [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, []], 'refund' => [-10.0, -1.2, []]], 0.12, 'refund of a 2.x order with no rate row resolves the shop rate and reconciles it against the parent line'],
-            [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 3.0, []], 'refund' => [-10.0, -3.0, []]], $mismatch, 'refund of a 2.x order whose parent tax does not reconcile with the shop rate is refused by name'],
+            [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, []], 'refund' => [-10.0, -1.2, []]], 0.0, 'refund of an order placed with no rate and no stored rate is sent as charged at 0%, without reading the shop'],
+            [['parentRows' => [[2, 0.0, false]], 'refundRows' => [], 'parent' => [10.0, 0.0, [2 => 0.0]], 'refund' => [-10.0, 0.0, [2 => 0.0]]], 0.0, 'refund of shipping with an explicit 0% rate is sent at 0%, with the option on'],
             [['refundedId' => null], $noParent, 'shipping refund with no parent line (another plugin built the refund) is refused by name'],
             [['refundedId' => 6], $noParent, 'shipping refund whose parent line was deleted is refused by name'],
             [['type' => 'line_item', 'refund' => [-10.0, 0.0, []]], 0.24, 'net-only product refund is sent at the charged rate'],
@@ -2081,8 +2121,8 @@ final class BrandConfigSpec
             [['type' => 'line_item', 'refundedId' => null], 0.24, 'product refund with no parent line keeps its own tax rows'],
         ];
 
-        // Option off: neither the stored-rate nor the 2.x path depends on it.
-        self::setShippingTaxShop(false, 'reduced-rate', ['reduced-rate' => [2 => ['rate' => 12.0, 'shipping' => 'yes', 'compound' => 'no', 'label' => 'VAT']]]);
+        // Option on: after placement only stored data decides, so it must change nothing.
+        self::setShippingTaxShop(true, 'reduced-rate', ['reduced-rate' => [2 => ['rate' => 12.0, 'shipping' => 'yes', 'compound' => 'no', 'label' => 'VAT']]]);
         $failures = [];
         foreach ($cases as [$overrides, $expected, $description]) {
             $c = array_merge($defaults, $overrides);
