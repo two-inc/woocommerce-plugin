@@ -310,10 +310,10 @@ When populated, the rate comes from WooCommerce's own "Shipping tax class"
 setting under WooCommerce > Settings > Tax, including "based on cart items", at
 the order's tax location.
 
-| Shipping line | Control blank (the default) | Control populated |
-|---|---|---|
-| Rate provided by the shop, including an explicit 0% rate | Sent at the recorded rate as is. No plugin check. Then the `twoinc_order_postprocessing` hook runs, then Two's API validates. | Same as control blank. |
-| No rate provided (whatever the line's tax, including 0) | Sent as is: rate 0, tax as charged. No plugin check. Then the hook runs, then Two's API validates. | The rate is resolved from the control, and the line's tax must reconcile with it (within 0.02). If it does not, the request is refused with an error naming the line. If it does, the line is sent at that rate and the hook runs. |
+| Shipping line                                            | Control blank (the default)                                                                                                   | Control populated                                                                                                                                                                                                                  |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rate provided by the shop, including an explicit 0% rate | Sent at the recorded rate as is. No plugin check. Then the `twoinc_order_postprocessing` hook runs, then Two's API validates. | Same as control blank.                                                                                                                                                                                                             |
+| No rate provided (whatever the line's tax, including 0)  | Sent as is: rate 0, tax as charged. No plugin check. Then the hook runs, then Two's API validates.                            | The rate is resolved from the control, and the line's tax must reconcile with it (within 0.02). If it does not, the request is refused with an error naming the line. If it does, the line is sent at that rate and the hook runs. |
 
 The check runs in the plugin's builders, before any filter and before the
 postprocessing hook, and never on what a filter returns. With the control
