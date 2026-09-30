@@ -7,6 +7,7 @@ require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/fixtures/orderpostprocessing.php';
 require __DIR__ . '/fixtures/builderorders.php';
 require __DIR__ . '/OrderPostprocessingSpec.php';
+require __DIR__ . '/TaxCodeSpec.php';
 
 final class TinyAssert
 {
@@ -17899,4 +17900,5 @@ CaptureMemorySpec::runAll();
 ProductPromoSpec::runAll();
 ProductButtonSpec::runAll();
 OrderPostprocessingSpec::runAll();
+TaxCodeSpec::runAll();
 print("All tests passed.\n");

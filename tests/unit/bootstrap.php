@@ -1689,6 +1689,17 @@ function wp_add_inline_script($handle, $data, $position = 'after')
     return true;
 }
 
+/** The product lookups the line builder makes for a product it was given (TWO-24877). */
+function wp_get_post_terms($post_id, $taxonomy = 'post_tag', $args = [])
+{
+    return [];
+}
+
+function get_the_post_thumbnail_url($post = null, $size = 'post-thumbnail')
+{
+    return false;
+}
+
 class StubProduct
 {
     private $purchasable;
