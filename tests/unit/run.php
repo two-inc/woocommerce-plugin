@@ -2096,8 +2096,8 @@ final class BrandConfigSpec
             if ($looked_up !== null && $looked_up['country'] !== $order->location['country']) {
                 $failures[] = $description . ': shop rates looked up away from the order tax location';
             }
-            if (!is_string($expected) && isset($shippings[0]->meta[$meta]) && !isset($c['lines'][0][3][$meta])
-                && abs($shippings[0]->meta[$meta]['rate'] - ((array) $expected)[0]) > 1e-9) {
+            $stored = isset($c['lines'][0][3][$meta]) ? null : ($shippings[0]->meta[$meta]['rate'] ?? null);
+            if (!is_string($expected) && $stored !== null && abs($stored - ((array) $expected)[0]) > 1e-9) {
                 $failures[] = $description . ': stored rate is not the rate sent';
             }
         }
