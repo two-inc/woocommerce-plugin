@@ -73,7 +73,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 * Refunds and order edits of an order whose shipping rate came from the shop's rates use the rate recorded at checkout. For an order placed before 3.0.0 whose shipping was taxed with no tax rate recorded, the rate is taken from the shop's shipping tax class and must match the tax the order was charged, or the refund is refused with a named error.
 * Requires WooCommerce 7.6 or later.
 * Developers can change anything the plugin sends to Two, such as treating untaxed shipping as VAT-inclusive, through the new `twoinc_order_postprocessing` filter. It is documented as a permanent contract in the plugin's README. The older order filters still work but are deprecated.
-* Every order, update and refund is checked before it is sent: line amounts, tax subtotals and order totals must add up, whether they came from your shop or from custom code. One that does not is refused with a named error rather than sent to Two.
+* Whatever that filter changes is checked before it is sent: line amounts, tax subtotals and order totals must still add up as they did in your shop's own order. A change that breaks them is refused with a named error rather than sent to Two. Orders your shop sends without the filter go out exactly as before.
 * The availability check at checkout is now worked out on your server from the basket, so it sees the same order lines the order itself will carry.
 
 = 2.25.0 =

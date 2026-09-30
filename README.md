@@ -371,27 +371,49 @@ payload is checked and sent.
 | `refund`        | A refund                                                                                                                                                                |
 | `cancel`        | Cancellation                                                                                                                                                            |
 
-**Checks on the returned payload**. They run on every request, subscriber or
-not. When a subscriber changed the payload, a failure refuses the request with
-the code below, logged at error level with the request type, the failing
-figures and every changed field:
+To build the intent, the plugin has WooCommerce copy the cart onto an unsaved
+order, so third-party `woocommerce_checkout_create_order_line_item`,
+`woocommerce_checkout_create_order_shipping_item`,
+`woocommerce_checkout_create_order_fee_item`,
+`woocommerce_checkout_create_order_tax_item` and
+`woocommerce_checkout_create_order_coupon_item` actions fire on every intent check,
+with an order whose id is `0`. Code on those actions that writes elsewhere
+should skip an order with id `0`.
 
-| Code                                              | Check                                                                                                                     |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `TWO_ORDER_POSTPROCESSING_HOOK_FAILED`            | The subscriber threw, or returned something other than an array                                                           |
-| `TWO_ORDER_POSTPROCESSING_BODY_NOT_ACCEPTED`      | A body was added to `order_confirm`, `capture` or `cancel`                                                                |
-| `TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT`      | A line's net + tax is not its gross, or its tax is not its net at its declared `tax_rate` (0.02 tolerance)                |
-| `TWO_ORDER_POSTPROCESSING_SUBTOTALS_INCONSISTENT` | `tax_subtotals` do not sum from the lines at each rate                                                                    |
-| `TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT`    | Order net/tax/gross do not sum from the lines or gross is not net + tax; or a refund `amount` is not the sum of its lines |
+**Checks on the returned payload**. A payload no subscriber changed goes out
+exactly as it would without the hook, held only to the check the plugin has
+always applied: shipping tax against the shop's shipping rate. When a subscriber
+changed it, a failure below refuses the request with its code, logged at error
+level with the request type, the failing figures and every changed field. The
+refusal is a `WC_Twoinc_Order_Postprocessing_Exception`, whose
+`get_refusal_code()` returns the code. Lines the subscriber left as the plugin
+built them are not re-checked, and the order figures may differ from what the
+lines sum to only by what the plugin's own payload did: a shop that sends store
+credit or a gift card outside its lines keeps sending it. A line is checked to
+0.02; sums across lines to 0.01 per line, and never less than 0.02, because each
+line is rounded on its own:
+
+| Code                                              | Check                                                                                                                                                                         |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TWO_ORDER_POSTPROCESSING_HOOK_FAILED`            | The subscriber threw, or returned something other than an array                                                                                                               |
+| `TWO_ORDER_POSTPROCESSING_BODY_NOT_ACCEPTED`      | A body was added to `order_confirm`, `capture` or `cancel`                                                                                                                    |
+| `TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT`      | A changed or added line's net + tax is not its gross, or its tax is not its net at its declared `tax_rate`; or `line_items` was removed, emptied or is not a list             |
+| `TWO_ORDER_POSTPROCESSING_SUBTOTALS_INCONSISTENT` | `tax_subtotals` at a rate differ from the lines at that rate by more than the plugin's payload did, or were removed                                                           |
+| `TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT`    | Order net/tax/gross differ from the lines, or gross from net + tax, by more than the plugin's payload did, or one was removed; likewise a refund `amount`, or it changed sign |
 
 A refusal is never "fixed" by falling back to the unedited payload. Checkout
-shows the buyer the usual "not available" message; admin actions leave an order
-note naming the code; a refund returns the error to the refund screen. The
+shows the buyer the usual "not available" message; a refused intent check is
+answered as an error rather than a decline, so the next check asks again; admin
+actions leave an order note naming the code; a refund returns the error to the refund screen. The
 plugin never recomputes anything after the hook: a subscriber that changes a
 line also updates the totals and subtotals it affects. It can do that with the
-opt-in helper `WC_Twoinc_Helper::recompute_totals_from_lines(array $payload): array`,
+opt-in helper
+`WC_Twoinc_Helper::recompute_totals_from_lines(array $payload, array $original = []): array`,
 which rebuilds the order totals, `tax_subtotals` and a refund `amount` from the
-payload's own lines, touching only the fields the payload already carries.
+payload's own lines, touching only the fields the payload already carries. Pass
+the payload as the subscriber received it as `$original` to carry over whatever
+the shop declared beyond its lines; without it, the totals are the lines alone,
+which is refused on an order that had anything beyond them.
 WooCommerce copies the order totals from the order itself, so the plugin runs no
 separate comparison against the shop's cart.
 
@@ -420,6 +442,7 @@ add_filter('twoinc_order_postprocessing', function (array $payload, array $conte
     if (!$rate || empty($payload['line_items'])) {
         return $payload;
     }
+    $original = $payload;
     foreach ($payload['line_items'] as &$line) {
         if ($line['type'] !== 'SHIPPING_FEE' || (float) $line['tax_amount'] != 0.0) {
             continue;
@@ -433,19 +456,19 @@ add_filter('twoinc_order_postprocessing', function (array $payload, array $conte
         $line['tax_class_name'] = 'VAT ' . number_format($rate * 100, 2) . '%';
     }
     unset($line);
-    return WC_Twoinc_Helper::recompute_totals_from_lines($payload);
+    return WC_Twoinc_Helper::recompute_totals_from_lines($payload, $original);
 }, 10, 2);
 ```
 
 The CI fixture `tests/unit/fixtures/orderpostprocessing.php` is a working
-subscriber, and the unit suite drives it through every request type.
+subscriber. The unit suite drives it through every request type, and the e2e
+suite loads it as an mu-plugin to place a real order with re-split shipping.
 
 **The older filters are deprecated** in favour of this one:
 `twoinc_payment_terms_line`, `two_order_create`, `two_order_edit` and
 `twoinc_order_payload` (see `docs/two-order-hook.md`). They still run, inside
-the order builders and before `twoinc_order_postprocessing`, and their output
-now passes the same checks, with the check's own message rather than a
-postprocessing code.
+the order builders and before `twoinc_order_postprocessing`, so their output is
+the plugin's payload and goes out as it always has.
 
 **Versioning**: this hook must remain for all time and must fire consistently
 in response to the same events.
