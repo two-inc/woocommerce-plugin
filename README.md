@@ -335,6 +335,57 @@ resolves and checks that line before the hook runs, and can refuse it.
 If an upgrade removes a non-empty "Default shipping tax class" value, the plugin
 logs a notice naming the old class (source `twoinc-payment-gateway`).
 
+## Tax codes for 0% lines
+
+Two's API accepts a `tax_code` on each order line. For a Spanish merchant a line
+at 0% tax must carry one, because a 0% rate on its own does not say why the
+line is untaxed. The plugin adds the code to every line it sends at 0%: order
+create, order edit, order intent and refund lines. Fulfilment sends no lines, so
+there is nothing to add. A line at any other rate is sent exactly as before,
+and so is every line of a merchant outside Spain who has mapped nothing.
+
+**Mapping.** Under WooCommerce > Settings > Payments > Two, "Tax codes for 0%
+lines" lists the standard tax class and every tax class the shop defines. Each
+has a dropdown of the tax codes Two offers for the merchant's country, fetched
+from Two's API and cached for a day, plus "(none)", the default. A code that
+needs an exemption reason Two cannot supply itself is not offered. A shipping
+line is looked up by the class WooCommerce's "Shipping tax class" setting gives
+it. A mapped class always wins, whatever the merchant's country.
+
+**Derivation.** For a Spanish merchant, a 0% line whose class is unmapped gets
+a code worked out from the order. A product line is a service when its product
+is virtual or downloadable, and goods otherwise. A shipping or fee line is goods
+when the order has at least one goods line, and a service otherwise. Goods
+follow the delivery address (the billing address when the order has no separate
+one). Services follow the buyer company's country, which is the billing
+country the order sends as `buyer.company.country_prefix`. The EU below is the
+27 member states plus Monaco. The Canary Islands, Ceuta and Melilla are Spanish
+postcodes starting 35 or 38, 51 and 52.
+
+| Line     | Where it goes, or who buys                                     | Code sent                |
+| -------- | -------------------------------------------------------------- | ------------------------ |
+| Goods    | Delivered outside the EU                                       | `ES_IVA_EXPORT`          |
+| Goods    | Delivered to the Canary Islands, Ceuta or Melilla              | `ES_IVA_EXPORT`          |
+| Goods    | Delivered to another EU state, for a buyer in another EU state | `ES_IVA_INTRA_COMMUNITY` |
+| Goods    | Delivered in mainland Spain or the Balearics                   | none                     |
+| Goods    | Delivered to another EU state, for a Spanish buyer             | none                     |
+| Services | Buyer in another EU state                                      | `ES_IVA_REVERSE_CHARGE`  |
+| Services | Buyer in Spain, or outside the EU                              | none                     |
+
+Where the table gives no code, the line is sent without one. **The plugin never
+refuses; the API does.** Two's API checks every code it receives, and refuses a
+Spanish merchant's 0% line that has none, with a reason the plugin logs and
+writes to the order note. To send those lines, map their tax class. The codes
+are added in the line builder, before `twoinc_payment_terms_line`,
+`twoinc_order_payload` and `twoinc_order_postprocessing`, so any of them can
+change or remove a code. A code that needs an exemption reason, such as
+`ES_IVA_EXEMPT_OTHER`, can be sent from `twoinc_order_postprocessing` with
+`tax_exemption_reason_code` set beside it.
+
+Known limits: goods to Northern Ireland derive as an export, and other member
+states' special territories derive by their ISO country code. Map the class, or
+use the hook, where that is wrong for you.
+
 ## Stable extension contract: order postprocessing
 
 `twoinc_order_postprocessing` is the one place for merchant code to change what

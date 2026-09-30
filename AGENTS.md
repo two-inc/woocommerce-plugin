@@ -667,3 +667,22 @@ it. Check before pushing:
 
 The expected top level is `assets brands class languages readme.txt templates
 tillit-payment-gateway.php uninstall.php views`.
+
+## Tax codes on 0% lines have one resolver
+
+`WC_Twoinc_Helper::apply_tax_codes()`, called at the end of `get_line_items()`,
+is the only place a `tax_code` is added (TWO-24877). Every builder that sends
+lines goes through it, so a new payload type gets codes by using the line
+builder, not by calling the resolver again. The merchant's mapping (the
+`tax_code_map` setting, keyed by tax class slug with the standard class as
+`standard`) wins; otherwise a Spanish merchant's line derives from the
+`ES_ZERO_RATE_DERIVATION` table. Change the rules by editing that table and
+its row in `tests/unit/TaxCodeSpec.php`, and keep the README table in step.
+
+- A non-zero line, and every line of a non-Spanish merchant with no mapping,
+  must stay byte-identical: the spec compares those payloads with the builder
+  goldens and with a resolver-free build.
+- The resolver never refuses and never changes a rate. Two's API validates the
+  code; the plugin is only an aid.
+- The merchant country is the Two merchant record's `country_code`, cached by
+  the merchant-record refresh; the resolver reads the cache and never fetches.
