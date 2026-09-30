@@ -1135,16 +1135,16 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * The one choke point every outbound order request passes before it is sent (TWO-26092): fires
-         * `twoinc_order_postprocessing`, runs the consistency gates on what it returns, and records any change.
-         * Never recomputes anything after the hook.
+         * `twoinc_order_postprocessing` and sends what it returns. The plugin does not check a subscriber's figures:
+         * Two's API validates the request as it arrives. Only a subscriber that throws, returns something other
+         * than an array, or returns something that cannot be encoded as JSON fails the request, as a code bug.
          *
          * @param array $payload the body exactly as it would be sent; [] for a request with no body
          * @param array $context from order_postprocessing_context()
          * @param bool  $record  false for a payload that is only hashed, never sent
          *
          * @return array the payload to send
-         * @throws WC_Twoinc_Order_Postprocessing_Exception when a subscriber threw or broke a gate
-         * @throws Exception when a gate fails on a payload no subscriber changed
+         * @throws WC_Twoinc_Order_Postprocessing_Exception when a subscriber failed
          */
         public static function postprocess_order_request(array $payload, array $context, $record = true)
         {
@@ -1158,44 +1158,22 @@ if (!class_exists('WC_Twoinc_Helper')) {
                  */
                 $processed = apply_filters('twoinc_order_postprocessing', $payload, $context);
             } catch (Throwable $e) {
-                self::refuse_postprocessing('TWO_ORDER_POSTPROCESSING_HOOK_FAILED', $context, 'subscriber threw ' . get_class($e) . ': ' . $e->getMessage(), []);
+                self::fail_postprocessing($context, 'a subscriber threw ' . get_class($e) . ': ' . $e->getMessage());
             }
             if (!is_array($processed)) {
-                self::refuse_postprocessing('TWO_ORDER_POSTPROCESSING_HOOK_FAILED', $context, 'subscriber returned ' . gettype($processed) . ', not an array', []);
+                self::fail_postprocessing($context, 'a subscriber returned ' . gettype($processed) . ', not an array');
+            }
+            if (json_encode(self::utf8ize($processed)) === false) {
+                self::fail_postprocessing($context, 'a subscriber returned a payload that cannot be encoded as JSON: ' . json_last_error_msg());
             }
 
-            $diff = self::payload_diff($payload, $processed);
-            $failure = self::find_order_gate_failure($context['request_type'], $payload, $processed, $diff !== []);
-            if ($failure !== null) {
+            if ($record && function_exists('wc_get_logger')) {
+                $diff = self::payload_diff($payload, $processed);
                 if ($diff !== []) {
-                    self::refuse_postprocessing($failure['code'], $context, $failure['detail'], $diff);
-                }
-                if (function_exists('wc_get_logger')) {
-                    wc_get_logger()->error(
-                        sprintf('%s request refused: %s', $context['request_type'], $failure['detail']),
+                    wc_get_logger()->debug(
+                        sprintf('twoinc_order_postprocessing changed the %s request: %s', $context['request_type'], self::describe_payload_diff($diff)),
                         ['source' => 'twoinc-payment-gateway']
                     );
-                }
-                throw new Exception($failure['message']);
-            }
-
-            if ($diff !== [] && $record) {
-                $summary = self::describe_payload_diff($diff);
-                if (function_exists('wc_get_logger')) {
-                    wc_get_logger()->info(
-                        sprintf('Order postprocessing changed the %s request: %s', $context['request_type'], $summary),
-                        ['source' => 'twoinc-payment-gateway']
-                    );
-                }
-                $order = $context['order'];
-                if ($order && $order->get_id()) {
-                    $order->add_order_note(sprintf(
-                        /* translators: 1: request type (e.g. order_update). 2: product name (e.g. Two). 3: changed fields with before and after values. */
-                        __('Order postprocessing changed the %1$s request sent to %2$s: %3$s', 'twoinc-payment-gateway'),
-                        $context['request_type'],
-                        WC_Twoinc_Brand::get('product_name'),
-                        $summary
-                    ));
                 }
             }
 
@@ -1249,83 +1227,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * The plugin's consistency gates (TWO-26092), run on the final payload whoever produced it. A payload no
-         * subscriber changed is held only to what its builder held it to before the hook existed, so the shop
-         * sends exactly what it sent then. A changed one is checked line by line where a line changed, and its
-         * figures may sit beyond its lines only by what the plugin's own payload did.
-         *
-         * @param string $request_type
-         * @param array  $before       the payload as the plugin built it; [] for a request defined with no body
-         * @param array  $payload
-         * @param bool   $changed      a subscriber changed the payload
-         *
-         * @return array|null ['code', 'message', 'detail'] for the first failure, null when every gate passes
-         */
-        private static function find_order_gate_failure($request_type, array $before, array $payload, $changed)
-        {
-            if ($before === []) {
-                return $payload === [] ? null : self::gate_failure(
-                    'TWO_ORDER_POSTPROCESSING_BODY_NOT_ACCEPTED',
-                    __('This request is sent without a body.', 'twoinc-payment-gateway'),
-                    'a body was added to a request the API defines with none'
-                );
-            }
-            $failure = $changed ? self::find_gated_field_failure($before, $payload, $request_type === 'refund') : null;
-            if ($failure !== null) {
-                return $failure;
-            }
-
-            $lines = isset($payload['line_items']) && is_array($payload['line_items']) ? $payload['line_items'] : [];
-            $built = isset($before['line_items']) && is_array($before['line_items']) ? $before['line_items'] : [];
-            foreach ($lines as $index => $line) {
-                if ($changed && !is_array($line)) {
-                    $message = __('The order totals do not match the order lines.', 'twoinc-payment-gateway');
-                    $detail = sprintf('line %s is %s, not a line', $index, gettype($line));
-                    return self::gate_failure('TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT', $message, $detail);
-                }
-                $line = is_array($line) ? $line : [];
-                $full = $changed && !in_array($line, $built, true);
-                $failure = self::find_line_failure($index, $line, $request_type === 'refund', $full);
-                if ($failure !== null) {
-                    return $failure;
-                }
-            }
-            if (!$changed) {
-                return null;
-            }
-
-            // Each line is rounded on its own, so a sum may drift a cent per line from the rounded total.
-            $tolerance = max(self::TAX_RECONCILE_TOLERANCE, 0.01 * max(count($lines), count($built)));
-            $was = self::residuals($before);
-            $now = self::residuals($payload);
-            foreach (array_unique(array_merge(array_keys($now), array_keys($was))) as $key) {
-                if (abs(($now[$key] ?? 0.0) - ($was[$key] ?? 0.0)) <= $tolerance + 1e-9) {
-                    continue;
-                }
-                if (strpos($key, 'tax_subtotals') === 0) {
-                    $code = 'TWO_ORDER_POSTPROCESSING_SUBTOTALS_INCONSISTENT';
-                    $message = __('The tax subtotals do not match the order lines.', 'twoinc-payment-gateway');
-                } elseif ($key === 'amount') {
-                    $code = 'TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT';
-                    $message = __('The refund amount does not match the refunded lines.', 'twoinc-payment-gateway');
-                } else {
-                    $code = 'TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT';
-                    $message = __('The order totals do not match the order lines.', 'twoinc-payment-gateway');
-                }
-                return self::gate_failure($code, $message, sprintf(
-                    '%s is %s beyond what the lines sum to; as the plugin built it, %s',
-                    $key,
-                    self::format_amount($now[$key] ?? 0.0),
-                    self::format_amount($was[$key] ?? 0.0)
-                ));
-            }
-            return null;
-        }
-
-        /**
          * What each figure a payload declares carries beyond what its lines sum to: zero for a shop whose totals
-         * are its lines, not zero where store credit, a gift card or rounding sits outside them. Subtotals first,
-         * so a failure names the most specific figure.
+         * are its lines, not zero where store credit, a gift card or rounding sits outside them.
          *
          * @return array<string, float>
          */
@@ -1354,11 +1257,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $residuals[$field] = (float) $payload[$field] - $sums[$sum];
                 }
             }
-            if (array_key_exists('gross_amount', $payload)) {
-                $residuals['gross_amount - net_amount - tax_amount'] = (float) $payload['gross_amount']
-                    - (float) ($payload['net_amount'] ?? 0) - (float) ($payload['tax_amount'] ?? 0);
-            }
-            // Magnitudes: refund lines are negative while the amount may be either sign; the sign is gated apart.
+            // Magnitudes: refund lines are negative while the amount may be either sign.
             if (array_key_exists('amount', $payload) && $lines !== []) {
                 $residuals['amount'] = abs((float) $payload['amount']) - abs($sums['gross']);
             }
@@ -1366,153 +1265,24 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * The gates below only read fields that are present, so a field the plugin sent must survive the hook: a
-         * subscriber may change any figure, not delete what the gates check it against.
-         *
-         * @return array|null
-         */
-        private static function find_gated_field_failure(array $before, array $payload, $is_refund)
-        {
-            $totals = __('The order totals do not match the order lines.', 'twoinc-payment-gateway');
-            $refund = __('The refund amount does not match the refunded lines.', 'twoinc-payment-gateway');
-            // field => [code, message]
-            $gated = [
-                'line_items' => ['TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT', $totals],
-                'tax_subtotals' => [
-                    'TWO_ORDER_POSTPROCESSING_SUBTOTALS_INCONSISTENT',
-                    __('The tax subtotals do not match the order lines.', 'twoinc-payment-gateway'),
-                ],
-                'gross_amount' => ['TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', $totals],
-                'net_amount' => ['TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', $totals],
-                'tax_amount' => ['TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', $totals],
-                'amount' => ['TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', $refund],
-            ];
-            foreach (array_intersect_key($gated, $before) as $field => [$code, $message]) {
-                if (!array_key_exists($field, $payload)) {
-                    return self::gate_failure($code, $message, "$field was removed");
-                }
-                if (is_array($before[$field]) && !is_array($payload[$field])) {
-                    return self::gate_failure($code, $message, "$field is " . gettype($payload[$field]) . ', not a list');
-                }
-            }
-            if (!empty($before['line_items']) && $payload['line_items'] === []) {
-                return self::gate_failure('TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT', $totals, 'every line was removed');
-            }
-            if (isset($before['amount']) && ((float) $before['amount'] < 0) !== ((float) $payload['amount'] < 0)) {
-                $detail = sprintf('refund amount %s has the opposite sign to %s', $payload['amount'], $before['amount']);
-                return self::gate_failure('TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', $refund, $detail);
-            }
-            // The residuals compare magnitudes, so a refund line turned into a charge is caught here.
-            if ($is_refund && !empty($before['line_items']) && is_array($payload['line_items'] ?? null)) {
-                $sign = self::sum_lines($before['line_items'])['gross'] < 0 ? -1 : 1;
-                foreach ($payload['line_items'] as $index => $line) {
-                    foreach (['net_amount', 'tax_amount', 'gross_amount'] as $field) {
-                        if (is_array($line) && $sign * (float) ($line[$field] ?? 0) < 0) {
-                            $detail = sprintf('refund line %s %s %s has the opposite sign to the refund', $index, $field, $line[$field]);
-                            return self::gate_failure('TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', $refund, $detail);
-                        }
-                    }
-                }
-            }
-            return null;
-        }
-
-        /**
-         * A line the plugin built is held to the one check its builder applied before the hook existed: shipping
-         * tax against the shipping rate. A line a subscriber changed or added is checked in full.
-         *
-         * @return array|null
-         */
-        private static function find_line_failure($index, array $line, $is_refund, $full)
-        {
-            if (!$full && ($line['type'] ?? '') !== 'SHIPPING_FEE') {
-                return null;
-            }
-            $name = (string) ($line['name'] ?? '');
-            $net = round((float) ($line['net_amount'] ?? 0), 2);
-            $tax = round((float) ($line['tax_amount'] ?? 0), 2);
-            $gross = round((float) ($line['gross_amount'] ?? 0), 2);
-            // Epsilon: 0.02 itself is not exactly representable.
-            if ($full && abs($net + $tax - $gross) > self::TAX_RECONCILE_TOLERANCE + 1e-9) {
-                return self::gate_failure(
-                    'TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT',
-                    sprintf(
-                        /* translators: %s: order line name */
-                        __('The amounts on "%s" do not add up.', 'twoinc-payment-gateway'),
-                        $name
-                    ),
-                    sprintf('line %d "%s": net %s + tax %s != gross %s', $index, $name, $net, $tax, $gross)
-                );
-            }
-            $rate_message = sprintf(
-                /* translators: %s: order line name */
-                __('The tax charged on "%s" does not match the shop\'s tax rates.', 'twoinc-payment-gateway'),
-                $name
-            );
-            if ($full && !is_numeric($line['tax_rate'] ?? null)) {
-                $detail = sprintf('line %d "%s" declares no numeric tax_rate', $index, $name);
-                return self::gate_failure('TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT', $rate_message, $detail);
-            }
-            // A refund may return only the net or only the tax (e.g. VAT charged to a reverse-charge buyer).
-            if (!isset($line['tax_rate']) || ($is_refund && (!$net || !$tax))) {
-                return null;
-            }
-            $rate = (float) $line['tax_rate'];
-            $expected = self::unreconciled_tax($net, $tax, $rate);
-            if ($expected === null) {
-                return null;
-            }
-            return self::gate_failure(
-                'TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT',
-                $rate_message,
-                sprintf(
-                    'declared tax rate does not reconcile with the tax charged on line %d "%s": rate %s, net %s, tax %s, expected tax %s. Check the shop tax rates for this line.',
-                    $index,
-                    $name,
-                    self::round_rate($rate),
-                    $net,
-                    $tax,
-                    $expected
-                )
-            );
-        }
-
-        /**
-         * @return array
-         */
-        private static function gate_failure($code, $message, $detail)
-        {
-            return ['code' => $code, 'message' => $message, 'detail' => $detail];
-        }
-
-        /**
          * @return never
          * @throws WC_Twoinc_Order_Postprocessing_Exception
          */
-        private static function refuse_postprocessing($code, array $context, $detail, array $diff)
+        private static function fail_postprocessing(array $context, $detail)
         {
             if (function_exists('wc_get_logger')) {
                 wc_get_logger()->error(
-                    sprintf(
-                        '%s: %s request refused after order postprocessing: %s. Changed: %s',
-                        $code,
-                        $context['request_type'],
-                        $detail,
-                        $diff === [] ? 'nothing' : self::describe_payload_diff($diff)
-                    ),
+                    sprintf('twoinc_order_postprocessing failed on the %s request, which was not sent: %s', $context['request_type'], $detail),
                     ['source' => 'twoinc-payment-gateway']
                 );
             }
-            throw new WC_Twoinc_Order_Postprocessing_Exception(
-                $code,
-                sprintf(
-                    /* translators: 1: request type (e.g. order_update). 2: product name (e.g. Two). 3: refusal code. */
-                    __('The %1$s request was not sent to %2$s: the order postprocessing hook produced a payload that failed a consistency check (%3$s).', 'twoinc-payment-gateway'),
-                    $context['request_type'],
-                    WC_Twoinc_Brand::get('product_name'),
-                    $code
-                )
-            );
+            throw new WC_Twoinc_Order_Postprocessing_Exception(sprintf(
+                /* translators: 1: request type (e.g. order_update). 2: product name (e.g. Two). 3: what went wrong. */
+                __('The %1$s request was not sent to %2$s: the twoinc_order_postprocessing filter failed (%3$s).', 'twoinc-payment-gateway'),
+                $context['request_type'],
+                WC_Twoinc_Brand::get('product_name'),
+                $detail
+            ));
         }
 
         /**
@@ -2020,6 +1790,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if (!$resolved['rate'] && round((float) $charged->get_total_tax(), 2) !== 0.0) {
                 $resolved = self::get_undeclared_shipping_tax_rate($charged, $order);
             }
+            // A refund may return only the net or only the tax (e.g. VAT charged to a reverse-charge buyer).
+            $partial = !round((float) $shipping->get_total(), 2) || !round((float) $shipping->get_total_tax(), 2);
+            if (!$is_refund || !$partial) {
+                self::assert_tax_reconciles($shipping, $resolved['rate']);
+            }
             return $resolved;
         }
 
@@ -2164,7 +1939,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Guards a rate resolved from the shop's configuration against the tax the line was charged.
+         * Same check and tolerance as the PrestaShop and Magento plugins.
          *
          * @throws Exception
          */
@@ -2172,8 +1947,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
         {
             $net = round((float) $line->get_total(), 2);
             $tax = round((float) $line->get_total_tax(), 2);
-            $expected = self::unreconciled_tax($net, $tax, $rate);
-            if ($expected === null) {
+            $expected = round($net * (float) $rate, 2);
+            // Epsilon: 0.02 itself is not exactly representable.
+            if (abs($tax - $expected) <= self::TAX_RECONCILE_TOLERANCE + 1e-9) {
                 return;
             }
             self::refuse(
@@ -2193,19 +1969,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $line->get_name()
                 )
             );
-        }
-
-        /**
-         * The tax $net carries at $rate, when $tax is further from it than the tolerance; null when they reconcile.
-         * The one check both the shipping rate resolver and the line gate apply.
-         *
-         * @return float|null
-         */
-        private static function unreconciled_tax($net, $tax, $rate)
-        {
-            $expected = round($net * (float) $rate, 2);
-            // Epsilon: 0.02 itself is not exactly representable.
-            return abs($tax - $expected) <= self::TAX_RECONCILE_TOLERANCE + 1e-9 ? null : $expected;
         }
 
         /**

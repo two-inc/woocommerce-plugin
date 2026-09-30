@@ -7248,20 +7248,66 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Every order request is sent through here, so `twoinc_order_postprocessing` and its gates see each one
-         * (TWO-26092).
+         * Every order request is sent through here, so `twoinc_order_postprocessing` sees each one (TWO-26092). A
+         * request the API refuses has the API's own reason logged and, on a saved order, written to an order note.
          *
          * @param WC_Order             $order  the order, or for an intent the unsaved order built from the cart
          * @param WC_Order_Refund|null $refund
          *
          * @return WP_Error|array
-         * @throws WC_Twoinc_Order_Postprocessing_Exception
-         * @throws Exception when a gate fails on a payload no subscriber changed
+         * @throws WC_Twoinc_Order_Postprocessing_Exception when a subscriber failed
          */
         public function make_order_request($request_type, $trigger, $endpoint, array $payload, $method, $order, $refund = null)
         {
             $context = WC_Twoinc_Helper::order_postprocessing_context($request_type, $trigger, $endpoint, $order, $refund);
-            return $this->make_request($endpoint, WC_Twoinc_Helper::postprocess_order_request($payload, $context), $method);
+            $response = $this->make_request($endpoint, WC_Twoinc_Helper::postprocess_order_request($payload, $context), $method);
+            $status = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
+            if ($status >= 400) {
+                $reason = self::api_rejection_reason($response);
+                if (function_exists('wc_get_logger')) {
+                    wc_get_logger()->error(
+                        sprintf('%s request for order %s refused by the API (HTTP %d): %s', $request_type, $order->get_id(), $status, $reason),
+                        ['source' => 'twoinc-payment-gateway']
+                    );
+                }
+                if ($order->get_id()) {
+                    $order->add_order_note(sprintf(
+                        /* translators: 1: product name (e.g. Two). 2: request type (e.g. order_update). 3: HTTP status. 4: the API's reason. */
+                        __('%1$s refused the %2$s request (HTTP %3$d): %4$s', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name'),
+                        $request_type,
+                        $status,
+                        $reason
+                    ));
+                }
+            }
+            return $response;
+        }
+
+        /**
+         * The API's own reason for refusing a request, as it sent it.
+         *
+         * @return string
+         */
+        private static function api_rejection_reason($response)
+        {
+            $raw = (string) wp_remote_retrieve_body($response);
+            $body = json_decode($raw, true);
+            if (!is_array($body)) {
+                return $raw === '' ? 'no response body' : substr($raw, 0, 500);
+            }
+            $parts = [];
+            foreach (['error_code', 'error_message', 'error_details'] as $key) {
+                if (isset($body[$key]) && is_string($body[$key]) && $body[$key] !== '') {
+                    $parts[] = $body[$key];
+                }
+            }
+            foreach (is_array($body['error_json'] ?? null) ? $body['error_json'] : [] as $error) {
+                if (is_array($error) && isset($error['msg']) && is_string($error['msg'])) {
+                    $parts[] = (is_array($error['loc'] ?? null) ? implode('.', $error['loc']) . ': ' : '') . $error['msg'];
+                }
+            }
+            return $parts === [] ? substr($raw, 0, 500) : implode('; ', array_unique($parts));
         }
 
         /**
