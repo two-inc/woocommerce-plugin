@@ -2045,6 +2045,7 @@ final class BrandConfigSpec
             [['fallback' => true, 'lines' => [[10.0, 2.5, []]]], 0.25, 'no rate with tax charged, control populated: resolved from the control'],
             [['fallback' => true, 'lines' => [[10.0, 2.0, []]]], $mismatch, 'no rate with tax that does not reconcile, control populated: refused'],
             [['fallback' => true, 'lines' => [[10.0, 0.0, [], [], 'none']]], 0.0, 'non-taxable shipping method, control populated: no rate, resolves to 0% and reconciles'],
+            [['fallback' => true, 'orderMeta' => ['is_vat_exempt' => 'yes']], 0.0, 'no rate, VAT-exempt buyer, control populated: resolves to 0%, as core charges it, and reconciles'],
         ];
         self::assertShippingRateCases($defaults, $cases);
     }
@@ -2070,15 +2071,34 @@ final class BrandConfigSpec
                 return new StubShippingItem(...$l);
             }, $c['lines']);
 
-            $failures[] = self::shippingRateCaseFailure($expected, static function () use ($shippings, $order) {
-                return implode(',', array_column(WC_Twoinc_Helper::get_line_items([], $shippings, [], $order), 'tax_rate'));
+            $sent = null;
+            $failures[] = self::shippingRateCaseFailure($expected, static function () use ($shippings, $order, &$sent) {
+                $sent = WC_Twoinc_Helper::get_line_items([], $shippings, [], $order);
+                return implode(',', array_column($sent, 'tax_rate'));
             }, $description);
+            // Every sent line carries its tax as charged; a rate is stored only when resolved from the control at checkout.
+            $placed = $c['orderMeta'][WC_Twoinc_Brand::prefixed_name('order_id')] ?? '';
+            $charged = array_map(static function ($l) {
+                return WC_Twoinc_Helper::round_amt($l[1]);
+            }, array_values(array_filter($c['lines'], static function ($l) {
+                return round($l[0], 2) || round($l[1], 2);
+            })));
+            if ($sent !== null && array_map('floatval', array_column($sent, 'tax_amount')) !== array_map('floatval', $charged)) {
+                $failures[] = $description . ': tax not sent as charged';
+            }
+            foreach ($c['lines'] as $i => $l) {
+                $store = $sent !== null && $c['fallback'] && !$placed && ($l[2] ?? []) === [] && !isset($l[3][$meta]) && (round($l[0], 2) || round($l[1], 2));
+                if ($store !== (isset($shippings[$i]->meta[$meta]) && !isset($l[3][$meta]))) {
+                    $failures[] = $description . ($store ? ': resolved rate not stored on the line' : ': rate stored on the line');
+                }
+            }
             $looked_up = $GLOBALS['__twoinc_test_find_rates_args'] ?? null;
             if ($looked_up !== null && $looked_up['country'] !== $order->location['country']) {
                 $failures[] = $description . ': shop rates looked up away from the order tax location';
             }
-            if ($c['fallback'] && $c['orderMeta'] === [] && $expected === 0.12 && abs(($shippings[0]->meta[$meta]['rate'] ?? 0) - 0.12) > 1e-9) {
-                $failures[] = $description . ': fallback rate not stored on the shipping item';
+            if (!is_string($expected) && isset($shippings[0]->meta[$meta]) && !isset($c['lines'][0][3][$meta])
+                && abs($shippings[0]->meta[$meta]['rate'] - ((array) $expected)[0]) > 1e-9) {
+                $failures[] = $description . ': stored rate is not the rate sent';
             }
         }
         remove_all_filters('woocommerce_shipping_tax_class');

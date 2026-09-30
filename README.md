@@ -396,11 +396,11 @@ should skip an order with id `0`.
 
 **What the plugin checks**. Only what it builds itself. Its builders check the
 order the shop recorded before any filter runs and refuse a request that fails.
-For shipping tax that is only a line with no rate provided while the shipping
-tax control is populated (see "Shipping tax from the shop's rates"). What a subscriber returns is not
-re-checked: Two's API validates it, and a request the API refuses is logged
-at error level with the API's reason and, on a saved order, the reason is
-written to an order note.
+For shipping tax, the only such check is on a line with no rate provided while
+the shipping tax control is populated (see "Shipping tax from the shop's
+rates"). What a subscriber returns is not re-checked: Two's API validates it,
+and a request the API refuses is logged at error level with the API's reason
+and, on a saved order, the reason is written to an order note.
 
 A subscriber that throws, or returns something other than an array or
 something that cannot be encoded as JSON, is a code fault rather than a

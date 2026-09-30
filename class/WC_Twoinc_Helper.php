@@ -1898,7 +1898,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
         {
             $tax_class = self::get_shop_shipping_tax_class($order);
             $rates = [];
-            if (null !== $tax_class && wc_tax_enabled() && 'taxable' === $shipping->get_tax_status()) {
+            // Core taxes nothing on a VAT-exempt order (e.g. a reverse-charge buyer), shipping included.
+            $is_vat_exempt = apply_filters('woocommerce_order_is_vat_exempt', 'yes' === $order->get_meta('is_vat_exempt'), $order);
+            if (!$is_vat_exempt && null !== $tax_class && wc_tax_enabled() && 'taxable' === $shipping->get_tax_status()) {
                 $rates = WC_Tax::find_shipping_rates(array_merge($order->get_taxable_location(), ['tax_class' => $tax_class]));
             }
             return self::get_tax_rate_from_tax_list(self::shop_rate_list($rates));

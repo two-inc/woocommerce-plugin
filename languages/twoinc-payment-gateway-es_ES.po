@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: woocommerce-plugin\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/app\n"
-"POT-Creation-Date: 2026-09-30T22:23:01+00:00\n"
+"POT-Creation-Date: 2026-09-30T22:59:03+00:00\n"
 "PO-Revision-Date: 2026-09-03 00:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: Spanish\n"
@@ -1740,7 +1740,7 @@ msgid "Shipping \"%s\" cannot be refunded: the order line it refunds was not fou
 msgstr "No se puede reembolsar el envío «%s»: no se encontró la línea del pedido que reembolsa."
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:1995
+#: class/WC_Twoinc_Helper.php:1997
 #, php-format
 msgid "The tax charged on \"%s\" does not match the shop's tax rates."
 msgstr "El impuesto cobrado en «%s» no coincide con los tipos impositivos de la tienda."
