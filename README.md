@@ -399,12 +399,13 @@ leave an order note; a refund returns the error to the refund screen.
 The plugin never recomputes anything after the hook: a subscriber that changes
 a line also updates the totals and subtotals it affects. It can do that with
 the opt-in helper
-`WC_Twoinc_Helper::recompute_totals_from_lines(array $payload, array $original = []): array`,
-which rebuilds the order totals, `tax_subtotals` and a refund `amount` from the
-payload's own lines, touching only the fields the payload already carries. Pass
-the payload as the subscriber received it as `$original` to carry over whatever
-the shop declared beyond its lines, such as store credit or a gift card;
-without it, the totals are the lines alone.
+`WC_Twoinc_Helper::recompute_totals_from_lines(array $payload, array $original): array`.
+`$original` is required: the payload as the subscriber received it. The helper
+sets each order total, each per-rate entry in `tax_subtotals` and a refund
+`amount` to the sum over the payload's lines plus the residual `$original`
+carried beyond its lines, such as store credit or a gift card. It touches only
+the fields the payload already carries. A total the subscriber edited by hand
+before calling it is overwritten: the helper's result wins.
 
 When a subscriber changes a payload, the changed fields are logged at debug
 level with their before and after values.
@@ -440,7 +441,7 @@ add_filter('twoinc_order_postprocessing', function (array $payload, array $conte
         $line['net_amount'] = number_format($net, 2, '.', '');
         $line['tax_amount'] = number_format($gross - $net, 2, '.', '');
         $line['unit_price'] = $line['net_amount'];
-        $line['tax_rate'] = (string) $rate;
+        $line['tax_rate'] = number_format($rate, 6, '.', '');
         $line['tax_class_name'] = 'VAT ' . number_format($rate * 100, 2) . '%';
     }
     unset($line);
@@ -467,7 +468,7 @@ in response to the same events.
 - Allowed without a new version: new context keys, new `request_type` or
   `trigger` values.
 - Never allowed: removing or renaming a context key, changing units (rates stay
-  decimal fractions), checking in the plugin what a subscriber returns, or
+  decimal fractions), checking the figures a subscriber returns, or
   firing on fewer requests.
 - An incompatible version 2 would be a new hook name, with this one still
   firing alongside it. Any contract change is recorded in the changelog, and the
