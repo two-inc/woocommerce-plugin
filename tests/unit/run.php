@@ -1964,12 +1964,6 @@ final class BrandConfigSpec
         TinyAssert::true(isset($body['shipping_details']['expected_delivery_date']));
     }
 
-    /** The consistency gates alone, for a spec that exercises a builder rather than a request (TWO-26092). */
-    private static function gateOnlyContext(string $request_type = 'order_create'): array
-    {
-        return ['request_type' => $request_type, 'order' => null];
-    }
-
     /** TWO-26072: shipping rate from the order's tax rows, else WooCommerce's own shipping tax class; a mismatch refuses. */
     private static function testShippingTaxRateComesFromShopRatesAndReconciles(): void
     {
@@ -2038,9 +2032,7 @@ final class BrandConfigSpec
             }, $c['lines']);
 
             $failures[] = self::shippingRateCaseFailure($expected, static function () use ($shippings, $order) {
-                $lines = WC_Twoinc_Helper::get_line_items([], $shippings, [], $order);
-                WC_Twoinc_Helper::postprocess_order_request(['line_items' => $lines], self::gateOnlyContext());
-                return implode(',', array_column($lines, 'tax_rate'));
+                return implode(',', array_column(WC_Twoinc_Helper::get_line_items([], $shippings, [], $order), 'tax_rate'));
             }, $description);
             $looked_up = $GLOBALS['__twoinc_test_find_rates_args'] ?? null;
             if ($looked_up !== null && $looked_up['country'] !== $order->location['country']) {
@@ -2109,7 +2101,6 @@ final class BrandConfigSpec
                 if (round(array_sum(array_column($lines, 'gross_amount')), 2) !== round($net + $tax, 2)) {
                     return 'lines that do not sum to the refund';
                 }
-                WC_Twoinc_Helper::postprocess_order_request(['line_items' => $lines], self::gateOnlyContext('refund'));
                 return $lines[0]['tax_rate'];
             }, $description);
         }

@@ -52,11 +52,6 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
                 return WC_Twoinc_Helper::recompute_totals_from_lines($payload);
             case 'resplit_lines_only':
                 return twoinc_order_postprocessing_fixture_resplit($payload, $context);
-            case 'resplit_stale_subtotals':
-                $subtotals = $payload['tax_subtotals'];
-                $payload = WC_Twoinc_Helper::recompute_totals_from_lines(twoinc_order_postprocessing_fixture_resplit($payload, $context), $payload);
-                $payload['tax_subtotals'] = $subtotals;
-                return $payload;
             case 'gross':
                 foreach ($payload['line_items'] as &$line) {
                     if ($line['type'] === 'SHIPPING_FEE') {
@@ -70,46 +65,11 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
             case 'line_off':
                 $payload['line_items'][0]['gross_amount'] = number_format((float) $payload['line_items'][0]['gross_amount'] + 0.05, 2, '.', '');
                 return $payload;
-            case 'wrong_rate':
-                $payload['line_items'][0]['tax_rate'] = '0.500000';
-                return $payload;
-            case 'refund_amount':
-                $payload['amount'] = '1.00';
-                return $payload;
-            case 'drop_lines':
-                $payload['line_items'] = [];
-                $payload['gross_amount'] = '999.00';
-                return $payload;
             case 'lines_string':
                 $payload['line_items'] = 'x';
                 return $payload;
-            case 'unset_gross':
-                unset($payload['gross_amount']);
-                $payload['net_amount'] = '1.00';
-                return $payload;
             case 'refund_sign':
                 $payload['amount'] = number_format(-(float) $payload['amount'], 2, '.', '');
-                return $payload;
-            case 'refund_lines_flipped':
-                foreach ($payload['line_items'] as &$line) {
-                    foreach (['net_amount', 'tax_amount', 'gross_amount', 'unit_price'] as $field) {
-                        $line[$field] = number_format(abs((float) $line[$field]), 2, '.', '');
-                    }
-                }
-                unset($line);
-                return $payload;
-            case 'drop_tax_rate':
-                $original = $payload;
-                unset($payload['line_items'][0]['tax_rate']);
-                $payload['line_items'][0]['tax_amount'] = '99.00';
-                $payload['line_items'][0]['gross_amount'] = '199.00';
-                return WC_Twoinc_Helper::recompute_totals_from_lines($payload, $original);
-            case 'line_scalar':
-                $original = $payload;
-                $payload['line_items'][1] = 'x';
-                return WC_Twoinc_Helper::recompute_totals_from_lines($payload, $original);
-            case 'drop_subtotals':
-                unset($payload['tax_subtotals']);
                 return $payload;
             case 'throws_on_hash':
                 if ($context['trigger'] === 'change_hash') {
@@ -122,6 +82,9 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
                 throw new RuntimeException('fixture subscriber failed');
             case 'non_array':
                 return null;
+            case 'non_json':
+                $payload['gross_amount'] = NAN;
+                return $payload;
             default:
                 return $payload;
         }

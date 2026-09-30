@@ -3,8 +3,9 @@
 declare(strict_types=1);
 
 /**
- * The `twoinc_order_postprocessing` contract (TWO-26092): where it fires, what it may change, and the gates
- * that hold on whatever it returns. Drives the CI fixture subscriber in fixtures/orderpostprocessing.php.
+ * The `twoinc_order_postprocessing` contract (TWO-26092): where it fires, that what it returns is sent as
+ * returned, and that the plugin still checks what it builds itself. Drives the CI fixture subscriber in
+ * fixtures/orderpostprocessing.php.
  */
 final class OrderPostprocessingSpec
 {
@@ -27,11 +28,13 @@ final class OrderPostprocessingSpec
             'testNoSubscriberLeavesEveryPayloadByteIdentical',
             'testTheWorkedExampleResplitsUntaxedShipping',
             'testASubscriberMayChangeGross',
-            'testABrokenPayloadIsRefusedWithANamedCode',
-            'testAPayloadNoSubscriberChangedIsGatedAsItsBuilderWas',
+            'testAHookEditIsSentAsReturned',
+            'testASubscriberCodeFaultFailsTheRequest',
+            'testTheShippingReconcileRunsOnTheBuiltPayload',
+            'testAnApiRefusalReachesTheLogAndTheOrderNote',
             'testAChangedPayloadKeepsWhatTheShopDeclaredBeyondItsLines',
             'testTheOlderFiltersOutputIsSentAsBefore',
-            'testEveryRequestTypeFiresOnceAndIsGated',
+            'testEveryRequestTypeFiresOnce',
             'testEveryOrderSendGoesThroughTheChokeFunction',
             'testIntentIsBuiltServerSideAsTheBrowserUsedToSendIt',
             'testAnIntentThatCannotBeSentIsAnErrorNotADecline',
@@ -135,7 +138,7 @@ final class OrderPostprocessingSpec
                 return [new StubOrderTaxItem(1, 21.0)];
             }
 
-            private $shipping;
+            public $shipping;
 
             public function get_item($id)
             {
@@ -231,16 +234,20 @@ final class OrderPostprocessingSpec
         return WC_Twoinc_Helper::order_postprocessing_context($request_type, 'test', '/v1/order', $order ?? self::exampleOrder());
     }
 
-    /** A gateway that records what it would send and answers every call with success. */
-    private static function recordingGateway()
+    /** A gateway that records what it would send and answers every call with success, or with $status and $body. */
+    private static function recordingGateway(int $status = 200, ?string $body = null)
     {
-        return new class () extends WC_Twoinc {
+        return new class ($status, $body) extends WC_Twoinc {
             public $icon = '';
             public $sent = [];
+            private $status;
+            private $body;
 
-            public function __construct()
+            public function __construct(int $status = 200, ?string $body = null)
             {
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->status = $status;
+                $this->body = $body;
             }
 
             public function get_merchant_id()
@@ -262,8 +269,8 @@ final class OrderPostprocessingSpec
             {
                 $this->sent[] = ['endpoint' => $endpoint, 'method' => $method, 'payload' => $payload];
                 return [
-                    'response' => ['code' => 200],
-                    'body' => '{"id":"two-1","status":"APPROVED","state":"VERIFIED","approved":true,"amount":"-29.00","gross_amount":"150.00","payment_url":"https://pay.example/1","merchant_urls":{"merchant_confirmation_url":"https://shop.example/thanks"}}',
+                    'response' => ['code' => $this->status],
+                    'body' => $this->body ?? '{"id":"two-1","status":"APPROVED","state":"VERIFIED","approved":true,"amount":"-29.00","gross_amount":"150.00","payment_url":"https://pay.example/1","merchant_urls":{"merchant_confirmation_url":"https://shop.example/thanks"}}',
                 ];
             }
         };
@@ -339,9 +346,9 @@ final class OrderPostprocessingSpec
             } else {
                 TinyAssert::same($totals, $sent['amount'], $description);
             }
-            TinyAssert::same(1, count($order->notes), "$description: no order note records the change");
-            TinyAssert::true(strpos($order->notes[0], '/line_items/') !== false, "$description: the note does not name the changed line");
-            TinyAssert::same('info', $GLOBALS['__twoinc_test_logs'][0]['level'] ?? null, "$description: the change was not logged");
+            $log = $GLOBALS['__twoinc_test_logs'][0] ?? ['level' => '', 'message' => ''];
+            TinyAssert::same('debug', $log['level'], "$description: the change was not logged at debug level");
+            TinyAssert::true(strpos($log['message'], '/line_items/') !== false, "$description: the log does not name the changed line");
         }
     }
 
@@ -354,45 +361,107 @@ final class OrderPostprocessingSpec
         TinyAssert::same(['130.00', '21.00', '151.00'], [$sent['net_amount'], $sent['tax_amount'], $sent['gross_amount']]);
     }
 
-    private static function testABrokenPayloadIsRefusedWithANamedCode(): void
+    private static function testAHookEditIsSentAsReturned(): void
     {
         $refund = self::refundPayload('-29.00');
-        // [fixture mode, request type, payload, expected refusal code, description]
+        // The API validates what arrives, so a subscriber's figures go out as it declared them.
+        // [fixture mode, request type, payload, description]
         $cases = [
-            ['resplit_lines_only', 'order_create', self::examplePayload(false), 'TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', 'lines re-split, order totals left stale'],
-            ['resplit_lines_only', 'order_create', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_SUBTOTALS_INCONSISTENT', 'lines re-split, subtotals and totals left stale'],
-            ['resplit_stale_subtotals', 'order_create', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_SUBTOTALS_INCONSISTENT', 'totals rebuilt, subtotals left stale'],
-            ['line_off', 'order_create', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT', 'a line whose net + tax no longer makes its gross'],
-            ['wrong_rate', 'order_update', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT', 'a line declaring a rate its tax does not match'],
-            ['refund_amount', 'refund', $refund, 'TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', 'a refund amount the lines do not sum to'],
-            ['body', 'cancel', [], 'TWO_ORDER_POSTPROCESSING_BODY_NOT_ACCEPTED', 'a body added to a request defined with none'],
-            ['throws', 'order_intent', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_HOOK_FAILED', 'a subscriber that throws'],
-            ['non_array', 'capture', [], 'TWO_ORDER_POSTPROCESSING_HOOK_FAILED', 'a subscriber that returns no array'],
-            ['drop_lines', 'order_create', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT', 'every line dropped and gross set to 999'],
-            ['lines_string', 'order_create', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT', 'line_items replaced by a string'],
-            ['unset_gross', 'order_create', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', 'gross_amount removed and net made nonsense'],
-            ['refund_sign', 'refund', $refund, 'TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', 'a refund amount with its sign flipped'],
-            ['drop_subtotals', 'order_create', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_SUBTOTALS_INCONSISTENT', 'tax_subtotals removed'],
-            ['refund_lines_flipped', 'refund', $refund, 'TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', 'every refund line turned positive'],
-            ['drop_tax_rate', 'order_create', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT', 'a changed line with its tax_rate removed'],
-            ['line_scalar', 'order_create', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT', 'a line replaced by a scalar, totals moved to match'],
+            ['resplit_lines_only', 'order_create', self::examplePayload(), 'lines re-split, subtotals and totals left stale'],
+            ['line_off', 'order_update', self::examplePayload(), 'a line whose net + tax no longer makes its gross'],
+            ['lines_string', 'order_create', self::examplePayload(), 'line_items replaced by a string'],
+            ['refund_sign', 'refund', $refund, 'a refund amount with its sign flipped'],
+            ['body', 'cancel', [], 'a body added to a request defined with none'],
         ];
-        foreach ($cases as [$mode, $type, $payload, $code, $description]) {
+        foreach ($cases as [$mode, $type, $payload, $description]) {
             self::reset();
             self::arm($mode);
+            $order = self::exampleOrder();
+            $expected = twoinc_order_postprocessing_fixture($payload, self::context($type, $order));
+            $gateway = self::recordingGateway();
+            $gateway->make_order_request($type, 'test', '/v1/order', $payload, 'POST', $order);
+
+            TinyAssert::same(json_encode($expected), json_encode($gateway->sent[0]['payload'] ?? null), "$description: not sent as returned");
+            TinyAssert::same([], array_filter(array_column($GLOBALS['__twoinc_test_logs'], 'level'), static function ($level) {
+                return $level !== 'debug';
+            }), "$description: logged above debug");
+        }
+    }
+
+    private static function testASubscriberCodeFaultFailsTheRequest(): void
+    {
+        // [fixture mode, request type, payload, what the log names, description]
+        $cases = [
+            ['throws', 'order_intent', self::examplePayload(), 'RuntimeException', 'a subscriber that throws'],
+            ['non_array', 'capture', [], 'returned NULL, not an array', 'a subscriber that returns no array'],
+            ['non_json', 'order_create', self::examplePayload(), 'cannot be encoded as JSON', 'a subscriber that returns what JSON cannot carry'],
+        ];
+        foreach ($cases as [$mode, $type, $payload, $named, $description]) {
+            self::reset();
+            self::arm($mode);
+            $gateway = self::recordingGateway();
             $caught = null;
             try {
-                WC_Twoinc_Helper::postprocess_order_request($payload, self::context($type));
+                $gateway->make_order_request($type, 'test', '/v1/order', $payload, 'POST', self::exampleOrder());
             } catch (WC_Twoinc_Order_Postprocessing_Exception $e) {
                 $caught = $e;
             }
-            TinyAssert::true($caught !== null, "$description: was not refused");
-            TinyAssert::same($code, $caught->get_refusal_code(), $description);
-            TinyAssert::true(strpos($caught->getMessage(), $code) !== false, "$description: the message does not name the code");
+            TinyAssert::true($caught !== null, "$description: did not fail");
+            TinyAssert::same([], $gateway->sent, "$description: was sent");
             $log = $GLOBALS['__twoinc_test_logs'][0] ?? ['level' => '', 'message' => ''];
             TinyAssert::same('error', $log['level'], "$description: not logged at error level");
-            TinyAssert::true(strpos($log['message'], $code) !== false && strpos($log['message'], $type) !== false, "$description: the log names neither code nor request type");
+            foreach (['twoinc_order_postprocessing', $type, $named] as $needle) {
+                TinyAssert::true(strpos($log['message'], $needle) !== false, "$description: the log does not name $needle: {$log['message']}");
+            }
         }
+    }
+
+    private static function testTheShippingReconcileRunsOnTheBuiltPayload(): void
+    {
+        $repair = static function ($body) {
+            return is_array($body) ? ['repaired' => true] + $body : $body;
+        };
+        // The shop charged 7.00 on 29.00 of shipping declared at 21%: 6.09 was due.
+        // [filter that would have repaired the payload (null: none), description]
+        $cases = [
+            [null, 'no subscriber'],
+            ['two_order_create', 'a legacy filter runs after the check'],
+            ['twoinc_order_payload', 'the payload filter runs after the check'],
+            ['twoinc_order_postprocessing', 'the postprocessing hook runs after the check'],
+        ];
+        foreach ($cases as [$filter, $description]) {
+            self::reset();
+            self::arm('record');
+            if ($filter !== null) {
+                add_filter($filter, $repair, 5, 1);
+            }
+            $order = self::exampleOrder();
+            $order->shipping = new StubShippingItem(29.0, 7.0, [1 => 7.0]);
+            $gateway = self::recordingGateway();
+            try {
+                $body = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
+                $gateway->make_order_request('order_create', 'checkout', '/v1/order', $body, 'POST', $order);
+                $outcome = 'sent';
+            } catch (Exception $e) {
+                $outcome = $e->getMessage();
+            }
+            TinyAssert::true(strpos($outcome, "does not match the shop's tax rates") !== false, "$description: $outcome");
+            TinyAssert::same([], $gateway->sent, "$description: was sent");
+            TinyAssert::same([], self::fixtureCalls(), "$description: the hook fired on a refused payload");
+        }
+    }
+
+    private static function testAnApiRefusalReachesTheLogAndTheOrderNote(): void
+    {
+        $gateway = self::recordingGateway(400, '{"error_code":"SCHEMA_ERROR","error_details":"gross_amount does not match the line items"}');
+        $order = self::exampleOrder();
+        $gateway->make_order_request('order_update', 'admin_edit', '/v1/order/two-1', self::examplePayload(), 'PUT', $order);
+
+        $reason = 'SCHEMA_ERROR; gross_amount does not match the line items';
+        $log = $GLOBALS['__twoinc_test_logs'][0] ?? ['level' => '', 'message' => ''];
+        TinyAssert::same('error', $log['level'], 'the refusal was not logged at error level');
+        TinyAssert::true(strpos($log['message'], $reason) !== false, "the log does not carry the API's reason: {$log['message']}");
+        TinyAssert::true(strpos($order->notes[0] ?? '', $reason) !== false, "the order note does not carry the API's reason: " . json_encode($order->notes));
     }
 
     /** The worked example, with 10.00 of gift card taken off the order total but not off any line. */
@@ -416,59 +485,19 @@ final class OrderPostprocessingSpec
         return $payload;
     }
 
-    private static function testAPayloadNoSubscriberChangedIsGatedAsItsBuilderWas(): void
-    {
-        $mistaxed_shipping = self::examplePayload();
-        $mistaxed_shipping['line_items'][1]['tax_amount'] = '7.00';
-        $mistaxed_shipping['line_items'][1]['gross_amount'] = '36.00';
-        $mistaxed_product = self::examplePayload();
-        $mistaxed_product['line_items'][0]['tax_amount'] = '25.00';
-        $unbalanced_line = self::examplePayload();
-        $unbalanced_line['line_items'][0]['gross_amount'] = '130.00';
-        // [payload, refusal the builder raised before the hook existed (null: sent), description]
-        $cases = [
-            [$mistaxed_shipping, 'does not match the shop\'s tax rates', 'shipping taxed off the shop rate is refused, as its builder refused it'],
-            [$mistaxed_product, null, 'a product line off its rate is sent, as it was'],
-            [$unbalanced_line, null, 'a line whose net + tax is not its gross is sent, as it was'],
-            [self::residualPayload(), null, 'a gift card outside the lines is sent, as it was'],
-            [self::unverifiableFeePayload(), null, 'a third-party fee off its rate is sent, as it was'],
-        ];
-        foreach ([false, true] as $subscriber) {
-            foreach ($cases as [$payload, $refusal, $description]) {
-                self::reset($subscriber);
-                try {
-                    $sent = WC_Twoinc_Helper::postprocess_order_request($payload, self::context('order_create'));
-                    $outcome = json_encode($sent) === json_encode($payload) ? null : 'changed';
-                } catch (Exception $e) {
-                    $outcome = get_class($e) === Exception::class ? $e->getMessage() : get_class($e);
-                }
-                $label = "$description, subscriber " . var_export($subscriber, true);
-                if ($refusal === null) {
-                    TinyAssert::same(null, $outcome, $label);
-                } else {
-                    TinyAssert::true(is_string($outcome) && strpos($outcome, $refusal) !== false, "$label: " . var_export($outcome, true));
-                }
-            }
-        }
-    }
-
     private static function testAChangedPayloadKeepsWhatTheShopDeclaredBeyondItsLines(): void
     {
-        // [fixture mode, payload, expected gross or refusal code, description]
+        // [fixture mode, payload, expected gross, description]
         $cases = [
-            ['resplit', self::residualPayload(), '140.00', 'a re-split carrying the gift card over is sent'],
-            ['drop_residual', self::residualPayload(), 'TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', 'totals rebuilt without the gift card are refused'],
-            ['resplit', self::unverifiableFeePayload(), '156.00', 'a line the subscriber left alone is not re-checked'],
+            ['resplit', self::residualPayload(), '140.00', 'a re-split carrying the gift card over keeps it'],
+            ['drop_residual', self::residualPayload(), '150.00', 'totals rebuilt without the original are the lines alone, sent as declared'],
+            ['resplit', self::unverifiableFeePayload(), '156.00', 'a line the subscriber left alone is carried as it was'],
         ];
         foreach ($cases as [$mode, $payload, $expected, $description]) {
             self::reset();
             self::arm($mode);
-            try {
-                $outcome = WC_Twoinc_Helper::postprocess_order_request($payload, self::context('order_create'))['gross_amount'];
-            } catch (WC_Twoinc_Order_Postprocessing_Exception $e) {
-                $outcome = $e->get_refusal_code();
-            }
-            TinyAssert::same($expected, $outcome, $description);
+            $sent = WC_Twoinc_Helper::postprocess_order_request($payload, self::context('order_create'));
+            TinyAssert::same($expected, $sent['gross_amount'], $description);
         }
     }
 
@@ -491,6 +520,11 @@ final class OrderPostprocessingSpec
                 $body['line_items'][0]['tax_amount'] = '1.00';
                 return $body;
             }, 'order_create', 'the payload filter breaking a line'],
+            ['twoinc_order_payload', static function ($body) {
+                $body['line_items'][1]['tax_amount'] = '7.00';
+                $body['line_items'][1]['gross_amount'] = '36.00';
+                return $body;
+            }, 'order_create', 'the payload filter taxing the shipping line off the shop rate'],
         ];
         foreach ($cases as [$filter, $callback, $type, $description]) {
             self::reset();
@@ -499,16 +533,13 @@ final class OrderPostprocessingSpec
             $body = $type === 'order_update'
                 ? WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '')
                 : WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
-            try {
-                $sent = json_encode(WC_Twoinc_Helper::postprocess_order_request($body, self::context($type, $order)));
-            } catch (Exception $e) {
-                $sent = $e->getMessage();
-            }
-            TinyAssert::same(json_encode($body), $sent, $description);
+            $gateway = self::recordingGateway();
+            $gateway->make_order_request($type, 'test', '/v1/order', $body, 'POST', $order);
+            TinyAssert::same(json_encode($body), json_encode($gateway->sent[0]['payload'] ?? null), $description);
         }
     }
 
-    private static function testEveryRequestTypeFiresOnceAndIsGated(): void
+    private static function testEveryRequestTypeFiresOnce(): void
     {
         $run = static function (callable $drive) {
             $gateway = self::recordingGateway();
@@ -720,7 +751,7 @@ final class OrderPostprocessingSpec
             ['', ['throws' => true], 'the cart cannot be copied onto an order'],
             ['', ['line_item' => [new StubProductLineItem(['name' => 'Widget', 'line_total' => 100.0, 'line_subtotal' => 90.0, 'line_tax' => 25.0, 'taxes' => [1 => 25.0]])]], 'a builder guard throws while composing'],
             ['throws', [], 'the subscriber throws'],
-            ['line_off', [], 'the subscriber breaks a line'],
+            ['non_array', [], 'the subscriber returns no array'],
         ];
         foreach ($cases as [$mode, $override, $description]) {
             self::reset();
@@ -850,8 +881,7 @@ final class OrderPostprocessingSpec
                         $sent = ['refused' => $e->getMessage()];
                     }
                     if (isset($want['refused']) || isset($sent['refused'])) {
-                        // The release named the shipping method; the gate names its line.
-                        TinyAssert::true(isset($want['refused'], $sent['refused']) && strpos($sent['refused'], 'does not match the shop\'s tax rates') !== false, "$label: " . json_encode([$want['refused'] ?? 'sent', $sent['refused'] ?? 'sent']));
+                        TinyAssert::same($want['refused'] ?? 'sent', $sent['refused'] ?? 'sent', $label);
                         continue;
                     }
                     $want = $type === 'intent' ? $want['line_items'] : $want;
