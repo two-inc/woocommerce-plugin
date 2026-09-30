@@ -1270,7 +1270,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'a body was added to a request the API defines with none'
                 );
             }
-            $failure = $changed ? self::find_gated_field_failure($before, $payload) : null;
+            $failure = $changed ? self::find_gated_field_failure($before, $payload, $request_type === 'refund') : null;
             if ($failure !== null) {
                 return $failure;
             }
@@ -1278,6 +1278,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $lines = isset($payload['line_items']) && is_array($payload['line_items']) ? $payload['line_items'] : [];
             $built = isset($before['line_items']) && is_array($before['line_items']) ? $before['line_items'] : [];
             foreach ($lines as $index => $line) {
+                if ($changed && !is_array($line)) {
+                    $message = __('The order totals do not match the order lines.', 'twoinc-payment-gateway');
+                    $detail = sprintf('line %s is %s, not a line', $index, gettype($line));
+                    return self::gate_failure('TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT', $message, $detail);
+                }
                 $line = is_array($line) ? $line : [];
                 $full = $changed && !in_array($line, $built, true);
                 $failure = self::find_line_failure($index, $line, $request_type === 'refund', $full);
@@ -1366,7 +1371,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * @return array|null
          */
-        private static function find_gated_field_failure(array $before, array $payload)
+        private static function find_gated_field_failure(array $before, array $payload, $is_refund)
         {
             $totals = __('The order totals do not match the order lines.', 'twoinc-payment-gateway');
             $refund = __('The refund amount does not match the refunded lines.', 'twoinc-payment-gateway');
@@ -1396,6 +1401,18 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if (isset($before['amount']) && ((float) $before['amount'] < 0) !== ((float) $payload['amount'] < 0)) {
                 $detail = sprintf('refund amount %s has the opposite sign to %s', $payload['amount'], $before['amount']);
                 return self::gate_failure('TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', $refund, $detail);
+            }
+            // The residuals compare magnitudes, so a refund line turned into a charge is caught here.
+            if ($is_refund && !empty($before['line_items']) && is_array($payload['line_items'] ?? null)) {
+                $sign = self::sum_lines($before['line_items'])['gross'] < 0 ? -1 : 1;
+                foreach ($payload['line_items'] as $index => $line) {
+                    foreach (['net_amount', 'tax_amount', 'gross_amount'] as $field) {
+                        if (is_array($line) && $sign * (float) ($line[$field] ?? 0) < 0) {
+                            $detail = sprintf('refund line %s %s %s has the opposite sign to the refund', $index, $field, $line[$field]);
+                            return self::gate_failure('TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', $refund, $detail);
+                        }
+                    }
+                }
             }
             return null;
         }
@@ -1427,6 +1444,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     sprintf('line %d "%s": net %s + tax %s != gross %s', $index, $name, $net, $tax, $gross)
                 );
             }
+            $rate_message = sprintf(
+                /* translators: %s: order line name */
+                __('The tax charged on "%s" does not match the shop\'s tax rates.', 'twoinc-payment-gateway'),
+                $name
+            );
+            if ($full && !is_numeric($line['tax_rate'] ?? null)) {
+                $detail = sprintf('line %d "%s" declares no numeric tax_rate', $index, $name);
+                return self::gate_failure('TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT', $rate_message, $detail);
+            }
             // A refund may return only the net or only the tax (e.g. VAT charged to a reverse-charge buyer).
             if (!isset($line['tax_rate']) || ($is_refund && (!$net || !$tax))) {
                 return null;
@@ -1438,11 +1464,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
             return self::gate_failure(
                 'TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT',
-                sprintf(
-                    /* translators: %s: order line name */
-                    __('The tax charged on "%s" does not match the shop\'s tax rates.', 'twoinc-payment-gateway'),
-                    $name
-                ),
+                $rate_message,
                 sprintf(
                     'declared tax rate does not reconcile with the tax charged on line %d "%s": rate %s, net %s, tax %s, expected tax %s. Check the shop tax rates for this line.',
                     $index,
