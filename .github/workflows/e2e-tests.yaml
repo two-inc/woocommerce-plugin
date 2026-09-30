@@ -104,12 +104,13 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: e2e-${{ github.run_id }}-${{ strategy.job-index }}
     # Must exceed Playwright's own worst case, or a fully-failing suite is
-    # killed before it can report: 6 tests x 2 attempts (retries: 1) x the
-    # 180s per-test timeout = 36m of testing, plus ~5m of setup. At 15m the
-    # job was cancelled mid-run, which discards the reporter output AND the
-    # traces, leaving no way to see why a test failed. A passing run still
-    # takes ~6m, so this ceiling only ever costs time on a broken suite.
-    timeout-minutes: 45
+    # killed before it can report: 7 tests x 2 attempts (retries: 1) x the
+    # 180s per-test timeout = 42m, plus 5 order-intent legs x 2 x 60s = 10m,
+    # of testing, plus ~5m of setup. At 15m the job was cancelled mid-run,
+    # which discards the reporter output AND the traces, leaving no way to see
+    # why a test failed. A passing run still takes ~9m, so this ceiling only
+    # ever costs time on a broken suite.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
 

@@ -178,11 +178,10 @@ describe("order-intent 429 backoff", () => {
     );
   }
 
-  // `getPrice()` returns before the check is ever issued without these.
+  // The total keys the verdict cache; without it nothing is cached.
   function buildCartTotals() {
     $(document.body).append(
-      '<div class="order-total"><span class="woocommerce-Price-amount">120.00</span></div>' +
-        '<div class="tax-rate"><span class="woocommerce-Price-amount">20.00</span></div>'
+      '<div class="order-total"><span class="woocommerce-Price-amount">120.00</span></div>'
     );
   }
 

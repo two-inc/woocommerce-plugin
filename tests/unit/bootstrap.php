@@ -1392,6 +1392,8 @@ class StubIntentCart
 {
     public $contents;
     public $calculated = 0;
+    /** The buyer's term in the session when the totals (and so the surcharge fee) were calculated. */
+    public $term_at_totals;
 
     public function __construct(?array $contents = null)
     {
@@ -1412,6 +1414,7 @@ class StubIntentCart
     public function calculate_totals()
     {
         $this->calculated++;
+        $this->term_at_totals = WC()->session ? WC()->session->get('two_selected_term') : null;
     }
 }
 
@@ -1422,6 +1425,9 @@ class WC_Checkout
         /** @var StubIntentCart $cart */
         $cart = WC()->cart;
         $contents = $cart->contents;
+        if (!empty($contents['throws'])) {
+            throw new Exception('the cart could not be copied onto the order');
+        }
         foreach (['line_item', 'shipping', 'fee', 'tax'] as $type) {
             $order->items[$type] = $contents[$type] ?? [];
         }

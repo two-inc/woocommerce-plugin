@@ -5,6 +5,7 @@ declare(strict_types=1);
 require __DIR__ . '/bootstrap.php';
 // Registered for the whole suite and inert until armed, so every other spec runs with a subscriber present.
 require __DIR__ . '/fixtures/orderpostprocessing.php';
+require __DIR__ . '/fixtures/builderorders.php';
 require __DIR__ . '/OrderPostprocessingSpec.php';
 
 final class TinyAssert

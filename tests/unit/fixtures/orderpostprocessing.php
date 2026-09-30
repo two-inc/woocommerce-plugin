@@ -47,12 +47,14 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
 
         switch ($mode) {
             case 'resplit':
-                return WC_Twoinc_Helper::recompute_totals_from_lines(twoinc_order_postprocessing_fixture_resplit($payload, $context));
+                return WC_Twoinc_Helper::recompute_totals_from_lines(twoinc_order_postprocessing_fixture_resplit($payload, $context), $payload);
+            case 'drop_residual':
+                return WC_Twoinc_Helper::recompute_totals_from_lines($payload);
             case 'resplit_lines_only':
                 return twoinc_order_postprocessing_fixture_resplit($payload, $context);
             case 'resplit_stale_subtotals':
                 $subtotals = $payload['tax_subtotals'];
-                $payload = WC_Twoinc_Helper::recompute_totals_from_lines(twoinc_order_postprocessing_fixture_resplit($payload, $context));
+                $payload = WC_Twoinc_Helper::recompute_totals_from_lines(twoinc_order_postprocessing_fixture_resplit($payload, $context), $payload);
                 $payload['tax_subtotals'] = $subtotals;
                 return $payload;
             case 'gross':
@@ -73,6 +75,28 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
                 return $payload;
             case 'refund_amount':
                 $payload['amount'] = '1.00';
+                return $payload;
+            case 'drop_lines':
+                $payload['line_items'] = [];
+                $payload['gross_amount'] = '999.00';
+                return $payload;
+            case 'lines_string':
+                $payload['line_items'] = 'x';
+                return $payload;
+            case 'unset_gross':
+                unset($payload['gross_amount']);
+                $payload['net_amount'] = '1.00';
+                return $payload;
+            case 'refund_sign':
+                $payload['amount'] = number_format(-(float) $payload['amount'], 2, '.', '');
+                return $payload;
+            case 'drop_subtotals':
+                unset($payload['tax_subtotals']);
+                return $payload;
+            case 'throws_on_hash':
+                if ($context['trigger'] === 'change_hash') {
+                    throw new RuntimeException('fixture subscriber failed while hashing');
+                }
                 return $payload;
             case 'body':
                 return $payload === [] ? ['note' => 'added'] : $payload;

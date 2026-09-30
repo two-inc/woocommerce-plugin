@@ -433,11 +433,12 @@ function stubAjax($) {
        *
        * `status: 0` on the jqXHR is not incidental: a jQuery timeout and
        * a cancellation are indistinguishable by status, which is why the
-       * transport decides the outcome from textStatus instead.
+       * transport decides the outcome from textStatus instead. `status`
+       * is for an HTTP error the server answered with.
        */
-      fail: function (textStatus, error) {
+      fail: function (textStatus, error, status) {
         record.settled = true;
-        jqXHR.status = 0;
+        jqXHR.status = status || 0;
         deferred.rejectWith(jqXHR, [jqXHR, textStatus, error || textStatus]);
       }
     };

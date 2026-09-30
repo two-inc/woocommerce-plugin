@@ -122,13 +122,11 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     );
   }
 
-  // The two price nodes `getPrice()` reads. Without them the interval body
-  // returns on `!gross_amount` before it ever reaches the check, so the request
-  // assertions below would pass against a request that never happened.
+  // The total keys the verdict cache; without it nothing is cached, and the
+  // cache assertions below would pass against a cache never written.
   function buildCartTotals() {
     $(document.body).append(
-      '<div class="order-total"><span class="woocommerce-Price-amount">120.00</span></div>' +
-        '<div class="tax-rate"><span class="woocommerce-Price-amount">20.00</span></div>'
+      '<div class="order-total"><span class="woocommerce-Price-amount">120.00</span></div>'
     );
   }
 
@@ -1089,7 +1087,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       }
     });
 
-    test("a transport failure is not cached, so the next check retries", () => {
+    test.each([
+      [0, "a transport failure"],
+      [500, "the proxy failing to compose or send the intent (TWO-25657)"]
+    ])("a %s is not cached, so the next check retries: %s", (status) => {
       // A dropped connection is not a verdict. Cached, it declined this cart and
       // company for the rest of the page — permanently, since the cached branch
       // disarms and no request is ever retried. One blip would lose the sale.
@@ -1097,7 +1098,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       try {
         instance.getApproval();
         jest.advanceTimersByTime(1000);
-        ajax.last().fail("error", "error");
+        ajax.last().fail("error", "error", status);
         jest.advanceTimersByTime(1000);
 
         expect(shown(".twoinc-err-payment-default")).toBe(true);
@@ -1140,6 +1141,47 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         expect(instance.orderIntentLog["h" + status]).toBeUndefined();
       });
     }
+
+    test("an unreadable page total bypasses the cache, so a changed cart is asked about again", () => {
+      // The total is what tells one cart from another; without it every cart shares one key.
+      $(".order-total").remove();
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+        expect(Object.keys(instance.orderIntentLog).length).toBe(0);
+
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        expect(ajax.calls.length).toBe(2);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("the check posts the selected term, and a changed term is asked about again", () => {
+      // The server applies it before recalculating the cart, so the surcharge in the
+      // intent's gross is the chosen term's rather than the session's previous one.
+      $("form[name='checkout']").append(
+        '<input type="hidden" name="two_selected_term" value="60" />'
+      );
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+        expect(ajax.last().settings.data.two_selected_term).toBe("60");
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+
+        $("input[name='two_selected_term']").val("90");
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        expect(ajax.calls.length).toBe(2);
+        expect(ajax.last().settings.data.two_selected_term).toBe("90");
+      } finally {
+        ajax.restore();
+      }
+    });
 
     test("a cacheable verdict with no request hash is not filed under a blank key", () => {
       // Dropping the `hashedBody &&` guard survived: the pre-existing kill exercised a
