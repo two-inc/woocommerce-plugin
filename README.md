@@ -326,11 +326,11 @@ logs a notice naming the old class (source `twoinc-payment-gateway`).
 `twoinc_order_postprocessing` is the one place for merchant code to change what
 is sent to Two. It presents the complete request body and lets a subscriber edit
 any of it: lines, net/tax splits, gross amounts, totals, fields the plugin does
-not send itself. The plugin fires it, checks what comes back, and names the
-failure when a subscriber broke something. Two's API validates whatever
-arrives; if it passes, Two accepts what the merchant declared. The merchant owns
-what their code declares: with a subscriber that changes amounts, the Two
-invoice can differ from what the shop itself recorded.
+not send itself. The plugin fires it and sends the payload exactly as it is
+returned. Two's API validates whatever arrives; if it passes, Two accepts what
+the merchant declared. The merchant owns what their code declares: with a
+subscriber that changes amounts, the Two invoice can differ from what the shop
+itself recorded.
 
 ```php
 add_filter('twoinc_order_postprocessing', function (array $payload, array $context): array {
@@ -356,8 +356,8 @@ add_filter('twoinc_order_postprocessing', function (array $payload, array $conte
   | `fallback_shipping_tax_rate` | float or null             | The same rate when the shop-rate shipping tax fallback above is on, else null                                                                                                    |
   | `contract_version`           | int                       | `1`                                                                                                                                                                              |
 
-**Return**: the full payload. Callbacks chain in priority order; only the final
-payload is checked and sent.
+**Return**: the full payload. Callbacks chain in priority order; the final
+payload is sent.
 
 **When it fires**: once for every request the plugin sends to an order endpoint:
 
@@ -380,46 +380,34 @@ order, so third-party `woocommerce_checkout_create_order_line_item`,
 with an order whose id is `0`. Code on those actions that writes elsewhere
 should skip an order with id `0`.
 
-**Checks on the returned payload**. A payload no subscriber changed goes out
-exactly as it would without the hook, held only to the check the plugin has
-always applied: shipping tax against the shop's shipping rate. When a subscriber
-changed it, a failure below refuses the request with its code, logged at error
-level with the request type, the failing figures and every changed field. The
-refusal is a `WC_Twoinc_Order_Postprocessing_Exception`, whose
-`get_refusal_code()` returns the code. Lines the subscriber left as the plugin
-built them are not re-checked, and the order figures may differ from what the
-lines sum to only by what the plugin's own payload did: a shop that sends store
-credit or a gift card outside its lines keeps sending it. A line is checked to
-0.02; sums across lines to 0.01 per line, and never less than 0.02, because each
-line is rounded on its own:
+**What the plugin checks**. Only what it builds itself. Its builders check the
+order the shop recorded before any filter runs (for example, that the tax
+charged on a shipping line matches the shop's shipping tax rate) and refuse a
+request that fails, as they always have. What a subscriber returns is not
+re-checked: Two's API validates it, and a request the API refuses is logged
+at error level with the API's reason and, on a saved order, the reason is
+written to an order note.
 
-| Code                                              | Check                                                                                                                                                                         |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TWO_ORDER_POSTPROCESSING_HOOK_FAILED`            | The subscriber threw, or returned something other than an array                                                                                                               |
-| `TWO_ORDER_POSTPROCESSING_BODY_NOT_ACCEPTED`      | A body was added to `order_confirm`, `capture` or `cancel`                                                                                                                    |
-| `TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT`      | A changed or added line's net + tax is not its gross, or its tax is not its net at its declared `tax_rate`; or `line_items` was removed, emptied or is not a list             |
-| `TWO_ORDER_POSTPROCESSING_SUBTOTALS_INCONSISTENT` | `tax_subtotals` at a rate differ from the lines at that rate by more than the plugin's payload did, or were removed                                                           |
-| `TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT`    | Order net/tax/gross differ from the lines, or gross from net + tax, by more than the plugin's payload did, or one was removed; likewise a refund `amount`, or it changed sign |
+A subscriber that throws, or returns something other than an array or
+something that cannot be encoded as JSON, is a code fault rather than a
+declaration: the request is not sent, and the failure is logged at error level
+naming `twoinc_order_postprocessing` and the request type. Checkout then shows
+the buyer the usual "not available" message; a failed intent check is answered
+as an error rather than a decline, so the next check asks again; admin actions
+leave an order note; a refund returns the error to the refund screen.
 
-A refusal is never "fixed" by falling back to the unedited payload. Checkout
-shows the buyer the usual "not available" message; a refused intent check is
-answered as an error rather than a decline, so the next check asks again; admin
-actions leave an order note naming the code; a refund returns the error to the refund screen. The
-plugin never recomputes anything after the hook: a subscriber that changes a
-line also updates the totals and subtotals it affects. It can do that with the
-opt-in helper
+The plugin never recomputes anything after the hook: a subscriber that changes
+a line also updates the totals and subtotals it affects. It can do that with
+the opt-in helper
 `WC_Twoinc_Helper::recompute_totals_from_lines(array $payload, array $original = []): array`,
 which rebuilds the order totals, `tax_subtotals` and a refund `amount` from the
 payload's own lines, touching only the fields the payload already carries. Pass
 the payload as the subscriber received it as `$original` to carry over whatever
-the shop declared beyond its lines; without it, the totals are the lines alone,
-which is refused on an order that had anything beyond them.
-WooCommerce copies the order totals from the order itself, so the plugin runs no
-separate comparison against the shop's cart.
+the shop declared beyond its lines, such as store credit or a gift card;
+without it, the totals are the lines alone.
 
-When a subscriber changes a payload, the change is logged at info level and, on
-a saved order, written to an order note as the changed fields with before and
-after values.
+When a subscriber changes a payload, the changed fields are logged at debug
+level with their before and after values.
 
 **Determinism**: a subscriber must be a pure function of its inputs. The plugin
 recomposes the order and compares hashes of the post-hook payload to detect
@@ -467,8 +455,9 @@ suite loads it as an mu-plugin to place a real order with re-split shipping.
 **The older filters are deprecated** in favour of this one:
 `twoinc_payment_terms_line`, `two_order_create`, `two_order_edit` and
 `twoinc_order_payload` (see `docs/two-order-hook.md`). They still run, inside
-the order builders and before `twoinc_order_postprocessing`, so their output is
-the plugin's payload and goes out as it always has.
+the order builders, after the builders' own checks and before
+`twoinc_order_postprocessing`, so their output is the plugin's payload and goes
+out as it always has.
 
 **Versioning**: this hook must remain for all time and must fire consistently
 in response to the same events.
@@ -476,10 +465,10 @@ in response to the same events.
 - It is never removed or renamed, and its version 1 context keys and
   `request_type` values keep their meaning.
 - Allowed without a new version: new context keys, new `request_type` or
-  `trigger` values, and relaxing a check.
+  `trigger` values.
 - Never allowed: removing or renaming a context key, changing units (rates stay
-  decimal fractions), tightening a check version 1 subscribers could already
-  satisfy, or firing on fewer requests.
+  decimal fractions), checking in the plugin what a subscriber returns, or
+  firing on fewer requests.
 - An incompatible version 2 would be a new hook name, with this one still
   firing alongside it. Any contract change is recorded in the changelog, and the
   CI fixture pins version 1.
