@@ -122,13 +122,11 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     );
   }
 
-  // The two price nodes `getPrice()` reads. Without them the interval body
-  // returns on `!gross_amount` before it ever reaches the check, so the request
-  // assertions below would pass against a request that never happened.
+  // The total keys the verdict cache; without it nothing is cached, and the
+  // cache assertions below would pass against a cache never written.
   function buildCartTotals() {
     $(document.body).append(
-      '<div class="order-total"><span class="woocommerce-Price-amount">120.00</span></div>' +
-        '<div class="tax-rate"><span class="woocommerce-Price-amount">20.00</span></div>'
+      '<div class="order-total"><span class="woocommerce-Price-amount">120.00</span></div>'
     );
   }
 
@@ -615,59 +613,6 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         ajax.restore();
       }
     });
-
-    test("a cart total of ZERO gives up too, and posts nothing", () => {
-      // `getPrice()` cannot return 0: `getPriceRecursively()` gates on `if
-      // (val)`, so "0.00" is discarded as falsy and the walk falls through to
-      // undefined — a zero total and absent markup are indistinguishable there.
-      // The pre-existing consequence this records: a fully-discounted order can
-      // never obtain a verdict. Its own ticket, in `getPrice`.
-      const ajax = harness.stubAjax($);
-      try {
-        $(".order-total .woocommerce-Price-amount").text("0.00");
-        instance.getApproval();
-
-        jest.advanceTimersByTime(9000);
-        expect(instance.orderIntentCheck.interval).not.toBeNull();
-
-        jest.advanceTimersByTime(1000);
-        expect(instance.orderIntentCheck.interval).toBeNull();
-        expect(ajax.calls.length).toBe(0);
-        expect(shown(".twoinc-loader")).toBe(false);
-      } finally {
-        ajax.restore();
-      }
-    });
-
-    test("no readable cart total gives up rather than spinning forever", () => {
-      // Absent totals markup — a theme `getPrice()` cannot read. Retrying leaks a
-      // 1s timer for the life of the page and keeps `pendingCheck` alive with it.
-      // No loader is involved: it goes up with the request, downstream of this.
-      const ajax = harness.stubAjax($);
-      try {
-        $(".order-total").remove();
-        instance.getApproval();
-
-        jest.advanceTimersByTime(9000);
-        expect(instance.orderIntentCheck.interval).not.toBeNull();
-
-        jest.advanceTimersByTime(1000);
-        expect(instance.orderIntentCheck.interval).toBeNull();
-        expect(ajax.calls.length).toBe(0);
-        expect(shown(".twoinc-loader")).toBe(false);
-
-        // And the counter is reset for the NEXT check, which is the only reason
-        // the reset in getApproval() exists. Left at 10, a second price wait
-        // would give up after a single tick.
-        instance.getApproval();
-        jest.advanceTimersByTime(9000);
-        expect(instance.orderIntentCheck.interval).not.toBeNull();
-        jest.advanceTimersByTime(1000);
-        expect(instance.orderIntentCheck.interval).toBeNull();
-      } finally {
-        ajax.restore();
-      }
-    });
   });
 
   describe("a cached verdict disarms the check instead of re-rendering forever", () => {
@@ -985,38 +930,6 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
   });
 
-  describe("the loading state is never handed to a check that has not asked yet", () => {
-    test("a stuck-overlay give-up does not raise the loader for a merely ARMED check", () => {
-      // A loader raised for a merely ARMED check can never come down: the
-      // cart-total give-up disarms with no UI touch, `clearIntentVerdicts()`
-      // excludes the loader, and the abandon gate reads false on every flag.
-      const ajax = harness.stubAjax($);
-      try {
-        $(document.body).append('<div id="payment"><div class="blockOverlay"></div></div>');
-        issueACheck(ajax);
-        ajax.last().succeed({ approved: true });
-        expect(instance.orderIntentCheck.renderInterval).not.toBeNull();
-
-        // A newer check is ARMED but never issues, because the total goes unreadable.
-        $(".order-total").remove();
-        instance.getApproval();
-        expect(instance.orderIntentCheck.interval).not.toBeNull();
-        expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
-
-        // The blocked paint gives up at its tenth tick, then the cart-total wait at
-        // its own. Nothing is outstanding at any point, so the loader must never be
-        // raised — and certainly must not survive.
-        jest.advanceTimersByTime(20000);
-
-        expect(shown(".twoinc-loader")).toBe(false);
-        expect(instance.orderIntentCheck.interval).toBeNull();
-        expect(ajax.calls.length).toBe(1);
-      } finally {
-        ajax.restore();
-      }
-    });
-  });
-
   describe("what gets cached, and against which request", () => {
     test("a superseded response is ignored outright — not painted, not cached", () => {
       // The interval is disarmed BEFORE the request goes out, so a second check
@@ -1174,7 +1087,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       }
     });
 
-    test("a transport failure is not cached, so the next check retries", () => {
+    test.each([
+      [0, "a transport failure"],
+      [500, "the proxy failing to compose or send the intent (TWO-25657)"]
+    ])("a %s is not cached, so the next check retries: %s", (status) => {
       // A dropped connection is not a verdict. Cached, it declined this cart and
       // company for the rest of the page — permanently, since the cached branch
       // disarms and no request is ever retried. One blip would lose the sale.
@@ -1182,7 +1098,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       try {
         instance.getApproval();
         jest.advanceTimersByTime(1000);
-        ajax.last().fail("error", "error");
+        ajax.last().fail("error", "error", status);
         jest.advanceTimersByTime(1000);
 
         expect(shown(".twoinc-err-payment-default")).toBe(true);
@@ -1225,6 +1141,47 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         expect(instance.orderIntentLog["h" + status]).toBeUndefined();
       });
     }
+
+    test("an unreadable page total bypasses the cache, so a changed cart is asked about again", () => {
+      // The total is what tells one cart from another; without it every cart shares one key.
+      $(".order-total").remove();
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+        expect(Object.keys(instance.orderIntentLog).length).toBe(0);
+
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        expect(ajax.calls.length).toBe(2);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("the check posts the selected term, and a changed term is asked about again", () => {
+      // The server applies it before recalculating the cart, so the surcharge in the
+      // intent's gross is the chosen term's rather than the session's previous one.
+      $("form[name='checkout']").append(
+        '<input type="hidden" name="two_selected_term" value="60" />'
+      );
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+        expect(ajax.last().settings.data.two_selected_term).toBe("60");
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+
+        $("input[name='two_selected_term']").val("90");
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        expect(ajax.calls.length).toBe(2);
+        expect(ajax.last().settings.data.two_selected_term).toBe("90");
+      } finally {
+        ajax.restore();
+      }
+    });
 
     test("a cacheable verdict with no request hash is not filed under a blank key", () => {
       // Dropping the `hashedBody &&` guard survived: the pre-existing kill exercised a
@@ -1514,6 +1471,16 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       }
     });
 
+    test("the check sends only the buyer; the server composes amounts and lines from the cart", () => {
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+        expect(Object.keys(JSON.parse(ajax.last().settings.data.intent))).toEqual(["buyer"]);
+      } finally {
+        ajax.restore();
+      }
+    });
+
     test("the label and the request body name the same company", () => {
       // They used to come from different places — the body from `customerCompany`, the
       // label from `#billing_company`/`#company_id` — and `clearCompanyIfCountryStale()`
@@ -1677,54 +1644,6 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         $("#payment .blockOverlay").remove();
         jest.advanceTimersByTime(10000);
         expect(shown(".twoinc-intent-approved")).toBe(false);
-      } finally {
-        ajax.restore();
-      }
-    });
-  });
-
-  describe("the cart-total give-up is quiet", () => {
-    test("giving up does not wipe a verdict painted meanwhile", () => {
-      // No loading state is up during the price wait, so there is nothing of this
-      // check's to take down — and the blanket reset instead erased whatever else the
-      // tile was showing, with nothing left to re-arm. Driven here with absent totals
-      // markup; the zero-total cart takes the same branch and is covered in its own
-      // test.
-      const ajax = harness.stubAjax($);
-      try {
-        // Request 1 goes out and is left UNSETTLED on purpose: settled,
-        // `abortedWhilePending` reads false however the give-up behaves, so the
-        // "does not touch an outstanding request" assertion below was vacuous.
-        issueACheck(ajax);
-
-        // A second check is armed and its cart total then becomes unreadable — plus a
-        // third call while that interval is live, so `pendingCheck` is genuinely set
-        // when the give-up runs. Without that it was already false and the assertion
-        // proved nothing.
-        instance.getApproval();
-        $(".order-total").remove();
-        instance.getApproval();
-        expect(instance.orderIntentCheck.pendingCheck).toBe(true);
-
-        // Staged AFTER the arming calls, since each of them clears verdicts.
-        revealVerdictBox(".twoinc-err-payment-default");
-
-        jest.advanceTimersByTime(2000);
-        expect(shown(".twoinc-err-payment-default")).toBe(true);
-
-        // Ten ticks in, the price wait gives up — quietly.
-        jest.advanceTimersByTime(10000);
-
-        expect(shown(".twoinc-err-payment-default")).toBe(true);
-        expect(instance.orderIntentCheck.interval).toBeNull();
-        // `pendingCheck` too: left set, initialize()'s 3s poller re-enters
-        // getApproval() for the life of the page — the exact leak this block's own
-        // comment claims to close. Unpinned because this describe never starts the
-        // poller.
-        expect(instance.orderIntentCheck.pendingCheck).toBe(false);
-        // And an outstanding request is deliberately left alone — this wait knows
-        // nothing about it. Asserted rather than only claimed in prose.
-        expect(ajax.calls[0].abortedWhilePending).toBe(false);
       } finally {
         ajax.restore();
       }

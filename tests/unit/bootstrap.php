@@ -356,6 +356,11 @@ function WC()
             public $session;
 
             /** The gateways this checkout offers; a spec sets the global. */
+            public function checkout()
+            {
+                return new WC_Checkout();
+            }
+
             public function payment_gateways()
             {
                 return new class () {
@@ -1318,6 +1323,118 @@ class StubOrder
     {
         return 'https://shop.example/edit';
     }
+
+    public function get_taxable_location()
+    {
+        return ['country' => 'NO', 'state' => '', 'postcode' => '0150', 'city' => 'Oslo'];
+    }
+
+    public function get_items_tax_classes()
+    {
+        return [];
+    }
+}
+
+/**
+ * The unsaved order WC_Checkout::set_data_from_cart() fills for an order intent (TWO-26092): unsaved, so id 0,
+ * and items and totals are whatever the checkout stub sets.
+ */
+class WC_Order extends StubOrder
+{
+    public $items = [];
+    public $props = [];
+
+    public function __call($name, $args)
+    {
+        if (strpos($name, 'set_') === 0) {
+            $this->props[substr($name, 4)] = $args[0];
+            return;
+        }
+        throw new BadMethodCallException($name);
+    }
+
+    public function get_items($type = 'line_item')
+    {
+        return $this->items[$type] ?? [];
+    }
+
+    public function get_taxes()
+    {
+        return $this->items['tax'] ?? [];
+    }
+
+    public function get_id()
+    {
+        return 0;
+    }
+
+    public function get_currency()
+    {
+        return $this->props['currency'] ?? '';
+    }
+
+    public function get_total()
+    {
+        return $this->props['total'] ?? 0.0;
+    }
+
+    public function get_total_tax()
+    {
+        return ($this->props['cart_tax'] ?? 0.0) + ($this->props['shipping_tax'] ?? 0.0);
+    }
+}
+
+/**
+ * A live cart for the intent builder: $contents holds what core's checkout would copy onto the order.
+ * The default is a plain cart, one product at 100.00 net plus 25% VAT.
+ */
+class StubIntentCart
+{
+    public $contents;
+    public $calculated = 0;
+    /** The buyer's term in the session when the totals (and so the surcharge fee) were calculated. */
+    public $term_at_totals;
+
+    public function __construct(?array $contents = null)
+    {
+        $this->contents = $contents ?? [
+            'line_item' => [new StubProductLineItem(['name' => 'Widget', 'line_total' => 100.0, 'line_subtotal' => 100.0, 'line_tax' => 25.0, 'taxes' => [1 => 25.0]])],
+            'tax' => [new StubOrderTaxItem(1, 25.0)],
+            'total' => 125.0,
+            'cart_tax' => 25.0,
+            'shipping_tax' => 0.0,
+        ];
+    }
+
+    public function is_empty()
+    {
+        return false;
+    }
+
+    public function calculate_totals()
+    {
+        $this->calculated++;
+        $this->term_at_totals = WC()->session ? WC()->session->get('two_selected_term') : null;
+    }
+}
+
+class WC_Checkout
+{
+    public function set_data_from_cart(&$order)
+    {
+        /** @var StubIntentCart $cart */
+        $cart = WC()->cart;
+        $contents = $cart->contents;
+        if (!empty($contents['throws'])) {
+            throw new Exception('the cart could not be copied onto the order');
+        }
+        foreach (['line_item', 'shipping', 'fee', 'tax'] as $type) {
+            $order->items[$type] = $contents[$type] ?? [];
+        }
+        $order->set_total($contents['total']);
+        $order->set_cart_tax($contents['cart_tax']);
+        $order->set_shipping_tax($contents['shipping_tax']);
+    }
 }
 
 function wp_json_encode($data, $options = 0, $depth = 512)
@@ -1889,6 +2006,7 @@ require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Helper.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_FX.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Rate_Limiter.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Surcharge_Method_Exception.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Order_Postprocessing_Exception.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Stored_Term.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Payment_Terms.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Sole_Trader.php';

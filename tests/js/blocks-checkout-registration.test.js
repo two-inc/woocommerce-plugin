@@ -804,17 +804,15 @@ describe("blocks-checkout.js reaches the rest of the tile's surfaces", () => {
     return { env, registered, updates };
   }
 
-  test.each([
-    ["order-total", 386],
-    ["tax-rate", 0]
-  ])("the controller reads %s off the store's cart totals", (name, expected) => {
+  test("the controller reads the order total off the store's cart totals, and nothing else", () => {
     const base = baseGlobals("address_area");
     const { env } = globals({});
     env.wp.data = base.data;
     evaluate(env);
 
-    const node = document.querySelector("." + name + " .woocommerce-Price-amount bdi");
-    expect(parseFloat(node.textContent)).toBe(expected);
+    const node = document.querySelector(".order-total .woocommerce-Price-amount bdi");
+    expect(parseFloat(node.textContent)).toBe(386);
+    expect(document.querySelector(".tax-rate")).toBeNull();
   });
 
   test.each([

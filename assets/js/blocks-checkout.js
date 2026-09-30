@@ -195,24 +195,20 @@
   }
 
   /**
-   * The order total and tax, in the markup `twoincDomHelper.getPrice()`
-   * reads. The order-intent check polls for them before it will ask, and
-   * Blocks' own totals carry none of the classic classes.
+   * The order total, in the markup `twoincDomHelper.getPrice()` reads. The
+   * order-intent check keys its verdict cache on it, and Blocks' own totals
+   * carry none of the classic classes.
    */
-  function priceNodes() {
+  function totalNode() {
     var host = shadow();
-    var nodes = {};
-    ["order-total", "tax-rate"].forEach(function (name) {
-      var node = host.querySelector("." + name);
-      if (!node) {
-        node = document.createElement("span");
-        node.className = name;
-        node.innerHTML = '<span class="woocommerce-Price-amount"><bdi></bdi></span>';
-        host.appendChild(node);
-      }
-      nodes[name] = node.querySelector("bdi");
-    });
-    return nodes;
+    var node = host.querySelector(".order-total");
+    if (!node) {
+      node = document.createElement("span");
+      node.className = "order-total";
+      node.innerHTML = '<span class="woocommerce-Price-amount"><bdi></bdi></span>';
+      host.appendChild(node);
+    }
+    return node.querySelector("bdi");
   }
 
   function pullTotals() {
@@ -222,12 +218,8 @@
 
     var decimals = totals.currency_minor_unit == null ? 2 : totals.currency_minor_unit;
     var unit = Math.pow(10, decimals);
-    var nodes = priceNodes();
     var separator = (window.twoinc && window.twoinc.price_decimal_separator) || ".";
-    nodes["order-total"].textContent = ((totals.total_price || 0) / unit)
-      .toFixed(decimals)
-      .replace(".", separator);
-    nodes["tax-rate"].textContent = ((totals.total_tax || 0) / unit)
+    totalNode().textContent = ((totals.total_price || 0) / unit)
       .toFixed(decimals)
       .replace(".", separator);
   }

@@ -321,6 +321,159 @@ above.
 If an upgrade removes a non-empty "Default shipping tax class" value, the plugin
 logs a notice naming the old class (source `twoinc-payment-gateway`).
 
+## Stable extension contract: order postprocessing
+
+`twoinc_order_postprocessing` is the one place for merchant code to change what
+is sent to Two. It presents the complete request body and lets a subscriber edit
+any of it: lines, net/tax splits, gross amounts, totals, fields the plugin does
+not send itself. The plugin fires it and sends the payload exactly as it is
+returned. Two's API validates whatever arrives; if it passes, Two accepts what
+the merchant declared. The merchant owns what their code declares: with a
+subscriber that changes amounts, the Two invoice can differ from what the shop
+itself recorded.
+
+```php
+add_filter('twoinc_order_postprocessing', function (array $payload, array $context): array {
+    // ...edit $payload...
+    return $payload;
+}, 10, 2);
+```
+
+**Parameters**
+
+- `$payload` (array): the request body exactly as it would be sent, amounts as
+  2dp decimal strings. `[]` for a request the API defines with no body.
+- `$context` (array):
+
+  | Key                          | Type                      | Meaning                                                                                                                                                                          |
+  | ---------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `request_type`               | string                    | `order_intent`, `order_create`, `order_update`, `order_confirm`, `capture`, `refund` or `cancel`                                                                                 |
+  | `trigger`                    | string                    | What caused it, for diagnosis: `checkout`, `change_hash`, `admin_edit`, `tracking_number`, `confirmation_redirect`, `status_change`, `order_refund`                              |
+  | `endpoint`                   | string                    | The API path, e.g. `/v1/order/<id>/refund`                                                                                                                                       |
+  | `order`                      | `WC_Order`                | The order; for `order_intent` an unsaved order built from the cart                                                                                                               |
+  | `refund`                     | `WC_Order_Refund` or null | The refund being sent, for `refund`                                                                                                                                              |
+  | `shipping_tax_rate`          | float or null             | The rate WooCommerce's shipping tax class setting applies at the order's tax address, whether or not the shipping line was taxed. `0.21` means 21%. Null when none is configured |
+  | `fallback_shipping_tax_rate` | float or null             | The same rate when the shop-rate shipping tax fallback above is on, else null                                                                                                    |
+  | `contract_version`           | int                       | `1`                                                                                                                                                                              |
+
+**Return**: the full payload. Callbacks chain in priority order; the final
+payload is sent.
+
+**When it fires**: once for every request the plugin sends to an order endpoint:
+
+| `request_type`  | When                                                                                                                                                                    |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `order_intent`  | Every availability check at checkout. The plugin composes the intent itself from the cart, with the same line builder as the order; the browser supplies only the buyer |
+| `order_create`  | Placing the order; also, with `trigger` `change_hash`, whenever the plugin recomposes the order to detect an edit (nothing is sent then)                                |
+| `order_update`  | An admin edit or a tracking number reaching the order                                                                                                                   |
+| `order_confirm` | The buyer returning from Two's checkout                                                                                                                                 |
+| `capture`       | The fulfilment trigger status                                                                                                                                           |
+| `refund`        | A refund                                                                                                                                                                |
+| `cancel`        | Cancellation                                                                                                                                                            |
+
+To build the intent, the plugin has WooCommerce copy the cart onto an unsaved
+order, so third-party `woocommerce_checkout_create_order_line_item`,
+`woocommerce_checkout_create_order_shipping_item`,
+`woocommerce_checkout_create_order_fee_item`,
+`woocommerce_checkout_create_order_tax_item` and
+`woocommerce_checkout_create_order_coupon_item` actions fire on every intent check,
+with an order whose id is `0`. Code on those actions that writes elsewhere
+should skip an order with id `0`.
+
+**What the plugin checks**. Only what it builds itself. Its builders check the
+order the shop recorded before any filter runs (for example, that the tax
+charged on a shipping line matches the shop's shipping tax rate) and refuse a
+request that fails, as they always have. What a subscriber returns is not
+re-checked: Two's API validates it, and a request the API refuses is logged
+at error level with the API's reason and, on a saved order, the reason is
+written to an order note.
+
+A subscriber that throws, or returns something other than an array or
+something that cannot be encoded as JSON, is a code fault rather than a
+declaration: the request is not sent, and the failure is logged at error level
+naming `twoinc_order_postprocessing` and the request type. Checkout then shows
+the buyer the usual "not available" message; a failed intent check is answered
+as an error rather than a decline, so the next check asks again; admin actions
+leave an order note; a refund returns the error to the refund screen.
+
+The plugin never recomputes anything after the hook: a subscriber that changes
+a line also updates the totals and subtotals it affects. It can do that with
+the opt-in helper
+`WC_Twoinc_Helper::recompute_totals_from_lines(array $payload, array $original): array`.
+`$original` is required: the payload as the subscriber received it. The helper
+sets each order total, each per-rate entry in `tax_subtotals` and a refund
+`amount` to the sum over the payload's lines plus the residual `$original`
+carried beyond its lines, such as store credit or a gift card. It touches only
+the fields the payload already carries. A total the subscriber edited by hand
+before calling it is overwritten: the helper's result wins.
+
+When a subscriber changes a payload, the changed fields are logged at debug
+level with their before and after values.
+
+**Determinism**: a subscriber must be a pure function of its inputs. The plugin
+recomposes the order and compares hashes of the post-hook payload to detect
+edits; a subscriber that answers differently each time makes every order save
+send an update.
+
+**Performance**: it runs on every intent check during checkout. Keep it cheap.
+
+**A subscriber that is switched off** (a deactivated plugin, a removed
+snippet) is indistinguishable from none: orders then go out with the shop's
+figures.
+
+**Example**: the shop records shipping as untaxed, while the business books
+VAT inside that charge at the shop's configured shipping rate. For 29.00 of
+shipping at 21%, the line goes out as 23.97 net + 5.03 tax, gross unchanged.
+
+```php
+add_filter('twoinc_order_postprocessing', function (array $payload, array $context): array {
+    $rate = $context['shipping_tax_rate'];
+    if (!$rate || empty($payload['line_items'])) {
+        return $payload;
+    }
+    $original = $payload;
+    foreach ($payload['line_items'] as &$line) {
+        if ($line['type'] !== 'SHIPPING_FEE' || (float) $line['tax_amount'] != 0.0) {
+            continue;
+        }
+        $gross = (float) $line['gross_amount'];
+        $net = round($gross / (1 + $rate), 2);
+        $line['net_amount'] = number_format($net, 2, '.', '');
+        $line['tax_amount'] = number_format($gross - $net, 2, '.', '');
+        $line['unit_price'] = $line['net_amount'];
+        $line['tax_rate'] = number_format($rate, 6, '.', '');
+        $line['tax_class_name'] = 'VAT ' . number_format($rate * 100, 2) . '%';
+    }
+    unset($line);
+    return WC_Twoinc_Helper::recompute_totals_from_lines($payload, $original);
+}, 10, 2);
+```
+
+The CI fixture `tests/unit/fixtures/orderpostprocessing.php` is a working
+subscriber. The unit suite drives it through every request type, and the e2e
+suite loads it as an mu-plugin to place a real order with re-split shipping.
+
+**The older filters are deprecated** in favour of this one:
+`twoinc_payment_terms_line`, `two_order_create`, `two_order_edit` and
+`twoinc_order_payload` (see `docs/two-order-hook.md`). They still run, inside
+the order builders, after the builders' own checks and before
+`twoinc_order_postprocessing`, so their output is the plugin's payload and goes
+out as it always has.
+
+**Versioning**: this hook must remain for all time and must fire consistently
+in response to the same events.
+
+- It is never removed or renamed, and its version 1 context keys and
+  `request_type` values keep their meaning.
+- Allowed without a new version: new context keys, new `request_type` or
+  `trigger` values.
+- Never allowed: removing or renaming a context key, changing units (rates stay
+  decimal fractions), checking the figures a subscriber returns, or
+  firing on fewer requests.
+- An incompatible version 2 would be a new hook name, with this one still
+  firing alongside it. Any contract change is recorded in the changelog, and the
+  CI fixture pins version 1.
+
 ## Post installation optional steps
 
 Once Wordpress has been set up, a recommended plugin theme to install is:

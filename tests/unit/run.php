@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 require __DIR__ . '/bootstrap.php';
+// Registered for the whole suite and inert until armed, so every other spec runs with a subscriber present.
+require __DIR__ . '/fixtures/orderpostprocessing.php';
+require __DIR__ . '/fixtures/builderorders.php';
+require __DIR__ . '/OrderPostprocessingSpec.php';
 
 final class TinyAssert
 {
@@ -14808,10 +14812,17 @@ final class BrandConfigSpec
         $prop->setAccessible(true);
         $prop->setValue(null, $gateway);
         $GLOBALS['__twoinc_test_ajax_json'] = null;
+        // The intent is composed from the live cart, so every handler runs with one.
+        $cart = WC()->cart;
+        $customer = WC()->customer;
+        WC()->cart = $GLOBALS['__twoinc_test_intent_cart'] ?? new StubIntentCart();
+        WC()->customer = null;
         try {
             WC_Twoinc_Api_Proxy::$handler();
         } finally {
             $prop->setValue(null, null);
+            WC()->cart = $cart;
+            WC()->customer = $customer;
         }
         return $GLOBALS['__twoinc_test_ajax_json'] ?? [];
     }
@@ -15034,8 +15045,8 @@ final class BrandConfigSpec
         $payload = $gateway->calls[0]['payload'];
         TinyAssert::same('merchant-from-settings', $payload['merchant_id']);
         TinyAssert::same('shortname-from-settings', $payload['merchant_short_name']);
-        // Cart-derived fields still come from the form the buyer filled in.
-        TinyAssert::same('100.00', $payload['gross_amount']);
+        // Amounts come from the cart server-side, never from the request (TWO-26092).
+        TinyAssert::same('125.00', $payload['gross_amount']);
         TinyAssert::same('ACME', $payload['buyer']['company']['company_name']);
         // Anything outside the allowlist is dropped rather than relayed.
         TinyAssert::same(false, array_key_exists('invoice_details', $payload));
@@ -17827,4 +17838,5 @@ SubtitleSaveValidationSpec::runAll();
 CaptureMemorySpec::runAll();
 ProductPromoSpec::runAll();
 ProductButtonSpec::runAll();
+OrderPostprocessingSpec::runAll();
 print("All tests passed.\n");

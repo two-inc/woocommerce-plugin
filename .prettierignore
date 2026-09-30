@@ -10,3 +10,6 @@ tests/js/fixtures/capture-scope.generated.json
 # the accessible-name spec runs against what the plugin emits rather than a copy.
 tests/js/fixtures/product-button-with-mark.html
 tests/js/fixtures/product-button-without-mark.html
+
+# Emitted by tests/unit/fixtures/capture-builder-goldens.php; kept as it prints so a re-capture diffs cleanly.
+tests/unit/fixtures/builder-goldens.json

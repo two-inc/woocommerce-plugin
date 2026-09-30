@@ -8,20 +8,6 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
      */
     class WC_Twoinc_Api_Proxy
     {
-        /**
-         * The order-intent fields the browser is trusted to supply. Everything
-         * else it sends is dropped: the relay spends the merchant's API key.
-         */
-        private const INTENT_FIELDS = [
-            'gross_amount',
-            'net_amount',
-            'tax_amount',
-            'invoice_type',
-            'buyer',
-            'currency',
-            'line_items',
-        ];
-
         /** @return WC_Twoinc|null Null when the request was already refused. */
         private static function authorize(string $handler, string $route)
         {
@@ -158,11 +144,31 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
                 wp_send_json_error('Buyer country not supported');
                 return;
             }
-            $payload = array_intersect_key($posted, array_flip(self::INTENT_FIELDS));
-            // Merchant identity is resolved here, never read from the request.
-            $payload['merchant_id'] = (string) $gateway->get_merchant_id();
-            $payload['merchant_short_name'] = (string) $gateway->get_option('merchant_short_name');
-            $response = $gateway->make_request('/v1/order_intent', $payload, 'POST');
+            // The session follows a term chip a round trip late, and the cart's surcharge fee reads it.
+            $term = (int) ($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] ?? 0);
+            if ($term > 0 && in_array($term, WC_Twoinc_Payment_Terms::get_available_terms($gateway), true)) {
+                WC_Twoinc_Payment_Terms::set_selected_term($gateway, $term);
+            }
+            // 5xx, not a 200 error: the browser reads a 200 as a decline and caches it (TWO-25657).
+            try {
+                $order = WC_Twoinc_Helper::build_intent_order_from_cart();
+                if (!$order) {
+                    self::log_refusal('order intent', 'no cart to compose the intent from');
+                    wp_send_json_error('Invalid order intent payload', 500);
+                    return;
+                }
+                // Only the buyer comes from the browser: the relay spends the merchant's API key.
+                $buyer = is_array($posted['buyer'] ?? null) ? $posted['buyer'] : [];
+                $payload = WC_Twoinc_Helper::compose_twoinc_intent($order, $buyer);
+                // Merchant identity is resolved here, never read from the request.
+                $payload['merchant_id'] = (string) $gateway->get_merchant_id();
+                $payload['merchant_short_name'] = (string) $gateway->get_option('merchant_short_name');
+                $response = $gateway->make_order_request('order_intent', 'checkout', '/v1/order_intent', $payload, 'POST', $order);
+            } catch (Exception $e) {
+                self::log_refusal('order intent', $e->getMessage());
+                wp_send_json_error('Order intent refused', 500);
+                return;
+            }
             self::record_verdict($company, $response);
             self::relay($response);
         }
