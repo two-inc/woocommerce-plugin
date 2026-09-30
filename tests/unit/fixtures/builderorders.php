@@ -118,6 +118,30 @@ if (!class_exists('TwoincBuilderFixtureOrder')) {
                     'refund' => null,
                 ];
             },
+            // 10.00 of gift card off the order total and off no line.
+            'gift_card_residual' => static function () use ($line) {
+                return [
+                    'order' => new TwoincBuilderFixtureOrder([
+                        'currency' => 'GBP', 'total' => 122.0, 'total_tax' => 22.0,
+                        'line_item' => [$line('Widget', 100.0, 100.0, 20.0, [1 => 20.0])],
+                        'shipping' => [5 => new StubShippingItem(10.0, 2.0, [1 => 2.0])],
+                        'tax' => [new StubOrderTaxItem(1, 20.0)],
+                    ]),
+                    'refund' => null,
+                ];
+            },
+            // Shipping charged 7.00 of tax where its 20% rate gives 5.80: the release refuses it.
+            'mistaxed_shipping' => static function () use ($line) {
+                return [
+                    'order' => new TwoincBuilderFixtureOrder([
+                        'currency' => 'GBP', 'total' => 156.0, 'total_tax' => 27.0,
+                        'line_item' => [$line('Widget', 100.0, 100.0, 20.0, [1 => 20.0])],
+                        'shipping' => [5 => new StubShippingItem(29.0, 7.0, [1 => 7.0])],
+                        'tax' => [new StubOrderTaxItem(1, 20.0)],
+                    ]),
+                    'refund' => null,
+                ];
+            },
             'vat_exempt_buyer' => static function () use ($line) {
                 return [
                     'order' => new TwoincBuilderFixtureOrder([
@@ -132,8 +156,8 @@ if (!class_exists('TwoincBuilderFixtureOrder')) {
     }
 
     /**
-     * Every builder's body for one fixture, composed with tax subtotals on. The delivery date is today-relative, so
-     * it is pinned.
+     * Every builder's body for one fixture, composed with tax subtotals on, or ['refused' => message] where the
+     * builder refused it. The delivery date is today-relative, so it is pinned.
      */
     function twoinc_builder_fixture_payloads(array $fixture): array
     {
@@ -151,16 +175,32 @@ if (!class_exists('TwoincBuilderFixtureOrder')) {
                 return $key === 'enable_tax_subtotals' ? 'yes' : ($empty_value ?? '');
             }
         });
+        $builders = [
+            'order_create' => static function () use ($order) {
+                return WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
+            },
+            'order_update' => static function () use ($order) {
+                return WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+            },
+        ];
+        if ($fixture['refund']) {
+            $builders['refund'] = static function () use ($fixture, $order) {
+                return WC_Twoinc_Helper::compose_twoinc_refund($fixture['refund'][0], $fixture['refund'][1], $order);
+            };
+        }
+        if (method_exists('WC_Twoinc_Helper', 'compose_twoinc_intent')) {
+            $builders['intent'] = static function () use ($order) {
+                return WC_Twoinc_Helper::compose_twoinc_intent($order, []);
+            };
+        }
+        $payloads = [];
         try {
-            $payloads = [
-                'order_create' => WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []),
-                'order_update' => WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', ''),
-            ];
-            if ($fixture['refund']) {
-                $payloads['refund'] = WC_Twoinc_Helper::compose_twoinc_refund($fixture['refund'][0], $fixture['refund'][1], $order);
-            }
-            if (method_exists('WC_Twoinc_Helper', 'compose_twoinc_intent')) {
-                $payloads['intent'] = WC_Twoinc_Helper::compose_twoinc_intent($order, []);
+            foreach ($builders as $type => $build) {
+                try {
+                    $payloads[$type] = $build();
+                } catch (Exception $e) {
+                    $payloads[$type] = ['refused' => $e->getMessage()];
+                }
             }
         } finally {
             $instance->setValue(null, $previous);

@@ -90,6 +90,24 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
             case 'refund_sign':
                 $payload['amount'] = number_format(-(float) $payload['amount'], 2, '.', '');
                 return $payload;
+            case 'refund_lines_flipped':
+                foreach ($payload['line_items'] as &$line) {
+                    foreach (['net_amount', 'tax_amount', 'gross_amount', 'unit_price'] as $field) {
+                        $line[$field] = number_format(abs((float) $line[$field]), 2, '.', '');
+                    }
+                }
+                unset($line);
+                return $payload;
+            case 'drop_tax_rate':
+                $original = $payload;
+                unset($payload['line_items'][0]['tax_rate']);
+                $payload['line_items'][0]['tax_amount'] = '99.00';
+                $payload['line_items'][0]['gross_amount'] = '199.00';
+                return WC_Twoinc_Helper::recompute_totals_from_lines($payload, $original);
+            case 'line_scalar':
+                $original = $payload;
+                $payload['line_items'][1] = 'x';
+                return WC_Twoinc_Helper::recompute_totals_from_lines($payload, $original);
             case 'drop_subtotals':
                 unset($payload['tax_subtotals']);
                 return $payload;

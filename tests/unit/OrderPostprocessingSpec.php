@@ -373,6 +373,9 @@ final class OrderPostprocessingSpec
             ['unset_gross', 'order_create', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', 'gross_amount removed and net made nonsense'],
             ['refund_sign', 'refund', $refund, 'TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', 'a refund amount with its sign flipped'],
             ['drop_subtotals', 'order_create', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_SUBTOTALS_INCONSISTENT', 'tax_subtotals removed'],
+            ['refund_lines_flipped', 'refund', $refund, 'TWO_ORDER_POSTPROCESSING_TOTALS_INCONSISTENT', 'every refund line turned positive'],
+            ['drop_tax_rate', 'order_create', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT', 'a changed line with its tax_rate removed'],
+            ['line_scalar', 'order_create', self::examplePayload(), 'TWO_ORDER_POSTPROCESSING_LINE_INCONSISTENT', 'a line replaced by a scalar, totals moved to match'],
         ];
         foreach ($cases as [$mode, $type, $payload, $code, $description]) {
             self::reset();
@@ -838,11 +841,22 @@ final class OrderPostprocessingSpec
                 // Rebuilt per pass: a builder may stamp meta on the order it reads.
                 $fixture = $build();
                 foreach (twoinc_builder_fixture_payloads($fixture) as $type => $payload) {
-                    $sent = WC_Twoinc_Helper::postprocess_order_request($payload, self::context($type === 'intent' ? 'order_intent' : $type, $fixture['order']));
-                    // Intent had no server-side builder before; its lines must be the order's own.
-                    $want = $type === 'intent' ? $goldens[$name]['order_create']['line_items'] : $goldens[$name][$type];
+                    $label = "$name $type, subscriber " . var_export($subscriber, true);
+                    // Intent had no server-side builder before; it answers as the order did.
+                    $want = $goldens[$name][$type === 'intent' ? 'order_create' : $type];
+                    try {
+                        $sent = isset($payload['refused']) ? $payload : WC_Twoinc_Helper::postprocess_order_request($payload, self::context($type === 'intent' ? 'order_intent' : $type, $fixture['order']));
+                    } catch (Exception $e) {
+                        $sent = ['refused' => $e->getMessage()];
+                    }
+                    if (isset($want['refused']) || isset($sent['refused'])) {
+                        // The release named the shipping method; the gate names its line.
+                        TinyAssert::true(isset($want['refused'], $sent['refused']) && strpos($sent['refused'], 'does not match the shop\'s tax rates') !== false, "$label: " . json_encode([$want['refused'] ?? 'sent', $sent['refused'] ?? 'sent']));
+                        continue;
+                    }
+                    $want = $type === 'intent' ? $want['line_items'] : $want;
                     $have = $type === 'intent' ? $sent['line_items'] : $sent;
-                    TinyAssert::same(json_encode($want), json_encode($have), "$name $type, subscriber " . var_export($subscriber, true));
+                    TinyAssert::same(json_encode($want), json_encode($have), $label);
                 }
             }
         }

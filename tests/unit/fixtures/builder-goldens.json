@@ -775,6 +775,210 @@
             ]
         }
     },
+    "gift_card_residual": {
+        "order_create": {
+            "currency": "GBP",
+            "gross_amount": "122.00",
+            "net_amount": "100.00",
+            "tax_amount": "22.00",
+            "discount_amount": "0.00",
+            "discount_rate": "0",
+            "invoice_type": "FUNDED_INVOICE",
+            "invoice_details": {
+                "payment_reference_message": "",
+                "payment_reference_ocr": ""
+            },
+            "buyer": {
+                "company": {
+                    "organization_number": "912345678",
+                    "country_prefix": "NO",
+                    "company_name": "Test Buyer AS"
+                },
+                "representative": {
+                    "email": "buyer@example.com",
+                    "first_name": "Test",
+                    "last_name": "Buyer",
+                    "phone_number": "+4712345678"
+                }
+            },
+            "buyer_department": "",
+            "buyer_project": "",
+            "order_note": "",
+            "line_items": [
+                {
+                    "name": "Widget",
+                    "description": "",
+                    "gross_amount": "120.00",
+                    "net_amount": "100.00",
+                    "discount_amount": "0.00",
+                    "tax_amount": "20.00",
+                    "tax_class_name": "Tax 1",
+                    "tax_rate": "0.200000",
+                    "unit_price": "100",
+                    "quantity": 1,
+                    "quantity_unit": "item",
+                    "image_url": "",
+                    "product_page_url": "",
+                    "type": "PHYSICAL",
+                    "details": {
+                        "barcodes": [
+                            {
+                                "type": "SKU",
+                                "value": ""
+                            }
+                        ],
+                        "categories": []
+                    }
+                },
+                {
+                    "name": "Shipping - Carrier",
+                    "description": "",
+                    "gross_amount": "12.00",
+                    "net_amount": "10.00",
+                    "discount_amount": "0",
+                    "tax_amount": "2.00",
+                    "tax_class_name": "Tax 1",
+                    "tax_rate": "0.200000",
+                    "unit_price": "10.00",
+                    "quantity": 1,
+                    "quantity_unit": "sc",
+                    "image_url": "",
+                    "product_page_url": "",
+                    "type": "SHIPPING_FEE"
+                }
+            ],
+            "recurring": false,
+            "merchant_additional_info": "",
+            "merchant_order_id": "42",
+            "merchant_reference": "",
+            "merchant_urls": {
+                "merchant_cancel_order_url": "https://shop.example/cancel",
+                "merchant_edit_order_url": "https://shop.example/edit",
+                "merchant_order_verification_failed_url": "https://shop.example/cancel",
+                "merchant_invoice_url": "",
+                "merchant_shipping_document_url": "",
+                "merchant_confirmation_url": "https://shop.example/twoinc-payment-gateway/confirm?order_id=42&twoinc_order_reference=ref&twoinc_csrf_token=testtoken:twoinc_confirm_42"
+            },
+            "billing_address": {
+                "organization_name": "Test Buyer AS",
+                "street_address": "Testgata 1",
+                "postal_code": "0150",
+                "city": "Oslo",
+                "region": "",
+                "country": "NO"
+            },
+            "shipping_address": {
+                "organization_name": "Test Buyer AS",
+                "street_address": "Testgata 1",
+                "postal_code": "0150",
+                "city": "Oslo",
+                "region": "",
+                "country": "NO"
+            },
+            "shipping_details": {
+                "expected_delivery_date": "pinned"
+            },
+            "tax_subtotals": [
+                {
+                    "tax_amount": "22.00",
+                    "tax_rate": "0.200000",
+                    "taxable_amount": "110.00"
+                }
+            ]
+        },
+        "order_update": {
+            "currency": "GBP",
+            "gross_amount": "122.00",
+            "net_amount": "100.00",
+            "tax_amount": "22.00",
+            "discount_amount": "0.00",
+            "discount_rate": "0",
+            "invoice_type": "FUNDED_INVOICE",
+            "buyer_department": "",
+            "buyer_project": "",
+            "order_note": "",
+            "line_items": [
+                {
+                    "name": "Widget",
+                    "description": "",
+                    "gross_amount": "120.00",
+                    "net_amount": "100.00",
+                    "discount_amount": "0.00",
+                    "tax_amount": "20.00",
+                    "tax_class_name": "Tax 1",
+                    "tax_rate": "0.200000",
+                    "unit_price": "100",
+                    "quantity": 1,
+                    "quantity_unit": "item",
+                    "image_url": "",
+                    "product_page_url": "",
+                    "type": "PHYSICAL",
+                    "details": {
+                        "barcodes": [
+                            {
+                                "type": "SKU",
+                                "value": ""
+                            }
+                        ],
+                        "categories": []
+                    }
+                },
+                {
+                    "name": "Shipping - Carrier",
+                    "description": "",
+                    "gross_amount": "12.00",
+                    "net_amount": "10.00",
+                    "discount_amount": "0",
+                    "tax_amount": "2.00",
+                    "tax_class_name": "Tax 1",
+                    "tax_rate": "0.200000",
+                    "unit_price": "10.00",
+                    "quantity": 1,
+                    "quantity_unit": "sc",
+                    "image_url": "",
+                    "product_page_url": "",
+                    "type": "SHIPPING_FEE"
+                }
+            ],
+            "recurring": false,
+            "merchant_additional_info": "",
+            "merchant_reference": "",
+            "billing_address": {
+                "organization_name": "Test Buyer AS",
+                "street_address": "Testgata 1",
+                "postal_code": "0150",
+                "city": "Oslo",
+                "region": "",
+                "country": "NO"
+            },
+            "shipping_address": {
+                "organization_name": "Test Buyer AS",
+                "street_address": "Testgata 1",
+                "postal_code": "0150",
+                "city": "Oslo",
+                "region": "",
+                "country": "NO"
+            },
+            "shipping_details": {
+                "expected_delivery_date": "pinned"
+            },
+            "tax_subtotals": [
+                {
+                    "tax_amount": "22.00",
+                    "tax_rate": "0.200000",
+                    "taxable_amount": "110.00"
+                }
+            ]
+        }
+    },
+    "mistaxed_shipping": {
+        "order_create": {
+            "refused": "The tax charged on \"Carrier\" does not match the shop's tax rates."
+        },
+        "order_update": {
+            "refused": "The tax charged on \"Carrier\" does not match the shop's tax rates."
+        }
+    },
     "vat_exempt_buyer": {
         "order_create": {
             "currency": "GBP",
