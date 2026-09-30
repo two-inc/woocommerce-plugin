@@ -76,7 +76,12 @@ if (!class_exists('WC_Twoinc')) {
             'merchant_surcharge_limit',
             'supported_buyer_countries',
             'merchant_record_last_error',
+            'merchant_country',
+            'tax_codes',
         ];
+
+        // How long a tax code list is served before it is fetched again (TWO-24877); the list changes only on deploy.
+        private const TAX_CODES_TTL = 86400;
 
         private bool $twoinc_process_confirmation_called = false;
 
@@ -420,6 +425,7 @@ if (!class_exists('WC_Twoinc')) {
             self::store_platform_minimum_order($record);
             self::store_supported_buyer_countries($record);
             self::store_merchant_surcharge_limit($record);
+            self::store_merchant_country($record);
             update_option($checked_option, time(), false);
             delete_option(WC_Twoinc_Brand::prefixed_name('merchant_record_last_error'));
 
@@ -575,6 +581,193 @@ if (!class_exists('WC_Twoinc')) {
                 $limit ? wp_json_encode($limit) : '',
                 false
             );
+        }
+
+        private static function store_merchant_country(array $record): void
+        {
+            $country = is_string($record['country_code'] ?? null) ? strtoupper($record['country_code']) : '';
+            update_option(WC_Twoinc_Brand::prefixed_name('merchant_country'), $country, false);
+        }
+
+        /**
+         * The Two merchant's country (TWO-24877), which decides whether a 0% line derives a Spanish tax code and
+         * which country's codes the mapping offers. The shop's base country stands in until the merchant record has
+         * been read since this was added (at the latest, the nightly refresh).
+         *
+         * @return string
+         */
+        public static function get_merchant_country()
+        {
+            // Read, never fetched: the order paths calling this must not add a request of their own.
+            $country = (string) get_option(WC_Twoinc_Brand::prefixed_name('merchant_country'), '');
+            if ('' === $country && function_exists('WC') && WC()->countries) {
+                $country = (string) WC()->countries->get_base_country();
+            }
+            return strtoupper($country);
+        }
+
+        /**
+         * The merchant's mapping of WooCommerce tax class (slug, the standard class as `standard`) to Two tax code.
+         *
+         * @return array<string, string>
+         */
+        public static function get_tax_code_map()
+        {
+            $map = self::get_instance()->get_option('tax_code_map');
+            return is_array($map) ? array_filter($map, 'is_string') : [];
+        }
+
+        /**
+         * Two's tax codes for a country, from `GET /v1/tax_codes/<country>` (TWO-24877). A list younger than
+         * TAX_CODES_TTL is served without a call, and a failed call serves the last list fetched. `error` is set
+         * when the call failed, whether or not a list was served.
+         *
+         * @return array{codes: array, error: string|null}
+         */
+        public function get_tax_codes($country)
+        {
+            $country = strtoupper((string) $country);
+            $option = WC_Twoinc_Brand::prefixed_name('tax_codes');
+            $cached = get_option($option);
+            $cached = is_array($cached) && ($cached['country'] ?? null) === $country ? $cached : null;
+            if ($cached && (int) $cached['fetched_at'] + self::TAX_CODES_TTL > time()) {
+                return ['codes' => $cached['codes'], 'error' => null];
+            }
+
+            $error = null;
+            if ('' === $country) {
+                $error = __('The merchant country is not known yet.', 'twoinc-payment-gateway');
+            } elseif (!$this->get_option('api_key')) {
+                $error = __('Enter an API key first.', 'twoinc-payment-gateway');
+            } else {
+                $response = $this->make_request('/v1/tax_codes/' . rawurlencode($country), [], 'GET', [], null, 10);
+                $body = is_array($response) ? json_decode((string) ($response['body'] ?? ''), true) : null;
+                $error = is_wp_error($response) ? $response->get_error_message() : WC_Twoinc_Helper::get_twoinc_error_msg($response);
+                if (!$error && is_array($body) && is_array($body['data'] ?? null)) {
+                    $cached = ['country' => $country, 'codes' => array_values(array_filter($body['data'], 'is_array')), 'fetched_at' => time()];
+                    update_option($option, $cached, false);
+                    return ['codes' => $cached['codes'], 'error' => null];
+                }
+                $error = $error ?: __('The response could not be read.', 'twoinc-payment-gateway');
+            }
+            return ['codes' => $cached['codes'] ?? [], 'error' => $error];
+        }
+
+        /**
+         * The mapping dropdown's options: every code the API lists except one that needs a reason the mapping
+         * cannot capture (a required exemption reason with no default), so a mapped line can never be refused
+         * for a missing reason.
+         *
+         * @return array<string, string>
+         */
+        public static function tax_code_options(array $codes)
+        {
+            $options = [];
+            foreach ($codes as $entry) {
+                $code = is_string($entry['code'] ?? null) ? $entry['code'] : '';
+                if ('' === $code || (!empty($entry['requires_exemption_reason']) && null === ($entry['exemption_reason_code'] ?? null))) {
+                    continue;
+                }
+                $name = is_string($entry['display_name'] ?? null) ? $entry['display_name'] : '';
+                $rate = is_numeric($entry['rate'] ?? null) ? ' (' . (float) $entry['rate'] * 100 . '%)' : '';
+                $options[$code] = $code . ($name !== '' ? ': ' . $name : '') . $rate;
+            }
+            return $options;
+        }
+
+        /**
+         * The rows of the tax code mapping: the standard class and every tax class the shop defines, by mapping key.
+         *
+         * @return array<string, string>
+         */
+        public static function tax_code_map_classes()
+        {
+            $classes = ['standard' => __('Standard', 'twoinc-payment-gateway')];
+            if (class_exists('WC_Tax')) {
+                foreach ((array) WC_Tax::get_tax_classes() as $name) {
+                    $slug = sanitize_title((string) $name);
+                    if ($slug !== '' && !isset($classes[$slug])) {
+                        $classes[$slug] = (string) $name;
+                    }
+                }
+            }
+            return $classes;
+        }
+
+        /**
+         * Render the tax code mapping (WC Settings API custom field `two_tax_code_map`, TWO-24877): one row per tax
+         * class, each a dropdown of the merchant country's codes plus "(none)". A saved code the list no longer
+         * offers is still shown, so a save cannot drop it silently.
+         */
+        public function generate_two_tax_code_map_html($key, $data)
+        {
+            $field_key = $this->get_field_key($key);
+            $data = wp_parse_args($data, ['title' => '', 'description' => '']);
+            $stored = self::get_tax_code_map();
+            $list = $this->get_tax_codes(self::get_merchant_country());
+            $options = self::tax_code_options($list['codes']);
+
+            ob_start();
+            ?>
+            <tr valign="top" class="twoinc-tax-code-map-field">
+                <th scope="row" class="titledesc"><label><?php echo wp_kses_post($data['title']); ?></label></th>
+                <td class="forminp">
+                    <?php if ($list['error'] && !$options) : ?>
+                        <p class="twoinc-tax-code-map-error"><?php echo esc_html(sprintf(
+                            /* translators: %s: why the list of tax codes could not be loaded */
+                            __('The list of tax codes could not be loaded: %s', 'twoinc-payment-gateway'),
+                            $list['error']
+                        )); ?></p>
+                    <?php endif; ?>
+                    <table class="widefat twoinc-tax-code-map">
+                        <thead><tr>
+                            <th><?php esc_html_e('Tax class', 'twoinc-payment-gateway'); ?></th>
+                            <th><?php esc_html_e('Tax code', 'twoinc-payment-gateway'); ?></th>
+                        </tr></thead>
+                        <tbody>
+                        <?php foreach (self::tax_code_map_classes() as $slug => $name) :
+                            $current = $stored[$slug] ?? '';
+                            $row_options = ['' => __('(none)', 'twoinc-payment-gateway')] + $options;
+                            if ($current !== '' && !isset($row_options[$current])) {
+                                $row_options[$current] = $current;
+                            } ?>
+                            <tr>
+                                <td><?php echo esc_html($name); ?></td>
+                                <td><select name="<?php echo esc_attr($field_key); ?>[<?php echo esc_attr($slug); ?>]">
+                                    <?php foreach ($row_options as $value => $label) : ?>
+                                        <option value="<?php echo esc_attr($value); ?>"<?php echo $value === $current ? ' selected="selected"' : ''; ?>><?php echo esc_html($label); ?></option>
+                                    <?php endforeach; ?>
+                                </select></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <?php if ($data['description']) : ?>
+                        <p class="description"><?php echo wp_kses_post($data['description']); ?></p>
+                    <?php endif; ?>
+                </td>
+            </tr>
+            <?php
+            return ob_get_clean();
+        }
+
+        /**
+         * Keep a code for each tax class the shop defines, "(none)" dropped. The code is checked for shape only:
+         * Two's API validates it on every order.
+         *
+         * @return array<string, string>
+         */
+        public function validate_two_tax_code_map_field($key, $value)
+        {
+            $map = [];
+            $classes = self::tax_code_map_classes();
+            foreach (is_array($value) ? $value : [] as $slug => $code) {
+                $code = strtoupper(trim(sanitize_text_field(wp_unslash((string) $code))));
+                if (isset($classes[$slug]) && preg_match('/^[A-Z0-9_]+$/', $code)) {
+                    $map[$slug] = $code;
+                }
+            }
+            return $map;
         }
 
         /** Display copy only: 14 stands in for a merchant with no default. */
@@ -6319,6 +6512,16 @@ if (!class_exists('WC_Twoinc')) {
                     ),
                     'desc_tip'    => true,
                     'default'     => 'yes'
+                ],
+                'tax_code_map' => [
+                    'title'       => __('Tax codes for 0% lines', 'twoinc-payment-gateway'),
+                    'type'        => 'two_tax_code_map',
+                    'description' => sprintf(
+                        /* translators: %s is the brand product name (e.g. "Two") */
+                        __('The tax code sent with each order line charged at 0%%, by the tax class it was charged under. Leave a class on (none) to send no code; for a Spanish merchant the plugin then works the code out from the order where it can (export, intra-community supply or reverse charge). %s checks every code when the order arrives.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name')
+                    ),
+                    'default'     => [],
                 ],
                 // ── F. Diagnostics ──────────────────────────────────────
                 'section_diagnostics' => [

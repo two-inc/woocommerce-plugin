@@ -16,6 +16,28 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         public const ORDER_POSTPROCESSING_CONTRACT_VERSION = 1;
 
+        /** The EU VAT area by ISO code, with Monaco, which counts as France for VAT (TWO-24877). */
+        private const EU_VAT_COUNTRIES = [
+            'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'IE', 'IT', 'LV', 'LT',
+            'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE', 'HU', 'MC',
+        ];
+
+        /** Spanish postcodes outside the EU VAT area: the Canary Islands, Ceuta and Melilla. */
+        private const ES_OUTSIDE_VAT_AREA_POSTCODES = ['35', '38', '51', '52'];
+
+        /**
+         * The code a Spanish merchant's 0% line derives when its tax class is unmapped (TWO-24877). First matching
+         * row wins; a null zone matches any. Goods follow where they are delivered, services where the buyer is
+         * established. Zones: `es` (mainland and Balearic Spain), `es_outside` (Canaries, Ceuta, Melilla), `eu`
+         * (another EU state), `non_eu`.
+         */
+        private const ES_ZERO_RATE_DERIVATION = [
+            ['line' => 'goods', 'destination' => 'non_eu', 'buyer' => null, 'code' => 'ES_IVA_EXPORT'],
+            ['line' => 'goods', 'destination' => 'es_outside', 'buyer' => null, 'code' => 'ES_IVA_EXPORT'],
+            ['line' => 'goods', 'destination' => 'eu', 'buyer' => 'eu', 'code' => 'ES_IVA_INTRA_COMMUNITY'],
+            ['line' => 'service', 'destination' => null, 'buyer' => 'eu', 'code' => 'ES_IVA_REVERSE_CHARGE'],
+        ];
+
         /**
          * Reduces buyer-facing copy to text plus links: an `<a>` with an
          * http(s) href survives, every other tag is dropped and its text kept,
@@ -457,6 +479,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $rate_order = $rate_order ?? $order;
 
             $items = [];
+            // Per line, what the tax code resolver needs: the tax class it was charged under and, for a product,
+            // whether it is goods.
+            $sources = [];
 
             /** @var WC_Order_Item_Product $line_item */
             foreach ($line_items as $line_item) {
@@ -538,6 +563,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 }
 
                 $items[] = $product;
+                $sources[] = [
+                    'tax_class' => self::get_line_tax_class(self::get_rate_line($line_item, $rate_order, $is_refund)),
+                    'goods' => self::is_goods($product_simple),
+                ];
             }
 
             $shipping_rates = [];
@@ -565,6 +594,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 ];
 
                 $items[] = $shipping_line;
+                $sources[] = ['tax_class' => 'shipping', 'goods' => null];
             }
 
             foreach ($fees as $fee) {
@@ -596,9 +626,196 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 ];
 
                 $items[] = $fee_line;
+                $sources[] = [
+                    'tax_class' => self::get_line_tax_class(self::get_rate_line($fee, $rate_order, $is_refund)),
+                    'goods' => null,
+                ];
             }
 
+            return self::apply_tax_codes($items, $sources, $rate_order);
+        }
+
+        /**
+         * Adds `tax_code` to each line sent at 0% (TWO-24877). The merchant's mapping of the line's tax class wins;
+         * an unmapped line of a Spanish merchant takes the code ES_ZERO_RATE_DERIVATION derives, if any. Any other
+         * line is sent as built: the plugin never refuses, and Two's API validates what arrives. A non-zero line is
+         * never touched. Runs inside the builder, so every hook after it sees the code and can change it.
+         *
+         * @param array $items   the built lines
+         * @param array $sources per line, its tax class ('shipping' for a shipping line) and, for a product, whether
+         *                       it is goods (null for shipping and fees, which follow the order)
+         * @param mixed $order   the order whose addresses and products decide the derivation
+         *
+         * @return array
+         */
+        private static function apply_tax_codes(array $items, array $sources, $order)
+        {
+            $zero = [];
+            foreach ($items as $i => $item) {
+                if (0.0 === (float) $item['tax_rate']) {
+                    $zero[] = $i;
+                }
+            }
+            $map = WC_Twoinc::get_tax_code_map();
+            $derive = 'ES' === WC_Twoinc::get_merchant_country();
+            if (!$zero || (!$map && !$derive)) {
+                return $items;
+            }
+
+            $context = $derive ? self::tax_code_context($order) : null;
+            foreach ($zero as $i) {
+                $source = $sources[$i];
+                $tax_class = 'shipping' === $source['tax_class'] ? self::get_shipping_tax_class_key($order) : $source['tax_class'];
+                $code = null !== $tax_class && isset($map[$tax_class]) ? $map[$tax_class] : null;
+                if (null === $code && $context) {
+                    $goods = $source['goods'] ?? $context['order_has_goods'];
+                    $code = self::derive_es_zero_rate_code($goods, $context['destination'], $context['buyer']);
+                }
+                if (null !== $code) {
+                    $items[$i]['tax_code'] = $code;
+                }
+            }
             return $items;
+        }
+
+        /**
+         * The ES_ZERO_RATE_DERIVATION lookup, or null where no row matches.
+         *
+         * @param bool        $goods       a goods line, rather than a service line
+         * @param string|null $destination the delivery zone
+         * @param string|null $buyer       the buyer company's zone
+         *
+         * @return string|null
+         */
+        public static function derive_es_zero_rate_code($goods, $destination, $buyer)
+        {
+            $line = $goods ? 'goods' : 'service';
+            foreach (self::ES_ZERO_RATE_DERIVATION as $row) {
+                if (
+                    $row['line'] === $line
+                    && (null === $row['destination'] || $row['destination'] === $destination)
+                    && (null === $row['buyer'] || $row['buyer'] === $buyer)
+                ) {
+                    return $row['code'];
+                }
+            }
+            return null;
+        }
+
+        /**
+         * What the derivation reads off the order: the delivery address (billing when the order has none), the buyer
+         * company country the order payload sends as `buyer.company.country_prefix`, and whether any product line is
+         * goods, which decides how its shipping and fees are treated.
+         *
+         * @return array|null null when the order carries no addresses
+         */
+        private static function tax_code_context($order)
+        {
+            if (!is_object($order) || !method_exists($order, 'get_billing_country')) {
+                return null;
+            }
+            $country = $order->get_shipping_country();
+            $postcode = $order->get_shipping_postcode();
+            $shipping_address = [
+                'organization_name' => $order->get_shipping_company(),
+                'street_address' => $order->get_shipping_address_1() . $order->get_shipping_address_2(),
+                'postal_code' => $postcode,
+                'city' => $order->get_shipping_city(),
+                'region' => $order->get_shipping_state(),
+                'country' => $country,
+            ];
+            // The same fallback the order payload's shipping_address takes.
+            if (self::is_twoinc_address_empty($shipping_address)) {
+                $country = $order->get_billing_country();
+                $postcode = $order->get_billing_postcode();
+            }
+            $has_goods = false;
+            foreach ($order->get_items() as $line_item) {
+                if (is_object($line_item) || is_array($line_item)) {
+                    $has_goods = $has_goods || self::is_goods(self::get_product($line_item));
+                }
+            }
+            return [
+                'destination' => self::tax_zone($country, $postcode),
+                'buyer' => self::tax_zone($order->get_billing_country()),
+                'order_has_goods' => $has_goods,
+            ];
+        }
+
+        /**
+         * A country's zone for the derivation, or null when it is unknown. Only a destination passes a postcode, so
+         * only a destination can be `es_outside`: a buyer company's establishment is judged by its country alone.
+         *
+         * @return string|null
+         */
+        private static function tax_zone($country, $postcode = null)
+        {
+            $country = strtoupper(trim((string) $country));
+            if ('' === $country) {
+                return null;
+            }
+            if ('ES' === $country) {
+                $prefix = substr(trim((string) $postcode), 0, 2);
+                return null !== $postcode && in_array($prefix, self::ES_OUTSIDE_VAT_AREA_POSTCODES, true) ? 'es_outside' : 'es';
+            }
+            return in_array($country, self::EU_VAT_COUNTRIES, true) ? 'eu' : 'non_eu';
+        }
+
+        /**
+         * A product is a service when it is virtual or downloadable. A line whose product is gone is taken as goods,
+         * the WooCommerce default for a product.
+         *
+         * @return bool
+         */
+        private static function is_goods($product)
+        {
+            if (!is_object($product)) {
+                return true;
+            }
+            $virtual = method_exists($product, 'is_virtual') && $product->is_virtual();
+            $downloadable = method_exists($product, 'is_downloadable') && $product->is_downloadable();
+            return !$virtual && !$downloadable;
+        }
+
+        /**
+         * The mapping key of a product or fee line's tax class: its slug, with the standard class ('') as `standard`.
+         *
+         * @return string
+         */
+        private static function get_line_tax_class($line)
+        {
+            if (is_object($line) && method_exists($line, 'get_tax_class')) {
+                $tax_class = $line->get_tax_class();
+            } elseif (is_array($line) || $line instanceof ArrayAccess) {
+                $tax_class = $line['tax_class'] ?? '';
+            } else {
+                $tax_class = '';
+            }
+            return self::tax_class_key($tax_class);
+        }
+
+        /**
+         * The mapping key of the class WooCommerce's shipping tax class setting resolves to for this order, or null
+         * when it follows the cart items and finds none.
+         *
+         * @return string|null
+         */
+        private static function get_shipping_tax_class_key($order)
+        {
+            if (!is_object($order) || !method_exists($order, 'get_items_tax_classes')) {
+                return null;
+            }
+            $tax_class = self::get_shop_shipping_tax_class($order);
+            return null === $tax_class ? null : self::tax_class_key($tax_class);
+        }
+
+        /**
+         * @return string
+         */
+        public static function tax_class_key($tax_class)
+        {
+            $tax_class = (string) $tax_class;
+            return '' === $tax_class ? 'standard' : $tax_class;
         }
 
         /**
