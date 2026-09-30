@@ -5604,6 +5604,10 @@ if (!class_exists('WC_Twoinc')) {
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_validation_msg($response);
             if ($twoinc_err) {
+                $order->add_order_note(
+                    sprintf(__('Failed to request order creation with %s.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'))
+                    . ' ' . sprintf(__('Response: %s', 'twoinc-payment-gateway'), WC_Twoinc_Helper::get_twoinc_error_msg($response))
+                );
                 WC_Twoinc_Helper::display_ajax_error($twoinc_err);
                 return self::payment_failure($twoinc_err);
             }
@@ -7249,7 +7253,8 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Every order request is sent through here, so `twoinc_order_postprocessing` sees each one (TWO-26092). A
-         * request the API refuses has the API's own reason logged and, on a saved order, written to an order note.
+         * request the API refuses has the API's own reason logged; the caller's order note carries it too, through
+         * WC_Twoinc_Helper::get_twoinc_error_msg().
          *
          * @param WC_Order             $order  the order, or for an intent the unsaved order built from the cart
          * @param WC_Order_Refund|null $refund
@@ -7262,52 +7267,21 @@ if (!class_exists('WC_Twoinc')) {
             $context = WC_Twoinc_Helper::order_postprocessing_context($request_type, $trigger, $endpoint, $order, $refund);
             $response = $this->make_request($endpoint, WC_Twoinc_Helper::postprocess_order_request($payload, $context), $method);
             $status = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
-            if ($status >= 400) {
-                $reason = self::api_rejection_reason($response);
-                if (function_exists('wc_get_logger')) {
-                    wc_get_logger()->error(
-                        sprintf('%s request for order %s refused by the API (HTTP %d): %s', $request_type, $order->get_id(), $status, $reason),
-                        ['source' => 'twoinc-payment-gateway']
-                    );
-                }
-                if ($order->get_id()) {
-                    $order->add_order_note(sprintf(
-                        /* translators: 1: product name (e.g. Two). 2: request type (e.g. order_update). 3: HTTP status. 4: the API's reason. */
-                        __('%1$s refused the %2$s request (HTTP %3$d): %4$s', 'twoinc-payment-gateway'),
-                        WC_Twoinc_Brand::get('product_name'),
+            if ($status >= 400 && function_exists('wc_get_logger')) {
+                // An intent is refused routinely (no order yet, a rate limit), so it is only a warning.
+                $level = $request_type === 'order_intent' ? 'warning' : 'error';
+                wc_get_logger()->$level(
+                    sprintf(
+                        '%s request%s refused by the API (HTTP %d): %s',
                         $request_type,
+                        $order->get_id() ? ' for order ' . $order->get_id() : '',
                         $status,
-                        $reason
-                    ));
-                }
+                        WC_Twoinc_Helper::get_api_rejection_reason($response)
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
             }
             return $response;
-        }
-
-        /**
-         * The API's own reason for refusing a request, as it sent it.
-         *
-         * @return string
-         */
-        private static function api_rejection_reason($response)
-        {
-            $raw = (string) wp_remote_retrieve_body($response);
-            $body = json_decode($raw, true);
-            if (!is_array($body)) {
-                return $raw === '' ? 'no response body' : substr($raw, 0, 500);
-            }
-            $parts = [];
-            foreach (['error_code', 'error_message', 'error_details'] as $key) {
-                if (isset($body[$key]) && is_string($body[$key]) && $body[$key] !== '') {
-                    $parts[] = $body[$key];
-                }
-            }
-            foreach (is_array($body['error_json'] ?? null) ? $body['error_json'] : [] as $error) {
-                if (is_array($error) && isset($error['msg']) && is_string($error['msg'])) {
-                    $parts[] = (is_array($error['loc'] ?? null) ? implode('.', $error['loc']) . ': ' : '') . $error['msg'];
-                }
-            }
-            return $parts === [] ? substr($raw, 0, 500) : implode('; ', array_unique($parts));
         }
 
         /**

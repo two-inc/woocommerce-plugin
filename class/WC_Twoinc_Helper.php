@@ -231,7 +231,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             if ($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
-                return sprintf(__('Response code from %s: %d', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), $response['response']['code']);
+                return sprintf(__('Response code from %s: %d', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), $response['response']['code'])
+                    . ' (' . self::get_api_rejection_reason($response) . ')';
             }
 
             if ($response['body']) {
@@ -244,6 +245,32 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     return __($body['error_code'], 'twoinc-payment-gateway');
                 }
             }
+        }
+
+        /**
+         * The API's own reason for refusing a request, as it sent it (TWO-26092).
+         *
+         * @return string
+         */
+        public static function get_api_rejection_reason($response)
+        {
+            $raw = (string) wp_remote_retrieve_body($response);
+            $body = json_decode($raw, true);
+            if (!is_array($body)) {
+                return $raw === '' ? 'no response body' : substr($raw, 0, 500);
+            }
+            $parts = [];
+            foreach (['error_code', 'error_message', 'error_details'] as $key) {
+                if (isset($body[$key]) && is_string($body[$key]) && $body[$key] !== '') {
+                    $parts[] = $body[$key];
+                }
+            }
+            foreach (is_array($body['error_json'] ?? null) ? $body['error_json'] : [] as $error) {
+                if (is_array($error) && isset($error['msg']) && is_string($error['msg'])) {
+                    $parts[] = (is_array($error['loc'] ?? null) ? implode('.', $error['loc']) . ': ' : '') . $error['msg'];
+                }
+            }
+            return $parts === [] ? substr($raw, 0, 500) : implode('; ', array_unique($parts));
         }
 
         /**
@@ -1181,20 +1208,21 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Opt-in for `twoinc_order_postprocessing` subscribers (TWO-26092): rebuilds the order totals, the tax
-         * subtotals and a refund's amount from the payload's own line items, touching only the fields the payload
-         * already carries. Pass the payload as the subscriber received it as `$original` to carry over what the
-         * shop declared beyond its lines (store credit, a gift card, rounding). Arithmetic only; part of the stable
+         * Opt-in for `twoinc_order_postprocessing` subscribers (TWO-26092): sets each order total, each per-rate tax
+         * subtotal and a refund's amount to the sum over the payload's own lines plus the residual the original
+         * carried beyond its lines (store credit, a gift card, rounding), touching only the fields the payload
+         * already carries. `$original` is the payload as the subscriber received it. A total the subscriber edited
+         * by hand before calling this is overwritten: the helper's result wins. Arithmetic only; part of the stable
          * contract.
          *
          * @param array $payload
-         * @param array $original the payload before the subscriber's edits, or [] to rebuild from the lines alone
+         * @param array $original the payload before the subscriber's edits
          *
          * @return array
          */
-        public static function recompute_totals_from_lines(array $payload, array $original = [])
+        public static function recompute_totals_from_lines(array $payload, array $original)
         {
-            $carry = $original === [] ? [] : self::residuals($original);
+            $carry = self::residuals($original);
             $lines = isset($payload['line_items']) && is_array($payload['line_items']) ? $payload['line_items'] : [];
             $sums = self::sum_lines($lines);
             if (array_key_exists('gross_amount', $payload)) {
