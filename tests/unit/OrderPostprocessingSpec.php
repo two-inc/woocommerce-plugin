@@ -421,7 +421,8 @@ final class OrderPostprocessingSpec
         $repair = static function ($body) {
             return is_array($body) ? ['repaired' => true] + $body : $body;
         };
-        // The shop charged 7.00 on 29.00 of shipping declared at 21%: 6.09 was due.
+        // The shop charged 7.00 on 29.00 of shipping with no rate row, and the shipping tax control resolves 21%:
+        // 6.09 was due.
         // [filter that would have repaired the payload (null: none), description]
         $cases = [
             [null, 'no subscriber'],
@@ -432,11 +433,13 @@ final class OrderPostprocessingSpec
         foreach ($cases as [$filter, $description]) {
             self::reset();
             self::arm('record');
+            $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('shipping_tax_from_shop_rates')] = 'yes';
             if ($filter !== null) {
                 add_filter($filter, $repair, 5, 1);
             }
             $order = self::exampleOrder();
-            $order->shipping = new StubShippingItem(29.0, 7.0, [1 => 7.0]);
+            unset($order->meta[WC_Twoinc_Brand::prefixed_name('order_id')]);
+            $order->shipping = new StubShippingItem(29.0, 7.0, []);
             $gateway = self::recordingGateway();
             try {
                 $body = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
@@ -746,6 +749,28 @@ final class OrderPostprocessingSpec
                     ['tax_amount' => '21.00', 'tax_rate' => '0.210000', 'taxable_amount' => '100.00'],
                     ['tax_amount' => '0.00', 'tax_rate' => '0.000000', 'taxable_amount' => '39.00'],
                 ], 'line_items' => [$lines[0], ['net_amount' => '39.00', 'tax_amount' => '0.00', 'gross_amount' => '39.00', 'tax_rate' => '0']]],
+            ],
+            [
+                ['gross_amount' => '0', 'net_amount' => '0', 'tax_amount' => '0', 'tax_subtotals' => [], 'line_items' => $lines],
+                ['gross_amount' => '160.00', 'net_amount' => '133.97', 'tax_amount' => '26.03', 'tax_subtotals' => [
+                    ['tax_amount' => '26.03', 'tax_rate' => '0.210000', 'taxable_amount' => '123.97'],
+                    ['tax_amount' => '0.00', 'tax_rate' => '0.000000', 'taxable_amount' => '10.00'],
+                ], 'line_items' => $lines],
+                'TWO-26117: a rate with lines but no bucket in the original carries no residual',
+                ['gross_amount' => '160.00', 'net_amount' => '133.97', 'tax_amount' => '26.03', 'tax_subtotals' => [
+                    ['tax_amount' => '26.03', 'tax_rate' => '0.210000', 'taxable_amount' => '123.97'],
+                ], 'line_items' => $lines],
+            ],
+            [
+                ['gross_amount' => '0', 'net_amount' => '0', 'tax_amount' => '0', 'tax_subtotals' => [], 'line_items' => [$lines[0], $lines[2]]],
+                ['gross_amount' => '131.00', 'net_amount' => '110.00', 'tax_amount' => '21.00', 'tax_subtotals' => [
+                    ['tax_amount' => '21.00', 'tax_rate' => '0.210000', 'taxable_amount' => '100.00'],
+                    ['tax_amount' => '0.00', 'tax_rate' => '0.000000', 'taxable_amount' => '10.00'],
+                ], 'line_items' => [$lines[0], $lines[2]]],
+                'TWO-26117: a hook that re-splits a line onto a rate the original declared no bucket for gets that bucket from its lines',
+                ['gross_amount' => '131.00', 'net_amount' => '110.00', 'tax_amount' => '21.00', 'tax_subtotals' => [
+                    ['tax_amount' => '21.00', 'tax_rate' => '0.210000', 'taxable_amount' => '100.00'],
+                ], 'line_items' => [$lines[0], ['net_amount' => '5.00', 'tax_amount' => '0.00', 'gross_amount' => '5.00', 'tax_rate' => '0'], ['net_amount' => '5.00', 'tax_amount' => '0.00', 'gross_amount' => '5.00', 'tax_rate' => '0']]],
             ],
             [
                 ['amount' => '1.00', 'line_items' => [['net_amount' => '-8.26', 'tax_amount' => '-1.74', 'gross_amount' => '-10.00']]],

@@ -990,13 +990,15 @@ class StubShippingItem
     private $net;
     private $tax;
     private $taxes;
+    private $tax_status;
 
-    public function __construct(float $net, float $tax, array $taxes = [], array $meta = [])
+    public function __construct(float $net, float $tax, array $taxes = [], array $meta = [], string $tax_status = 'taxable')
     {
         $this->net = $net;
         $this->tax = $tax;
         $this->taxes = $taxes;
         $this->meta = $meta;
+        $this->tax_status = $tax_status;
     }
 
     public function get_name()
@@ -1021,7 +1023,7 @@ class StubShippingItem
 
     public function get_tax_status()
     {
-        return 'taxable';
+        return $this->tax_status;
     }
 
     public function get_meta($key)

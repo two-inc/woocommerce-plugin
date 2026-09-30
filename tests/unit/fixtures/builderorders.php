@@ -6,6 +6,8 @@
  *
  *   git worktree add /tmp/before 301db2d
  *   php tests/unit/fixtures/capture-builder-goldens.php /tmp/before > tests/unit/fixtures/builder-goldens.json
+ *
+ * TWO-26117 re-pinned mistaxed_shipping only: a shipping rate the shop provided is now sent as declared, unchecked.
  */
 
 if (!class_exists('TwoincBuilderFixtureOrder')) {
@@ -130,7 +132,7 @@ if (!class_exists('TwoincBuilderFixtureOrder')) {
                     'refund' => null,
                 ];
             },
-            // Shipping charged 7.00 of tax where its 20% rate gives 5.80: the release refuses it.
+            // Shipping charged 7.00 of tax where its declared 20% rate gives 5.80: sent as declared, for the API to validate.
             'mistaxed_shipping' => static function () use ($line) {
                 return [
                     'order' => new TwoincBuilderFixtureOrder([

@@ -66,11 +66,10 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 = 3.0.0 =
 
 * Breaking: the "Default shipping tax class" setting has been removed and there is no migration. Its stored value is not carried over anywhere.
-* A shipping line charged tax without a recorded tax rate is now refused at checkout with a named error, rather than sent as untaxed. Shops that need such lines can have the rate taken from WooCommerce's own shipping tax class (WooCommerce > Settings > Tax, including "based on cart items") by running `wp option update twoinc_shipping_tax_from_shop_rates yes`.
-* An order whose shipping tax does not match its declared rate is refused at checkout.
+* A shipping line is sent at the tax rate WooCommerce recorded for it, including a 0% rate, and Two checks it. A shipping line with no recorded rate is sent as charged at 0%, unless the shop runs `wp option update twoinc_shipping_tax_from_shop_rates yes`: then its rate is taken from WooCommerce's own shipping tax class (WooCommerce > Settings > Tax, including "based on cart items"), and an order whose shipping tax does not match that rate is refused at checkout with a named error.
 * Compound tax rates are declared at their true combined rate.
-* A refund declares the tax rates the order was charged at, not the shop's current rates, and its shipping tax is checked against them. A refund of the tax alone, or of the net alone, is sent as such.
-* Refunds and order edits of an order whose shipping rate came from the shop's rates use the rate recorded at checkout. For an order placed before 3.0.0 whose shipping was taxed with no tax rate recorded, the rate is taken from the shop's shipping tax class and must match the tax the order was charged, or the refund is refused with a named error.
+* A refund declares the tax rates the order was charged at, not the shop's current rates. A refund of the tax alone, or of the net alone, is sent as such.
+* Refunds and order edits of an order whose shipping rate came from the shop's rates use the rate recorded at checkout. A shipping line with no rate recorded at checkout is sent as charged, whatever the shop's settings are later.
 * Requires WooCommerce 7.6 or later.
 * Developers can change anything the plugin sends to Two, such as treating untaxed shipping as VAT-inclusive, through the new `twoinc_order_postprocessing` filter. It is documented as a permanent contract in the plugin's README. The older order filters still work but are deprecated.
 * Whatever that filter returns is sent to Two as it is, and Two checks it. If Two refuses an order, its reason is written to the WooCommerce log and to an order note. Orders your shop sends without the filter go out exactly as before.
@@ -176,7 +175,7 @@ Older releases are listed at https://github.com/two-inc/woocommerce-plugin/relea
 == Upgrade Notice ==
 
 = 3.0.0 =
-Removes the "Default shipping tax class" setting, with no migration. A shipping line charged tax without a recorded tax rate is now refused at checkout; see the changelog for the WP-CLI option that takes the rate from WooCommerce's shipping tax class instead.
+Removes the "Default shipping tax class" setting, with no migration. See the changelog for the WP-CLI option that takes the shipping tax rate from WooCommerce's shipping tax class.
 
 = 2.25.0 =
 Adds an optional line about paying by invoice on your product pages, and an optional buy button beside Add to cart. Nothing changes until you switch them on under WooCommerce > Settings > Payments > Two.

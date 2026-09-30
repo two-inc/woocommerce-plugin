@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: woocommerce-plugin\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/app\n"
-"POT-Creation-Date: 2026-09-30T14:47:09+00:00\n"
+"POT-Creation-Date: 2026-09-30T22:59:03+00:00\n"
 "PO-Revision-Date: 2025-07-01 10:28+0000\n"
 "Last-Translator: \n"
 "Language-Team: Dutch\n"
@@ -1728,25 +1728,19 @@ msgid "Postal code"
 msgstr "Postcode"
 
 #. translators: 1: request type (e.g. order_update). 2: product name (e.g. Two). 3: what went wrong.
-#: class/WC_Twoinc_Helper.php:1309
+#: class/WC_Twoinc_Helper.php:1310
 #, php-format
 msgid "The %1$s request was not sent to %2$s: the twoinc_order_postprocessing filter failed (%3$s)."
 msgstr ""
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:1812
+#: class/WC_Twoinc_Helper.php:1822
 #, php-format
 msgid "Shipping \"%s\" cannot be refunded: the order line it refunds was not found."
 msgstr "Verzending \"%s\" kan niet worden terugbetaald: de orderregel die wordt terugbetaald is niet gevonden."
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:1879
-#, php-format
-msgid "Shipping \"%s\" was charged tax but has no tax rate recorded."
-msgstr "Over verzending \"%s\" is btw berekend, maar er is geen btw-tarief vastgelegd."
-
-#. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:1996
+#: class/WC_Twoinc_Helper.php:1997
 #, php-format
 msgid "The tax charged on \"%s\" does not match the shop's tax rates."
 msgstr "De btw berekend op \"%s\" komt niet overeen met de btw-tarieven van de winkel."

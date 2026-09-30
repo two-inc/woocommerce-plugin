@@ -1273,7 +1273,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $declared[$rate]['tax'] = ($declared[$rate]['tax'] ?? 0.0) + (float) ($subtotal['tax_amount'] ?? 0);
                 }
                 $from_lines = self::sum_lines_by_rate($lines);
-                foreach (array_unique(array_merge(array_keys($declared), array_keys($from_lines))) as $rate) {
+                // A rate with lines but no declared bucket carries nothing (TWO-26117).
+                foreach (array_keys($declared) as $rate) {
                     foreach (['net', 'tax'] as $part) {
                         $residuals["tax_subtotals@$rate/$part"] = ($declared[$rate][$part] ?? 0.0)
                             - ($from_lines[$rate][$part] ?? 0.0);
@@ -1767,23 +1768,29 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * The rate the line's tax rows declare. `$declared` reports whether the line carries any rate row of the
+         * order at all, including one charged 0 (a 0% rate), as distinct from a line with no rate row.
+         *
          * @return array
          */
-        private static function get_item_tax_rate($line_item, $order)
+        private static function get_item_tax_rate($line_item, $order, &$declared = null)
         {
+            $declared = false;
             $item_tax_rate_list = [];
             if ($line_item->get_taxes()['total']) {
                 foreach ($line_item->get_taxes()['total'] as $rate_id => $tax_amt) {
-                    if ($tax_amt) {
-                        foreach ($order->get_taxes() as $order_tax) {
-                            if ($rate_id == $order_tax->get_rate_id()) {
-                                $tax_name = isset($order_tax['label']) ? $order_tax['label'] : '';
-                                array_push($item_tax_rate_list, [
-                                    'rate' => $order_tax->get_rate_percent() / 100,
-                                    'name' => $tax_name,
-                                    'compound' => (bool) $order_tax->get_compound(),
-                                ]);
-                            }
+                    foreach ($order->get_taxes() as $order_tax) {
+                        if ($rate_id != $order_tax->get_rate_id()) {
+                            continue;
+                        }
+                        $declared = true;
+                        if ($tax_amt) {
+                            $tax_name = isset($order_tax['label']) ? $order_tax['label'] : '';
+                            array_push($item_tax_rate_list, [
+                                'rate' => $order_tax->get_rate_percent() / 100,
+                                'name' => $tax_name,
+                                'compound' => (bool) $order_tax->get_compound(),
+                            ]);
                         }
                     }
                 }
@@ -1792,6 +1799,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * TWO-26117. A line with a rate row (including a 0% one) is sent at that rate, unchecked. A line with none is
+         * sent as charged at 0% unless the shipping tax control is populated, in which case the rate comes from it
+         * and the line's tax must reconcile with it. Two's API validates what is sent either way.
          * A refund line takes its rate from the parent line it refunds, which is what the order was charged at.
          *
          * @return array
@@ -1814,16 +1824,20 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     )
                 );
             }
-            $resolved = self::get_item_tax_rate($charged, $order);
-            if (!$resolved['rate'] && round((float) $charged->get_total_tax(), 2) !== 0.0) {
-                $resolved = self::get_undeclared_shipping_tax_rate($charged, $order);
+            $resolved = self::get_item_tax_rate($charged, $order, $declared);
+            if ($declared) {
+                return $resolved;
+            }
+            $controlled = self::get_undeclared_shipping_tax_rate($charged, $order);
+            if (null === $controlled) {
+                return $resolved;
             }
             // A refund may return only the net or only the tax (e.g. VAT charged to a reverse-charge buyer).
             $partial = !round((float) $shipping->get_total(), 2) || !round((float) $shipping->get_total_tax(), 2);
             if (!$is_refund || !$partial) {
-                self::assert_tax_reconciles($shipping, $resolved['rate']);
+                self::assert_tax_reconciles($shipping, $controlled['rate']);
             }
-            return $resolved;
+            return $controlled;
         }
 
         /**
@@ -1848,11 +1862,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Shipping charged tax with no rate row: the rate stored at checkout, else the shop's shipping tax class.
-         * An order already placed with Two (including one from 2.x) resolves regardless of the option,
-         * because the reconcile against the tax it was charged is what guards it.
+         * The rate for a shipping line with no rate row when the shipping tax control is populated, else null.
+         * Decided from stored data after placement: the rate recorded on the line at checkout if the control was
+         * populated then, else null. Only an order not yet placed reads the control and the shop's shipping tax class.
          *
-         * @return array
+         * @return array|null
          * @throws Exception
          */
         private static function get_undeclared_shipping_tax_rate($line, $order)
@@ -1865,28 +1879,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $placed = $order->get_meta(WC_Twoinc_Brand::prefixed_name('order_id'))
                 || $order->get_meta('tillit_order_id');
             $option = WC_Twoinc_Brand::prefixed_name(WC_Twoinc::SHIPPING_TAX_FROM_SHOP_RATES_OPTION);
-            if (!$placed && 'yes' !== get_option($option)) {
-                self::refuse(
-                    sprintf(
-                        'Shipping "%s" on order %s was charged tax but has no tax rate recorded.'
-                            . ' To take the rate from the WooCommerce shipping tax class, run: wp option update %s yes',
-                        $line->get_name(),
-                        $order->get_id(),
-                        $option
-                    ),
-                    sprintf(
-                        /* translators: %s: shipping method name */
-                        __('Shipping "%s" was charged tax but has no tax rate recorded.', 'twoinc-payment-gateway'),
-                        $line->get_name()
-                    )
-                );
+            if ($placed || 'yes' !== get_option($option)) {
+                return null;
             }
             $resolved = self::get_shop_shipping_tax_rate($line, $order);
             self::assert_tax_reconciles($line, $resolved['rate']);
-            if (!$placed) {
-                // Persisted by the order save that follows a successful create.
-                $line->update_meta_data($meta_key, $resolved);
-            }
+            // Persisted by the order save that follows a successful create.
+            $line->update_meta_data($meta_key, $resolved);
             return $resolved;
         }
 
@@ -1899,7 +1898,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
         {
             $tax_class = self::get_shop_shipping_tax_class($order);
             $rates = [];
-            if (null !== $tax_class && wc_tax_enabled() && 'taxable' === $shipping->get_tax_status()) {
+            // Core taxes nothing on a VAT-exempt order (e.g. a reverse-charge buyer), shipping included.
+            $is_vat_exempt = apply_filters('woocommerce_order_is_vat_exempt', 'yes' === $order->get_meta('is_vat_exempt'), $order);
+            if (!$is_vat_exempt && null !== $tax_class && wc_tax_enabled() && 'taxable' === $shipping->get_tax_status()) {
                 $rates = WC_Tax::find_shipping_rates(array_merge($order->get_taxable_location(), ['tax_class' => $tax_class]));
             }
             return self::get_tax_rate_from_tax_list(self::shop_rate_list($rates));
