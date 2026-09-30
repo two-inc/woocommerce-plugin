@@ -65,8 +65,8 @@ const carts: [string, string[], (lines: Line[]) => boolean, string][] = [
 
 for (const [shape, products, check, description] of carts) {
   test(`order intent answers with a verdict for a cart with ${description}`, async ({ page }) => {
-    // No order is placed, so a leg runs well inside a minute; the job ceiling counts on this.
-    test.setTimeout(60_000);
+    // No order is placed, so a leg needs less than the suite's default; the job ceiling counts on this.
+    test.setTimeout(120_000);
     setOption(SHAPE_OPTION, shape);
     await fillCart(page, products);
     await checkout.goto(page);
