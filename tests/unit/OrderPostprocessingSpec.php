@@ -339,7 +339,7 @@ final class OrderPostprocessingSpec
 
             $shipping = end($sent['line_items']);
             TinyAssert::same($line, [$shipping['net_amount'], $shipping['tax_amount'], $shipping['gross_amount']], $description);
-            TinyAssert::same('0.21', $shipping['tax_rate'], $description);
+            TinyAssert::same('0.210000', $shipping['tax_rate'], $description);
             if (is_array($totals)) {
                 TinyAssert::same($totals, [$sent['net_amount'], $sent['tax_amount'], $sent['gross_amount']], $description);
                 TinyAssert::same($subtotals, $sent['tax_subtotals'], $description);
@@ -453,15 +453,43 @@ final class OrderPostprocessingSpec
 
     private static function testAnApiRefusalReachesTheLogAndTheOrderNote(): void
     {
-        $gateway = self::recordingGateway(400, '{"error_code":"SCHEMA_ERROR","error_details":"gross_amount does not match the line items"}');
-        $order = self::exampleOrder();
-        $gateway->make_order_request('order_update', 'admin_edit', '/v1/order/two-1', self::examplePayload(), 'PUT', $order);
+        $intent = new WC_Order();
+        // [status, response body, request type, order (null: a saved one), the API's reason as reported, log level, description]
+        $cases = [
+            [400, '{"error_code":"SCHEMA_ERROR","error_details":"gross_amount does not match the line items"}', 'order_update', null, 'SCHEMA_ERROR; gross_amount does not match the line items', 'error', 'code and details'],
+            [400, '{"error_json":[{"loc":["line_items",0,"gross_amount"],"msg":"value is not valid"}]}', 'order_create', null, 'line_items.0.gross_amount: value is not valid', 'error', 'field errors'],
+            [502, '<html>Bad gateway</html>', 'refund', null, '<html>Bad gateway</html>', 'error', 'a body that is not JSON'],
+            [500, '', 'capture', null, 'no response body', 'error', 'an empty body'],
+            [429, '{"error_code":"RATE_LIMITED"}', 'order_intent', $intent, 'RATE_LIMITED', 'warning', 'an intent, which has no order yet'],
+        ];
+        foreach ($cases as [$status, $body, $type, $order, $reason, $level, $description]) {
+            self::reset();
+            $order = $order ?? self::exampleOrder();
+            $gateway = self::recordingGateway($status, $body);
+            $response = $gateway->make_order_request($type, 'test', '/v1/order', self::examplePayload(), 'POST', $order);
 
-        $reason = 'SCHEMA_ERROR; gross_amount does not match the line items';
-        $log = $GLOBALS['__twoinc_test_logs'][0] ?? ['level' => '', 'message' => ''];
-        TinyAssert::same('error', $log['level'], 'the refusal was not logged at error level');
-        TinyAssert::true(strpos($log['message'], $reason) !== false, "the log does not carry the API's reason: {$log['message']}");
-        TinyAssert::true(strpos($order->notes[0] ?? '', $reason) !== false, "the order note does not carry the API's reason: " . json_encode($order->notes));
+            $log = $GLOBALS['__twoinc_test_logs'][0] ?? ['level' => '', 'message' => ''];
+            TinyAssert::same($level, $log['level'], "$description: log level");
+            TinyAssert::true(strpos($log['message'], $reason) !== false, "$description: the log does not carry the API's reason: {$log['message']}");
+            TinyAssert::same($order->get_id() ? true : false, strpos($log['message'], 'for order') !== false, "$description: order named in the log: {$log['message']}");
+            // Every caller's order note is built from this message, so the note carries the reason.
+            TinyAssert::true(strpos((string) WC_Twoinc_Helper::get_twoinc_error_msg($response), $reason) !== false, "$description: the note text does not carry the API's reason");
+            TinyAssert::same([], $order->notes, "$description: the request itself wrote a note");
+        }
+
+        // End to end, a refused edit leaves one note, carrying the reason.
+        self::reset();
+        $order = self::exampleOrder();
+        $meta = [
+            'order_reference' => 'ref', 'company_id' => '912345678', 'department' => '', 'project' => '',
+            'purchase_order_number' => '', 'invoice_emails' => [], 'payment_reference_message' => '',
+            'payment_reference_ocr' => '', 'payment_reference' => '', 'payment_reference_type' => '', 'vendor_name' => '',
+        ];
+        $update = new ReflectionMethod(WC_Twoinc::class, 'update_twoinc_order');
+        $update->setAccessible(true);
+        $update->invoke(self::recordingGateway(400, $cases[0][1]), $order, $meta);
+        TinyAssert::same(1, count($order->notes), 'one note per refusal: ' . json_encode($order->notes));
+        TinyAssert::true(strpos($order->notes[0], $cases[0][4]) !== false, "the note does not carry the API's reason: {$order->notes[0]}");
     }
 
     /** The worked example, with 10.00 of gift card taken off the order total but not off any line. */
@@ -474,7 +502,7 @@ final class OrderPostprocessingSpec
     }
 
     /** The worked example plus a third-party fee whose tax does not reconcile with the rate it declares. */
-    private static function unverifiableFeePayload(): array
+    private static function mismatchedFeePayload(): array
     {
         $payload = self::examplePayload();
         $payload['line_items'][] = ['name' => 'Handling', 'net_amount' => '5.00', 'tax_amount' => '1.00', 'gross_amount' => '6.00', 'tax_rate' => '0.250000', 'unit_price' => '5.00', 'type' => 'SERVICE'];
@@ -490,8 +518,7 @@ final class OrderPostprocessingSpec
         // [fixture mode, payload, expected gross, description]
         $cases = [
             ['resplit', self::residualPayload(), '140.00', 'a re-split carrying the gift card over keeps it'],
-            ['drop_residual', self::residualPayload(), '150.00', 'totals rebuilt without the original are the lines alone, sent as declared'],
-            ['resplit', self::unverifiableFeePayload(), '156.00', 'a line the subscriber left alone is carried as it was'],
+            ['resplit', self::mismatchedFeePayload(), '156.00', 'a line the subscriber left alone is carried as it was'],
         ];
         foreach ($cases as [$mode, $payload, $expected, $description]) {
             self::reset();
@@ -681,8 +708,13 @@ final class OrderPostprocessingSpec
             ['net_amount' => '23.97', 'tax_amount' => '5.03', 'gross_amount' => '29.00', 'tax_rate' => '0.210000'],
             ['net_amount' => '10.00', 'tax_amount' => '0.00', 'gross_amount' => '10.00', 'tax_rate' => '0'],
         ];
-        // [payload in, payload out, description]
+        // [payload in, payload out, description, original (default: the payload out, which carries nothing beyond its lines)]
         $cases = [
+            [
+                ['gross_amount' => '999.00', 'net_amount' => '133.97', 'tax_amount' => '26.03', 'line_items' => $lines],
+                ['gross_amount' => '160.00', 'net_amount' => '133.97', 'tax_amount' => '26.03', 'line_items' => $lines],
+                'a total the subscriber edited by hand is overwritten',
+            ],
             [
                 ['gross_amount' => '0', 'net_amount' => '0', 'tax_amount' => '0', 'tax_subtotals' => [], 'line_items' => $lines],
                 ['gross_amount' => '160.00', 'net_amount' => '133.97', 'tax_amount' => '26.03', 'tax_subtotals' => [
@@ -724,7 +756,7 @@ final class OrderPostprocessingSpec
         ];
         foreach ($cases as $case) {
             [$in, $out, $description] = $case;
-            TinyAssert::same($out, WC_Twoinc_Helper::recompute_totals_from_lines($in, $case[3] ?? []), $description);
+            TinyAssert::same($out, WC_Twoinc_Helper::recompute_totals_from_lines($in, $case[3] ?? $out), $description);
         }
     }
 

@@ -25,7 +25,7 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
             $line['net_amount'] = number_format($net, 2, '.', '');
             $line['tax_amount'] = number_format($gross - $net, 2, '.', '');
             $line['unit_price'] = $line['net_amount'];
-            $line['tax_rate'] = (string) $rate;
+            $line['tax_rate'] = number_format($rate, 6, '.', '');
             $line['tax_class_name'] = 'VAT ' . number_format($rate * 100, 2) . '%';
         }
         unset($line);
@@ -48,11 +48,10 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
         switch ($mode) {
             case 'resplit':
                 return WC_Twoinc_Helper::recompute_totals_from_lines(twoinc_order_postprocessing_fixture_resplit($payload, $context), $payload);
-            case 'drop_residual':
-                return WC_Twoinc_Helper::recompute_totals_from_lines($payload);
             case 'resplit_lines_only':
                 return twoinc_order_postprocessing_fixture_resplit($payload, $context);
             case 'gross':
+                $original = $payload;
                 foreach ($payload['line_items'] as &$line) {
                     if ($line['type'] === 'SHIPPING_FEE') {
                         $line['net_amount'] = '30.00';
@@ -61,7 +60,7 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
                     }
                 }
                 unset($line);
-                return WC_Twoinc_Helper::recompute_totals_from_lines($payload);
+                return WC_Twoinc_Helper::recompute_totals_from_lines($payload, $original);
             case 'line_off':
                 $payload['line_items'][0]['gross_amount'] = number_format((float) $payload['line_items'][0]['gross_amount'] + 0.05, 2, '.', '');
                 return $payload;
