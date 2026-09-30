@@ -291,32 +291,46 @@ make clean && make run
 
 ## Shipping tax from the shop's rates
 
-A shipping line charged tax with no tax rate recorded (typically a third-party
-shipping module that adds tax without a WooCommerce rate row) refuses the order
-by default. For a merchant who needs it, the plugin can instead take the rate
-WooCommerce itself charges shipping at: the "Shipping tax class" setting under
-WooCommerce > Settings > Tax, including "based on cart items", at the order's
-tax location. There is no admin setting; enable it per shop with WP-CLI:
+The plugin sends each shipping line at the tax rate the shop recorded for it.
+A shipping line either has a rate provided (WooCommerce stored a tax rate row
+on it, including a 0% rate) or has none (for example a non-taxable shipping
+method, or a third-party shipping module that adds tax without a WooCommerce
+rate row).
+
+What the plugin does depends on the shipping tax control, a hidden per-shop
+option. It is blank by default. There is no admin setting; populate it with
+WP-CLI:
 
 ```bash
 wp option update twoinc_shipping_tax_from_shop_rates yes
 ```
 
-`wp option delete twoinc_shipping_tax_from_shop_rates` turns it off again.
-Either way, an order whose shipping tax does not match its declared rate
-(beyond 0.02) is refused, and refunds always use the rates the order was
-charged at. That includes a shipping line with zero net but non-zero tax: it
-is refused at checkout with an error naming the line. A fee line with zero net
-but non-zero tax is sent with its tax rather than dropped.
+`wp option delete twoinc_shipping_tax_from_shop_rates` makes it blank again.
+When populated, the rate comes from WooCommerce's own "Shipping tax class"
+setting under WooCommerce > Settings > Tax, including "based on cart items", at
+the order's tax location.
 
-A rate taken from the shop's rates is recorded on the shipping line at
-checkout, so refunds and order edits of that order use it even if the shop's
-rates change later. An order placed before 3.0.0 whose shipping was taxed with
-no tax rate recorded has no such record: its refunds and edits take the rate
-from the shop's shipping tax class at the order's tax location, and go through
-only if that rate matches the tax the order was charged. Otherwise they are
-refused with an error naming the shipping line. This does not need the option
-above.
+| Shipping line | Control blank (the default) | Control populated |
+|---|---|---|
+| Rate provided by the shop, including an explicit 0% rate | Sent at the recorded rate as is. No plugin check. Then the `twoinc_order_postprocessing` hook runs, then Two's API validates. | Same as control blank. |
+| No rate provided (whatever the line's tax, including 0) | Sent as is: rate 0, tax as charged. No plugin check. Then the hook runs, then Two's API validates. | The rate is resolved from the control, and the line's tax must reconcile with it (within 0.02). If it does not, the request is refused with an error naming the line. If it does, the line is sent at that rate and the hook runs. |
+
+The check runs in the plugin's builders, before any filter and before the
+postprocessing hook, and never on what a filter returns. With the control
+blank, the plugin never refuses a request over shipping tax. A shipping or fee
+line with zero net but non-zero tax is sent with its tax rather than dropped.
+
+A rate resolved from the control is recorded on the shipping line at checkout.
+Order edits, captures and refunds decide from that record, not from the
+option or the shop's rates as they are later: a line with a recorded rate uses
+it and must still reconcile with it, and a line with no rate row and no
+recorded rate is sent as is. Refunds take the rate the parent line was charged
+at.
+
+**Note for integrators.** If your `twoinc_order_postprocessing` subscriber
+re-splits a shipping line that has no rate (for example, treating untaxed
+shipping as VAT-inclusive), keep the control blank. A populated control
+resolves and checks that line before the hook runs, and can refuse it.
 
 If an upgrade removes a non-empty "Default shipping tax class" value, the plugin
 logs a notice naming the old class (source `twoinc-payment-gateway`).
@@ -381,9 +395,9 @@ with an order whose id is `0`. Code on those actions that writes elsewhere
 should skip an order with id `0`.
 
 **What the plugin checks**. Only what it builds itself. Its builders check the
-order the shop recorded before any filter runs (for example, that the tax
-charged on a shipping line matches the shop's shipping tax rate) and refuse a
-request that fails, as they always have. What a subscriber returns is not
+order the shop recorded before any filter runs and refuse a request that fails.
+For shipping tax that is only a line with no rate provided while the shipping
+tax control is populated (see "Shipping tax from the shop's rates"). What a subscriber returns is not
 re-checked: Two's API validates it, and a request the API refuses is logged
 at error level with the API's reason and, on a saved order, the reason is
 written to an order note.
