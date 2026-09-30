@@ -255,6 +255,8 @@ final class TaxCodeSpec
     {
         static $previous = false;
         $instance = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        // Required before PHP 8.1.
+        $instance->setAccessible(true);
         if ($previous === false) {
             $previous = $instance->getValue();
         }
@@ -312,6 +314,8 @@ final class TaxCodeSpec
         };
         $gateway->map = $map;
         $instance = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        // Required before PHP 8.1.
+        $instance->setAccessible(true);
         self::useGateway([]);
         $instance->setValue(null, $gateway);
         return $gateway;
