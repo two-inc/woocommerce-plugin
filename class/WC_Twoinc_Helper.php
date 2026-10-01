@@ -848,7 +848,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Strips spaces, dots and hyphens and uppercases. A number that does not start with two letters gets the
+         * Strips spaces (a pasted no-break space too), dots and hyphens and uppercases. A number that does not start with two letters gets the
          * address country in front, with Greece written `EL` as on its VAT numbers and Monaco `FR`, since its businesses
          * hold French ones; with no country it stays as it is.
          *
@@ -856,7 +856,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function normalise_vat_number($raw, $country)
         {
-            $vat = strtoupper((string) preg_replace('/[\s.\-]+/', '', (string) $raw));
+            $vat = strtoupper((string) preg_replace('/[\s\x{00A0}.\-]+/u', '', (string) $raw));
             if ('' === $vat) {
                 return null;
             }

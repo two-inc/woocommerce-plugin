@@ -135,6 +135,7 @@ final class TaxCodeSpec
             ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => '123456789'], [], $intraServices, 'DE123456789', 'an unprefixed number gains the billing country'],
             ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => ' de 123.456-789 '], [], $intraServices, 'DE123456789', 'spaces, dots and hyphens are stripped and the number uppercased'],
             ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => ' .- '], [], [null], null, 'a number of only separators is no number'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => "DE\u{00A0}123\t456\u{00A0}789"], [], $intraServices, 'DE123456789', 'no-break spaces and tabs are stripped'],
             ['ES', ['service'], 'MC', $es, ['_billing_vat_number' => '12345678901'], [], $intraServices, 'FR12345678901', 'an unprefixed number billed in Monaco gains FR'],
             ['ES', ['service'], 'MC', $es, ['_billing_vat_number' => 'MC12345678901'], [], [null], 'MC12345678901', 'an MC prefix is no VAT prefix and derives nothing'],
             ['ES', ['goods', 'shipping'], 'DE', $fr, [], ['standard' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20', 'ES_IVA_EXEMPT_ART20'], null, 'the mapping still wins with no VAT number'],
