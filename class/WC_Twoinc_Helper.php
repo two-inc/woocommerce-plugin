@@ -801,7 +801,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'destination' => self::tax_zone($country, $postcode),
                 'buyer' => self::tax_zone($order->get_billing_country(), $order->get_billing_postcode()),
                 'order_has_goods' => $has_goods,
-                'vat_qualifies' => self::is_vat_prefix_eu_other_than($order, $merchant_country),
+                // Only a number the create actually sends qualifies, so no code rests on a number Two never receives.
+                'vat_qualifies' => null !== self::buyer_vat_number_to_send($order)
+                    && self::is_vat_prefix_eu_other_than($order, $merchant_country),
             ];
         }
 

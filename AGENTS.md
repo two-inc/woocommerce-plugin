@@ -692,7 +692,8 @@ comes from `get_buyer_vat_number()`, the first non-empty of
 Add a key only once its plugin is confirmed to store it; anything else is the
 filter's job. Only the order create sends it, as top-level
 `buyer_vat_number`, and only for a Spanish merchant and a buyer company
-outside Spain; otherwise the key is absent.
+outside Spain; otherwise the key is absent. The `vat` rows qualify only on a
+number that create sends, so the derivation and the payload always agree.
 Intent lines carry no intra-community code, because the unsaved order the
 intent is built from has no VAT meta yet. That is expected; do not "fix" it.
 
