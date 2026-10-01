@@ -189,10 +189,10 @@ final class TaxCodeSpec
             // meta, filter, want codes, sent, received by the filter, description
             [[], static function ($vat) {
                 return $vat === '' ? 'fr 123 456 789 01' : $vat;
-            }, ['ES_IVA_INTRA_COMMUNITY_GOODS'], 'FR12345678901', '', 'the filter supplies a number when no meta has one'],
+            }, ['ES_IVA_INTRA_COMMUNITY'], 'FR12345678901', '', 'the filter supplies a number when no meta has one'],
             [['_billing_vat_number' => 'DE123456789'], static function () {
                 return 'NL123456789B01';
-            }, ['ES_IVA_INTRA_COMMUNITY_GOODS'], 'NL123456789B01', 'DE123456789', 'the filter overrides the meta'],
+            }, ['ES_IVA_INTRA_COMMUNITY'], 'NL123456789B01', 'DE123456789', 'the filter overrides the meta'],
             [['_billing_vat_number' => 'DE123456789'], static function () {
                 return '';
             }, [null], null, 'DE123456789', 'the filter returning an empty string leaves no number'],
