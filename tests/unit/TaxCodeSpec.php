@@ -12,6 +12,8 @@ final class TaxCodeSpec
     {
         $tests = [
             'testZeroRateLinesCarryTheResolvedCode',
+            'testIntraCommunityCodesNeedABuyerVatNumber',
+            'testTheVatNumberFilterRunsBeforeTheDerivation',
             'testEveryPayloadWithLinesCarriesTheCode',
             'testAnEsMerchantsNonZeroOrdersMatchTheGoldens',
             'testTheCodeListIsCachedAndServedStale',
@@ -57,13 +59,13 @@ final class TaxCodeSpec
             ['ES', ['goods'], 'ES', ['country' => 'ES', 'postcode' => '38001'], [], ['ES_IVA_EXPORT'], 'goods delivered to Tenerife'],
             ['ES', ['goods'], 'ES', ['country' => 'ES', 'postcode' => '51001'], [], ['ES_IVA_EXPORT'], 'goods delivered to Ceuta'],
             ['ES', ['goods'], 'ES', ['country' => 'ES', 'postcode' => '52001'], [], ['ES_IVA_EXPORT'], 'goods delivered to Melilla'],
-            ['ES', ['goods'], 'DE', ['country' => 'FR', 'postcode' => '75001'], [], ['ES_IVA_INTRA_COMMUNITY'], 'goods to the EU for an EU buyer of another state'],
-            ['ES', ['goods'], 'FR', ['country' => 'MC', 'postcode' => '98000'], [], ['ES_IVA_INTRA_COMMUNITY'], 'Monaco counts as France'],
+            ['ES', ['goods'], 'DE', ['country' => 'FR', 'postcode' => '75001'], [], [null], 'goods to the EU for an EU buyer of another state with no VAT number'],
+            ['ES', ['goods'], 'FR', ['country' => 'MC', 'postcode' => '98000'], [], [null], 'goods to Monaco for a French buyer with no VAT number'],
             ['ES', ['goods'], 'ES', ['country' => 'FR', 'postcode' => '75001'], [], [null], 'goods to the EU for a Spanish buyer'],
             ['ES', ['goods'], 'FR', $es, [], [null], 'goods delivered in mainland Spain'],
             ['ES', ['goods'], 'ES', ['country' => 'ES', 'postcode' => '07001'], [], [null], 'goods delivered to the Balearics'],
             ['ES', ['goods'], 'US', null, [], ['ES_IVA_EXPORT'], 'no delivery address: billing is the destination'],
-            ['ES', ['service'], 'FR', $es, [], ['ES_IVA_INTRA_COMMUNITY_SERVICES'], 'service to an EU buyer of another state'],
+            ['ES', ['service'], 'FR', $es, [], [null], 'service to an EU buyer of another state with no VAT number, never NON_EU_SERVICES'],
             ['ES', ['service'], 'ES', ['country' => 'FR', 'postcode' => '75001'], [], [null], 'service to a Spanish buyer'],
             ['ES', ['service'], 'NO', ['country' => 'NO', 'postcode' => '0150'], [], ['ES_IVA_NON_EU_SERVICES'], 'service to a buyer outside the EU'],
             ['ES', ['service'], 'US', $es, [], ['ES_IVA_NON_EU_SERVICES'], 'service to a buyer outside the EU, delivered in Spain'],
@@ -74,7 +76,7 @@ final class TaxCodeSpec
             ['ES', ['service'], 'ES 28001', ['country' => 'ES', 'postcode' => '35001'], [], [null], 'service delivered to the Canaries for a mainland buyer'],
             ['ES', ['goods'], 'ES 35001', $es, [], [null], 'goods delivered in mainland Spain for a buyer billed in the Canaries'],
             ['ES', ['goods', 'service', 'shipping'], 'ES', ['country' => 'NO', 'postcode' => '0150'], [], ['ES_IVA_EXPORT', null, 'ES_IVA_EXPORT'], 'shipping follows the goods'],
-            ['ES', ['service', 'shipping'], 'FR', $es, [], ['ES_IVA_INTRA_COMMUNITY_SERVICES', 'ES_IVA_INTRA_COMMUNITY_SERVICES'], 'shipping follows the services'],
+            ['ES', ['service', 'shipping'], 'FR', $es, [], [null, null], 'shipping follows services to an EU buyer with no VAT number'],
             ['ES', ['service', 'shipping'], 'NO', ['country' => 'NO', 'postcode' => '0150'], [], ['ES_IVA_NON_EU_SERVICES', 'ES_IVA_NON_EU_SERVICES'], 'shipping follows non-EU services'],
             ['ES', ['goods', 'shipping'], 'ES', ['country' => 'NO', 'postcode' => '0150'], ['standard' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20', 'ES_IVA_EXEMPT_ART20'], 'the mapping beats the derivation'],
             ['ES', ['goods'], 'ES', $es, ['reduced-rate' => 'ES_IVA_ZERO'], [null], 'a mapping of another class does not apply'],
@@ -98,6 +100,121 @@ final class TaxCodeSpec
                 TinyAssert::same(json_encode($before), json_encode($sent), $description . ': byte-identical to a payload with no resolver at work');
             }
         }
+    }
+
+    /**
+     * TWO-26153: both intra-community codes need a buyer VAT number whose prefix is an EU member state other than the
+     * merchant's country, and an order create sends that number as `buyer_vat_number` for a Spanish merchant and a
+     * buyer company outside Spain. `meta` is the order's meta; `sent` is the `buyer_vat_number` sent, null for none.
+     * The edit, which reads the number the same way, must derive the same codes and never send the key. Merchant ''
+     * is a merchant record not read yet, in a shop whose base country is Spain.
+     */
+    private static function testIntraCommunityCodesNeedABuyerVatNumber(): void
+    {
+        $GLOBALS['__twoinc_test_base_country'] = 'ES';
+        $es = ['country' => 'ES', 'postcode' => '28001'];
+        $fr = ['country' => 'FR', 'postcode' => '75001'];
+        $no = ['country' => 'NO', 'postcode' => '0150'];
+        $intraGoods = ['ES_IVA_INTRA_COMMUNITY'];
+        $intraServices = ['ES_IVA_INTRA_COMMUNITY_SERVICES'];
+        $cases = [
+            // merchant, lines, buyer (billing) country, delivery address, meta, map, want, sent, description
+            ['ES', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'DE123456789'], [], $intraGoods, 'DE123456789', 'goods to the EU with a VAT number of another EU state'],
+            ['ES', ['service'], 'FR', $es, ['_billing_vat_number' => 'FR12345678901'], [], $intraServices, 'FR12345678901', 'services with a VAT number of another EU state'],
+            ['ES', ['service', 'shipping'], 'FR', $es, ['_billing_vat_number' => 'FR12345678901'], [], ['ES_IVA_INTRA_COMMUNITY_SERVICES', 'ES_IVA_INTRA_COMMUNITY_SERVICES'], 'FR12345678901', 'shipping follows the services'],
+            ['ES', ['goods'], 'FR', ['country' => 'MC', 'postcode' => '98000'], ['_billing_vat_number' => 'FR12345678901'], [], $intraGoods, 'FR12345678901', 'Monaco counts as France'],
+            ['ES', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'NL123456789B01'], [], $intraGoods, 'NL123456789B01', 'the VAT prefix need not match the buyer or the destination'],
+            ['ES', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'ESB12345678'], [], [null], 'ESB12345678', 'goods: a VAT prefix of the merchant\'s country derives nothing'],
+            ['ES', ['service'], 'FR', $es, ['_billing_vat_number' => 'ESB12345678'], [], [null], 'ESB12345678', 'services: a VAT prefix of the merchant\'s country derives nothing'],
+            ['ES', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'GB123456789'], [], [null], 'GB123456789', 'goods: a VAT prefix outside the EU derives nothing'],
+            ['ES', ['service'], 'FR', $es, ['_billing_vat_number' => 'CHE123456789'], [], [null], 'CHE123456789', 'services: a VAT prefix outside the EU derives nothing, never NON_EU_SERVICES'],
+            ['ES', ['goods'], 'GR', ['country' => 'GR', 'postcode' => '10431'], ['_billing_vat_number' => 'EL123456789'], [], $intraGoods, 'EL123456789', 'EL reads as Greece'],
+            ['ES', ['service'], 'GR', $es, ['_billing_vat_number' => '123456789'], [], $intraServices, 'EL123456789', 'an unprefixed Greek number gains EL'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => '123456789'], [], $intraServices, 'DE123456789', 'an unprefixed number gains the billing country'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => ' de 123.456-789 '], [], $intraServices, 'DE123456789', 'spaces, dots and hyphens are stripped and the number uppercased'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => ' .- '], [], [null], null, 'a number of only separators is no number'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => "DE\u{00A0}123\t456\u{00A0}789"], [], $intraServices, 'DE123456789', 'no-break spaces and tabs are stripped'],
+            ['ES', ['service'], 'MC', $es, ['_billing_vat_number' => '12345678901'], [], $intraServices, 'FR12345678901', 'an unprefixed number billed in Monaco gains FR'],
+            ['ES', ['service'], 'MC', $es, ['_billing_vat_number' => 'MC12345678901'], [], [null], 'MC12345678901', 'an MC prefix is no VAT prefix and derives nothing'],
+            ['ES', ['goods', 'shipping'], 'DE', $fr, [], ['standard' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20', 'ES_IVA_EXEMPT_ART20'], null, 'the mapping still wins with no VAT number'],
+            ['ES', ['service'], 'NO', $no, [], [], ['ES_IVA_NON_EU_SERVICES'], null, 'services outside the EU need no VAT number'],
+            ['ES', ['goods'], 'DE', $no, [], [], ['ES_IVA_EXPORT'], null, 'an export needs no VAT number'],
+            ['ES', ['goods'], 'ES', $no, ['_billing_vat_number' => 'ESB12345678'], [], ['ES_IVA_EXPORT'], null, 'never sent for a Spanish buyer'],
+            ['NO', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'DE123456789'], [], [null], null, 'never sent by a merchant outside Spain'],
+            ['', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'DE123456789'], [], [null], null, 'not sent, and so no intra-community code, until the merchant record gives the country'],
+            ['ES', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'DE123456789'], [], $intraGoods, 'DE123456789', 'the same order derives and sends once the merchant record names Spain'],
+            ['ES', ['goods21'], 'DE', $fr, ['_billing_vat_number' => 'DE123456789'], [], [null], 'DE123456789', 'sent on an order with no 0% line'],
+            ['ES', ['goods'], 'DE', $fr, ['_vat_number' => 'FR12345678901', '_billing_vat_number' => 'DE123456789'], [], $intraGoods, 'DE123456789', 'source order: _billing_vat_number first'],
+            ['ES', ['goods'], 'DE', $fr, ['_billing_vat_number' => ' ', '_vat_number' => 'FR12345678901'], [], $intraGoods, 'FR12345678901', 'source order: an empty key falls through to _vat_number'],
+            ['ES', ['goods'], 'DE', $fr, ['_vat_number' => 'FR111', 'vat_number' => 'IT222'], [], $intraGoods, 'FR111', 'source order: _vat_number before vat_number'],
+            ['ES', ['goods'], 'DE', $fr, ['vat_number' => 'IT222', 'VAT Number' => 'AT333'], [], $intraGoods, 'IT222', 'source order: vat_number before VAT Number'],
+            ['ES', ['goods'], 'DE', $fr, ['VAT Number' => 'AT333', '_billing_eu_vat_number' => 'BE444'], [], $intraGoods, 'AT333', 'source order: VAT Number before _billing_eu_vat_number'],
+            ['ES', ['goods'], 'DE', $fr, ['_billing_eu_vat_number' => 'BE444'], [], $intraGoods, 'BE444', 'source order: _billing_eu_vat_number is read'],
+            ['ES', ['goods'], 'DE', $fr, ['billing_vat' => 'DE123456789'], [], [null], null, 'an unknown key is not read'],
+        ];
+
+        $codes = static function (array $payload) {
+            return array_map(static function ($line) {
+                return $line['tax_code'] ?? null;
+            }, $payload['line_items']);
+        };
+        foreach ($cases as [$merchant, $lines, $buyer, $delivery, $meta, $map, $want, $sent, $description]) {
+            $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = $merchant;
+            self::useGateway($map);
+            $order = self::order($lines, $buyer, $delivery);
+            $order->meta = $meta;
+            $create = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true);
+            TinyAssert::same($want, $codes($create), $description . ': create codes');
+            TinyAssert::same($sent, $create['buyer_vat_number'] ?? null, $description . ': buyer_vat_number');
+            TinyAssert::same($sent !== null, array_key_exists('buyer_vat_number', $create), $description . ': key present only when sent');
+            $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+            TinyAssert::same($want, $codes($edit), $description . ': edit codes');
+            TinyAssert::true(!array_key_exists('buyer_vat_number', $edit), $description . ': edit never sends the key');
+        }
+    }
+
+    /**
+     * `twoinc_buyer_vat_number` receives the first non-empty meta value ('' for none) and its result is normalised
+     * and used for both the derivation and the payload (TWO-26153). `filter` is what the filter returns given what it
+     * received; null means no filter is added.
+     */
+    private static function testTheVatNumberFilterRunsBeforeTheDerivation(): void
+    {
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = 'ES';
+        self::useGateway([]);
+        $fr = ['country' => 'FR', 'postcode' => '75001'];
+        $cases = [
+            // meta, filter, want codes, sent, received by the filter, description
+            [[], static function ($vat) {
+                return $vat === '' ? 'fr 123 456 789 01' : $vat;
+            }, ['ES_IVA_INTRA_COMMUNITY'], 'FR12345678901', '', 'the filter supplies a number when no meta has one'],
+            [['_billing_vat_number' => 'DE123456789'], static function () {
+                return 'NL123456789B01';
+            }, ['ES_IVA_INTRA_COMMUNITY'], 'NL123456789B01', 'DE123456789', 'the filter overrides the meta'],
+            [['_billing_vat_number' => 'DE123456789'], static function () {
+                return '';
+            }, [null], null, 'DE123456789', 'the filter returning an empty string leaves no number'],
+            [['_billing_vat_number' => 'DE123456789'], static function () {
+                return 'ESB12345678';
+            }, [null], 'ESB12345678', 'DE123456789', 'a filtered number of the merchant\'s country derives nothing'],
+        ];
+        foreach ($cases as [$meta, $filter, $want, $sent, $received, $description]) {
+            remove_all_filters('twoinc_buyer_vat_number');
+            $seen = [];
+            add_filter('twoinc_buyer_vat_number', static function ($vat, $order) use ($filter, &$seen) {
+                $seen[] = [$vat, is_object($order)];
+                return $filter($vat);
+            }, 10, 2);
+            $order = self::order(['goods'], 'DE', $fr);
+            $order->meta = $meta;
+            $create = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true);
+            TinyAssert::same($want, array_map(static function ($line) {
+                return $line['tax_code'] ?? null;
+            }, $create['line_items']), $description . ': codes');
+            TinyAssert::same($sent, $create['buyer_vat_number'] ?? null, $description . ': buyer_vat_number');
+            TinyAssert::same([$received, true], $seen[0] ?? null, $description . ': the filter gets the meta value and the order');
+        }
+        remove_all_filters('twoinc_buyer_vat_number');
     }
 
     /** Create, edit, intent and refund all carry the code; fulfilment sends no lines. */

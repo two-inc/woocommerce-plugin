@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/app\n"
-"POT-Creation-Date: 2026-09-30T23:20:06+00:00\n"
+"POT-Creation-Date: 2026-10-01T19:57:02+00:00\n"
 "PO-Revision-Date: 2025-07-01 10:29+0000\n"
 "Last-Translator: \n"
 "Language-Team: Norwegian (Bokmål)\n"
@@ -363,7 +363,7 @@ msgstr "Fakturaen din med %1$s vil sannsynligvis bli akseptert, med forbehold om
 
 #: class/WC_Twoinc.php:1911 class/WC_Twoinc.php:5681 class/WC_Twoinc.php:5691
 #: class/WC_Twoinc.php:5781 class/WC_Twoinc.php:5811
-#: class/WC_Twoinc_Helper.php:303
+#: class/WC_Twoinc_Helper.php:317
 #, php-format
 msgid "Invoice purchase with %s is not available for this order."
 msgstr "Fakturakjøp med %s er ikke tilgjengelig for denne bestillingen."
@@ -1296,8 +1296,8 @@ msgstr "Avgiftskoder for linjer med 0 %"
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:6521
 #, php-format
-msgid "The tax code sent with each order line charged at 0%%, by the tax class it was charged under. Leave a class on (none) to send no code; for a Spanish merchant the plugin then works the code out from the order where it can (export, intra-community supply of goods or services, or services outside the EU). %s checks every code when the order arrives."
-msgstr "Avgiftskoden som sendes med hver ordrelinje med 0 %% avgift, etter avgiftsklassen linjen ble belastet med. La en klasse stå på (ingen) for å ikke sende noen kode; for en spansk forhandler utleder utvidelsen da koden fra ordren der det er mulig (eksport, levering av varer eller tjenester innen EU, eller tjenester utenfor EU). %s kontrollerer hver kode når ordren kommer inn."
+msgid "The tax code sent with each order line charged at 0%%, by the tax class it was charged under. Leave a class on (none) to send no code; for a Spanish merchant the plugin then works the code out from the order where it can (export, intra-community supply of goods or services to a buyer with an EU VAT number from a member state other than yours, or services outside the EU). %s checks every code when the order arrives."
+msgstr "Avgiftskoden som sendes med hver ordrelinje med 0 %% avgift, etter avgiftsklassen linjen ble belastet med. La en klasse stå på (ingen) for å ikke sende noen kode; for en spansk forhandler utleder utvidelsen da koden fra ordren der det er mulig (eksport, levering av varer eller tjenester innen EU til en kjøper med et EU-momsnummer fra et annet medlemsland enn ditt, eller tjenester utenfor EU). %s kontrollerer hver kode når ordren kommer inn."
 
 #: class/WC_Twoinc.php:6529
 msgid "Diagnostics"
@@ -1617,7 +1617,7 @@ msgstr "API-nøkkelen er lagret, men %s returnerte en feil under bekreftelsen."
 
 #: class/WC_Twoinc_Checkout.php:220 class/WC_Twoinc_Checkout.php:234
 #: class/WC_Twoinc_Checkout.php:248 class/WC_Twoinc_Checkout.php:271
-#: class/WC_Twoinc_Checkout.php:280 class/WC_Twoinc_Helper.php:358
+#: class/WC_Twoinc_Checkout.php:280 class/WC_Twoinc_Helper.php:372
 msgid "Company name"
 msgstr "Selskapsnavn"
 
@@ -1625,7 +1625,7 @@ msgstr "Selskapsnavn"
 msgid "Company ID"
 msgstr "Organisasjonsnummer"
 
-#: class/WC_Twoinc_Checkout.php:311 class/WC_Twoinc_Helper.php:382
+#: class/WC_Twoinc_Checkout.php:311 class/WC_Twoinc_Helper.php:396
 msgid "Invoice email address"
 msgstr "E-postadresse for faktura"
 
@@ -1708,80 +1708,80 @@ msgstr "Velg et annet enkeltpersonforetak"
 msgid "Something went wrong setting up sole trader checkout. Please try again."
 msgstr "Noe gikk galt under oppsettet av utsjekk for enkeltpersonforetak. Prøv igjen."
 
-#: class/WC_Twoinc_Helper.php:233
+#: class/WC_Twoinc_Helper.php:247
 #, php-format
 msgid "Negative discount amount calculated for %s."
 msgstr "Negativt rabattbeløp beregnet for %s."
 
-#: class/WC_Twoinc_Helper.php:252
+#: class/WC_Twoinc_Helper.php:266
 #, php-format
 msgid "Empty response from %s."
 msgstr "Tomt svar fra %s ."
 
-#: class/WC_Twoinc_Helper.php:256
+#: class/WC_Twoinc_Helper.php:270
 #, php-format
 msgid "Response code from %s: %d"
 msgstr "Svarkode fra %s : %d"
 
-#: class/WC_Twoinc_Helper.php:326
+#: class/WC_Twoinc_Helper.php:340
 msgid "Buyer and merchant may not be the same company"
 msgstr "Selger og kjøper kan ikke være samme selskap"
 
-#: class/WC_Twoinc_Helper.php:345
+#: class/WC_Twoinc_Helper.php:359
 #, php-format
 msgid "Please enter a valid %s to pay on invoice"
 msgstr "Vennligst skriv inn %s for å betale med faktura"
 
-#: class/WC_Twoinc_Helper.php:349 class/WC_Twoinc_Helper.php:352
+#: class/WC_Twoinc_Helper.php:363 class/WC_Twoinc_Helper.php:366
 msgid "Phone number"
 msgstr "Telefonnummer"
 
-#: class/WC_Twoinc_Helper.php:355
+#: class/WC_Twoinc_Helper.php:369
 msgid "Organization number"
 msgstr "Organisasjonsnummer"
 
-#: class/WC_Twoinc_Helper.php:361
+#: class/WC_Twoinc_Helper.php:375
 msgid "First name"
 msgstr "Fornavn"
 
-#: class/WC_Twoinc_Helper.php:364
+#: class/WC_Twoinc_Helper.php:378
 msgid "Last name"
 msgstr "Etternavn"
 
-#: class/WC_Twoinc_Helper.php:367
+#: class/WC_Twoinc_Helper.php:381
 msgid "Email"
 msgstr "E-post"
 
-#: class/WC_Twoinc_Helper.php:370
+#: class/WC_Twoinc_Helper.php:384
 msgid "Address"
 msgstr "Adresse"
 
-#: class/WC_Twoinc_Helper.php:373
+#: class/WC_Twoinc_Helper.php:387
 msgid "City"
 msgstr "By"
 
-#: class/WC_Twoinc_Helper.php:376
+#: class/WC_Twoinc_Helper.php:390
 msgid "Country"
 msgstr "Land"
 
-#: class/WC_Twoinc_Helper.php:379
+#: class/WC_Twoinc_Helper.php:393
 msgid "Postal code"
 msgstr "Postkode"
 
 #. translators: 1: request type (e.g. order_update). 2: product name (e.g. Two). 3: what went wrong.
-#: class/WC_Twoinc_Helper.php:1527
+#: class/WC_Twoinc_Helper.php:1638
 #, php-format
 msgid "The %1$s request was not sent to %2$s: the twoinc_order_postprocessing filter failed (%3$s)."
 msgstr ""
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:2039
+#: class/WC_Twoinc_Helper.php:2150
 #, php-format
 msgid "Shipping \"%s\" cannot be refunded: the order line it refunds was not found."
 msgstr "Frakten «%s» kan ikke refunderes: ordrelinjen den refunderer ble ikke funnet."
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:2214
+#: class/WC_Twoinc_Helper.php:2325
 #, php-format
 msgid "The tax charged on \"%s\" does not match the shop's tax rates."
 msgstr "Avgiften belastet på «%s» samsvarer ikke med butikkens avgiftssatser."

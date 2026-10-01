@@ -364,14 +364,38 @@ postcodes starting 35 or 38, 51 and 52, and count as outside the EU: the
 delivery postcode decides for goods, the billing postcode for a Spanish buyer
 of services.
 
+Both intra-community codes also need the buyer's VAT number, with a prefix
+naming an EU member state other than the merchant's country (the prefix need
+not match the buyer or delivery country). The plugin collects no VAT number of
+its own; it reads the first non-empty of these order meta keys, which the
+common EU VAT plugins store: `_billing_vat_number`, `_vat_number`,
+`vat_number`, `VAT Number`, `_billing_eu_vat_number`, then passes it through
+the `twoinc_buyer_vat_number` filter (see below). Spaces, dots and hyphens are stripped (no-break spaces and tabs too) and the number is uppercased; a number without a
+two-letter prefix gets the billing country's (`EL` for Greece, `FR` for Monaco,
+whose businesses hold French numbers), and `EL` reads as Greece. `MC` is not a
+VAT prefix, so it never qualifies. With no such number the line gets no code, so Two refuses it.
+
+A Spanish merchant's order create also sends that number as the top-level
+`buyer_vat_number`, unless the buyer company's country is Spain: Two requires a
+Spanish buyer's VAT number to equal its organisation number, so it is never
+sent for one. Edits leave it out, which keeps the number Two stored, and
+refunds use the stored number. Other merchants' payloads are unchanged, and
+nothing is sent until the merchant record has given the merchant's country (the
+shop's base country does not stand in for this). The intra-community codes
+need the number to be sent, so they are not derived in that window either. A
+VAT number changed after the
+order is placed is not sent again: an edit cannot change the number Two holds.
+
 | Line     | Where it goes, or who buys                                       | Code sent                         |
 | -------- | ---------------------------------------------------------------- | --------------------------------- |
 | Goods    | Delivered outside the EU                                         | `ES_IVA_EXPORT`                   |
 | Goods    | Delivered to the Canary Islands, Ceuta or Melilla                | `ES_IVA_EXPORT`                   |
 | Goods    | Delivered to another EU state, for a buyer in another EU state   | `ES_IVA_INTRA_COMMUNITY`          |
+| Goods    | As above, with no qualifying buyer VAT number                    | none                              |
 | Goods    | Delivered in mainland Spain or the Balearics                     | none                              |
 | Goods    | Delivered to another EU state, for a Spanish buyer               | none                              |
 | Services | Buyer in another EU state                                        | `ES_IVA_INTRA_COMMUNITY_SERVICES` |
+| Services | As above, with no qualifying buyer VAT number                    | none                              |
 | Services | Buyer outside the EU, or in the Canary Islands, Ceuta or Melilla | `ES_IVA_NON_EU_SERVICES`          |
 | Services | Buyer in mainland Spain or the Balearics                         | none                              |
 
@@ -388,6 +412,24 @@ change or remove a code. A code that needs an exemption reason, such as
 Known limits: goods to Northern Ireland derive as an export, and other member
 states' special territories derive by their ISO country code. Map the class, or
 use the hook, where that is wrong for you.
+
+## Extension point: buyer VAT number
+
+`twoinc_buyer_vat_number` lets a shop supply the buyer's VAT number from any
+source the plugin does not read itself, such as a block checkout additional
+field (stored as order meta `_wc_billing/<namespace>/<field>`) or a theme's
+custom field. It receives the first non-empty value of the keys above, or `''`,
+and the order; return the number, or `''` for none. It runs before the tax code
+derivation, so the number decides the intra-community codes as well as the
+`buyer_vat_number` sent. `twoinc_order_postprocessing` runs after the
+derivation, so setting `buyer_vat_number` there cannot add the missing code.
+The filter can run several times per request, so keep it pure and cheap.
+
+```php
+add_filter('twoinc_buyer_vat_number', function ($vat, $order) {
+    return '' !== $vat ? $vat : (string) $order->get_meta('_wc_billing/my-shop/vat-number');
+}, 10, 2);
+```
 
 ## Stable extension contract: order postprocessing
 
