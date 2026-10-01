@@ -693,6 +693,8 @@ Add a key only once its plugin is confirmed to store it; anything else is the
 filter's job. Only the order create sends it, as top-level
 `buyer_vat_number`, and only for a Spanish merchant and a buyer company
 outside Spain; otherwise the key is absent.
+Intent lines carry no intra-community code, because the unsaved order the
+intent is built from has no VAT meta yet. That is expected; do not "fix" it.
 
 - A non-zero line, and every line of a non-Spanish merchant with no mapping,
   must stay byte-identical: the spec compares those payloads with the builder
