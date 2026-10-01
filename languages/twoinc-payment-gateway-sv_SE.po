@@ -1296,8 +1296,8 @@ msgstr "Momskoder för rader med 0 %"
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:6521
 #, php-format
-msgid "The tax code sent with each order line charged at 0%%, by the tax class it was charged under. Leave a class on (none) to send no code; for a Spanish merchant the plugin then works the code out from the order where it can (export, intra-community supply or reverse charge). %s checks every code when the order arrives."
-msgstr "Momskoden som skickas med varje orderrad med 0 %% moms, efter den momsklass raden debiterades med. Lämna en klass på (ingen) för att inte skicka någon kod; för en spansk handlare härleder tillägget då koden från ordern där det går (export, gemenskapsintern leverans eller omvänd skattskyldighet). %s kontrollerar varje kod när ordern kommer in."
+msgid "The tax code sent with each order line charged at 0%%, by the tax class it was charged under. Leave a class on (none) to send no code; for a Spanish merchant the plugin then works the code out from the order where it can (export, intra-community supply of goods or services, or services outside the EU). %s checks every code when the order arrives."
+msgstr "Momskoden som skickas med varje orderrad med 0 %% moms, efter den momsklass raden debiterades med. Lämna en klass på (ingen) för att inte skicka någon kod; för en spansk handlare härleder tillägget då koden från ordern där det går (export, gemenskapsintern leverans av varor eller tjänster, eller tjänster utanför EU). %s kontrollerar varje kod när ordern kommer in."
 
 #: class/WC_Twoinc.php:6529
 msgid "Diagnostics"
