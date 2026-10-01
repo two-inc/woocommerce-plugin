@@ -806,7 +806,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Whether the buyer VAT number's prefix names an EU member state other than the merchant's country.
+         * Whether the buyer VAT number's prefix names an EU member state other than the merchant's country. Monaco is
+         * in the EU list for addresses only: its businesses hold French VAT numbers, so `MC` is no VAT prefix.
          *
          * @return bool
          */
@@ -814,6 +815,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         {
             $prefix = self::vat_number_country(self::get_buyer_vat_number($order));
             return null !== $prefix
+                && 'MC' !== $prefix
                 && in_array($prefix, self::EU_VAT_COUNTRIES, true)
                 && strtoupper(trim((string) $merchant_country)) !== $prefix;
         }
@@ -847,7 +849,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * Strips spaces, dots and hyphens and uppercases. A number that does not start with two letters gets the
-         * address country in front, with Greece written `EL` as on its VAT numbers; with no country it stays as it is.
+         * address country in front, with Greece written `EL` as on its VAT numbers and Monaco `FR`, since its businesses
+         * hold French ones; with no country it stays as it is.
          *
          * @return string|null null when nothing is left
          */
@@ -859,7 +862,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
             if (!preg_match('/^[A-Z]{2}/', $vat)) {
                 $country = strtoupper(trim((string) $country));
-                $vat = ('GR' === $country ? 'EL' : $country) . $vat;
+                $vat = (['GR' => 'EL', 'MC' => 'FR'][$country] ?? $country) . $vat;
             }
             return $vat;
         }
