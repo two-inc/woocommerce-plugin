@@ -598,12 +598,23 @@ if (!class_exists('WC_Twoinc')) {
          */
         public static function get_merchant_country()
         {
-            // Read, never fetched: the order paths calling this must not add a request of their own.
-            $country = (string) get_option(WC_Twoinc_Brand::prefixed_name('merchant_country'), '');
+            $country = self::get_recorded_merchant_country();
             if ('' === $country && function_exists('WC') && WC()->countries) {
                 $country = (string) WC()->countries->get_base_country();
             }
             return strtoupper($country);
+        }
+
+        /**
+         * The merchant country the merchant record gave, or '' while it has not been read (no shop fallback), for a
+         * decision that must fail closed.
+         *
+         * @return string
+         */
+        public static function get_recorded_merchant_country()
+        {
+            // Read, never fetched: the order paths calling this must not add a request of their own.
+            return strtoupper((string) get_option(WC_Twoinc_Brand::prefixed_name('merchant_country'), ''));
         }
 
         /**

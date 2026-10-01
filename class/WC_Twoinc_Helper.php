@@ -881,13 +881,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * The buyer VAT number an order create sends (TWO-26153): only for a Spanish merchant, and never for a buyer
          * company in Spain, whose VAT number Two requires to equal its organisation number. Null leaves the key out,
-         * so every other payload stays as it was.
+         * so every other payload stays as it was. It reads the merchant record's country only, without the shop base
+         * country standing in, so nothing is sent while the record has not been read.
          *
          * @return string|null
          */
         private static function buyer_vat_number_to_send($order)
         {
-            if ('ES' !== WC_Twoinc::get_merchant_country() || 'ES' === strtoupper(trim((string) $order->get_billing_country()))) {
+            if ('ES' !== WC_Twoinc::get_recorded_merchant_country() || 'ES' === strtoupper(trim((string) $order->get_billing_country()))) {
                 return null;
             }
             return self::get_buyer_vat_number($order);
