@@ -378,7 +378,9 @@ A Spanish merchant's order create also sends that number as the top-level
 `buyer_vat_number`, unless the buyer company's country is Spain: Two requires a
 Spanish buyer's VAT number to equal its organisation number, so it is never
 sent for one. Edits leave it out, which keeps the number Two stored, and
-refunds use the stored number. Other merchants' payloads are unchanged.
+refunds use the stored number. Other merchants' payloads are unchanged, and
+nothing is sent until the merchant record has given the merchant's country (the
+shop's base country does not stand in for this).
 
 | Line     | Where it goes, or who buys                                       | Code sent                         |
 | -------- | ---------------------------------------------------------------- | --------------------------------- |

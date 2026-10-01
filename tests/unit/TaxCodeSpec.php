@@ -106,10 +106,12 @@ final class TaxCodeSpec
      * TWO-26153: both intra-community codes need a buyer VAT number whose prefix is an EU member state other than the
      * merchant's country, and an order create sends that number as `buyer_vat_number` for a Spanish merchant and a
      * buyer company outside Spain. `meta` is the order's meta; `sent` is the `buyer_vat_number` sent, null for none.
-     * The edit, which reads the number the same way, must derive the same codes and never send the key.
+     * The edit, which reads the number the same way, must derive the same codes and never send the key. Merchant ''
+     * is a merchant record not read yet, in a shop whose base country is Spain.
      */
     private static function testIntraCommunityCodesNeedABuyerVatNumber(): void
     {
+        $GLOBALS['__twoinc_test_base_country'] = 'ES';
         $es = ['country' => 'ES', 'postcode' => '28001'];
         $fr = ['country' => 'FR', 'postcode' => '75001'];
         $no = ['country' => 'NO', 'postcode' => '0150'];
@@ -136,6 +138,7 @@ final class TaxCodeSpec
             ['ES', ['goods'], 'DE', $no, [], [], ['ES_IVA_EXPORT'], null, 'an export needs no VAT number'],
             ['ES', ['goods'], 'ES', $no, ['_billing_vat_number' => 'ESB12345678'], [], ['ES_IVA_EXPORT'], null, 'never sent for a Spanish buyer'],
             ['NO', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'DE123456789'], [], [null], null, 'never sent by a merchant outside Spain'],
+            ['', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'DE123456789'], [], $intraGoods, null, 'not sent until the merchant record gives the country, though a Spanish shop derives'],
             ['ES', ['goods21'], 'DE', $fr, ['_billing_vat_number' => 'DE123456789'], [], [null], 'DE123456789', 'sent on an order with no 0% line'],
             ['ES', ['goods'], 'DE', $fr, ['_vat_number' => 'FR12345678901', '_billing_vat_number' => 'DE123456789'], [], $intraGoods, 'DE123456789', 'source order: _billing_vat_number first'],
             ['ES', ['goods'], 'DE', $fr, ['_billing_vat_number' => ' ', '_vat_number' => 'FR12345678901'], [], $intraGoods, 'FR12345678901', 'source order: an empty key falls through to _vat_number'],
