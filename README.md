@@ -360,17 +360,20 @@ follow the delivery address (the billing address when the order has no separate
 one). Services follow the buyer company's country, which is the billing
 country the order sends as `buyer.company.country_prefix`. The EU below is the
 27 member states plus Monaco. The Canary Islands, Ceuta and Melilla are Spanish
-postcodes starting 35 or 38, 51 and 52.
+postcodes starting 35 or 38, 51 and 52, and count as outside the EU: the
+delivery postcode decides for goods, the billing postcode for a Spanish buyer
+of services.
 
-| Line     | Where it goes, or who buys                                     | Code sent                |
-| -------- | -------------------------------------------------------------- | ------------------------ |
-| Goods    | Delivered outside the EU                                       | `ES_IVA_EXPORT`          |
-| Goods    | Delivered to the Canary Islands, Ceuta or Melilla              | `ES_IVA_EXPORT`          |
-| Goods    | Delivered to another EU state, for a buyer in another EU state | `ES_IVA_INTRA_COMMUNITY` |
-| Goods    | Delivered in mainland Spain or the Balearics                   | none                     |
-| Goods    | Delivered to another EU state, for a Spanish buyer             | none                     |
-| Services | Buyer in another EU state                                      | `ES_IVA_REVERSE_CHARGE`  |
-| Services | Buyer in Spain, or outside the EU                              | none                     |
+| Line     | Where it goes, or who buys                                       | Code sent                         |
+| -------- | ---------------------------------------------------------------- | --------------------------------- |
+| Goods    | Delivered outside the EU                                         | `ES_IVA_EXPORT`                   |
+| Goods    | Delivered to the Canary Islands, Ceuta or Melilla                | `ES_IVA_EXPORT`                   |
+| Goods    | Delivered to another EU state, for a buyer in another EU state   | `ES_IVA_INTRA_COMMUNITY_GOODS`    |
+| Goods    | Delivered in mainland Spain or the Balearics                     | none                              |
+| Goods    | Delivered to another EU state, for a Spanish buyer               | none                              |
+| Services | Buyer in another EU state                                        | `ES_IVA_INTRA_COMMUNITY_SERVICES` |
+| Services | Buyer outside the EU, or in the Canary Islands, Ceuta or Melilla | `ES_IVA_NON_EU_SERVICES`          |
+| Services | Buyer in mainland Spain or the Balearics                         | none                              |
 
 Where the table gives no code, the line is sent without one. **The plugin never
 refuses; the API does.** Two's API checks every code it receives, and refuses a
