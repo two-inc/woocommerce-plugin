@@ -92,8 +92,10 @@ proxy:
 	./start-proxy.sh
 
 ## Update Two payment gateway config from TWO_* env vars
+## (from .env, or passed on the command line: make configure TWO_API_KEY=...)
+CONFIGURE_VARS := TWO_API_KEY TWO_API_BASE_URL TWO_GATEWAY_ID
 configure:
-	docker compose exec -T wpcli bash /opt/tillit-payment-gateway/dev/configure
+	docker compose exec -T $(foreach v,$(CONFIGURE_VARS),$(if $($(v)),-e $(v)='$($(v))')) wpcli bash /opt/tillit-payment-gateway/dev/configure
 
 ## Tail WordPress container logs
 logs:
