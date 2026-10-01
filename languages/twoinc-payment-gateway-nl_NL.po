@@ -1300,8 +1300,8 @@ msgstr "Belastingcodes voor regels tegen 0%"
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:6533
 #, php-format
-msgid "The tax code sent with each order line charged at 0%%, by the tax class it was charged under. Leave a class on (none) to send no code; for a Spanish merchant the plugin then works the code out from the order where it can (export, intra-community supply or reverse charge). %s checks every code when the order arrives."
-msgstr "De belastingcode die wordt meegestuurd met elke orderregel tegen 0%% belasting, per belastingklasse waaronder de regel is belast. Laat een klasse op (geen) staan om geen code te sturen; voor een Spaanse verkoper leidt de plugin de code dan waar mogelijk af uit de bestelling (export, intracommunautaire levering of verlegging). %s controleert elke code wanneer de bestelling binnenkomt."
+msgid "The tax code sent with each order line charged at 0%%, by the tax class it was charged under. Leave a class on (none) to send no code; for a Spanish merchant the plugin then works the code out from the order where it can (export, intra-community supply of goods or services, or services outside the EU). %s checks every code when the order arrives."
+msgstr "De belastingcode die wordt meegestuurd met elke orderregel tegen 0%% belasting, per belastingklasse waaronder de regel is belast. Laat een klasse op (geen) staan om geen code te sturen; voor een Spaanse verkoper leidt de plugin de code dan waar mogelijk af uit de bestelling (export, intracommunautaire levering van goederen of diensten, of diensten buiten de EU). %s controleert elke code wanneer de bestelling binnenkomt."
 
 #: class/WC_Twoinc.php:6541
 msgid "Diagnostics"
