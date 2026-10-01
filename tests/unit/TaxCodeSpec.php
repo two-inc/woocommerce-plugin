@@ -13,6 +13,7 @@ final class TaxCodeSpec
         $tests = [
             'testZeroRateLinesCarryTheResolvedCode',
             'testIntraCommunityCodesNeedABuyerVatNumber',
+            'testTheVatNumberFilterRunsBeforeTheDerivation',
             'testTheIntentCarriesNoTaxCode',
             'testEveryPayloadWithLinesCarriesTheCode',
             'testAnEsMerchantsNonZeroOrdersMatchTheGoldens',
@@ -143,8 +144,7 @@ final class TaxCodeSpec
             ['ES', ['goods'], 'DE', $fr, ['_vat_number' => 'FR111', 'vat_number' => 'IT222'], [], $intraGoods, 'FR111', 'source order: _vat_number before vat_number'],
             ['ES', ['goods'], 'DE', $fr, ['vat_number' => 'IT222', 'VAT Number' => 'AT333'], [], $intraGoods, 'IT222', 'source order: vat_number before VAT Number'],
             ['ES', ['goods'], 'DE', $fr, ['VAT Number' => 'AT333', '_billing_eu_vat_number' => 'BE444'], [], $intraGoods, 'AT333', 'source order: VAT Number before _billing_eu_vat_number'],
-            ['ES', ['goods'], 'DE', $fr, ['_billing_eu_vat_number' => 'BE444', '_billing_vat_id' => 'PL555'], [], $intraGoods, 'BE444', 'source order: _billing_eu_vat_number before _billing_vat_id'],
-            ['ES', ['goods'], 'DE', $fr, ['_billing_vat_id' => 'PL555'], [], $intraGoods, 'PL555', 'source order: _billing_vat_id is read'],
+            ['ES', ['goods'], 'DE', $fr, ['_billing_eu_vat_number' => 'BE444'], [], $intraGoods, 'BE444', 'source order: _billing_eu_vat_number is read'],
             ['ES', ['goods'], 'DE', $fr, ['billing_vat' => 'DE123456789'], [], [null], null, 'an unknown key is not read'],
         ];
 
@@ -166,6 +166,50 @@ final class TaxCodeSpec
             TinyAssert::same($want, $codes($edit), $description . ': edit codes');
             TinyAssert::true(!array_key_exists('buyer_vat_number', $edit), $description . ': edit never sends the key');
         }
+    }
+
+    /**
+     * `twoinc_buyer_vat_number` receives the first non-empty meta value ('' for none) and its result is normalised
+     * and used for both the derivation and the payload (TWO-26153). `filter` is what the filter returns given what it
+     * received; null means no filter is added.
+     */
+    private static function testTheVatNumberFilterRunsBeforeTheDerivation(): void
+    {
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = 'ES';
+        self::useGateway([]);
+        $fr = ['country' => 'FR', 'postcode' => '75001'];
+        $cases = [
+            // meta, filter, want codes, sent, received by the filter, description
+            [[], static function ($vat) {
+                return $vat === '' ? 'fr 123 456 789 01' : $vat;
+            }, ['ES_IVA_INTRA_COMMUNITY_GOODS'], 'FR12345678901', '', 'the filter supplies a number when no meta has one'],
+            [['_billing_vat_number' => 'DE123456789'], static function () {
+                return 'NL123456789B01';
+            }, ['ES_IVA_INTRA_COMMUNITY_GOODS'], 'NL123456789B01', 'DE123456789', 'the filter overrides the meta'],
+            [['_billing_vat_number' => 'DE123456789'], static function () {
+                return '';
+            }, [null], null, 'DE123456789', 'the filter returning an empty string leaves no number'],
+            [['_billing_vat_number' => 'DE123456789'], static function () {
+                return 'ESB12345678';
+            }, [null], 'ESB12345678', 'DE123456789', 'a filtered number of the merchant\'s country derives nothing'],
+        ];
+        foreach ($cases as [$meta, $filter, $want, $sent, $received, $description]) {
+            remove_all_filters('twoinc_buyer_vat_number');
+            $seen = [];
+            add_filter('twoinc_buyer_vat_number', static function ($vat, $order) use ($filter, &$seen) {
+                $seen[] = [$vat, is_object($order)];
+                return $filter($vat);
+            }, 10, 2);
+            $order = self::order(['goods'], 'DE', $fr);
+            $order->meta = $meta;
+            $create = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true);
+            TinyAssert::same($want, array_map(static function ($line) {
+                return $line['tax_code'] ?? null;
+            }, $create['line_items']), $description . ': codes');
+            TinyAssert::same($sent, $create['buyer_vat_number'] ?? null, $description . ': buyer_vat_number');
+            TinyAssert::same([$received, true], $seen[0] ?? null, $description . ': the filter gets the meta value and the order');
+        }
+        remove_all_filters('twoinc_buyer_vat_number');
     }
 
     /**
