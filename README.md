@@ -381,7 +381,9 @@ Spanish buyer's VAT number to equal its organisation number, so it is never
 sent for one. Edits leave it out, which keeps the number Two stored, and
 refunds use the stored number. Other merchants' payloads are unchanged, and
 nothing is sent until the merchant record has given the merchant's country (the
-shop's base country does not stand in for this). A VAT number changed after the
+shop's base country does not stand in for this). The intra-community codes
+need the number to be sent, so they are not derived in that window either. A
+VAT number changed after the
 order is placed is not sent again: an edit cannot change the number Two holds.
 
 | Line     | Where it goes, or who buys                                       | Code sent                         |
