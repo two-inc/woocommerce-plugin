@@ -45,11 +45,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * Order meta keys holding the buyer's VAT number, first non-empty wins (TWO-26153). The plugin collects no VAT
          * number of its own, so these are the keys the common EU VAT plugins store: `_billing_vat_number` (and its
          * older `_vat_number`) from WooCommerce EU VAT Number, `vat_number` from Aelia EU VAT Assistant, `VAT Number`
-         * from EU/UK VAT Compliance, `_billing_eu_vat_number` from EU VAT for WooCommerce and `_billing_vat_id` from
-         * Germanized.
+         * from EU/UK VAT Compliance and `_billing_eu_vat_number` from EU VAT for WooCommerce. Any other source, such
+         * as a block checkout additional field, comes in through the `twoinc_buyer_vat_number` filter.
          */
         private const BUYER_VAT_NUMBER_META_KEYS = [
-            '_billing_vat_number', '_vat_number', 'vat_number', 'VAT Number', '_billing_eu_vat_number', '_billing_vat_id',
+            '_billing_vat_number', '_vat_number', 'vat_number', 'VAT Number', '_billing_eu_vat_number',
         ];
 
         /**
@@ -778,9 +778,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * The buyer's VAT number, normalised, from the first non-empty of BUYER_VAT_NUMBER_META_KEYS, or null
-         * (TWO-26153). Read through the order API, so it works with HPOS. An unprefixed number is read in the
-         * billing country.
+         * The buyer's VAT number, normalised, or null (TWO-26153). The first non-empty of BUYER_VAT_NUMBER_META_KEYS,
+         * read through the order API so it works with HPOS, passes through the `twoinc_buyer_vat_number` filter
+         * ('' when no key has one) before it is normalised, so a shop can supply a number from any other source. The
+         * filter runs before the derivation, which `twoinc_order_postprocessing` cannot. An unprefixed number is read
+         * in the billing country.
          *
          * @return string|null
          */
@@ -789,14 +791,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if (!is_object($order) || !method_exists($order, 'get_meta')) {
                 return null;
             }
+            $country = $order->get_billing_country();
+            $raw = '';
             foreach (self::BUYER_VAT_NUMBER_META_KEYS as $key) {
-                $raw = $order->get_meta($key);
-                $vat = is_scalar($raw) ? self::normalise_vat_number((string) $raw, $order->get_billing_country()) : null;
-                if (null !== $vat) {
-                    return $vat;
+                $value = $order->get_meta($key);
+                if (is_scalar($value) && null !== self::normalise_vat_number((string) $value, $country)) {
+                    $raw = (string) $value;
+                    break;
                 }
             }
-            return null;
+            $raw = apply_filters('twoinc_buyer_vat_number', $raw, $order);
+            return is_scalar($raw) ? self::normalise_vat_number((string) $raw, $country) : null;
         }
 
         /**

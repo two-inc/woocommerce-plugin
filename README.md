@@ -369,8 +369,8 @@ naming an EU member state other than the merchant's country (the prefix need
 not match the buyer or delivery country). The plugin collects no VAT number of
 its own; it reads the first non-empty of these order meta keys, which the
 common EU VAT plugins store: `_billing_vat_number`, `_vat_number`,
-`vat_number`, `VAT Number`, `_billing_eu_vat_number`, `_billing_vat_id`. Spaces,
-dots and hyphens are stripped and the number is uppercased; a number without a
+`vat_number`, `VAT Number`, `_billing_eu_vat_number`, then passes it through
+the `twoinc_buyer_vat_number` filter (see below). Spaces, dots and hyphens are stripped and the number is uppercased; a number without a
 two-letter prefix gets the billing country's (`EL` for Greece), and `EL` reads
 as Greece. With no such number the line gets no code, so Two refuses it.
 
@@ -406,6 +406,23 @@ change or remove a code. A code that needs an exemption reason, such as
 Known limits: goods to Northern Ireland derive as an export, and other member
 states' special territories derive by their ISO country code. Map the class, or
 use the hook, where that is wrong for you.
+
+## Extension point: buyer VAT number
+
+`twoinc_buyer_vat_number` lets a shop supply the buyer's VAT number from any
+source the plugin does not read itself, such as a block checkout additional
+field (stored as order meta `_wc_billing/<namespace>/<field>`) or a theme's
+custom field. It receives the first non-empty value of the keys above, or `''`,
+and the order; return the number, or `''` for none. It runs before the tax code
+derivation, so the number decides the intra-community codes as well as the
+`buyer_vat_number` sent. `twoinc_order_postprocessing` runs after the
+derivation, so setting `buyer_vat_number` there cannot add the missing code.
+
+```php
+add_filter('twoinc_buyer_vat_number', function ($vat, $order) {
+    return '' !== $vat ? $vat : (string) $order->get_meta('_wc_billing/my-shop/vat-number');
+}, 10, 2);
+```
 
 ## Stable extension contract: order postprocessing
 

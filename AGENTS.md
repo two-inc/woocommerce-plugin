@@ -687,8 +687,10 @@ Rows marked `vat` (both intra-community codes) also need a buyer VAT number
 whose prefix is an EU member state other than the merchant's country
 (TWO-26153); without one the line gets no code, never a later row. The number
 comes from `get_buyer_vat_number()`, the first non-empty of
-`BUYER_VAT_NUMBER_META_KEYS` read with `$order->get_meta()`, normalised by
-`normalise_vat_number()`. Only the order create sends it, as top-level
+`BUYER_VAT_NUMBER_META_KEYS` read with `$order->get_meta()`, passed through the
+`twoinc_buyer_vat_number` filter, then normalised by `normalise_vat_number()`.
+Add a key only once its plugin is confirmed to store it; anything else is the
+filter's job. Only the order create sends it, as top-level
 `buyer_vat_number`, and only for a Spanish merchant and a buyer company
 outside Spain; otherwise the key is absent.
 
