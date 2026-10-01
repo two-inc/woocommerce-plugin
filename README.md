@@ -434,6 +434,7 @@ and the order; return the number, or `''` for none. It runs before the tax code
 derivation, so the number decides the intra-community codes as well as the
 `buyer_vat_number` sent. `twoinc_order_postprocessing` runs after the
 derivation, so setting `buyer_vat_number` there cannot add the missing code.
+The filter can run several times per request, so keep it pure and cheap.
 
 ```php
 add_filter('twoinc_buyer_vat_number', function ($vat, $order) {
