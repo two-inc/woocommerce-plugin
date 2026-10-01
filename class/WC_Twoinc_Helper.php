@@ -34,7 +34,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         private const ES_ZERO_RATE_DERIVATION = [
             ['line' => 'goods', 'destination' => 'non_eu', 'buyer' => null, 'code' => 'ES_IVA_EXPORT'],
             ['line' => 'goods', 'destination' => 'es_outside', 'buyer' => null, 'code' => 'ES_IVA_EXPORT'],
-            ['line' => 'goods', 'destination' => 'eu', 'buyer' => 'eu', 'code' => 'ES_IVA_INTRA_COMMUNITY_GOODS'],
+            ['line' => 'goods', 'destination' => 'eu', 'buyer' => 'eu', 'code' => 'ES_IVA_INTRA_COMMUNITY'],
             ['line' => 'service', 'destination' => null, 'buyer' => 'eu', 'code' => 'ES_IVA_INTRA_COMMUNITY_SERVICES'],
             ['line' => 'service', 'destination' => null, 'buyer' => 'non_eu', 'code' => 'ES_IVA_NON_EU_SERVICES'],
             ['line' => 'service', 'destination' => null, 'buyer' => 'es_outside', 'code' => 'ES_IVA_NON_EU_SERVICES'],

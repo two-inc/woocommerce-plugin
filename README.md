@@ -368,7 +368,7 @@ of services.
 | -------- | ---------------------------------------------------------------- | --------------------------------- |
 | Goods    | Delivered outside the EU                                         | `ES_IVA_EXPORT`                   |
 | Goods    | Delivered to the Canary Islands, Ceuta or Melilla                | `ES_IVA_EXPORT`                   |
-| Goods    | Delivered to another EU state, for a buyer in another EU state   | `ES_IVA_INTRA_COMMUNITY_GOODS`    |
+| Goods    | Delivered to another EU state, for a buyer in another EU state   | `ES_IVA_INTRA_COMMUNITY`          |
 | Goods    | Delivered in mainland Spain or the Balearics                     | none                              |
 | Goods    | Delivered to another EU state, for a Spanish buyer               | none                              |
 | Services | Buyer in another EU state                                        | `ES_IVA_INTRA_COMMUNITY_SERVICES` |
