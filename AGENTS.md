@@ -683,6 +683,14 @@ country and postcode for the buyer, so a Spanish buyer billed in the Canaries,
 Ceuta or Melilla is `es_outside` and its services derive
 `ES_IVA_NON_EU_SERVICES` (TWO-26151). The plugin never derives
 `ES_IVA_REVERSE_CHARGE`, which is Spanish domestic reverse charge only.
+Rows marked `vat` (both intra-community codes) also need a buyer VAT number
+whose prefix is an EU member state other than the merchant's country
+(TWO-26153); without one the line gets no code, never a later row. The number
+comes from `get_buyer_vat_number()`, the first non-empty of
+`BUYER_VAT_NUMBER_META_KEYS` read with `$order->get_meta()`, normalised by
+`normalise_vat_number()`. Only the order create sends it, as top-level
+`buyer_vat_number`, and only for a Spanish merchant and a buyer company
+outside Spain; otherwise the key is absent.
 
 - A non-zero line, and every line of a non-Spanish merchant with no mapping,
   must stay byte-identical: the spec compares those payloads with the builder

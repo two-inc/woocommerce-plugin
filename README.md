@@ -375,14 +375,32 @@ postcodes starting 35 or 38, 51 and 52, and count as outside the EU: the
 delivery postcode decides for goods, the billing postcode for a Spanish buyer
 of services.
 
+Both intra-community codes also need the buyer's VAT number, with a prefix
+naming an EU member state other than the merchant's country (the prefix need
+not match the buyer or delivery country). The plugin collects no VAT number of
+its own; it reads the first non-empty of these order meta keys, which the
+common EU VAT plugins store: `_billing_vat_number`, `_vat_number`,
+`vat_number`, `VAT Number`, `_billing_eu_vat_number`, `_billing_vat_id`. Spaces,
+dots and hyphens are stripped and the number is uppercased; a number without a
+two-letter prefix gets the billing country's (`EL` for Greece), and `EL` reads
+as Greece. With no such number the line gets no code, so Two refuses it.
+
+A Spanish merchant's order create also sends that number as the top-level
+`buyer_vat_number`, unless the buyer company's country is Spain: Two requires a
+Spanish buyer's VAT number to equal its organisation number, so it is never
+sent for one. Edits leave it out, which keeps the number Two stored, and
+refunds use the stored number. Other merchants' payloads are unchanged.
+
 | Line     | Where it goes, or who buys                                       | Code sent                         |
 | -------- | ---------------------------------------------------------------- | --------------------------------- |
 | Goods    | Delivered outside the EU                                         | `ES_IVA_EXPORT`                   |
 | Goods    | Delivered to the Canary Islands, Ceuta or Melilla                | `ES_IVA_EXPORT`                   |
 | Goods    | Delivered to another EU state, for a buyer in another EU state   | `ES_IVA_INTRA_COMMUNITY`          |
+| Goods    | As above, with no qualifying buyer VAT number                    | none                              |
 | Goods    | Delivered in mainland Spain or the Balearics                     | none                              |
 | Goods    | Delivered to another EU state, for a Spanish buyer               | none                              |
 | Services | Buyer in another EU state                                        | `ES_IVA_INTRA_COMMUNITY_SERVICES` |
+| Services | As above, with no qualifying buyer VAT number                    | none                              |
 | Services | Buyer outside the EU, or in the Canary Islands, Ceuta or Melilla | `ES_IVA_NON_EU_SERVICES`          |
 | Services | Buyer in mainland Spain or the Balearics                         | none                              |
 

@@ -47,15 +47,27 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * The code a Spanish merchant's 0% line derives when its tax class is unmapped (TWO-24877, TWO-26151). First
          * matching row wins; a null zone matches any. Goods follow where they are delivered, services where the buyer
          * is established. Zones: `es` (mainland and Balearic Spain), `es_outside` (Canaries, Ceuta, Melilla), `eu`
-         * (another EU state), `non_eu`.
+         * (another EU state), `non_eu`. A row with `vat` also needs a buyer VAT number whose prefix is an EU member
+         * state other than the merchant's country (TWO-26153); without one an EU buyer's line derives no code.
          */
         private const ES_ZERO_RATE_DERIVATION = [
-            ['line' => 'goods', 'destination' => 'non_eu', 'buyer' => null, 'code' => 'ES_IVA_EXPORT'],
-            ['line' => 'goods', 'destination' => 'es_outside', 'buyer' => null, 'code' => 'ES_IVA_EXPORT'],
-            ['line' => 'goods', 'destination' => 'eu', 'buyer' => 'eu', 'code' => 'ES_IVA_INTRA_COMMUNITY'],
-            ['line' => 'service', 'destination' => null, 'buyer' => 'eu', 'code' => 'ES_IVA_INTRA_COMMUNITY_SERVICES'],
-            ['line' => 'service', 'destination' => null, 'buyer' => 'non_eu', 'code' => 'ES_IVA_NON_EU_SERVICES'],
-            ['line' => 'service', 'destination' => null, 'buyer' => 'es_outside', 'code' => 'ES_IVA_NON_EU_SERVICES'],
+            ['line' => 'goods', 'destination' => 'non_eu', 'buyer' => null, 'vat' => false, 'code' => 'ES_IVA_EXPORT'],
+            ['line' => 'goods', 'destination' => 'es_outside', 'buyer' => null, 'vat' => false, 'code' => 'ES_IVA_EXPORT'],
+            ['line' => 'goods', 'destination' => 'eu', 'buyer' => 'eu', 'vat' => true, 'code' => 'ES_IVA_INTRA_COMMUNITY'],
+            ['line' => 'service', 'destination' => null, 'buyer' => 'eu', 'vat' => true, 'code' => 'ES_IVA_INTRA_COMMUNITY_SERVICES'],
+            ['line' => 'service', 'destination' => null, 'buyer' => 'non_eu', 'vat' => false, 'code' => 'ES_IVA_NON_EU_SERVICES'],
+            ['line' => 'service', 'destination' => null, 'buyer' => 'es_outside', 'vat' => false, 'code' => 'ES_IVA_NON_EU_SERVICES'],
+        ];
+
+        /**
+         * Order meta keys holding the buyer's VAT number, first non-empty wins (TWO-26153). The plugin collects no VAT
+         * number of its own, so these are the keys the common EU VAT plugins store: `_billing_vat_number` (and its
+         * older `_vat_number`) from WooCommerce EU VAT Number, `vat_number` from Aelia EU VAT Assistant, `VAT Number`
+         * from EU/UK VAT Compliance, `_billing_eu_vat_number` from EU VAT for WooCommerce and `_billing_vat_id` from
+         * Germanized.
+         */
+        private const BUYER_VAT_NUMBER_META_KEYS = [
+            '_billing_vat_number', '_vat_number', 'vat_number', 'VAT Number', '_billing_eu_vat_number', '_billing_vat_id',
         ];
 
         /**
@@ -705,14 +717,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 return $items;
             }
 
-            $context = $derive ? self::tax_code_context($order) : null;
+            $context = $derive ? self::tax_code_context($order, WC_Twoinc::get_merchant_country()) : null;
             foreach ($zero as $i) {
                 $source = $sources[$i];
                 $tax_class = 'shipping' === $source['tax_class'] ? self::get_shipping_tax_class_key($order) : $source['tax_class'];
                 $code = null !== $tax_class && isset($map[$tax_class]) ? $map[$tax_class] : null;
                 if (null === $code && $context) {
                     $goods = $source['goods'] ?? $context['order_has_goods'];
-                    $code = self::derive_es_zero_rate_code($goods, $context['destination'], $context['buyer']);
+                    $code = self::derive_es_zero_rate_code($goods, $context['destination'], $context['buyer'], $context['vat_qualifies']);
                 }
                 if (null !== $code) {
                     $items[$i]['tax_code'] = $code;
@@ -727,10 +739,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @param bool        $goods       a goods line, rather than a service line
          * @param string|null $destination the delivery zone
          * @param string|null $buyer       the buyer company's zone
+         * @param bool        $vat_qualifies whether the buyer VAT number's prefix is an EU member state other than the
+         *                                   merchant's country
          *
          * @return string|null
          */
-        public static function derive_es_zero_rate_code($goods, $destination, $buyer)
+        public static function derive_es_zero_rate_code($goods, $destination, $buyer, $vat_qualifies = false)
         {
             $line = $goods ? 'goods' : 'service';
             foreach (self::ES_ZERO_RATE_DERIVATION as $row) {
@@ -738,6 +752,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $row['line'] === $line
                     && (null === $row['destination'] || $row['destination'] === $destination)
                     && (null === $row['buyer'] || $row['buyer'] === $buyer)
+                    && (!$row['vat'] || $vat_qualifies)
                 ) {
                     return $row['code'];
                 }
@@ -748,11 +763,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * What the derivation reads off the order: the delivery address (billing when the order has none), the buyer
          * company country the order payload sends as `buyer.company.country_prefix` with the billing postcode, and
-         * whether any product line is goods, which decides how its shipping and fees are treated.
+         * whether any product line is goods, which decides how its shipping and fees are treated, and whether the
+         * buyer VAT number's prefix is an EU member state other than the merchant's country.
+         *
+         * @param mixed  $order            the order, or a refund's parent
+         * @param string $merchant_country the merchant's country from the merchant record
          *
          * @return array|null null when the order carries no addresses
          */
-        private static function tax_code_context($order)
+        private static function tax_code_context($order, $merchant_country)
         {
             if (!is_object($order) || !method_exists($order, 'get_billing_country')) {
                 return null;
@@ -782,7 +801,91 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'destination' => self::tax_zone($country, $postcode),
                 'buyer' => self::tax_zone($order->get_billing_country(), $order->get_billing_postcode()),
                 'order_has_goods' => $has_goods,
+                'vat_qualifies' => self::is_vat_prefix_eu_other_than($order, $merchant_country),
             ];
+        }
+
+        /**
+         * Whether the buyer VAT number's prefix names an EU member state other than the merchant's country.
+         *
+         * @return bool
+         */
+        private static function is_vat_prefix_eu_other_than($order, $merchant_country)
+        {
+            $prefix = self::vat_number_country(self::get_buyer_vat_number($order));
+            return null !== $prefix
+                && in_array($prefix, self::EU_VAT_COUNTRIES, true)
+                && strtoupper(trim((string) $merchant_country)) !== $prefix;
+        }
+
+        /**
+         * The buyer's VAT number, normalised, from the first non-empty of BUYER_VAT_NUMBER_META_KEYS, or null
+         * (TWO-26153). Read through the order API, so it works with HPOS. An unprefixed number is read in the
+         * billing country.
+         *
+         * @return string|null
+         */
+        public static function get_buyer_vat_number($order)
+        {
+            if (!is_object($order) || !method_exists($order, 'get_meta')) {
+                return null;
+            }
+            foreach (self::BUYER_VAT_NUMBER_META_KEYS as $key) {
+                $raw = $order->get_meta($key);
+                $vat = is_scalar($raw) ? self::normalise_vat_number((string) $raw, $order->get_billing_country()) : null;
+                if (null !== $vat) {
+                    return $vat;
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Strips spaces, dots and hyphens and uppercases. A number that does not start with two letters gets the
+         * address country in front, with Greece written `EL` as on its VAT numbers; with no country it stays as it is.
+         *
+         * @return string|null null when nothing is left
+         */
+        public static function normalise_vat_number($raw, $country)
+        {
+            $vat = strtoupper((string) preg_replace('/[\s.\-]+/', '', (string) $raw));
+            if ('' === $vat) {
+                return null;
+            }
+            if (!preg_match('/^[A-Z]{2}/', $vat)) {
+                $country = strtoupper(trim((string) $country));
+                $vat = ('GR' === $country ? 'EL' : $country) . $vat;
+            }
+            return $vat;
+        }
+
+        /**
+         * The country a VAT number's prefix names, `EL` read as Greece, or null when it has no two-letter prefix.
+         *
+         * @return string|null
+         */
+        private static function vat_number_country($vat)
+        {
+            if (null === $vat || !preg_match('/^[A-Z]{2}/', $vat)) {
+                return null;
+            }
+            $prefix = substr($vat, 0, 2);
+            return 'EL' === $prefix ? 'GR' : $prefix;
+        }
+
+        /**
+         * The buyer VAT number an order create sends (TWO-26153): only for a Spanish merchant, and never for a buyer
+         * company in Spain, whose VAT number Two requires to equal its organisation number. Null leaves the key out,
+         * so every other payload stays as it was.
+         *
+         * @return string|null
+         */
+        private static function buyer_vat_number_to_send($order)
+        {
+            if ('ES' !== WC_Twoinc::get_merchant_country() || 'ES' === strtoupper(trim((string) $order->get_billing_country()))) {
+                return null;
+            }
+            return self::get_buyer_vat_number($order);
         }
 
         /**
@@ -1189,6 +1292,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             if ($tracking_id) {
                 $req_body['tracking_id'] = $tracking_id;
+            }
+
+            // Create only: an edit that leaves the key out keeps the stored number, and refunds read the stored one.
+            $buyer_vat_number = self::buyer_vat_number_to_send($order);
+            if (null !== $buyer_vat_number) {
+                $req_body['buyer_vat_number'] = $buyer_vat_number;
             }
 
             // Must receive and return the FULL line_items array — append or
