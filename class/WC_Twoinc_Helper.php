@@ -44,16 +44,18 @@ if (!class_exists('WC_Twoinc_Helper')) {
         private const ES_OUTSIDE_VAT_AREA_POSTCODES = ['35', '38', '51', '52'];
 
         /**
-         * The code a Spanish merchant's 0% line derives when its tax class is unmapped (TWO-24877). First matching
-         * row wins; a null zone matches any. Goods follow where they are delivered, services where the buyer is
-         * established. Zones: `es` (mainland and Balearic Spain), `es_outside` (Canaries, Ceuta, Melilla), `eu`
+         * The code a Spanish merchant's 0% line derives when its tax class is unmapped (TWO-24877, TWO-26151). First
+         * matching row wins; a null zone matches any. Goods follow where they are delivered, services where the buyer
+         * is established. Zones: `es` (mainland and Balearic Spain), `es_outside` (Canaries, Ceuta, Melilla), `eu`
          * (another EU state), `non_eu`.
          */
         private const ES_ZERO_RATE_DERIVATION = [
             ['line' => 'goods', 'destination' => 'non_eu', 'buyer' => null, 'code' => 'ES_IVA_EXPORT'],
             ['line' => 'goods', 'destination' => 'es_outside', 'buyer' => null, 'code' => 'ES_IVA_EXPORT'],
-            ['line' => 'goods', 'destination' => 'eu', 'buyer' => 'eu', 'code' => 'ES_IVA_INTRA_COMMUNITY'],
-            ['line' => 'service', 'destination' => null, 'buyer' => 'eu', 'code' => 'ES_IVA_REVERSE_CHARGE'],
+            ['line' => 'goods', 'destination' => 'eu', 'buyer' => 'eu', 'code' => 'ES_IVA_INTRA_COMMUNITY_GOODS'],
+            ['line' => 'service', 'destination' => null, 'buyer' => 'eu', 'code' => 'ES_IVA_INTRA_COMMUNITY_SERVICES'],
+            ['line' => 'service', 'destination' => null, 'buyer' => 'non_eu', 'code' => 'ES_IVA_NON_EU_SERVICES'],
+            ['line' => 'service', 'destination' => null, 'buyer' => 'es_outside', 'code' => 'ES_IVA_NON_EU_SERVICES'],
         ];
 
         /**
@@ -745,8 +747,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * What the derivation reads off the order: the delivery address (billing when the order has none), the buyer
-         * company country the order payload sends as `buyer.company.country_prefix`, and whether any product line is
-         * goods, which decides how its shipping and fees are treated.
+         * company country the order payload sends as `buyer.company.country_prefix` with the billing postcode, and
+         * whether any product line is goods, which decides how its shipping and fees are treated.
          *
          * @return array|null null when the order carries no addresses
          */
@@ -778,14 +780,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
             return [
                 'destination' => self::tax_zone($country, $postcode),
-                'buyer' => self::tax_zone($order->get_billing_country()),
+                'buyer' => self::tax_zone($order->get_billing_country(), $order->get_billing_postcode()),
                 'order_has_goods' => $has_goods,
             ];
         }
 
         /**
-         * A country's zone for the derivation, or null when it is unknown. Only a destination passes a postcode, so
-         * only a destination can be `es_outside`: a buyer company's establishment is judged by its country alone.
+         * A country's zone for the derivation, or null when it is unknown. A Spanish postcode in the Canaries, Ceuta
+         * or Melilla makes it `es_outside`: the delivery postcode for a destination, the billing postcode for a buyer.
          *
          * @return string|null
          */
