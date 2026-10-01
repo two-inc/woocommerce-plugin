@@ -6518,7 +6518,7 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'two_tax_code_map',
                     'description' => sprintf(
                         /* translators: %s is the brand product name (e.g. "Two") */
-                        __('The tax code sent with each order line charged at 0%%, by the tax class it was charged under. Leave a class on (none) to send no code; for a Spanish merchant the plugin then works the code out from the order where it can (export, intra-community supply or reverse charge). %s checks every code when the order arrives.', 'twoinc-payment-gateway'),
+                        __('The tax code sent with each order line charged at 0%%, by the tax class it was charged under. Leave a class on (none) to send no code; for a Spanish merchant the plugin then works the code out from the order where it can (export, intra-community supply of goods or services, or services outside the EU). %s checks every code when the order arrives.', 'twoinc-payment-gateway'),
                         WC_Twoinc_Brand::get('product_name')
                     ),
                     'default'     => [],
