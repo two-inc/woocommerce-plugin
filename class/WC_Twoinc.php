@@ -7138,8 +7138,9 @@ if (!class_exists('WC_Twoinc')) {
          * guaranteed to reject, each leaving a "contact support" order
          * note (TWO-24762 review).
          *
-         * An admin edit to what the invoice bills in such a state is not sent, so the order is marked as differing from Two's
-         * the first time one is seen (TWO-26171).
+         * An admin edit to what the invoice bills in such a state is not
+         * sent, so the order is marked the first time one is seen
+         * (TWO-26171).
          *
          * @return boolean true when the remote order is in sync (updated,
          *                 or no update needed), false when an update was
