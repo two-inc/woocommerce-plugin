@@ -485,6 +485,54 @@ describe("TWO-40 — field routing for an externally supplied address", () => {
       expect($("#billing_city").val()).toBe("Ashford, Kent");
     });
 
+    // TWO-26174: the registry gives some countries' regions as ISO 3166-2 codes.
+    const ES =
+      '<select id="billing_state"><option value=""></option><option value="B">Barcelona</option><option value="CA">Cádiz</option></select>';
+    const BG =
+      '<select id="billing_state"><option value=""></option><option value="BG-01">Blagoevgrad</option></select>';
+    const TEXT = '<input type="text" id="billing_state" value="" />';
+    const NONE = '<input type="hidden" id="billing_state" />';
+    // Block checkout's own country data, as WooCommerce publishes it.
+    const COUNTRY_DATA = {
+      ES: { states: { B: "Barcelona", CA: "Cádiz" } },
+      BG: { states: { "BG-01": "Blagoevgrad" } },
+      FR: { states: {} }
+    };
+    test.each`
+      country | markup  | blocks   | region                | state                 | city                               | description
+      ${"ES"} | ${ES}   | ${false} | ${"ES-B"}             | ${"B"}                | ${"Sant Antoni"}                   | ${"an ISO code matches the province id"}
+      ${"ES"} | ${ES}   | ${false} | ${"es-ca"}            | ${"CA"}               | ${"Sant Antoni"}                   | ${"case does not matter"}
+      ${"BG"} | ${BG}   | ${false} | ${"BG-01"}            | ${"BG-01"}            | ${"Sant Antoni"}                   | ${"a whole-code province id still matches"}
+      ${"ES"} | ${ES}   | ${false} | ${"Barcelona"}        | ${"B"}                | ${"Sant Antoni"}                   | ${"a name still matches by text"}
+      ${"ES"} | ${ES}   | ${false} | ${"ES-Z"}             | ${""}                 | ${"Sant Antoni"}                   | ${"an unmatched ISO code is not put on the city"}
+      ${"FR"} | ${ES}   | ${false} | ${"ES-B"}             | ${""}                 | ${"Sant Antoni, ES-B"}             | ${"another country's code is not read as a code"}
+      ${"ES"} | ${TEXT} | ${false} | ${"ES-B"}             | ${"ES-B"}             | ${"Sant Antoni"}                   | ${"a free-text county with no state list is written as given"}
+      ${"ES"} | ${TEXT} | ${true}  | ${"ES-B"}             | ${"B"}                | ${"Sant Antoni"}                   | ${"block checkout matches its own country data"}
+      ${"BG"} | ${TEXT} | ${true}  | ${"BG-01"}            | ${"BG-01"}            | ${"Sant Antoni"}                   | ${"block checkout keeps a whole-code id"}
+      ${"ES"} | ${TEXT} | ${true}  | ${"ES-Z"}             | ${""}                 | ${"Sant Antoni"}                   | ${"block checkout leaves an unmatched code out"}
+      ${"FR"} | ${TEXT} | ${true}  | ${"Pays de la Loire"} | ${"Pays de la Loire"} | ${"Sant Antoni"}                   | ${"block checkout writes a region for a country with no state list"}
+      ${"FR"} | ${NONE} | ${false} | ${"FR-PDL"}           | ${""}                 | ${"Sant Antoni"}                   | ${"a code is not put on the city of a country without states"}
+      ${"FR"} | ${NONE} | ${false} | ${"Pays de la Loire"} | ${""}                 | ${"Sant Antoni, Pays de la Loire"} | ${"a name still goes on the city of a country without states"}
+    `("$description", ({ country, markup, blocks, region, state, city }) => {
+      buildAddressForm({ billingCountry: country, billingStateMarkup: markup });
+      const savedWc = window.wc;
+      if (blocks) {
+        window.wc = {
+          wcSettings: {
+            getSetting: (key, fallback) => (key === "countryData" ? COUNTRY_DATA : fallback)
+          }
+        };
+      }
+      try {
+        ctx.Twoinc.getInstance().setAddress({ street: "x", city: "Sant Antoni", region });
+      } finally {
+        window.wc = savedWc;
+      }
+
+      expect($("#billing_state").val() || "").toBe(state);
+      expect($("#billing_city").val()).toBe(city);
+    });
+
     test("an empty region writes nothing", () => {
       $("#billing_city").val("Ashford");
       ctx.Twoinc.getInstance().setAddress({ street: "x", city: "Ashford", region: "" });

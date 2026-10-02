@@ -77,6 +77,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 * The availability check at checkout is now worked out on your server from the basket, so it sees the same order lines the order itself will carry.
 * Two does not accept edits to an order once it is fulfilled. If you change such an order's lines, amounts or addresses, the order now shows that the changes were not sent to Two and adds one order note saying so. Adding a tracking number is not counted as a change.
 * Fixed: after a buyer changed country at checkout, the availability check could be priced with the previous country's tax.
+* Choosing a Spanish company from the company search now fills in its province, so checkout no longer stops with "Province is a required field".
 
 = 2.25.0 =
 
