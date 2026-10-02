@@ -4669,8 +4669,9 @@ if (!class_exists('WC_Twoinc')) {
          */
         public static function on_admin_order_save($order_id)
         {
+            // The hook also fires for other order types' screens (a subscription, say).
             $order = wc_get_order($order_id);
-            if (!$order || !WC_Twoinc_Helper::is_twoinc_order($order)) {
+            if (!$order || 'shop_order' !== $order->get_type() || !WC_Twoinc_Helper::is_twoinc_order($order)) {
                 return;
             }
 

@@ -2017,18 +2017,21 @@ final class BrandConfigSpec
         };
         $marker_key = WC_Twoinc_Brand::meta_key('not_sent_at');
 
-        // [payment method, api key, order found, marked, description]
+        $two = WC_Twoinc_Brand::get('gateway_id');
+        // [payment method, order type, api key, order found, marked, description]
         $cases = [
-            [WC_Twoinc_Brand::get('gateway_id'), 'key', true, true, 'a Two order edit is sent through the edit path'],
-            ['bacs', 'key', true, false, 'another gateway\'s order is left alone'],
-            [WC_Twoinc_Brand::get('gateway_id'), '', true, false, 'an unconfigured gateway sends nothing'],
-            [WC_Twoinc_Brand::get('gateway_id'), 'key', false, false, 'an unknown order id is ignored'],
+            [$two, 'shop_order', 'key', true, true, 'a Two order edit is sent through the edit path'],
+            ['bacs', 'shop_order', 'key', true, false, 'another gateway\'s order is left alone'],
+            [$two, 'shop_subscription', 'key', true, false, 'another order type saved on its own screen is left alone'],
+            [$two, 'shop_order', '', true, false, 'an unconfigured gateway sends nothing'],
+            [$two, 'shop_order', 'key', false, false, 'an unknown order id is ignored'],
         ];
-        foreach ($cases as [$payment_method, $api_key, $found, $marked, $desc]) {
+        foreach ($cases as [$payment_method, $type, $api_key, $found, $marked, $desc]) {
             // A fulfilled order whose invoice changed since Two last accepted it: reaching the
             // edit path as an admin edit is what sets the refused-edit marker (TWO-26171).
             $order = new StubOrder();
             $order->payment_method = $payment_method;
+            $order->type = $type;
             $order->meta = [
                 WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order-1',
                 WC_Twoinc_Brand::meta_key('merchant_id') => '42',

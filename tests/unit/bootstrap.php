@@ -1304,6 +1304,13 @@ class StubOrder
     // Settable per test: '' means "not a Two order" (is_twoinc_order false).
     public $payment_method = '';
 
+    public $type = 'shop_order';
+
+    public function get_type()
+    {
+        return $this->type;
+    }
+
     public function get_payment_method()
     {
         return $this->payment_method;
