@@ -108,8 +108,8 @@ TWO\_\* env values to the gateway settings after you edit `.env` (run
 `make logs`, `make stop`, `make clean` (full reset), `make test-unit`,
 `make format`.
 
-The first provision shapes the shop (products, permalinks, currency, country,
-gateway settings JSON) and records that it has. Later starts only repair what
+The first provision shapes the shop (theme, products, permalinks, currency,
+country, gateway settings JSON) and records that it has. Later starts only repair what
 is missing (WooCommerce, the admin user, the gateway plugin's activation) and
 re-apply the TWO\_\* env values, so shop settings changed by hand survive a
 restart. To reshape from `.env`, start from a clean stack (`make clean`).

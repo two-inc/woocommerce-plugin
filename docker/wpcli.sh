@@ -27,7 +27,6 @@ wp user get "$WORDPRESS_ADMIN_USER" $SAFE >/dev/null 2>&1 ||
   wp user create "$WORDPRESS_ADMIN_USER" "$WORDPRESS_ADMIN_EMAIL" --role=administrator --user_pass="$WORDPRESS_ADMIN_PASSWORD" $SAFE
 
 wp theme is-installed storefront $SAFE || wp theme install storefront $SAFE
-wp theme activate storefront $SAFE
 wp plugin is-installed loco-translate $SAFE || wp plugin install loco-translate $SAFE
 
 # Reinstall WooCommerce only when it is missing, at another version, or an
@@ -46,6 +45,7 @@ done
 set -e
 
 if [ "$provisioned" = no ]; then
+  wp theme activate storefront
   existing_products=$(wp wc product list --user="$WORDPRESS_ADMIN_USER" --format=count 2>/dev/null || echo 0)
   if [ "$existing_products" -lt 4 ]; then
     for i in 1 2 3 4; do
