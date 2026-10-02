@@ -182,6 +182,7 @@ final class BrandConfigSpec
             'testSoleTraderRegistryErrorFallsBackToNoSoleTrader',
             'testSoleTraderRegistryRejectsMalformedCountry',
             'testSoleTraderRegistryResponseCachedPerRequest',
+            'testSoleTraderTypesCachedOutsideTheSession',
             'testSoleTraderTokenMintReadsHeaderCaseInsensitively',
             'testSoleTraderTokenMintFailsClosed',
             'testSoleTraderSignupUrlFollowsEnvAndFilter',
@@ -8129,6 +8130,34 @@ final class BrandConfigSpec
         // A different country is its own cache entry
         WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'US');
         TinyAssert::same(2, count($gateway->requests));
+    }
+
+    /**
+     * TWO-26173: the availability check fires with update_order_review on a country change, so it must not write
+     * the session, whose whole contents (the customer address loaded before the change included) it would write back.
+     */
+    private static function testSoleTraderTypesCachedOutsideTheSession(): void
+    {
+        $key = WC_Twoinc_Sole_Trader::CACHE_KEY_PREFIX . 'FR';
+        $fresh = ['types' => ['SOLE_TRADER'], 'fetched_at' => time()];
+        $expired = ['types' => [], 'fetched_at' => time() - WC_Twoinc_Sole_Trader::CACHE_TTL_SECONDS];
+        // [registry response, transient before, requests, available, transient after, description]
+        $cases = [
+            [self::registryOk(['SOLE_TRADER']), null, 1, true, ['SOLE_TRADER'], 'cold cache fetches and stores per country'],
+            [self::registryOk([]), $fresh, 0, true, ['SOLE_TRADER'], 'fresh entry from an earlier request is used'],
+            [self::registryOk(['SOLE_TRADER']), $expired, 1, true, ['SOLE_TRADER'], 'expired entry is refetched'],
+            [['response' => ['code' => 503], 'body' => ''], null, 1, false, null, 'registry error is not stored'],
+        ];
+        foreach ($cases as [$response, $before, $requests, $available, $after, $desc]) {
+            WC_Twoinc_Sole_Trader::reset_cache();
+            $GLOBALS['__twoinc_test_transients'] = null === $before ? [] : [$key => $before];
+            WC()->session = new StubSession();
+            $gateway = self::soleTraderGateway([], ['/registry/v1/supported-company-types/' => $response]);
+            TinyAssert::same($available, WC_Twoinc_Sole_Trader::is_available($gateway, 'fr'), "$desc: available");
+            TinyAssert::same($requests, count($gateway->requests), "$desc: requests");
+            TinyAssert::same($after, $GLOBALS['__twoinc_test_transients'][$key]['types'] ?? null, "$desc: stored");
+            TinyAssert::same(null, WC()->session->get($key), "$desc: session untouched");
+        }
     }
 
     private static function testSoleTraderTokenMintReadsHeaderCaseInsensitively(): void

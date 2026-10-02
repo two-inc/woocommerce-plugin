@@ -32,8 +32,13 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
     {
         public const SOLE_TRADER = 'SOLE_TRADER';
 
-        /** WC session key prefix; full key is prefix + ISO country code. */
-        public const SESSION_KEY_PREFIX = 'two_company_types_';
+        /**
+         * Transient key prefix; full key is prefix + ISO country code. A site-wide transient, never the WC session:
+         * the answer is the same for every buyer, and a session write here races WooCommerce's update_order_review,
+         * which fires on the same country change. The session handler writes the whole session back, so this
+         * request would restore the customer address it loaded and undo the new country (TWO-26173).
+         */
+        public const CACHE_KEY_PREFIX = 'two_company_types_';
 
         /** Matches the registry endpoint's Cache-Control max-age. */
         public const CACHE_TTL_SECONDS = 3600;
@@ -48,7 +53,7 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
          * (sole traders). Registered businesses need no enrollment and are
          * always supported, so the endpoint deliberately omits them: an
          * empty list means registered-business-only checkout. Cached per
-         * session for the endpoint's own max-age. Fail-soft: any error
+         * country for the endpoint's own max-age. Fail-soft: any error
          * (network, non-200, malformed body) also resolves to an empty
          * list — checkout never blocks, the sole trader option just
          * doesn't show.
@@ -66,34 +71,29 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
                 return self::$types_cache[$country];
             }
 
-            $session = function_exists('WC') ? (WC()->session ?? null) : null;
-            if ($session) {
-                $cached = $session->get(self::SESSION_KEY_PREFIX . $country);
-                if (
-                    is_array($cached)
-                    && isset($cached['types'], $cached['fetched_at'])
-                    && is_array($cached['types'])
-                    && time() - (int) $cached['fetched_at'] < self::CACHE_TTL_SECONDS
-                ) {
-                    return self::$types_cache[$country] = $cached['types'];
-                }
+            $cached = get_transient(self::CACHE_KEY_PREFIX . $country);
+            if (
+                is_array($cached)
+                && isset($cached['types'], $cached['fetched_at'])
+                && is_array($cached['types'])
+                && time() - (int) $cached['fetched_at'] < self::CACHE_TTL_SECONDS
+            ) {
+                return self::$types_cache[$country] = $cached['types'];
             }
 
             $types = self::fetch_supported_company_types($gateway, $country);
             if ($types === null) {
                 // Registry error (network / non-200 / malformed): fail-soft to
-                // no sole-trader option, but DON'T persist it — a transient
-                // blip must not hide the option for the rest of the session.
+                // no sole-trader option, but DON'T persist it — a passing
+                // blip must not hide the option for the next hour.
                 // Request-scoped only, so the next checkout update retries.
                 return self::$types_cache[$country] = [];
             }
 
-            if ($session) {
-                $session->set(self::SESSION_KEY_PREFIX . $country, [
-                    'types' => $types,
-                    'fetched_at' => time(),
-                ]);
-            }
+            set_transient(self::CACHE_KEY_PREFIX . $country, [
+                'types' => $types,
+                'fetched_at' => time(),
+            ], self::CACHE_TTL_SECONDS);
             return self::$types_cache[$country] = $types;
         }
 
