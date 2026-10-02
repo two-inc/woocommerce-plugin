@@ -8079,7 +8079,6 @@ final class BrandConfigSpec
             [self::registryOk(['SOLE_TRADER']), $expired, 1, true, ['SOLE_TRADER'], 'expired entry is refetched'],
             [['response' => ['code' => 503], 'body' => ''], null, 1, false, null, 'registry error is not stored'],
         ];
-        $saved = WC()->session;
         foreach ($cases as [$response, $before, $requests, $available, $after, $desc]) {
             WC_Twoinc_Sole_Trader::reset_cache();
             $GLOBALS['__twoinc_test_transients'] = null === $before ? [] : [$key => $before];
@@ -8090,7 +8089,6 @@ final class BrandConfigSpec
             TinyAssert::same($after, $GLOBALS['__twoinc_test_transients'][$key]['types'] ?? null, "$desc: stored");
             TinyAssert::same(null, WC()->session->get($key), "$desc: session untouched");
         }
-        WC()->session = $saved;
     }
 
     private static function testSoleTraderTokenMintReadsHeaderCaseInsensitively(): void
