@@ -6210,9 +6210,12 @@ class Twoinc {
    * real part of the buyer's address.
    *
    * A region given as an ISO 3166-2 code for the address's own country
-   * (`ES-B` on a Spanish address) is read as its subdivision part, which is
-   * WooCommerce's own state id for such countries (TWO-26174). A code is
-   * never appended to the city: it is no use to anyone reading the address.
+   * (`ES-B` on a Spanish address) is matched by its subdivision part too,
+   * which is WooCommerce's own state id for most countries; some, such as
+   * Bulgaria, use the whole code (TWO-26174). Block checkout's state field
+   * is a plain input, so there the ids come from WooCommerce's own country
+   * data. A code is never appended to the city: it is no use to anyone
+   * reading the address.
    *
    * @param {string} role
    * @param {*} region
@@ -6221,25 +6224,25 @@ class Twoinc {
   setRegion(role, region) {
     const value = twoincUtilHelper.blankToEmpty(region);
     if (!value) return;
-    const code = Twoinc.getInstance().ownSubdivisionCode(role, value);
+    const instance = Twoinc.getInstance();
+    const code = instance.ownSubdivisionCode(role, value);
 
     const $state = jQuery(twoincAddressRoles.field(role, "state"));
-    if ($state.is("select")) {
+    const isSelect = $state.is("select");
+    const states = isSelect ? instance.selectStates($state) : instance.countryDataStates(role);
+    if (states) {
       const wanted = value.trim().toLowerCase();
       const wantedId = code ? code.toLowerCase() : wanted;
-      let matched = null;
-      $state.find("option").each(function () {
-        const $option = jQuery(this);
-        if (!$option.attr("value")) return;
-        const text = twoincUtilHelper.blankToEmpty($option.text()).toLowerCase();
-        const id = twoincUtilHelper.blankToEmpty($option.attr("value")).toLowerCase();
-        if (text === wanted || id === wantedId) matched = $option.attr("value");
+      const hit = states.find(({ id, text }) => {
+        const lowerId = id.toLowerCase();
+        return text.toLowerCase() === wanted || lowerId === wanted || lowerId === wantedId;
       });
-      if (matched !== null) {
-        $state.val(matched).trigger("change");
+      if (hit) {
+        $state.val(hit.id);
+        if (isSelect) $state.trigger("change");
         return;
       }
-      if (!code) Twoinc.getInstance().appendRegionToCity(role, value);
+      if (!code) instance.appendRegionToCity(role, value);
       return;
     }
 
@@ -6247,11 +6250,51 @@ class Twoinc {
     // format has no state field"; a visible text input is a free-text county
     // the region can simply be written into.
     if ($state.length && $state.attr("type") !== "hidden") {
-      $state.val(code || value);
+      $state.val(value);
       return;
     }
 
-    if (!code) Twoinc.getInstance().appendRegionToCity(role, value);
+    if (!code) instance.appendRegionToCity(role, value);
+  }
+
+  /**
+   * A state select's options as `{id, text}`, the empty placeholder left out.
+   *
+   * @param {jQuery} $state
+   * @returns {Array<{id: string, text: string}>}
+   */
+  selectStates($state) {
+    return $state
+      .find("option")
+      .toArray()
+      .map((option) => ({
+        id: twoincUtilHelper.blankToEmpty(jQuery(option).attr("value")),
+        text: twoincUtilHelper.blankToEmpty(jQuery(option).text())
+      }))
+      .filter(({ id }) => id);
+  }
+
+  /**
+   * The role's country's states from WooCommerce's block checkout settings,
+   * as `{id, text}`, or null where there are none to match against (classic
+   * checkout, or a country without a state list).
+   *
+   * @param {string} role
+   * @returns {?Array<{id: string, text: string}>}
+   */
+  countryDataStates(role) {
+    const settings = window.wc && window.wc.wcSettings;
+    if (!settings || typeof settings.getSetting !== "function") return null;
+    const country = twoincUtilHelper.blankToEmpty(
+      jQuery(twoincAddressRoles.field(role, "country")).val()
+    );
+    const data = (settings.getSetting("countryData", {}) || {})[country.toUpperCase()];
+    const states = (data && data.states) || {};
+    const list = Object.keys(states).map((id) => ({
+      id,
+      text: twoincUtilHelper.blankToEmpty(states[id])
+    }));
+    return list.length ? list : null;
   }
 
   /**
@@ -6266,7 +6309,9 @@ class Twoinc {
   ownSubdivisionCode(role, region) {
     const match = /^([a-z]{2})-([a-z0-9]{1,3})$/i.exec(region.trim());
     if (!match) return null;
-    const country = twoincUtilHelper.blankToEmpty(jQuery(twoincAddressRoles.field(role, "country")).val());
+    const country = twoincUtilHelper.blankToEmpty(
+      jQuery(twoincAddressRoles.field(role, "country")).val()
+    );
     return match[1].toUpperCase() === country.toUpperCase() ? match[2].toUpperCase() : null;
   }
 
