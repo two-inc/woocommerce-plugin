@@ -182,7 +182,7 @@ if (!class_exists('WC_Twoinc')) {
                 add_filter('acf/settings/remove_wp_meta_box', '__return_false');
 
                 add_action('woocommerce_admin_order_item_headers', [$this, 'after_order_item_update'], 10, 1);
-                add_action('wp_after_insert_post', [$this, 'after_order_update'], 10, 4);
+                // The admin order-form save is registered in load_twoinc_classes() (TWO-26175).
             }
 
             // Each merchant-configured fulfilment trigger status gets its own
@@ -4657,24 +4657,34 @@ if (!class_exists('WC_Twoinc')) {
             }
         }
 
-        public function after_order_update($post_id, $post, $update, $post_before)
+        /**
+         * An admin saved the order form, on the legacy post screen or the
+         * HPOS order screen: WooCommerce fires woocommerce_process_shop_order_meta
+         * from both. Registered at plugins_loaded, after
+         * WC_Meta_Box_Order_Data::save (priority 40) has saved the addresses,
+         * because the gateway itself is only constructed partway through that
+         * save (TWO-26175).
+         *
+         * @param int $order_id
+         */
+        public static function on_admin_order_save($order_id)
         {
-
-            if (!isset($_POST) || !isset($_POST['action']) || 'editpost' !== sanitize_text_field($_POST['action'])) {
+            $order = wc_get_order($order_id);
+            if (!$order || !WC_Twoinc_Helper::is_twoinc_order($order)) {
                 return;
             }
 
-            $order = wc_get_order($post_id);
-            if ('shop_order' !== $post->post_type || !WC_Twoinc_Helper::is_twoinc_order($order)) {
+            $gateway = self::get_instance();
+            if (!$gateway->get_option('api_key') || !$gateway->get_merchant_id()) {
                 return;
             }
 
-            $twoinc_meta = $this->get_save_twoinc_meta($order);
+            $twoinc_meta = $gateway->get_save_twoinc_meta($order);
             if (!$twoinc_meta) {
                 return;
             }
 
-            $this->process_update_twoinc_order($order, $twoinc_meta);
+            $gateway->process_update_twoinc_order($order, $twoinc_meta);
         }
 
         public static function on_order_edit_status($order_id, $to_status)

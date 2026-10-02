@@ -55,6 +55,7 @@ final class BrandConfigSpec
             'testShippingDetailsFromShipmentTrackingMeta',
             'testProcessUpdateRefusesTerminalStates',
             'testRefusedEditMarksTheOrderOnce',
+            'testAdminOrderSaveReachesTheEditPath',
             'testShippingDetailsCarriedByCreateAndEditBodies',
             'testShippingDetailsFilterOverrides',
             'testShippingDetailsFilterGarbageDiscarded',
@@ -1978,6 +1979,71 @@ final class BrandConfigSpec
         $gateway->add_invoice_credit_note_urls($order);
         $html = ob_get_clean();
         TinyAssert::true(strpos($html, 'since 2026-10-01 09:00 UTC were not sent to') !== false, 'marker shown: ' . $html);
+    }
+
+    /** TWO-26175: the admin order-form save (legacy and HPOS screens) reaches the edit path for configured Two orders only. */
+    private static function testAdminOrderSaveReachesTheEditPath(): void
+    {
+        $source = file_get_contents(__DIR__ . '/../../tillit-payment-gateway.php');
+        TinyAssert::true(
+            strpos($source, "add_action('woocommerce_process_shop_order_meta', 'WC_Twoinc::on_admin_order_save', 45, 1);") !== false,
+            'registered at plugins_loaded, after WC_Meta_Box_Order_Data::save (priority 40)'
+        );
+        TinyAssert::true(
+            strpos(file_get_contents(__DIR__ . '/../../class/WC_Twoinc.php'), "'wp_after_insert_post'") === false,
+            'the post-screen-only hook is gone'
+        );
+        TinyAssert::true((new ReflectionMethod(WC_Twoinc::class, 'on_admin_order_save'))->isStatic(), 'static, so no gateway instance is needed to register it');
+
+        $make_gateway = function (string $api_key) {
+            return new class ($api_key) extends WC_Twoinc {
+                private $api_key;
+
+                public function __construct(string $api_key)
+                {
+                    $this->api_key = $api_key;
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $key === 'api_key' ? $this->api_key : ($empty_value ?? '');
+                }
+
+                public function get_merchant_id()
+                {
+                    return '42';
+                }
+            };
+        };
+        $marker_key = WC_Twoinc_Brand::meta_key('not_sent_at');
+
+        // [payment method, api key, order found, marked, description]
+        $cases = [
+            [WC_Twoinc_Brand::get('gateway_id'), 'key', true, true, 'a Two order edit is sent through the edit path'],
+            ['bacs', 'key', true, false, 'another gateway\'s order is left alone'],
+            [WC_Twoinc_Brand::get('gateway_id'), '', true, false, 'an unconfigured gateway sends nothing'],
+            [WC_Twoinc_Brand::get('gateway_id'), 'key', false, false, 'an unknown order id is ignored'],
+        ];
+        foreach ($cases as [$payment_method, $api_key, $found, $marked, $desc]) {
+            // A fulfilled order whose invoice changed since Two last accepted it: reaching the
+            // edit path as an admin edit is what sets the refused-edit marker (TWO-26171).
+            $order = new StubOrder();
+            $order->payment_method = $payment_method;
+            $order->meta = [
+                WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order-1',
+                WC_Twoinc_Brand::meta_key('merchant_id') => '42',
+                WC_Twoinc_Brand::meta_key('order_state') => 'FULFILLED',
+                WC_Twoinc_Brand::meta_key('invoice_hash') => 'hash-of-an-earlier-invoice',
+                'vendor_name' => 'Vendor',
+                'company_id' => '912345678',
+            ];
+            $GLOBALS['__twoinc_test_wc_orders'] = $found ? [42 => $order] : [];
+            self::withGatewayInstance($make_gateway($api_key), function () {
+                WC_Twoinc::on_admin_order_save(42);
+            });
+            TinyAssert::same($marked, ($order->meta[$marker_key] ?? '') !== '', "$desc: marker");
+        }
+        $GLOBALS['__twoinc_test_wc_orders'] = [];
     }
 
     private static function testShippingDetailsCarriedByCreateAndEditBodies(): void
