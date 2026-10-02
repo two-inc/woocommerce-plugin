@@ -108,6 +108,12 @@ TWO\_\* env values to the gateway settings after you edit `.env` (run
 `make logs`, `make stop`, `make clean` (full reset), `make test-unit`,
 `make format`.
 
+The first provision shapes the shop (products, permalinks, currency, country,
+gateway settings JSON) and records that it has. Later starts only repair what
+is missing (WooCommerce, the admin user, the gateway plugin's activation) and
+re-apply the TWO\_\* env values, so shop settings changed by hand survive a
+restart. To reshape from `.env`, start from a clean stack (`make clean`).
+
 The default `.env` targets a locally running Checkout API backend
 (`portal.localhost`) — no additional setup required.
 
@@ -243,7 +249,8 @@ are out of scope here — they live in the `e2e-tests` repo.
 # staging shop, so pin the staging config first (CI does the same):
 echo WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-demostoregb.json > .env
 docker compose up -d
-# wait ~90s for wpcli bootstrap to finish (installs WooCommerce, creates products, activates plugin)
+# wait ~90s for wpcli bootstrap to finish (installs WooCommerce, creates products, activates plugin).
+# An existing stack keeps its gateway settings: run `make clean` first so the staging config is applied
 
 make e2e-install
 ```
