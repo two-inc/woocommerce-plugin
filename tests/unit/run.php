@@ -54,6 +54,7 @@ final class BrandConfigSpec
             'testShippingDetailsOmitTrackingWithoutMeta',
             'testShippingDetailsFromShipmentTrackingMeta',
             'testProcessUpdateRefusesTerminalStates',
+            'testRefusedEditMarksTheOrderOnce',
             'testShippingDetailsCarriedByCreateAndEditBodies',
             'testShippingDetailsFilterOverrides',
             'testShippingDetailsFilterGarbageDiscarded',
@@ -1906,6 +1907,77 @@ final class BrandConfigSpec
         $order->meta[WC_Twoinc_Brand::meta_key('order_state')] = 'CONFIRMED';
         $order->meta[WC_Twoinc_Brand::meta_key('req_body_hash')] = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
         TinyAssert::same(true, $method->invoke($gateway, $order, $twoinc_meta));
+    }
+
+    /** TWO-26171: a refused admin edit marks the order once; tracking, an unchanged save and later saves do not. */
+    private static function testRefusedEditMarksTheOrderOnce(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+            }
+        };
+        $method = new ReflectionMethod(WC_Twoinc::class, 'process_update_twoinc_order');
+        $method->setAccessible(true);
+        $twoinc_meta = [
+            'order_reference' => 'test-order-reference', 'company_id' => '912345678', 'department' => '', 'project' => '',
+            'purchase_order_number' => '', 'invoice_emails' => [], 'payment_reference_message' => '', 'payment_reference_ocr' => '',
+            'payment_reference' => '', 'payment_reference_type' => '', 'vendor_name' => '',
+        ];
+        $hash_key = WC_Twoinc_Brand::meta_key('invoice_hash');
+        $marker_key = WC_Twoinc_Brand::meta_key('not_sent_at');
+        $new_order = function (float $total) {
+            return new class ($total) extends StubOrder {
+                private $total;
+
+                public function __construct(float $total)
+                {
+                    $this->total = $total;
+                }
+
+                public function get_total()
+                {
+                    return $this->total;
+                }
+            };
+        };
+        $tracking = [['tracking_provider' => 'dhl', 'tracking_number' => 'LATE-1']];
+
+        // [accepted total, total now, tracking added, already marked, baseline stored, trigger, notes, marked, baseline after, description]
+        $cases = [
+            [125.0, 125.0, false, false, true, 'admin_edit', 0, false, true, 'unchanged save'],
+            [125.0, 125.0, true, false, true, 'admin_edit', 0, false, true, 'tracking number added after fulfilment'],
+            [125.0, 150.0, false, false, true, 'admin_edit', 1, true, true, 'amount edited after fulfilment'],
+            [125.0, 150.0, false, true, true, 'admin_edit', 0, true, true, 'second refused save'],
+            [125.0, 150.0, false, false, false, 'admin_edit', 0, false, true, 'order from before the invoice hash takes a baseline'],
+            [125.0, 150.0, false, false, true, 'tracking_number', 0, false, true, 'tracking push is not an admin edit'],
+        ];
+        foreach ($cases as [$accepted, $now, $add_tracking, $marked, $baseline, $trigger, $notes, $marked_after, $baseline_after, $desc]) {
+            $order = $new_order($now);
+            $order->meta[WC_Twoinc_Brand::meta_key('order_state')] = 'FULFILLED';
+            if ($baseline) {
+                $order->meta[$hash_key] = WC_Twoinc_Helper::hash_order_pair($new_order($accepted), $twoinc_meta)[1];
+            }
+            if ($marked) {
+                $order->meta[$marker_key] = '2026-10-01 09:00';
+            }
+            if ($add_tracking) {
+                $order->meta['_wc_shipment_tracking_items'] = $tracking;
+            }
+            TinyAssert::same(false, $method->invoke($gateway, $order, $twoinc_meta, false, $trigger), "$desc: refused");
+            TinyAssert::same($notes, count($order->notes), "$desc: notes");
+            TinyAssert::same($marked_after, ($order->meta[$marker_key] ?? '') !== '', "$desc: marker");
+            TinyAssert::same($baseline_after, ($order->meta[$hash_key] ?? '') !== '', "$desc: baseline");
+        }
+
+        // The marker is shown on the order page.
+        $order = $new_order(125.0);
+        $order->payment_method = WC_Twoinc_Brand::get('gateway_id');
+        $order->meta[$marker_key] = '2026-10-01 09:00';
+        ob_start();
+        $gateway->add_invoice_credit_note_urls($order);
+        $html = ob_get_clean();
+        TinyAssert::true(strpos($html, 'since 2026-10-01 09:00 UTC were not sent to') !== false, 'marker shown: ' . $html);
     }
 
     private static function testShippingDetailsCarriedByCreateAndEditBodies(): void
