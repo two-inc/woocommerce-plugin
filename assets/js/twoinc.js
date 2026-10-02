@@ -6209,6 +6209,11 @@ class Twoinc {
    * appended to the city rather than dropped: losing it silently would strip a
    * real part of the buyer's address.
    *
+   * A region given as an ISO 3166-2 code for the address's own country
+   * (`ES-B` on a Spanish address) is read as its subdivision part, which is
+   * WooCommerce's own state id for such countries (TWO-26174). A code is
+   * never appended to the city: it is no use to anyone reading the address.
+   *
    * @param {string} role
    * @param {*} region
    * @returns {void}
@@ -6216,23 +6221,25 @@ class Twoinc {
   setRegion(role, region) {
     const value = twoincUtilHelper.blankToEmpty(region);
     if (!value) return;
+    const code = Twoinc.getInstance().ownSubdivisionCode(role, value);
 
     const $state = jQuery(twoincAddressRoles.field(role, "state"));
     if ($state.is("select")) {
       const wanted = value.trim().toLowerCase();
+      const wantedId = code ? code.toLowerCase() : wanted;
       let matched = null;
       $state.find("option").each(function () {
         const $option = jQuery(this);
         if (!$option.attr("value")) return;
         const text = twoincUtilHelper.blankToEmpty($option.text()).toLowerCase();
         const id = twoincUtilHelper.blankToEmpty($option.attr("value")).toLowerCase();
-        if (text === wanted || id === wanted) matched = $option.attr("value");
+        if (text === wanted || id === wantedId) matched = $option.attr("value");
       });
       if (matched !== null) {
         $state.val(matched).trigger("change");
         return;
       }
-      Twoinc.getInstance().appendRegionToCity(role, value);
+      if (!code) Twoinc.getInstance().appendRegionToCity(role, value);
       return;
     }
 
@@ -6240,11 +6247,27 @@ class Twoinc {
     // format has no state field"; a visible text input is a free-text county
     // the region can simply be written into.
     if ($state.length && $state.attr("type") !== "hidden") {
-      $state.val(value);
+      $state.val(code || value);
       return;
     }
 
-    Twoinc.getInstance().appendRegionToCity(role, value);
+    if (!code) Twoinc.getInstance().appendRegionToCity(role, value);
+  }
+
+  /**
+   * The subdivision part of an ISO 3166-2 code for the role's own country
+   * (`ES-B` on a Spanish address gives `B`), or null when the region is not
+   * one.
+   *
+   * @param {string} role
+   * @param {string} region
+   * @returns {?string}
+   */
+  ownSubdivisionCode(role, region) {
+    const match = /^([a-z]{2})-([a-z0-9]{1,3})$/i.exec(region.trim());
+    if (!match) return null;
+    const country = twoincUtilHelper.blankToEmpty(jQuery(twoincAddressRoles.field(role, "country")).val());
+    return match[1].toUpperCase() === country.toUpperCase() ? match[2].toUpperCase() : null;
   }
 
   /**

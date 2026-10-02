@@ -485,6 +485,30 @@ describe("TWO-40 — field routing for an externally supplied address", () => {
       expect($("#billing_city").val()).toBe("Ashford, Kent");
     });
 
+    // TWO-26174: the registry gives some countries' regions as ISO 3166-2 codes.
+    const ES_PROVINCES =
+      '<select id="billing_state" name="billing_state">' +
+      '<option value=""></option><option value="B">Barcelona</option><option value="CA">Cádiz</option>' +
+      "</select>";
+    const TEXT_STATE = '<input type="text" id="billing_state" name="billing_state" value="" />';
+    const NO_STATE = '<input type="hidden" id="billing_state" name="billing_state" />';
+    test.each([
+      { country: "ES", markup: ES_PROVINCES, region: "ES-B", state: "B", city: "Sant Antoni", description: "an ISO code matches the province id" },
+      { country: "ES", markup: ES_PROVINCES, region: "es-ca", state: "CA", city: "Sant Antoni", description: "case does not matter" },
+      { country: "ES", markup: ES_PROVINCES, region: "Barcelona", state: "B", city: "Sant Antoni", description: "a name still matches by text" },
+      { country: "ES", markup: ES_PROVINCES, region: "ES-Z", state: "", city: "Sant Antoni", description: "an unmatched ISO code is not put on the city" },
+      { country: "FR", markup: ES_PROVINCES, region: "ES-B", state: "", city: "Sant Antoni, ES-B", description: "another country's code is not read as a code" },
+      { country: "ES", markup: TEXT_STATE, region: "ES-B", state: "B", city: "Sant Antoni", description: "a free-text state field (block checkout) gets the id" },
+      { country: "FR", markup: NO_STATE, region: "FR-PDL", state: "", city: "Sant Antoni", description: "a code is not put on the city of a country without states" },
+      { country: "FR", markup: NO_STATE, region: "Pays de la Loire", state: "", city: "Sant Antoni, Pays de la Loire", description: "a name still goes on the city of a country without states" }
+    ])("$description", ({ country, markup, region, state, city }) => {
+      buildAddressForm({ billingCountry: country, billingStateMarkup: markup });
+      ctx.Twoinc.getInstance().setAddress({ street: "x", city: "Sant Antoni", region });
+
+      expect($("#billing_state").val() || "").toBe(state);
+      expect($("#billing_city").val()).toBe(city);
+    });
+
     test("an empty region writes nothing", () => {
       $("#billing_city").val("Ashford");
       ctx.Twoinc.getInstance().setAddress({ street: "x", city: "Ashford", region: "" });
