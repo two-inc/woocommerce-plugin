@@ -3975,6 +3975,16 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
+            // Set by mark_refused_edit (TWO-26171).
+            $not_sent_at = $order->get_meta(WC_Twoinc_Brand::meta_key('not_sent_at'));
+            if ($not_sent_at) {
+                print('<div class="notice notice-warning inline" style="clear:both;"><p>' . esc_html(sprintf(
+                    __('Changes made to this order since %1$s UTC were not sent to %2$s. The %2$s invoice does not include them.', 'twoinc-payment-gateway'),
+                    $not_sent_at,
+                    WC_Twoinc_Brand::get('product_name')
+                )) . '</p></div>');
+            }
+
             if ($order->get_status() !== 'completed' && $order->get_status() !== 'refunded') {
                 return;
             }
@@ -5840,10 +5850,11 @@ if (!class_exists('WC_Twoinc')) {
             $order->update_meta_data(WC_Twoinc_Brand::prefixed_name('order_id'), $body['id']);
             $twoinc_meta = $this->get_save_twoinc_meta($order, $body['id']);
             try {
-                $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
+                [$twoinc_updated_order_hash, $twoinc_invoice_hash] = WC_Twoinc_Helper::hash_order_pair($order, $twoinc_meta);
             } catch (Exception $e) {
                 // The Two order exists, so its id must be saved; an empty hash only makes the next save sync it.
                 $twoinc_updated_order_hash = '';
+                $twoinc_invoice_hash = '';
                 if (function_exists('wc_get_logger')) {
                     wc_get_logger()->error(
                         sprintf('Order %s: created, but no change hash could be taken: %s', $order->get_id(), $e->getMessage()),
@@ -5852,6 +5863,7 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
             $order->update_meta_data(WC_Twoinc_Brand::meta_key('req_body_hash'), $twoinc_updated_order_hash);
+            $order->update_meta_data(WC_Twoinc_Brand::meta_key('invoice_hash'), $twoinc_invoice_hash);
 
             if (isset($body['state'])) {
                 $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_state'), $body['state']);
@@ -7126,6 +7138,10 @@ if (!class_exists('WC_Twoinc')) {
          * guaranteed to reject, each leaving a "contact support" order
          * note (TWO-24762 review).
          *
+         * An admin edit to what the invoice bills in such a state is not
+         * sent, so the order is marked the first time one is seen
+         * (TWO-26171).
+         *
          * @return boolean true when the remote order is in sync (updated,
          *                 or no update needed), false when an update was
          *                 attempted and failed or the state forbids edits.
@@ -7134,6 +7150,9 @@ if (!class_exists('WC_Twoinc')) {
         {
             $state = $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
             if (in_array($state, self::TERMINAL_ORDER_STATES)) {
+                if ($trigger === 'admin_edit') {
+                    $this->mark_refused_edit($order, $twoinc_meta);
+                }
                 return false;
             }
 
@@ -7145,12 +7164,13 @@ if (!class_exists('WC_Twoinc')) {
             // crash the surrounding save/transition.
             try {
                 $twoinc_order_hash = $order->get_meta(WC_Twoinc_Brand::meta_key('req_body_hash'));
-                $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
+                [$twoinc_updated_order_hash, $twoinc_invoice_hash] = WC_Twoinc_Helper::hash_order_pair($order, $twoinc_meta);
                 $updated = true;
                 if (!$twoinc_order_hash || $twoinc_order_hash != $twoinc_updated_order_hash) {
                     $updated = $this->update_twoinc_order($order, $twoinc_meta, $trigger);
                     if ($updated) {
                         $order->update_meta_data(WC_Twoinc_Brand::meta_key('req_body_hash'), $twoinc_updated_order_hash);
+                        $order->update_meta_data(WC_Twoinc_Brand::meta_key('invoice_hash'), $twoinc_invoice_hash);
                         $order->save();
                     }
                     if ($forced_reload) {
@@ -7172,6 +7192,46 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
             return $updated;
+        }
+
+        /**
+         * Mark the order, once, when what its invoice bills differs from
+         * what Two last accepted (TWO-26171). The marker lasts, so
+         * later saves add no further note. An order without an invoice hash
+         * (created before it existed) takes its baseline on this save, so
+         * only its later changes are marked.
+         */
+        private function mark_refused_edit($order, $twoinc_meta)
+        {
+            $marker_key = WC_Twoinc_Brand::meta_key('not_sent_at');
+            if ($order->get_meta($marker_key)) {
+                return;
+            }
+            try {
+                $invoice_hash = WC_Twoinc_Helper::hash_order_pair($order, $twoinc_meta)[1];
+            } catch (Exception $e) {
+                if (function_exists('wc_get_logger')) {
+                    wc_get_logger()->error(
+                        'Order ' . $order->get_id() . ': could not check a refused edit: ' . $e->getMessage(),
+                        ['source' => 'twoinc-payment-gateway']
+                    );
+                }
+                return;
+            }
+            $sent_invoice_hash = $order->get_meta(WC_Twoinc_Brand::meta_key('invoice_hash'));
+            if ($sent_invoice_hash === $invoice_hash) {
+                return;
+            }
+            if (!$sent_invoice_hash) {
+                $order->update_meta_data(WC_Twoinc_Brand::meta_key('invoice_hash'), $invoice_hash);
+            } else {
+                $order->update_meta_data($marker_key, gmdate('Y-m-d H:i'));
+                $order->add_order_note(sprintf(
+                    __('This change was saved in WooCommerce but was not sent to %1$s, which no longer accepts edits to this order. The %1$s invoice does not include it.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name')
+                ));
+            }
+            $order->save();
         }
 
         /**

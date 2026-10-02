@@ -1917,6 +1917,22 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function hash_order($order, $twoinc_meta)
         {
+            return self::hash_order_pair($order, $twoinc_meta)[0];
+        }
+
+        /**
+         * The change hash, and a hash of only what the invoice bills: amounts,
+         * addresses, and each line's name, quantity and amount. The second
+         * judges whether an admin edit changed the order (TWO-26171). It
+         * leaves out shipping_details, which moves on its own (a tracking
+         * number added late, an expected delivery date taken from today) and
+         * is no edit to warn about (TWO-24762), and the rest of the body, so
+         * that a plugin update to it does not read as an edit.
+         *
+         * @return string[] [change hash, invoice hash]
+         */
+        public static function hash_order_pair($order, $twoinc_meta)
+        {
             $twoinc_order = WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $twoinc_meta['order_reference'],
@@ -1934,7 +1950,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 true
             );
             $context = self::order_postprocessing_context('order_create', 'change_hash', '/v1/order', $order);
-            return WC_Twoinc_Helper::hash_obj(self::postprocess_order_request($twoinc_order, $context, false));
+            $body = self::postprocess_order_request($twoinc_order, $context, false);
+            $invoiced = [];
+            foreach (['currency', 'gross_amount', 'net_amount', 'tax_amount', 'discount_amount', 'billing_address', 'shipping_address'] as $key) {
+                $invoiced[$key] = $body[$key] ?? null;
+            }
+            foreach ($body['line_items'] ?? [] as $line) {
+                $invoiced['line_items'][] = [$line['name'] ?? null, $line['quantity'] ?? null, $line['gross_amount'] ?? null];
+            }
+            return [WC_Twoinc_Helper::hash_obj($body), WC_Twoinc_Helper::hash_obj($invoiced)];
         }
 
         /**

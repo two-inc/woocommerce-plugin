@@ -1164,6 +1164,18 @@ class StubOrder
         return $this->meta[$key] ?? '';
     }
 
+    public function update_meta_data($key, $value)
+    {
+        $this->meta[$key] = $value;
+    }
+
+    public $saves = 0;
+
+    public function save()
+    {
+        $this->saves++;
+    }
+
     public function get_billing_company()
     {
         return 'Test Buyer AS';
