@@ -213,6 +213,12 @@ function load_twoinc_classes()
     // Fallback in case woocommerce_order_status_xxx doesn't fire
     add_action('woocommerce_order_edit_status', 'WC_Twoinc::on_order_edit_status', 10, 2);
 
+    // Admin order-form save, on both the legacy and the HPOS order screen.
+    // Priority 45: after WC_Meta_Box_Order_Data::save (40) has saved the
+    // addresses. Registered here, not in the gateway constructor, which only
+    // runs partway through that save (TWO-26175).
+    add_action('woocommerce_process_shop_order_meta', 'WC_Twoinc::on_admin_order_save', 45, 1);
+
     add_action('handle_bulk_actions-edit-shop_order', 'WC_Twoinc::on_order_bulk_edit_action', 10, 3);
     add_action('admin_notices', 'WC_Twoinc::on_order_bulk_edit_notices');
 }
