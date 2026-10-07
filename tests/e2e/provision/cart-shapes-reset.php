@@ -20,7 +20,8 @@ foreach ($zone->get_shipping_methods() as $instance_id => $method) {
         $zone->delete_shipping_method($instance_id);
     }
 }
-foreach (array('two_e2e_setup', 'two_e2e_setup_lock', 'two_e2e_cart_shape', 'twoinc_order_postprocessing_fixture') as $option) {
+// Disarmed first and unlocked last, so no request in between can start the setup again.
+foreach (array('two_e2e_cart_shape', 'twoinc_order_postprocessing_fixture', 'two_e2e_setup', 'two_e2e_setup_lock') as $option) {
     delete_option($option);
 }
 WP_CLI::log('[cart-shapes] reset');
