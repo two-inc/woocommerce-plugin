@@ -79,6 +79,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 * Fixed: after a buyer changed country at checkout, the availability check could be priced with the previous country's tax.
 * Choosing a Spanish company from the company search now fills in its province, so checkout no longer stops with "Province is a required field".
 * On shops using WooCommerce's High-Performance Order Storage, a change to an order's addresses or details saved from the order screen is now sent to Two. Before, only changes to the order's items were sent.
+* The plugin now declares that it supports WooCommerce's High-Performance Order Storage and the cart and checkout blocks, so WooCommerce no longer lists it as incompatible with them.
 
 = 2.25.0 =
 

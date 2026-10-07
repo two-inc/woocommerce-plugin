@@ -56,6 +56,7 @@ final class BrandConfigSpec
             'testProcessUpdateRefusesTerminalStates',
             'testRefusedEditMarksTheOrderOnce',
             'testAdminOrderSaveReachesTheEditPath',
+            'testDeclaresFeatureCompatibility',
             'testShippingDetailsCarriedByCreateAndEditBodies',
             'testShippingDetailsFilterOverrides',
             'testShippingDetailsFilterGarbageDiscarded',
@@ -1980,6 +1981,20 @@ final class BrandConfigSpec
         $gateway->add_invoice_credit_note_urls($order);
         $html = ob_get_clean();
         TinyAssert::true(strpos($html, 'since 2026-10-01 09:00 UTC were not sent to') !== false, 'marker shown: ' . $html);
+    }
+
+    /** TWO-26205: WooCommerce is told the plugin supports HPOS and the checkout blocks. */
+    private static function testDeclaresFeatureCompatibility(): void
+    {
+        $source = file_get_contents(__DIR__ . '/../../tillit-payment-gateway.php');
+        $cases = [
+            ["add_action('before_woocommerce_init', 'twoinc_declare_feature_compatibility');", 'declared before WooCommerce initialises'],
+            ["declare_compatibility('custom_order_tables', __FILE__, true)", 'High-Performance Order Storage'],
+            ["declare_compatibility('cart_checkout_blocks', __FILE__, true)", 'cart and checkout blocks'],
+        ];
+        foreach ($cases as [$needle, $desc]) {
+            TinyAssert::true(strpos($source, $needle) !== false, $desc);
+        }
     }
 
     /** TWO-26175: the admin order-form save (legacy and HPOS screens) reaches the edit path for configured Two orders only. */

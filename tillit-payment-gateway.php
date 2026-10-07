@@ -33,6 +33,20 @@ define('WC_TWOINC_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
 add_filter('woocommerce_payment_gateways', 'wc_twoinc_add_to_gateways');
 add_action('plugins_loaded', 'load_twoinc_classes');
+add_action('before_woocommerce_init', 'twoinc_declare_feature_compatibility');
+
+/**
+ * Tell WooCommerce the plugin works with High-Performance Order Storage
+ * and with the cart and checkout blocks, so its admin does not list it as
+ * incompatible (TWO-26205).
+ */
+function twoinc_declare_feature_compatibility()
+{
+    if (class_exists(\Automattic\WooCommerce\Utilities\FeaturesUtil::class)) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('custom_order_tables', __FILE__, true);
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('cart_checkout_blocks', __FILE__, true);
+    }
+}
 
 // Must be registered from the MAIN plugin file: register_deactivation_hook()
 // keys the hook by this file's plugin basename. The old registration inside
