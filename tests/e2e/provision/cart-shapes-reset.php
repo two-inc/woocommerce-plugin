@@ -9,11 +9,14 @@ $setup = get_option('two_e2e_setup');
 if (is_array($setup)) {
     WC_Tax::_delete_tax_rate($setup['tax_rate']);
 }
-// Every flat rate in the "rest of the world" zone, not only the stored one: the e2e shop has no other, and a
-// stray left by an earlier run would otherwise be offered at checkout (TWO-26215).
+// The stored flat rate, and any flat rate in the "rest of the world" zone that was never configured: a stray an
+// earlier run created would otherwise be offered at checkout for free (TWO-26215). A rate someone set up by hand
+// has saved settings and is kept.
 $zone = new WC_Shipping_Zone(0);
 foreach ($zone->get_shipping_methods() as $instance_id => $method) {
-    if ($method->id === 'flat_rate') {
+    $stored = is_array($setup) && (int) $setup['shipping_method'] === (int) $instance_id;
+    $unconfigured = get_option("woocommerce_flat_rate_{$instance_id}_settings") === false;
+    if ($method->id === 'flat_rate' && ($stored || $unconfigured)) {
         $zone->delete_shipping_method($instance_id);
     }
 }
