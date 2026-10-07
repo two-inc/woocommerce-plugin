@@ -8,7 +8,14 @@
 $setup = get_option('two_e2e_setup');
 if (is_array($setup)) {
     WC_Tax::_delete_tax_rate($setup['tax_rate']);
-    (new WC_Shipping_Zone(0))->delete_shipping_method($setup['shipping_method']);
+}
+// Every flat rate in the "rest of the world" zone, not only the stored one: the e2e shop has no other, and a
+// stray left by an earlier run would otherwise be offered at checkout (TWO-26215).
+$zone = new WC_Shipping_Zone(0);
+foreach ($zone->get_shipping_methods() as $instance_id => $method) {
+    if ($method->id === 'flat_rate') {
+        $zone->delete_shipping_method($instance_id);
+    }
 }
 foreach (array('two_e2e_setup', 'two_e2e_cart_shape', 'twoinc_order_postprocessing_fixture') as $option) {
     delete_option($option);
