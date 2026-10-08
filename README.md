@@ -347,8 +347,9 @@ logs a notice naming the old class (source `twoinc-payment-gateway`).
 Two's API accepts a `tax_code` on each order line. For a Spanish merchant a line
 at 0% tax must carry one, because a 0% rate on its own does not say why the
 line is untaxed. The plugin adds the code to every line it sends at 0%: order
-create, order edit, order intent and refund lines. Fulfilment sends no lines, so
-there is nothing to add. A line at any other rate is sent exactly as before,
+create, order edit and refund lines. Fulfilment sends no lines, so there is
+nothing to add. The availability check (order intent) carries no codes, because
+the buyer's details, such as the VAT number, may still be incomplete then. A line at any other rate is sent exactly as before,
 and so is every line of a merchant outside Spain who has mapped nothing.
 
 **Mapping.** Under WooCommerce > Settings > Payments > Two, "Tax codes for 0%
