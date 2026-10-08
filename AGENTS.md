@@ -673,7 +673,8 @@ tillit-payment-gateway.php uninstall.php views`.
 `WC_Twoinc_Helper::apply_tax_codes()`, called at the end of `get_line_items()`,
 is the only place a `tax_code` is added (TWO-24877). Every builder that sends
 lines goes through it, so a new payload type gets codes by using the line
-builder, not by calling the resolver again. The merchant's mapping (the
+builder, not by calling the resolver again. The order intent is the one
+exception: it uses the line builder, then strips the codes (see below). The merchant's mapping (the
 `tax_code_map` setting, keyed by tax class slug with the standard class as
 `standard`) wins; otherwise a Spanish merchant's line derives from the
 `ES_ZERO_RATE_DERIVATION` table. Change the rules by editing that table and
@@ -694,8 +695,10 @@ filter's job. Only the order create sends it, as top-level
 `buyer_vat_number`, and only for a Spanish merchant and a buyer company
 outside Spain; otherwise the key is absent. The `vat` rows qualify only on a
 number that create sends, so the derivation and the payload always agree.
-Intent lines carry no intra-community code, because the unsaved order the
-intent is built from has no VAT meta yet. That is expected; do not "fix" it.
+The intent carries no tax code at all (TWO-26226): `compose_twoinc_intent`
+strips `tax_code` and `tax_exemption_reason_code` from every line, because
+buyer details such as the VAT number may still be partial when it is raised.
+Codes are derived, and checked by Two, at order create.
 
 - A non-zero line, and every line of a non-Spanish merchant with no mapping,
   must stay byte-identical: the spec compares those payloads with the builder
