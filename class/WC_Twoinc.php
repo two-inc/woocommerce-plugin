@@ -668,8 +668,10 @@ if (!class_exists('WC_Twoinc')) {
                 if ('' === $code || (!empty($entry['requires_exemption_reason']) && null === ($entry['exemption_reason_code'] ?? null))) {
                     continue;
                 }
-                $name = is_string($entry['display_name'] ?? null) ? $entry['display_name'] : '';
-                $rate = is_numeric($entry['rate'] ?? null) ? ' (' . (float) $entry['rate'] * 100 . '%)' : '';
+                $name = is_string($entry['display_name'] ?? null) ? trim($entry['display_name']) : '';
+                // A rated display name already ends in its rate, "(21%)"; only an unrated one gets it appended.
+                $rated = 1 === preg_match('/\([^()]*%\)$/', $name);
+                $rate = !$rated && is_numeric($entry['rate'] ?? null) ? ' (' . (float) $entry['rate'] * 100 . '%)' : '';
                 $options[$code] = $code . ($name !== '' ? ': ' . $name : '') . $rate;
             }
             return $options;

@@ -17,6 +17,7 @@ final class TaxCodeSpec
             'testAnEsMerchantsNonZeroOrdersMatchTheGoldens',
             'testTheCodeListIsCachedAndServedStale',
             'testTheDropdownHidesCodesNeedingACallerReason',
+            'testTheLabelShowsTheRateOnce',
             'testTheMappingScreenRendersAndSaves',
             'testTheMerchantCountryComesFromTheMerchantRecord',
         ];
@@ -209,6 +210,28 @@ final class TaxCodeSpec
         ]);
         TinyAssert::same(['ES_IVA_EXPORT', 'ES_IVA_STANDARD'], array_keys($options), 'EXEMPT_OTHER is hidden');
         TinyAssert::same('ES_IVA_STANDARD: IVA general (21%)', $options['ES_IVA_STANDARD'], 'the label');
+    }
+
+    /** A rated display name already ends in its rate (TWO-26243), so the label carries the rate once. */
+    private static function testTheLabelShowsTheRateOnce(): void
+    {
+        $cases = [
+            // display_name, rate, want, description
+            ['IVA General (21%)', '0.21', 'C: IVA General (21%)', 'a rated name is not given the rate again'],
+            ['IVA Reducido (10%)  ', '0.1', 'C: IVA Reducido (10%)', 'trailing space does not hide the rate'],
+            ['IVA Superreducido (4 %)', '0.04', 'C: IVA Superreducido (4 %)', 'a spaced rate counts as a rate'],
+            ['Exento', '0', 'C: Exento (0%)', 'an unrated name gets the rate'],
+            ['Inversión del sujeto pasivo (art. 84)', '0', 'C: Inversión del sujeto pasivo (art. 84) (0%)', 'a bracket without % is not a rate'],
+            ['IVA (21%) general', '0.21', 'C: IVA (21%) general (21%)', 'a rate mid-name is not the trailing rate'],
+            ['', '0.21', 'C (21%)', 'no name still shows the rate'],
+            ['Exento', null, 'C: Exento', 'no rate appends nothing'],
+        ];
+        foreach ($cases as [$name, $rate, $want, $description]) {
+            $options = WC_Twoinc::tax_code_options([
+                ['code' => 'C', 'rate' => $rate, 'display_name' => $name, 'requires_exemption_reason' => false, 'exemption_reason_code' => null],
+            ]);
+            TinyAssert::same($want, $options['C'] ?? null, $description);
+        }
     }
 
     private static function testTheMappingScreenRendersAndSaves(): void
