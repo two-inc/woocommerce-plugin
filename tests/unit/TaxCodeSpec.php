@@ -12,6 +12,7 @@ final class TaxCodeSpec
     {
         $tests = [
             'testZeroRateLinesCarryTheResolvedCode',
+            'testTheIntentCarriesNoTaxCode',
             'testEveryPayloadWithLinesCarriesTheCode',
             'testAnEsMerchantsNonZeroOrdersMatchTheGoldens',
             'testTheCodeListIsCachedAndServedStale',
@@ -92,7 +93,39 @@ final class TaxCodeSpec
         }
     }
 
-    /** Create, edit, intent and refund all carry the code; fulfilment sends no lines. */
+    /**
+     * The intent carries no tax code (TWO-26226), even where create derives or maps one: the buyer's details may
+     * still be partial when the intent is checked.
+     */
+    private static function testTheIntentCarriesNoTaxCode(): void
+    {
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = 'ES';
+        $es = ['country' => 'ES', 'postcode' => '28001'];
+        $codes = static function (array $payload, string $key) {
+            return array_map(static function ($line) use ($key) {
+                return $line[$key] ?? null;
+            }, $payload['line_items']);
+        };
+        $cases = [
+            // lines, buyer (billing) country, delivery address, map, create's codes, description
+            [['goods', 'shipping'], 'ES', ['country' => 'NO', 'postcode' => '0150'], [], ['ES_IVA_EXPORT', 'ES_IVA_EXPORT'], 'export'],
+            [['goods'], 'DE', ['country' => 'FR', 'postcode' => '75001'], [], ['ES_IVA_INTRA_COMMUNITY'], 'intra-community goods'],
+            [['service'], 'FR', $es, [], ['ES_IVA_REVERSE_CHARGE'], 'a service to an EU buyer'],
+            [['goods'], 'ES', $es, ['standard' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20'], 'a mapped tax class'],
+        ];
+        foreach ($cases as [$lines, $buyer, $delivery, $map, $create, $description]) {
+            self::useGateway($map);
+            $order = self::order($lines, $buyer, $delivery);
+            $sent = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true);
+            TinyAssert::same($create, $codes($sent, 'tax_code'), "$description: create carries the code");
+            $intent = WC_Twoinc_Helper::compose_twoinc_intent($order, []);
+            $none = array_fill(0, count($lines), null);
+            TinyAssert::same($none, $codes($intent, 'tax_code'), "$description: the intent carries no code");
+            TinyAssert::same($none, $codes($intent, 'tax_exemption_reason_code'), "$description: nor an exemption reason");
+        }
+    }
+
+    /** Create, edit and refund carry the code; the intent does not (see above); fulfilment sends no lines. */
     private static function testEveryPayloadWithLinesCarriesTheCode(): void
     {
         $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = 'ES';
@@ -105,7 +138,6 @@ final class TaxCodeSpec
         };
 
         TinyAssert::same(['ES_IVA_EXPORT', 'ES_IVA_EXPORT'], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '')), 'edit');
-        TinyAssert::same(['ES_IVA_EXPORT', 'ES_IVA_EXPORT'], $codes(WC_Twoinc_Helper::compose_twoinc_intent($order, [])), 'intent');
 
         // A partial refund is sent as full line items, so each carries the code of the line it refunds.
         $refund = new StubRefund([

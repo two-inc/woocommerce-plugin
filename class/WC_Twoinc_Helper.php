@@ -1287,6 +1287,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * The order-intent body, from the same line builder as the order so intent and create declare the same
          * lines. `$order` is the unsaved order build_intent_order_from_cart() assembles from the cart.
          *
+         * Its lines carry no tax code (TWO-26226): the buyer's details, such as the VAT number and the final
+         * address, may still be partial when the intent is checked, so a code derived now could be wrong. Codes are
+         * derived, and checked by Two, at order create.
+         *
          * @param WC_Order $order
          * @param array    $buyer
          *
@@ -1294,11 +1298,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function compose_twoinc_intent($order, $buyer)
         {
+            $line_items = array_map(static function ($line) {
+                unset($line['tax_code'], $line['tax_exemption_reason_code']);
+                return $line;
+            }, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order));
             $req_body = self::order_totals($order) + [
                 'invoice_type' => 'FUNDED_INVOICE',
                 'buyer' => $buyer,
                 'currency' => $order->get_currency(),
-                'line_items' => WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order),
+                'line_items' => $line_items,
             ];
             $req_body['line_items'] = apply_filters('twoinc_payment_terms_line', $req_body['line_items'], $req_body);
             return $req_body;
