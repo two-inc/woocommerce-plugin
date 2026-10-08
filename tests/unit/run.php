@@ -275,6 +275,7 @@ final class BrandConfigSpec
             'testAboutTooltipEscapesTheBrandProductName',
             'testAboutControlFallsBackIntoTheHiddenPaymentBoxWhenATemplateOverrideWins',
             'testPaymentMethodTemplateIsStillCoreVerbatim',
+            'testTemplatePinIgnoresOnlyPhpComments',
             'testTermChipGroupIsNamedByANonLabelHeading',
             'testPaymentBoxRendersCompanySearchTileSlotBetweenSoleTraderAndIntentMessage',
             'testDeclinedBoxCarriesCompanyTemplate',
@@ -11616,10 +11617,43 @@ final class BrandConfigSpec
         TinyAssert::true(strpos($copy, ' * @version     3.5.0') !== false, 'the copy must still declare the core template version it was taken from');
         TinyAssert::same('6ec50712413ce4050c37791f6e746512', md5($verbatim), 'everything outside the TWOINC markers must still be WooCommerce 9.9.5 core byte for byte');
 
+        // Comments are left out: a core release that only rewords its phpcs
+        // annotations (WooCommerce 11.2.0) changes nothing the template renders.
         $core = (string) getenv('WC_CORE_TEMPLATE_PATH');
         if ($core !== '' && is_readable($core)) {
-            TinyAssert::same(file_get_contents($core), $verbatim, 'the installed WooCommerce moved this template - re-diff the copy and repin');
+            TinyAssert::same(self::withoutPhpComments((string) file_get_contents($core)), self::withoutPhpComments($verbatim), 'the installed WooCommerce moved this template - re-diff the copy and repin');
         }
+    }
+
+    /** TWO-26215: the installed-core comparison ignores PHP comments and nothing else. */
+    private static function testTemplatePinIgnoresOnlyPhpComments(): void
+    {
+        $pinned = "<li class=\"m\">\n\t<?php echo \$t; /* phpcs:ignore WordPress.XSS.EscapeOutput.OutputNotEscaped */ ?>\n</li>\n";
+        $cases = [
+            [str_replace('WordPress.XSS', 'WordPress.Security', $pinned), true, 'reworded phpcs comment (WooCommerce 11.2.0)'],
+            [str_replace('/* phpcs:ignore WordPress.XSS.EscapeOutput.OutputNotEscaped */', '', $pinned), true, 'comment removed'],
+            [str_replace('class="m"', 'class="n"', $pinned), false, 'markup changed'],
+            [str_replace('$t', '$u', $pinned), false, 'PHP code changed'],
+            [$pinned, true, 'identical'],
+            [$pinned . "<!-- html comment -->\n", false, 'HTML comment is output, not a PHP comment'],
+        ];
+        foreach ($cases as [$core, $same, $description]) {
+            TinyAssert::same($same, self::withoutPhpComments($core) === self::withoutPhpComments($pinned), $description);
+        }
+    }
+
+    /** PHP source with its comments removed; markup outside PHP tags is kept. */
+    private static function withoutPhpComments(string $source): string
+    {
+        $kept = '';
+        foreach (token_get_all($source) as $token) {
+            if (is_array($token) && in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+                continue;
+            }
+            $kept .= is_array($token) ? $token[1] : $token;
+        }
+
+        return $kept;
     }
 
     /** The copy with every TWOINC-marked region removed, leaving core's own text. */

@@ -39,9 +39,17 @@ foreach (['woocommerce_prices_include_tax', 'woocommerce_tax_display_shop', 'woo
     });
 }
 
-// Created once when armed: a shipping method must exist for the cart to need shipping at all.
+// Created once when armed: a shipping method must exist for the cart to need shipping at all. Block checkout
+// sends Store API requests concurrently, so the setup is claimed first with a lock option that never changes
+// value: add_option on a row that already holds the same value affects no row and returns false, so only one
+// request creates anything. Without the claim, two requests each added a flat rate and only one got the courier
+// settings below, leaving a free "Flat rate" that checkout could pick (TWO-26215).
 add_action('woocommerce_init', function () {
-    if (get_option('two_e2e_cart_shape', '') === '' || get_option('two_e2e_setup')) {
+    if (
+        get_option('two_e2e_cart_shape', '') === ''
+        || get_option('two_e2e_setup')
+        || !add_option('two_e2e_setup_lock', 'claimed', '', false)
+    ) {
         return;
     }
     $tax_rate_id = WC_Tax::_insert_tax_rate([
