@@ -14,7 +14,8 @@
  *   rowless     each shipping line keeps its tax but loses its rate row, as a module taxing shipping outside
  *               WooCommerce's rates would record it
  *   skewed      with rowless, each shipping line is charged 7.00 of tax, which no rate of the shop gives
- *   surcharge   10.00 added to the cart total outside any carrier or line
+ *   surcharge   10.00 added to the cart total outside any carrier or line, and kept in the order total when
+ *               WooCommerce recalculates it (an admin save does), as a module carrying such a cost would
  *
  * The subscriber is the unit suite's CI fixture, inert until `twoinc_order_postprocessing_fixture` names a mode.
  * tests/e2e/provision/cart-shapes-reset.php undoes all of it.
@@ -104,6 +105,17 @@ add_action('woocommerce_checkout_create_order_shipping_item', function ($item) {
 add_filter('woocommerce_calculated_total', function ($total) {
     return two_e2e_cart_shape('surcharge') ? $total + 10.0 : $total;
 });
+add_action('woocommerce_checkout_create_order', function ($order) {
+    if (two_e2e_cart_shape('surcharge')) {
+        $order->update_meta_data('_two_e2e_surcharge', '10.00');
+    }
+});
+add_action('woocommerce_order_after_calculate_totals', function ($and_taxes, $order) {
+    $surcharge = (float) $order->get_meta('_two_e2e_surcharge');
+    if ($surcharge) {
+        $order->set_total((float) $order->get_total('edit') + $surcharge);
+    }
+}, 10, 2);
 
 add_action('woocommerce_cart_calculate_fees', function ($cart) {
     if (two_e2e_cart_shape('fee')) {
