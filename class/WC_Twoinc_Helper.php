@@ -27,7 +27,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * The shop-match refusals the last line build found, keyed by line_fingerprint() of the line each was made
-         * for (TWO-26275). check_shop_match() applies them after the hook; get_line_items() resets them.
+         * for (TWO-26275). get_line_items() resets them, default_order_postprocessing() consumes them after the hook,
+         * and check_shop_match() applies them to lines left as built.
          *
          * @var array<string, array{log: string, message: string}>
          */
@@ -1462,7 +1463,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * The plugin's own `twoinc_order_postprocessing` handler (TWO-26275), registered at PHP_INT_MAX. With no
-         * merchant handler on the hook it runs the shop-match checks, check_shop_match(), on the payload. With one,
+         * merchant handler on the hook it refuses on any shop-match refusal the request's build recorded, as the
+         * builder did before the deprecated filters ran. With one,
          * it stands down: the merchant handler owns shop-match correctness, and each request sent says so in one
          * log line naming the handler. The change hash recomposes the order without sending it, so it logs nothing.
          *
@@ -1474,9 +1476,20 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function default_order_postprocessing($payload, $context)
         {
+            // Consumed here, last on the hook, so a later request in the same PHP request cannot pick them up.
+            $refusals = self::$shop_match_refusals;
+            self::$shop_match_refusals = [];
             $merchant = self::merchant_order_postprocessing_handlers();
             if ($merchant === []) {
-                return self::check_shop_match($payload);
+                // Every refusal this build recorded, whatever the deprecated filters did to its line since: the
+                // builder refused before they ran. Only a payload with lines was built by get_line_items(), which
+                // resets the record, so a request with no body never meets a refusal left by a build that failed.
+                $refusal = reset($refusals);
+                $lines = isset($payload['line_items']) && is_array($payload['line_items']) && $payload['line_items'] !== [];
+                if ($refusal && $lines) {
+                    self::refuse($refusal['log'], $refusal['message'], WC_Twoinc_Shop_Match_Exception::class);
+                }
+                return $payload;
             }
             if (($context['trigger'] ?? '') !== 'change_hash' && function_exists('wc_get_logger')) {
                 wc_get_logger()->info(
@@ -1496,9 +1509,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * The shop-match checks (TWO-26275): whether what a payload sends matches what the shop worked out. Today one
          * check: a shipping line with no rate row, sent at the rate the shipping tax control resolves, must carry the
          * tax that rate gives (within 0.02). Each check applies to the line the plugin built it for, while that line
-         * is in the payload with its name, type, amounts and rate unchanged. Runs by default when no merchant
-         * handler is registered; a merchant handler calls it to opt back in, on the payload it returns or on the one
-         * it received. Part of the stable contract.
+         * is in the payload with its name, type, amounts and rate unchanged. A merchant handler calls it to opt back
+         * in, on the payload it returns or on the one it received; with no merchant handler the default handler
+         * refuses on every refusal the build recorded instead. Part of the stable contract.
          *
          * `$scope` SHOP_MATCH_PER_LINE runs only the checks made for single lines, on the lines left as built, for a
          * handler that declares its own split of the order. This plugin has no whole-order shop-match check today,
@@ -2290,9 +2303,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
             $resolved = self::get_shop_shipping_tax_rate($line, $order);
             $refusal = self::tax_reconcile_refusal($line, $resolved['rate']);
-            // Persisted by the order save that follows a successful create. A line that does not reconcile records
-            // nothing, as when the check refused it here.
-            if (!$refusal) {
+            // Persisted by the order save that follows a successful create. A line the default handler will refuse
+            // records nothing, as when the builder refused it; with the check delegated to a merchant handler the
+            // line goes out at this rate, so later requests must take it too.
+            if (!$refusal || self::merchant_order_postprocessing_handlers() !== []) {
                 $line->update_meta_data($meta_key, $resolved);
             }
             return $resolved;

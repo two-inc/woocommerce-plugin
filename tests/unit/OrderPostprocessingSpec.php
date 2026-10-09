@@ -33,6 +33,9 @@ final class OrderPostprocessingSpec
             'testTheDefaultHandlerOwnsTheShopMatchCheck',
             'testMerchantHandlerDetection',
             'testTheShopMatchCheckAppliesToTheLineItWasMadeFor',
+            'testTheDeprecatedFiltersCannotRepairARefusedLine',
+            'testADelegatedLineKeepsItsRateAfterPlacement',
+            'testARefusalDoesNotOutliveItsRequest',
             'testAnApiRefusalReachesTheLogAndTheOrderNote',
             'testAChangedPayloadKeepsWhatTheShopDeclaredBeyondItsLines',
             'testTheOlderFiltersOutputIsSentAsBefore',
@@ -61,6 +64,10 @@ final class OrderPostprocessingSpec
         foreach (['twoinc_order_postprocessing', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'two_order_edit'] as $tag) {
             remove_all_filters($tag);
         }
+        // A fresh PHP request: no shop-match refusal left by an earlier build.
+        $refusals = new ReflectionProperty(WC_Twoinc_Helper::class, 'shop_match_refusals');
+        $refusals->setAccessible(true);
+        $refusals->setValue(null, []);
         // As the plugin registers it when it loads.
         add_filter('twoinc_order_postprocessing', [WC_Twoinc_Helper::class, 'default_order_postprocessing'], PHP_INT_MAX, 2);
         if ($fixture) {
@@ -641,6 +648,120 @@ final class OrderPostprocessingSpec
                 TinyAssert::same('InvalidArgumentException', $refused, "$description: " . $e->getMessage());
             }
         }
+    }
+
+    /** Staging refused in the builder, before the deprecated filters ran, so their edits to the line change nothing. */
+    private static function testTheDeprecatedFiltersCannotRepairARefusedLine(): void
+    {
+        $refused = 'WC_Twoinc_Shop_Match_Exception: The tax charged on "Carrier" does not match the shop\'s tax rates.';
+        $repairLine = static function (array $line) {
+            return ['name' => 'Shipping - Repaired', 'tax_amount' => '6.09', 'gross_amount' => '35.09'] + $line;
+        };
+        $lastLine = static function (array $body) use ($repairLine) {
+            $last = count($body['line_items']) - 1;
+            $body['line_items'][$last] = $repairLine($body['line_items'][$last]);
+            return $body;
+        };
+        $filters = [
+            'two_order_create' => $lastLine,
+            'twoinc_order_payload' => $lastLine,
+            'twoinc_payment_terms_line' => static function (array $lines) use ($repairLine) {
+                $lines[count($lines) - 1] = $repairLine($lines[count($lines) - 1]);
+                return $lines;
+            },
+        ];
+        // [deprecated filter, a merchant handler registered, expected outcome, description]
+        $cases = [];
+        foreach (array_keys($filters) as $filter) {
+            $cases[] = [$filter, false, $refused, "$filter repairing the line, no merchant handler: refused, as staging"];
+            $cases[] = [$filter, true, 'sent', "$filter repairing the line, a merchant handler: delegated and sent"];
+        }
+        foreach ($cases as [$filter, $merchant, $expected, $description]) {
+            self::reset();
+            add_filter($filter, $filters[$filter], 10, 1);
+            if ($merchant) {
+                self::arm('record');
+            }
+            $outcome = self::outcome(self::mismatchedRequests()['order_create']);
+            TinyAssert::same($expected, $outcome, $description);
+        }
+    }
+
+    /** With the check delegated, the rate the line went out at on create is the one every later request takes. */
+    private static function testADelegatedLineKeepsItsRateAfterPlacement(): void
+    {
+        $meta = WC_Twoinc_Brand::meta_key('shipping_tax_rate');
+        // [a merchant handler registered, create outcome, rate recorded on the line, description]
+        $cases = [
+            [true, 'sent', 0.21, 'a merchant handler: the resolved rate is recorded'],
+            [false, 'refused', null, 'no merchant handler: refused, and nothing recorded, as staging'],
+        ];
+        foreach ($cases as [$merchant, $created, $recorded, $description]) {
+            self::reset();
+            if ($merchant) {
+                self::arm('record');
+            }
+            $order = self::mismatchedOrder(false);
+            $gateway = self::recordingGateway();
+            try {
+                $gateway->make_order_request('order_create', 'checkout', '/v1/order', WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []), 'POST', $order);
+                $outcome = 'sent';
+            } catch (WC_Twoinc_Shop_Match_Exception $e) {
+                $outcome = 'refused';
+            }
+            TinyAssert::same($created, $outcome, "$description: create");
+            TinyAssert::same($recorded, $order->shipping->meta[$meta]['rate'] ?? null, "$description: rate recorded");
+            if (!$merchant) {
+                continue;
+            }
+            $sentShipping = static function (array $payload) {
+                $line = end($payload['line_items']);
+                return [$line['tax_rate'], $line['tax_amount']];
+            };
+            TinyAssert::same(['0.210000', '7.00'], $sentShipping($gateway->sent[0]['payload']), "$description: create line");
+
+            $order->meta[WC_Twoinc_Brand::prefixed_name('order_id')] = 'two-1';
+            $gateway->make_order_request('order_update', 'admin_edit', '/v1/order/two-1', WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', ''), 'PUT', $order);
+            TinyAssert::same(['0.210000', '7.00'], $sentShipping($gateway->sent[1]['payload']), "$description: update line");
+
+            $refund = new StubRefund(['shipping' => [new StubShippingItem(-29.0, -7.0, [], ['_refunded_item_id' => 5])]], []);
+            $gateway->make_order_request('refund', 'order_refund', '/v1/order/two-1/refund', WC_Twoinc_Helper::compose_twoinc_refund($refund, 36.0, $order), 'POST', $order, $refund);
+            TinyAssert::same(['0.210000', '-7.00'], $sentShipping($gateway->sent[2]['payload']), "$description: refund line");
+        }
+    }
+
+    /** A refusal is consumed by the request it was built for, and a request with no body never meets one. */
+    private static function testARefusalDoesNotOutliveItsRequest(): void
+    {
+        // [what runs first on the mismatched order, description]
+        $cases = [
+            [static function ($order) {
+                self::outcome(static function () use ($order) {
+                    $gateway = self::recordingGateway();
+                    $gateway->make_order_request('order_create', 'checkout', '/v1/order', WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []), 'POST', $order);
+                    return null;
+                });
+            }, 'after a refused create'],
+            [static function ($order) {
+                WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
+            }, 'after a build that never reached the hook'],
+        ];
+        foreach ($cases as [$first, $description]) {
+            self::reset();
+            $order = self::mismatchedOrder(false);
+            $first($order);
+            $gateway = self::recordingGateway();
+            TinyAssert::same('sent', self::outcome(static function () use ($gateway, $order) {
+                $gateway->make_order_request('capture', 'status_change', '/v1/order/two-1/fulfillments', [], 'POST', $order);
+                return $gateway->sent[0] ?? null;
+            }), "$description: a capture");
+        }
+        self::reset();
+        $order = self::mismatchedOrder(false);
+        $cases[0][0]($order);
+        TinyAssert::same('sent', self::outcome(static function () {
+            return WC_Twoinc_Helper::postprocess_order_request(self::examplePayload(), self::context('order_update'));
+        }), 'a later request with lines, after the refusal was consumed');
     }
 
     private static function testAnApiRefusalReachesTheLogAndTheOrderNote(): void

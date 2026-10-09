@@ -462,9 +462,10 @@ It runs the shop-match checks: whether what the request sends matches what
 the shop worked out. Today there is one: a shipping line with no rate row,
 sent at the rate the shipping tax control resolves, must carry the tax that
 rate gives, within 0.02 (see "Shipping tax from the shop's rates"). Each check
-applies to the line the plugin built it for, while that line's name, type,
-amounts and rate are unchanged. A failing check refuses the request with the
-same error, at the same level, as when the builders checked it.
+is made on a line as the plugin built it, and the default handler refuses the
+request if any check made for that request failed: with the same error, at
+the same level, as when the builders checked it. A request that will be
+refused now runs the deprecated filters below before it is refused.
 
 The default handler stands down when any other callback is registered on
 `twoinc_order_postprocessing`. That merchant handler then owns shop-match
@@ -487,8 +488,9 @@ with
 `WC_Twoinc_Helper::check_shop_match(array $payload, string $scope = WC_Twoinc_Helper::SHOP_MATCH_ALL): array`.
 It returns the payload unchanged, or throws `WC_Twoinc_Shop_Match_Exception`
 with the error the default handler would have raised; the plugin lets it
-through unwrapped. Called on the payload the handler returns, it checks every
-line the handler left as built. Called on the payload it received, before any
+through unwrapped. It applies each check to the line it was made for while that
+line's name, type, amounts and rate are as built. Called on the payload the
+handler returns, it checks every line the handler left as built. Called on the payload it received, before any
 edit, it checks them all.
 
 `$scope` chooses which checks run. `SHOP_MATCH_ALL`, the default, runs every
@@ -525,7 +527,8 @@ add_filter('twoinc_order_postprocessing', function (array $payload, array $conte
             'tax_rate' => '0.210000',
             'tax_class_name' => 'VAT 21%',
         ];
-        // An original with no totals carries no residual: every total becomes the sum of the lines.
+        // The edited lines are passed as the original, with no totals, so no residual is carried over:
+        // the line just added already holds the cost, and every total becomes the sum of the lines.
         $payload = WC_Twoinc_Helper::recompute_totals_from_lines($payload, ['line_items' => $payload['line_items']]);
     }
     // The shop's own lines, which this handler did not touch, are still checked against the shop.
@@ -605,8 +608,9 @@ suite loads it as an mu-plugin to place a real order with re-split shipping.
 `twoinc_order_payload` (see `docs/two-order-hook.md`). They still run, inside
 the order builders and before `twoinc_order_postprocessing`, so their output is
 the plugin's payload and goes out as it always has. They are not merchant
-handlers: the default handler's checks apply to the lines they leave as
-built.
+handlers: with no merchant handler, a request whose build failed a shop-match
+check is refused whatever they did to its lines, as when the builders checked
+before they ran.
 
 **Versioning**: this hook must remain for all time and must fire consistently
 in response to the same events.
