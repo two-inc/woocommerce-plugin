@@ -16,6 +16,19 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         public const ORDER_POSTPROCESSING_CONTRACT_VERSION = 1;
 
+        public const ORDER_POSTPROCESSING_HOOK = 'twoinc_order_postprocessing';
+
+        /** The plugin's own handler on the hook, as describe_callback() names it. */
+        private const DEFAULT_ORDER_POSTPROCESSING_HANDLER = 'WC_Twoinc_Helper::default_order_postprocessing';
+
+        /**
+         * The shop-match refusals the last line build found, keyed by line_fingerprint() of the line each was made
+         * for (TWO-26275). check_shop_match() applies them after the hook; get_line_items() resets them.
+         *
+         * @var array<string, array{log: string, message: string}>
+         */
+        private static $shop_match_refusals = [];
+
         /** The EU VAT area by ISO code, with Monaco, which counts as France for VAT (TWO-24877). */
         private const EU_VAT_COUNTRIES = [
             'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'IE', 'IT', 'LV', 'LT',
@@ -477,6 +490,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             &$shipping_rates = null
         ) {
             $rate_order = $rate_order ?? $order;
+            self::$shop_match_refusals = [];
 
             $items = [];
             // Per line, what the tax code resolver needs: the tax class it was charged under and, for a product,
@@ -574,7 +588,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 if (self::is_zero_line($shipping)) {
                     continue;
                 }
-                $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $rate_order, $is_refund);
+                $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $rate_order, $is_refund, $refusal);
                 $shipping_rates[$key] = $tax_rate;
                 $shipping_line = [
                     'name' => 'Shipping - ' . $shipping->get_name(),
@@ -592,6 +606,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'product_page_url' => '',
                     'type' => 'SHIPPING_FEE'
                 ];
+                // A shop-match check: applied after the hook by the default handler, not here (TWO-26275).
+                if ($refusal) {
+                    self::$shop_match_refusals[self::line_fingerprint($shipping_line)] = $refusal;
+                }
 
                 $items[] = $shipping_line;
                 $sources[] = ['tax_class' => 'shipping', 'goods' => null];
@@ -1390,6 +1408,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * `twoinc_order_postprocessing` and sends what it returns. The plugin does not check a subscriber's figures:
          * Two's API validates the request as it arrives. Only a subscriber that throws, returns something other
          * than an array, or returns something that cannot be encoded as JSON fails the request, as a code bug.
+         * The plugin's own handler on the hook, default_order_postprocessing(), runs the shop-match checks when no
+         * merchant handler is registered (TWO-26275); its refusal, or one a merchant handler opts back in to,
+         * passes through unwrapped.
          *
          * @param array $payload the body exactly as it would be sent; [] for a request with no body
          * @param array $context from order_postprocessing_context()
@@ -1397,6 +1418,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * @return array the payload to send
          * @throws WC_Twoinc_Order_Postprocessing_Exception when a subscriber failed
+         * @throws WC_Twoinc_Shop_Match_Exception when a shop-match check refused the payload
          */
         public static function postprocess_order_request(array $payload, array $context, $record = true)
         {
@@ -1408,7 +1430,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
                  * @param array $context request_type, trigger, endpoint, order, refund, shipping_tax_rate,
                  *                       fallback_shipping_tax_rate, contract_version.
                  */
-                $processed = apply_filters('twoinc_order_postprocessing', $payload, $context);
+                $processed = apply_filters(self::ORDER_POSTPROCESSING_HOOK, $payload, $context);
+            } catch (WC_Twoinc_Shop_Match_Exception $e) {
+                throw $e;
             } catch (Throwable $e) {
                 self::fail_postprocessing($context, 'a subscriber threw ' . get_class($e) . ': ' . $e->getMessage());
             }
@@ -1430,6 +1454,119 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             return $processed;
+        }
+
+        /**
+         * The plugin's own `twoinc_order_postprocessing` handler (TWO-26275), registered at PHP_INT_MAX. With no
+         * merchant handler on the hook it runs the shop-match checks, check_shop_match(), on the payload. With one,
+         * it stands down: the merchant handler owns shop-match correctness, and each request sent says so in one
+         * log line naming the handler. The change hash recomposes the order without sending it, so it logs nothing.
+         *
+         * @param array $payload
+         * @param array $context from order_postprocessing_context()
+         *
+         * @return array the payload, unchanged
+         * @throws WC_Twoinc_Shop_Match_Exception
+         */
+        public static function default_order_postprocessing($payload, $context)
+        {
+            $merchant = self::merchant_order_postprocessing_handlers();
+            if ($merchant === []) {
+                return self::check_shop_match($payload);
+            }
+            if (($context['trigger'] ?? '') !== 'change_hash' && function_exists('wc_get_logger')) {
+                wc_get_logger()->info(
+                    sprintf(
+                        '%s: the shop-match checks on the %s request are delegated to the merchant handler %s.',
+                        self::ORDER_POSTPROCESSING_HOOK,
+                        $context['request_type'] ?? '',
+                        implode(', ', $merchant)
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
+            return $payload;
+        }
+
+        /**
+         * The shop-match checks (TWO-26275): whether what a payload sends matches what the shop worked out. Today one
+         * check: a shipping line with no rate row, sent at the rate the shipping tax control resolves, must carry the
+         * tax that rate gives (within 0.02). Each check applies to the line the plugin built it for, while that line
+         * is in the payload with its name, type, amounts and rate unchanged. Runs by default when no merchant
+         * handler is registered; a merchant handler calls it to opt back in, on the payload it returns or on the one
+         * it received. Part of the stable contract.
+         *
+         * @param array $payload
+         *
+         * @return array the payload, unchanged
+         * @throws WC_Twoinc_Shop_Match_Exception naming the first line that fails, with the message checkout shows
+         */
+        public static function check_shop_match(array $payload)
+        {
+            $lines = isset($payload['line_items']) && is_array($payload['line_items']) ? $payload['line_items'] : [];
+            foreach ($lines as $line) {
+                $refusal = is_array($line) ? (self::$shop_match_refusals[self::line_fingerprint($line)] ?? null) : null;
+                if ($refusal) {
+                    self::refuse($refusal['log'], $refusal['message'], WC_Twoinc_Shop_Match_Exception::class);
+                }
+            }
+            return $payload;
+        }
+
+        /**
+         * Every callback on `twoinc_order_postprocessing` other than the plugin's own, named for the log. A plugin
+         * that is deactivated, or a callback removed with remove_filter(), registers nothing and so counts as none.
+         *
+         * @return string[]
+         */
+        private static function merchant_order_postprocessing_handlers()
+        {
+            $hook = $GLOBALS['wp_filter'][self::ORDER_POSTPROCESSING_HOOK] ?? null;
+            $names = [];
+            foreach (is_object($hook) ? $hook->callbacks : [] as $callbacks) {
+                foreach ($callbacks as $callback) {
+                    $name = self::describe_callback($callback['function']);
+                    if ($name !== self::DEFAULT_ORDER_POSTPROCESSING_HANDLER) {
+                        $names[] = $name;
+                    }
+                }
+            }
+            return $names;
+        }
+
+        /**
+         * @param mixed $callback
+         *
+         * @return string a function or Class::method name, or where a closure was defined
+         */
+        private static function describe_callback($callback)
+        {
+            if (is_string($callback)) {
+                return $callback;
+            }
+            if (is_array($callback) && count($callback) === 2) {
+                return (is_object($callback[0]) ? get_class($callback[0]) : (string) $callback[0]) . '::' . $callback[1];
+            }
+            if ($callback instanceof Closure) {
+                $reflection = new ReflectionFunction($callback);
+                return sprintf('closure at %s:%d', $reflection->getFileName(), $reflection->getStartLine());
+            }
+            return is_object($callback) ? get_class($callback) . '::__invoke' : gettype($callback);
+        }
+
+        /**
+         * What identifies a built line for the shop-match checks: the fields their verdict reads, and its name and
+         * type. Tax codes are left out: the intent strips them from lines the order build gave them.
+         *
+         * @return string
+         */
+        private static function line_fingerprint(array $line)
+        {
+            $fields = [];
+            foreach (['type', 'name', 'net_amount', 'tax_amount', 'gross_amount', 'tax_rate'] as $field) {
+                $fields[] = isset($line[$field]) && is_scalar($line[$field]) ? (string) $line[$field] : null;
+            }
+            return (string) json_encode($fields);
         }
 
         /**
@@ -2052,12 +2189,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * sent as charged at 0% unless the shipping tax control is populated, in which case the rate comes from it
          * and the line's tax must reconcile with it. Two's API validates what is sent either way.
          * A refund line takes its rate from the parent line it refunds, which is what the order was charged at.
+         * A line that does not reconcile is not refused here: `$refusal` reports it, for check_shop_match() to
+         * apply after the hook (TWO-26275).
+         *
+         * @param array|null $refusal receives ['log', 'message'] when the line does not reconcile, else null
          *
          * @return array
-         * @throws Exception
+         * @throws Exception when a refund line has no parent line to take its rate from
          */
-        private static function get_shipping_tax_rate($shipping, $order, $is_refund = false)
+        private static function get_shipping_tax_rate($shipping, $order, $is_refund = false, &$refusal = null)
         {
+            $refusal = null;
             $charged = $is_refund ? self::get_refunded_line($shipping, $order) : $shipping;
             if (!$charged) {
                 self::refuse(
@@ -2077,14 +2219,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if ($declared) {
                 return $resolved;
             }
-            $controlled = self::get_undeclared_shipping_tax_rate($charged, $order);
+            $controlled = self::get_undeclared_shipping_tax_rate($charged, $order, $refusal);
             if (null === $controlled) {
                 return $resolved;
             }
             // A refund may return only the net or only the tax (e.g. VAT charged to a reverse-charge buyer).
             $partial = !round((float) $shipping->get_total(), 2) || !round((float) $shipping->get_total_tax(), 2);
-            if (!$is_refund || !$partial) {
-                self::assert_tax_reconciles($shipping, $controlled['rate']);
+            if (!$refusal && (!$is_refund || !$partial)) {
+                $refusal = self::tax_reconcile_refusal($shipping, $controlled['rate']);
             }
             return $controlled;
         }
@@ -2115,11 +2257,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * Decided from stored data after placement: the rate recorded on the line at checkout if the control was
          * populated then, else null. Only an order not yet placed reads the control and the shop's shipping tax class.
          *
+         * @param array|null $refusal receives the reconcile refusal for a rate resolved now, else null
+         *
          * @return array|null
-         * @throws Exception
          */
-        private static function get_undeclared_shipping_tax_rate($line, $order)
+        private static function get_undeclared_shipping_tax_rate($line, $order, &$refusal = null)
         {
+            $refusal = null;
             $meta_key = WC_Twoinc_Brand::meta_key(self::SHIPPING_TAX_RATE_META);
             $stored = $line->get_meta($meta_key);
             if (is_array($stored)) {
@@ -2132,9 +2276,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 return null;
             }
             $resolved = self::get_shop_shipping_tax_rate($line, $order);
-            self::assert_tax_reconciles($line, $resolved['rate']);
-            // Persisted by the order save that follows a successful create.
-            $line->update_meta_data($meta_key, $resolved);
+            $refusal = self::tax_reconcile_refusal($line, $resolved['rate']);
+            // Persisted by the order save that follows a successful create. A line that does not reconcile records
+            // nothing, as when the check refused it here.
+            if (!$refusal) {
+                $line->update_meta_data($meta_key, $resolved);
+            }
             return $resolved;
         }
 
@@ -2217,21 +2364,22 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Same check and tolerance as the PrestaShop and Magento plugins.
+         * Same check and tolerance as the PrestaShop and Magento plugins. A shop-match check: the tax the shop
+         * charged on the line against the rate its shipping tax setting gives it.
          *
-         * @throws Exception
+         * @return array|null ['log', 'message'] when the line does not reconcile, else null
          */
-        private static function assert_tax_reconciles($line, $rate)
+        private static function tax_reconcile_refusal($line, $rate)
         {
             $net = round((float) $line->get_total(), 2);
             $tax = round((float) $line->get_total_tax(), 2);
             $expected = round($net * (float) $rate, 2);
             // Epsilon: 0.02 itself is not exactly representable.
             if (abs($tax - $expected) <= self::TAX_RECONCILE_TOLERANCE + 1e-9) {
-                return;
+                return null;
             }
-            self::refuse(
-                sprintf(
+            return [
+                'log' => sprintf(
                     'Declared tax rate does not reconcile with the tax charged on "%s":'
                         . ' rate %s, net %s, tax %s, expected tax %s.'
                         . ' Check the shop tax rates for this shipping method.',
@@ -2241,23 +2389,26 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $tax,
                     $expected
                 ),
-                sprintf(
+                'message' => sprintf(
                     /* translators: %s: shipping method name */
                     __('The tax charged on "%s" does not match the shop\'s tax rates.', 'twoinc-payment-gateway'),
                     $line->get_name()
-                )
-            );
+                ),
+            ];
         }
 
         /**
+         * @param class-string<Exception> $exception
+         *
+         * @return never
          * @throws Exception
          */
-        private static function refuse($log, $message)
+        private static function refuse($log, $message, $exception = Exception::class)
         {
             if (function_exists('wc_get_logger')) {
                 wc_get_logger()->error($log, ['source' => 'twoinc-payment-gateway']);
             }
-            throw new Exception($message);
+            throw new $exception($message);
         }
 
         /**

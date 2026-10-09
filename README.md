@@ -317,13 +317,15 @@ When populated, the rate comes from WooCommerce's own "Shipping tax class"
 setting under WooCommerce > Settings > Tax, including "based on cart items", at
 the order's tax location.
 
-| Shipping line                                            | Control blank (the default)                                                                                                   | Control populated                                                                                                                                                                                                                  |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rate provided by the shop, including an explicit 0% rate | Sent at the recorded rate as is. No plugin check. Then the `twoinc_order_postprocessing` hook runs, then Two's API validates. | Same as control blank.                                                                                                                                                                                                             |
-| No rate provided (whatever the line's tax, including 0)  | Sent as is: rate 0, tax as charged. No plugin check. Then the hook runs, then Two's API validates.                            | The rate is resolved from the control, and the line's tax must reconcile with it (within 0.02). If it does not, the request is refused with an error naming the line. If it does, the line is sent at that rate and the hook runs. |
+| Shipping line                                            | Control blank (the default)                                                                                                   | Control populated                                                                                                                                                                                                                                                                     |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rate provided by the shop, including an explicit 0% rate | Sent at the recorded rate as is. No plugin check. Then the `twoinc_order_postprocessing` hook runs, then Two's API validates. | Same as control blank.                                                                                                                                                                                                                                                                |
+| No rate provided (whatever the line's tax, including 0)  | Sent as is: rate 0, tax as charged. No plugin check. Then the hook runs, then Two's API validates.                            | The rate is resolved from the control, and the line is sent at that rate. Its tax must reconcile with it (within 0.02): unless a merchant handler is registered, the default handler checks that after the hook and refuses the request with an error naming the line if it does not. |
 
-The check runs in the plugin's builders, before any filter and before the
-postprocessing hook, and never on what a filter returns. With the control
+The reconcile check is a shop-match check. It runs after the
+`twoinc_order_postprocessing` hook, in the plugin's default handler, on the
+shipping line as the plugin built it, and only when no merchant handler is
+registered on the hook (see "What the plugin checks" below). With the control
 blank, the plugin never refuses a request over shipping tax. A shipping or fee
 line with zero net but non-zero tax is sent with its tax rather than dropped.
 
@@ -334,10 +336,11 @@ it and must still reconcile with it, and a line with no rate row and no
 recorded rate is sent as is. Refunds take the rate the parent line was charged
 at.
 
-**Note for integrators.** If your `twoinc_order_postprocessing` subscriber
-re-splits a shipping line that has no rate (for example, treating untaxed
-shipping as VAT-inclusive), keep the control blank. A populated control
-resolves and checks that line before the hook runs, and can refuse it.
+**Note for integrators.** A `twoinc_order_postprocessing` subscriber that
+re-splits a shipping line with no rate (for example, treating untaxed shipping
+as VAT-inclusive) owns that line's figures: while it is registered, the
+reconcile check stands down. A populated control still decides the rate the
+line arrives at the hook with.
 
 If an upgrade removes a non-empty "Default shipping tax class" value, the plugin
 logs a notice naming the old class (source `twoinc-payment-gateway`).
@@ -453,13 +456,48 @@ order, so third-party `woocommerce_checkout_create_order_line_item`,
 with an order whose id is `0`. Code on those actions that writes elsewhere
 should skip an order with id `0`.
 
-**What the plugin checks**. Only what it builds itself. Its builders check the
-order the shop recorded before any filter runs and refuse a request that fails.
-For shipping tax, the only such check is on a line with no rate provided while
-the shipping tax control is populated (see "Shipping tax from the shop's
-rates"). What a subscriber returns is not re-checked: Two's API validates it,
-and a request the API refuses is logged at error level with the API's reason
-and, on a saved order, the reason is written to an order note.
+**What the plugin checks**. The plugin registers its own handler on the hook,
+`WC_Twoinc_Helper::default_order_postprocessing`, at priority `PHP_INT_MAX`.
+It runs the shop-match checks: whether what the request sends matches what
+the shop worked out. Today there is one: a shipping line with no rate row,
+sent at the rate the shipping tax control resolves, must carry the tax that
+rate gives, within 0.02 (see "Shipping tax from the shop's rates"). Each check
+applies to the line the plugin built it for, while that line's name, type,
+amounts and rate are unchanged. A failing check refuses the request with the
+same error, at the same level, as when the builders checked it.
+
+The default handler stands down when any other callback is registered on
+`twoinc_order_postprocessing`. That merchant handler then owns shop-match
+correctness: the plugin does not compare what it returns with the shop's
+figures, whether or not it changed them. Each request sent says so in one
+line in the WooCommerce log at info level, naming the handler (a function,
+`Class::method`, or where a closure was defined). The change hash, which
+sends nothing, logs nothing.
+
+What always runs, with or without a merchant handler: the builders' own
+refusals where they cannot build a payload at all (a negative discount, a
+shipping refund with no order line to take its rate from), the code-fault
+checks below, and Two's API. The plugin has no internal-consistency checks of
+its own: whether the lines add up to the totals and subtotals is validated by
+Two's API, and a request the API refuses is logged at error level with the
+API's reason and, on a saved order, the reason is written to an order note.
+
+**Opting back in**. A merchant handler can run the shop-match checks itself
+with `WC_Twoinc_Helper::check_shop_match(array $payload): array`. It returns
+the payload unchanged, or throws `WC_Twoinc_Shop_Match_Exception` with the
+error the default handler would have raised; the plugin lets it through
+unwrapped. Called on the payload the handler returns, it checks every line the
+handler left as built. Called on the payload it received, before any edit, it
+checks them all.
+
+```php
+add_filter('twoinc_order_postprocessing', function (array $payload, array $context): array {
+    // A cost the shop adds to the cart total outside any carrier, sent as its own line.
+    $payload = add_handling_line($payload, $context);
+    // The shop's lines this handler did not touch are still checked against the shop.
+    return WC_Twoinc_Helper::check_shop_match($payload);
+}, 10, 2);
+```
 
 A subscriber that throws, or returns something other than an array or
 something that cannot be encoded as JSON, is a code fault rather than a
@@ -491,8 +529,10 @@ send an update.
 **Performance**: it runs on every intent check during checkout. Keep it cheap.
 
 **A subscriber that is switched off** (a deactivated plugin, a removed
-snippet) is indistinguishable from none: orders then go out with the shop's
-figures.
+snippet, a callback taken off with `remove_filter()`) is indistinguishable
+from none: orders then go out with the shop's figures, and the default
+handler's checks apply again. Removing the default handler itself switches the
+shop-match checks off.
 
 **Example**: the shop records shipping as untaxed, while the business books
 VAT inside that charge at the shop's configured shipping rate. For 29.00 of
@@ -529,9 +569,10 @@ suite loads it as an mu-plugin to place a real order with re-split shipping.
 **The older filters are deprecated** in favour of this one:
 `twoinc_payment_terms_line`, `two_order_create`, `two_order_edit` and
 `twoinc_order_payload` (see `docs/two-order-hook.md`). They still run, inside
-the order builders, after the builders' own checks and before
-`twoinc_order_postprocessing`, so their output is the plugin's payload and goes
-out as it always has.
+the order builders and before `twoinc_order_postprocessing`, so their output is
+the plugin's payload and goes out as it always has. They are not merchant
+handlers: the default handler's checks apply to the lines they leave as
+built.
 
 **Versioning**: this hook must remain for all time and must fire consistently
 in response to the same events.
@@ -541,8 +582,8 @@ in response to the same events.
 - Allowed without a new version: new context keys, new `request_type` or
   `trigger` values.
 - Never allowed: removing or renaming a context key, changing units (rates stay
-  decimal fractions), checking the figures a subscriber returns, or
-  firing on fewer requests.
+  decimal fractions), checking the figures a merchant handler returns unless
+  it calls `check_shop_match()`, or firing on fewer requests.
 - An incompatible version 2 would be a new hook name, with this one still
   firing alongside it. Any contract change is recorded in the changelog, and the
   CI fixture pins version 1.

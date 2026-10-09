@@ -11,6 +11,10 @@
  *   packages    each cart line shipped as its own package
  *   inclusive   prices entered and shown including tax
  *   exempt      the buyer is VAT exempt
+ *   rowless     each shipping line keeps its tax but loses its rate row, as a module taxing shipping outside
+ *               WooCommerce's rates would record it
+ *   skewed      with rowless, each shipping line is charged 7.00 of tax, which no rate of the shop gives
+ *   surcharge   10.00 added to the cart total outside any carrier or line
  *
  * The subscriber is the unit suite's CI fixture, inert until `twoinc_order_postprocessing_fixture` names a mode.
  * tests/e2e/provision/cart-shapes-reset.php undoes all of it.
@@ -86,6 +90,19 @@ add_filter('woocommerce_cart_shipping_packages', function ($packages) {
         ]);
     }
     return $split;
+});
+
+// A rate id no tax row of the order carries, so the plugin finds no rate provided for the line.
+add_action('woocommerce_checkout_create_order_shipping_item', function ($item) {
+    if (!two_e2e_cart_shape('rowless')) {
+        return;
+    }
+    $tax = two_e2e_cart_shape('skewed') ? 7.0 : array_sum($item->get_taxes()['total'] ?? []);
+    $item->set_taxes(['total' => [999999 => $tax]]);
+});
+
+add_filter('woocommerce_calculated_total', function ($total) {
+    return two_e2e_cart_shape('surcharge') ? $total + 10.0 : $total;
 });
 
 add_action('woocommerce_cart_calculate_fees', function ($cart) {

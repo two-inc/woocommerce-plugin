@@ -2,8 +2,9 @@
 
 /**
  * Plugin Name: Two order postprocessing fixture
- * Description: A working `twoinc_order_postprocessing` subscriber for CI (TWO-26092). Inert until the
- *              `twoinc_order_postprocessing_fixture` option names a mode; records every call it sees.
+ * Description: A working `twoinc_order_postprocessing` subscriber for CI (TWO-26092). Registered only while the
+ *              `twoinc_order_postprocessing_fixture` option names a mode, because a registered subscriber is a
+ *              merchant handler and stands the plugin's default checks down (TWO-26275); records every call it sees.
  *
  * Also usable as an mu-plugin. The `resplit` mode is the README's example: it treats untaxed shipping as
  * VAT-inclusive at the shop's configured shipping rate, then rebuilds the totals from the edited lines.
@@ -32,6 +33,40 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
         return $payload;
     }
 
+    /**
+     * Adds a line for what the order's gross carries beyond its lines, a cost the shop adds to the cart total
+     * outside any carrier, split at 21%, and sets the totals to the lines (TWO-26275).
+     */
+    function twoinc_order_postprocessing_fixture_extra_line(array $payload): array
+    {
+        if (!isset($payload['gross_amount']) || empty($payload['line_items'])) {
+            return $payload;
+        }
+        $extra = (float) $payload['gross_amount'] - array_sum(array_map('floatval', array_column($payload['line_items'], 'gross_amount')));
+        if (round($extra, 2) <= 0) {
+            return $payload;
+        }
+        $net = round($extra / 1.21, 2);
+        $payload['line_items'][] = [
+            'name' => 'Handling',
+            'description' => '',
+            'gross_amount' => number_format($extra, 2, '.', ''),
+            'net_amount' => number_format($net, 2, '.', ''),
+            'discount_amount' => '0',
+            'tax_amount' => number_format($extra - $net, 2, '.', ''),
+            'tax_class_name' => 'VAT 21.00%',
+            'tax_rate' => '0.210000',
+            'unit_price' => number_format($net, 2, '.', ''),
+            'quantity' => 1,
+            'quantity_unit' => 'fee',
+            'image_url' => '',
+            'product_page_url' => '',
+            'type' => 'SERVICE',
+        ];
+        // An original with no totals carries no residual, so every total becomes the sum of the lines.
+        return WC_Twoinc_Helper::recompute_totals_from_lines($payload, ['line_items' => $payload['line_items']]);
+    }
+
     function twoinc_order_postprocessing_fixture($payload, $context)
     {
         $mode = get_option('twoinc_order_postprocessing_fixture');
@@ -50,6 +85,11 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
                 return WC_Twoinc_Helper::recompute_totals_from_lines(twoinc_order_postprocessing_fixture_resplit($payload, $context), $payload);
             case 'resplit_lines_only':
                 return twoinc_order_postprocessing_fixture_resplit($payload, $context);
+            case 'checked':
+                // Opts back in to the shop-match checks on the payload it returns (TWO-26275).
+                return WC_Twoinc_Helper::check_shop_match($payload);
+            case 'extra_line':
+                return twoinc_order_postprocessing_fixture_extra_line($payload);
             case 'gross':
                 $original = $payload;
                 foreach ($payload['line_items'] as &$line) {
@@ -89,5 +129,7 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
         }
     }
 
-    add_filter('twoinc_order_postprocessing', 'twoinc_order_postprocessing_fixture', 10, 2);
+    if (get_option('twoinc_order_postprocessing_fixture')) {
+        add_filter('twoinc_order_postprocessing', 'twoinc_order_postprocessing_fixture', 10, 2);
+    }
 }
