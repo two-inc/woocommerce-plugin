@@ -122,9 +122,10 @@ async function checkIntent(page: Page, products: string[] = ["Product 1"]) {
   const intent = page.waitForResponse((r) => r.url().includes("wc-ajax=two_order_intent"), {
     timeout: 60_000
   });
-  await checkout.completeCheckoutForm(page, "Test", `E2EHook${Date.now().toString(36)}`);
+  const lastName = `E2EHook${Date.now().toString(36)}`;
+  await checkout.completeCheckoutForm(page, "Test", lastName);
   const response = await intent;
-  return { status: response.status(), body: await response.json() };
+  return { status: response.status(), body: await response.json(), lastName };
 }
 
 // [cart shape, subscriber mode ("" for none), refused locally, description]
@@ -183,7 +184,7 @@ test("a subscriber adds a line for a cost outside the carrier, sent at intent, c
   ];
   const expected = ["8.26", "1.74", "10.00", "0.210000"];
 
-  const { status, body } = await checkIntent(page);
+  const { status, body, lastName } = await checkIntent(page);
   expect(status >= 200 && status < 300, `${status} ${JSON.stringify(body)}`).toBe(true);
   expect(split(handling(body.line_items)), "intent").toEqual(expected);
 
@@ -195,15 +196,17 @@ test("a subscriber adds a line for a cost outside the carrier, sent at intent, c
   const created = await getOrder(twoOrderId);
   expect(split(handling(created.line_items as Line[])), "create").toEqual(expected);
 
-  // An admin edit the plugin sends as an order update.
+  // An admin edit the plugin sends as an order update. The address is changed from WP-CLI, which does not load
+  // the e2e mu-plugin and so has no subscriber, and the order is then saved from its admin screen, which does.
   wp(
     "eval",
-    `$o = wc_get_order(${Number(
-      orderId
-    )}); $o->set_billing_city('E2E Updated'); $o->save(); WC_Twoinc::on_admin_order_save(${Number(
-      orderId
-    )});`
+    `$o = wc_get_order(${Number(orderId)}); $o->set_billing_city('E2E Updated'); $o->save();`
   );
+  await wpAdmin.login(page);
+  await wpAdmin.navigateToOrders(page);
+  await wpAdmin.openOrder(page, lastName);
+  await page.locator("button.save_order").click();
+  await page.waitForLoadState("load");
   // The plugin notes an update the API accepted, and its reason when the API refused one.
   const notes = wp(
     "eval",
