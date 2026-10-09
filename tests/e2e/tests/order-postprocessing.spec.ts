@@ -217,4 +217,10 @@ test("a subscriber adds a line for a cost outside the carrier, sent at intent, c
   expect(notes, "update sent and accepted").toContain("order edit request has been accepted");
   const updated = await getOrder(twoOrderId);
   expect(split(handling(updated.line_items as Line[])), "update").toEqual(expected);
+  // The update sends the same lines as the create, not a second split of the same cost.
+  const lineSet = (lines: Line[]) =>
+    lines.map((line) => [line.name, line.type, ...split(line)].join(" ")).sort();
+  expect(lineSet(updated.line_items as Line[]), "update lines").toEqual(
+    lineSet(created.line_items as Line[])
+  );
 });

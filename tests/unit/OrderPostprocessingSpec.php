@@ -611,26 +611,34 @@ final class OrderPostprocessingSpec
         };
         $moved = $built;
         array_unshift($moved['line_items'], array_pop($moved['line_items']));
-        // [payload the helper is given, refused, description]
+        // A handler declaring its own split: the shipping line re-split at 21% with gross unchanged.
+        $resplit = $edit(['net_amount' => '29.75', 'tax_amount' => '6.25', 'gross_amount' => '36.00', 'tax_rate' => '0.210000']);
+        // [payload the helper is given, scope, refused, description]
         $cases = [
-            [$built, true, 'the payload as built'],
-            [$moved, true, 'the line moved to another position, unchanged'],
-            [$edit(['description' => 'edited', 'tax_code' => 'X']), true, 'a field the check does not read changed'],
-            [$edit(['tax_amount' => '6.09', 'gross_amount' => '35.09']), false, 'the tax changed'],
-            [$edit(['tax_rate' => '0.240000']), false, 'the rate changed'],
-            [$edit(['name' => 'Shipping - Other']), false, 'the line renamed'],
-            [$edit(['type' => 'SERVICE']), false, 'the line retyped'],
-            [['line_items' => []] + $built, false, 'the line removed'],
-            [['line_items' => 'x'] + $built, false, 'lines that are not a list'],
-            [$edit(['description' => 'edited'], 0), true, 'another line edited'],
+            [$built, WC_Twoinc_Helper::SHOP_MATCH_ALL, true, 'the payload as built'],
+            [$built, WC_Twoinc_Helper::SHOP_MATCH_PER_LINE, true, 'the payload as built, per-line scope: the untouched mismatching line is refused'],
+            [$moved, WC_Twoinc_Helper::SHOP_MATCH_ALL, true, 'the line moved to another position, unchanged'],
+            [$edit(['description' => 'edited', 'tax_code' => 'X']), WC_Twoinc_Helper::SHOP_MATCH_ALL, true, 'a field the check does not read changed'],
+            [$edit(['tax_amount' => '6.09', 'gross_amount' => '35.09']), WC_Twoinc_Helper::SHOP_MATCH_ALL, false, 'the tax changed'],
+            [$edit(['tax_rate' => '0.240000']), WC_Twoinc_Helper::SHOP_MATCH_ALL, false, 'the rate changed'],
+            [$resplit, WC_Twoinc_Helper::SHOP_MATCH_PER_LINE, false, 'per-line scope: the line re-split at 21% passes'],
+            [$resplit, WC_Twoinc_Helper::SHOP_MATCH_ALL, false, 'all scope: the line re-split at 21% passes'],
+            [$edit(['name' => 'Shipping - Other']), WC_Twoinc_Helper::SHOP_MATCH_ALL, false, 'the line renamed'],
+            [$edit(['type' => 'SERVICE']), WC_Twoinc_Helper::SHOP_MATCH_ALL, false, 'the line retyped'],
+            [['line_items' => []] + $built, WC_Twoinc_Helper::SHOP_MATCH_ALL, false, 'the line removed'],
+            [['line_items' => 'x'] + $built, WC_Twoinc_Helper::SHOP_MATCH_ALL, false, 'lines that are not a list'],
+            [$edit(['description' => 'edited'], 0), WC_Twoinc_Helper::SHOP_MATCH_PER_LINE, true, 'per-line scope: another line edited, the mismatching line untouched'],
+            [$built, 'whole', 'InvalidArgumentException', 'an unknown scope is a code fault'],
         ];
-        foreach ($cases as [$payload, $refused, $description]) {
+        foreach ($cases as [$payload, $scope, $refused, $description]) {
             try {
-                $returned = WC_Twoinc_Helper::check_shop_match($payload);
+                $returned = WC_Twoinc_Helper::check_shop_match($payload, $scope);
                 TinyAssert::same(false, $refused, "$description: not refused");
                 TinyAssert::same(json_encode($payload), json_encode($returned), "$description: the helper changed the payload");
             } catch (WC_Twoinc_Shop_Match_Exception $e) {
                 TinyAssert::same(true, $refused, "$description: refused: " . $e->getMessage());
+            } catch (InvalidArgumentException $e) {
+                TinyAssert::same('InvalidArgumentException', $refused, "$description: " . $e->getMessage());
             }
         }
     }

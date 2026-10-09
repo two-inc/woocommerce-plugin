@@ -18,6 +18,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         public const ORDER_POSTPROCESSING_HOOK = 'twoinc_order_postprocessing';
 
+        /** check_shop_match() scopes (TWO-26275): every shop-match check, or only those made for single lines. */
+        public const SHOP_MATCH_ALL = 'all';
+        public const SHOP_MATCH_PER_LINE = 'per_line';
+
         /** The plugin's own handler on the hook, as describe_callback() names it. */
         private const DEFAULT_ORDER_POSTPROCESSING_HANDLER = 'WC_Twoinc_Helper::default_order_postprocessing';
 
@@ -1496,13 +1500,22 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * handler is registered; a merchant handler calls it to opt back in, on the payload it returns or on the one
          * it received. Part of the stable contract.
          *
-         * @param array $payload
+         * `$scope` SHOP_MATCH_PER_LINE runs only the checks made for single lines, on the lines left as built, for a
+         * handler that declares its own split of the order. This plugin has no whole-order shop-match check today,
+         * so both scopes run the same checks; the scope keeps a handler's call correct if one is added.
+         *
+         * @param array  $payload
+         * @param string $scope   SHOP_MATCH_ALL (the default) or SHOP_MATCH_PER_LINE
          *
          * @return array the payload, unchanged
          * @throws WC_Twoinc_Shop_Match_Exception naming the first line that fails, with the message checkout shows
+         * @throws InvalidArgumentException for an unknown scope
          */
-        public static function check_shop_match(array $payload)
+        public static function check_shop_match(array $payload, $scope = self::SHOP_MATCH_ALL)
         {
+            if (!in_array($scope, [self::SHOP_MATCH_ALL, self::SHOP_MATCH_PER_LINE], true)) {
+                throw new InvalidArgumentException(sprintf('Unknown shop-match scope %s.', var_export($scope, true)));
+            }
             $lines = isset($payload['line_items']) && is_array($payload['line_items']) ? $payload['line_items'] : [];
             foreach ($lines as $line) {
                 $refusal = is_array($line) ? (self::$shop_match_refusals[self::line_fingerprint($line)] ?? null) : null;

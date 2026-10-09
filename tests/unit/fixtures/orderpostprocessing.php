@@ -44,7 +44,7 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
         }
         $extra = (float) $payload['gross_amount'] - array_sum(array_map('floatval', array_column($payload['line_items'], 'gross_amount')));
         if (round($extra, 2) <= 0) {
-            return $payload;
+            return WC_Twoinc_Helper::check_shop_match($payload, WC_Twoinc_Helper::SHOP_MATCH_PER_LINE);
         }
         $net = round($extra / 1.21, 2);
         $payload['line_items'][] = [
@@ -64,7 +64,9 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
             'type' => 'SERVICE',
         ];
         // An original with no totals carries no residual, so every total becomes the sum of the lines.
-        return WC_Twoinc_Helper::recompute_totals_from_lines($payload, ['line_items' => $payload['line_items']]);
+        $payload = WC_Twoinc_Helper::recompute_totals_from_lines($payload, ['line_items' => $payload['line_items']]);
+        // The shop's own lines are still checked against the shop, as the README example does.
+        return WC_Twoinc_Helper::check_shop_match($payload, WC_Twoinc_Helper::SHOP_MATCH_PER_LINE);
     }
 
     function twoinc_order_postprocessing_fixture($payload, $context)

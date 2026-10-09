@@ -483,19 +483,53 @@ Two's API, and a request the API refuses is logged at error level with the
 API's reason and, on a saved order, the reason is written to an order note.
 
 **Opting back in**. A merchant handler can run the shop-match checks itself
-with `WC_Twoinc_Helper::check_shop_match(array $payload): array`. It returns
-the payload unchanged, or throws `WC_Twoinc_Shop_Match_Exception` with the
-error the default handler would have raised; the plugin lets it through
-unwrapped. Called on the payload the handler returns, it checks every line the
-handler left as built. Called on the payload it received, before any edit, it
-checks them all.
+with
+`WC_Twoinc_Helper::check_shop_match(array $payload, string $scope = WC_Twoinc_Helper::SHOP_MATCH_ALL): array`.
+It returns the payload unchanged, or throws `WC_Twoinc_Shop_Match_Exception`
+with the error the default handler would have raised; the plugin lets it
+through unwrapped. Called on the payload the handler returns, it checks every
+line the handler left as built. Called on the payload it received, before any
+edit, it checks them all.
+
+`$scope` chooses which checks run. `SHOP_MATCH_ALL`, the default, runs every
+shop-match check. `SHOP_MATCH_PER_LINE` runs only the checks made for single
+lines, on the lines the handler left as built: use it when the handler
+declares its own split of the order, so that a whole-order comparison with the
+shop's totals cannot refuse that split. Every shop-match check this plugin has
+today is per line, so the two scopes currently run the same checks.
+
+The example sends a cost the shop adds to the cart total outside any carrier
+as its own line, taxed at 21%. It splits off only what the order total
+carries beyond the lines, so a create and a later update of the same order
+send the same lines, and an order with nothing beyond its lines is left alone.
 
 ```php
 add_filter('twoinc_order_postprocessing', function (array $payload, array $context): array {
-    // A cost the shop adds to the cart total outside any carrier, sent as its own line.
-    $payload = add_handling_line($payload, $context);
-    // The shop's lines this handler did not touch are still checked against the shop.
-    return WC_Twoinc_Helper::check_shop_match($payload);
+    if (!isset($payload['gross_amount']) || empty($payload['line_items'])) {
+        return $payload;
+    }
+    $beyond = (float) $payload['gross_amount']
+        - array_sum(array_map('floatval', array_column($payload['line_items'], 'gross_amount')));
+    if (round($beyond, 2) > 0) {
+        $net = round($beyond / 1.21, 2);
+        $payload['line_items'][] = [
+            'name' => 'Handling',
+            'type' => 'SERVICE',
+            'quantity' => 1,
+            'quantity_unit' => 'fee',
+            'unit_price' => number_format($net, 2, '.', ''),
+            'net_amount' => number_format($net, 2, '.', ''),
+            'tax_amount' => number_format($beyond - $net, 2, '.', ''),
+            'gross_amount' => number_format($beyond, 2, '.', ''),
+            'discount_amount' => '0',
+            'tax_rate' => '0.210000',
+            'tax_class_name' => 'VAT 21%',
+        ];
+        // An original with no totals carries no residual: every total becomes the sum of the lines.
+        $payload = WC_Twoinc_Helper::recompute_totals_from_lines($payload, ['line_items' => $payload['line_items']]);
+    }
+    // The shop's own lines, which this handler did not touch, are still checked against the shop.
+    return WC_Twoinc_Helper::check_shop_match($payload, WC_Twoinc_Helper::SHOP_MATCH_PER_LINE);
 }, 10, 2);
 ```
 
