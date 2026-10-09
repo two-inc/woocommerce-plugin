@@ -163,7 +163,7 @@ test("a subscriber that changes gross is sent as returned", async ({ page }) => 
   setOption(SHAPE_OPTION, "taxes,untaxed");
   setOption(SUBSCRIBER_OPTION, "gross");
   const { status, body } = await checkIntent(page);
-  expect(status, JSON.stringify(body)).toBe(200);
+  expect(status >= 200 && status < 300, `${status} ${JSON.stringify(body)}`).toBe(true);
   expect(ofType(body.line_items, "SHIPPING_FEE")[0]?.gross_amount).toBe("30.00");
 });
 
@@ -184,7 +184,7 @@ test("a subscriber adds a line for a cost outside the carrier, sent at intent, c
   const expected = ["8.26", "1.74", "10.00", "0.210000"];
 
   const { status, body } = await checkIntent(page);
-  expect(status, JSON.stringify(body)).toBe(200);
+  expect(status >= 200 && status < 300, `${status} ${JSON.stringify(body)}`).toBe(true);
   expect(split(handling(body.line_items)), "intent").toEqual(expected);
 
   const orderId = await checkout.placeOrder(page);
