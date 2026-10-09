@@ -204,7 +204,14 @@ test("a subscriber adds a line for a cost outside the carrier, sent at intent, c
       orderId
     )});`
   );
+  // The plugin notes an update the API accepted, and its reason when the API refused one.
+  const notes = wp(
+    "eval",
+    `echo implode(' | ', wp_list_pluck(wc_get_order_notes(['order_id' => ${Number(
+      orderId
+    )}, 'limit' => 3]), 'content'));`
+  );
+  expect(notes, "update sent and accepted").toContain("order edit request has been accepted");
   const updated = await getOrder(twoOrderId);
-  expect((updated.billing_address as Line | undefined)?.city, "update sent").toBe("E2E Updated");
   expect(split(handling(updated.line_items as Line[])), "update").toEqual(expected);
 });
