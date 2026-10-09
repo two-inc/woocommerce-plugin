@@ -105,15 +105,10 @@ add_action('woocommerce_checkout_create_order_shipping_item', function ($item) {
 add_filter('woocommerce_calculated_total', function ($total) {
     return two_e2e_cart_shape('surcharge') ? $total + 10.0 : $total;
 });
-add_action('woocommerce_checkout_create_order', function ($order) {
-    if (two_e2e_cart_shape('surcharge')) {
-        $order->update_meta_data('_two_e2e_surcharge', '10.00');
-    }
-});
+// Every recalculation of an order total, by the Store API checkout or an admin save, adds the cost back.
 add_action('woocommerce_order_after_calculate_totals', function ($and_taxes, $order) {
-    $surcharge = (float) $order->get_meta('_two_e2e_surcharge');
-    if ($surcharge) {
-        $order->set_total((float) $order->get_total('edit') + $surcharge);
+    if (two_e2e_cart_shape('surcharge')) {
+        $order->set_total((float) $order->get_total('edit') + 10.0);
     }
 }, 10, 2);
 
