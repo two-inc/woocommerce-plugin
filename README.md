@@ -349,16 +349,17 @@ logs a notice naming the old class (source `twoinc-payment-gateway`).
 
 Two's API accepts a `tax_code` on each order line. For a Spanish merchant a line
 at 0% tax must carry one, because a 0% rate on its own does not say why the
-line is untaxed. The plugin adds the code to every line it sends at 0%: order
-create, order edit and refund lines. Fulfilment sends no lines, so there is
+line is untaxed. The plugin adds the code the merchant mapped to each line it
+sends at 0%: order create, order edit and refund lines. Fulfilment sends no lines, so there is
 nothing to add. The availability check (order intent) carries no codes, because
 the buyer's details, such as the VAT number, may still be incomplete then. A
 line at any other rate is sent exactly as before, and so is every line of a
-merchant outside Spain who has mapped nothing.
+merchant who has mapped nothing.
 
 It is the merchant's job to set the shop's taxes up correctly. The plugin does
 not decide how a line is taxed: it sends the code the merchant chose for the
-case the shop's own tax setup puts the line in (TWO-26153).
+case the shop's own tax setup puts the line in, and never picks a code itself
+(TWO-26153).
 
 **Mapping.** Under WooCommerce > Settings > Payments > Two, "Tax codes for 0%
 lines" has a block of rows for the standard tax class and for every tax class
@@ -414,46 +415,38 @@ a services class's exempt row to an intra-community services code.
 
 **Placement record.** When the order is created with Two, the plugin records
 the code each 0% line was sent with on the order, "no code" included (through
-the order API, so it works with High-Performance Order Storage). A merchant
-outside Spain with no row mapped records nothing, since nothing could code
-those lines. Edits and refunds send the recorded
-code, so a changed address, mapping or tax rate never moves a placed order. A
-line the record does not cover (an order placed before the record existed, or a
-line added by an edit) is resolved as at placement, and step 4 shares only codes the record
-holds from steps 1 to 3.
+the order API, so it works with High-Performance Order Storage). A shop with no
+row mapped records nothing, since nothing could code those lines. Edits and
+refunds send the recorded code, so a changed address, mapping or tax rate never
+moves a placed order. A line the record does not cover (a line added by an
+edit) is resolved as at placement, and step 4 shares only codes the record
+holds from steps 1 to 3. An order placed before the record existed has none:
+its lines are resolved again on each edit or refund, and shipping with no tax
+class takes the one code all the order's other 0% lines get, and none when they
+disagree or one has none.
 
 **Upgrading.** A mapping saved per tax class by an earlier build is moved once
 to the rows: each class's code is copied to its exempt row, its no-rule row and
 every 0% rate it has at that moment, so every line the old mapping covered
 keeps its code. Rates added later start on "(none)".
 
-**Derivation, while it is retired.** For a Spanish merchant, a 0% line whose
-tax class has no row mapped at all, or shipping with no tax class when no line
-of the order was coded by steps 1 to 3, still gets a code worked out from the
-order, as below. A follow-up release removes this. A product line is a service
-when its product is virtual or downloadable, and goods otherwise. A shipping or
-fee line is goods when the order has at least one goods line, and a service
-otherwise. Goods follow the delivery address (the billing address when the
-order has no separate one). Services follow the buyer company's country, which
-is the billing country the order sends as `buyer.company.country_prefix`. The
-EU below is the 27 member states plus Monaco. The Canary Islands, Ceuta and
-Melilla are Spanish postcodes starting 35 or 38, 51 and 52, and count as
-outside the EU: the delivery postcode decides for goods, the billing postcode
-for a Spanish buyer of services.
+**Upgrading from a build that derived codes.** Earlier pre-release builds
+worked out a code for a Spanish merchant's 0% line whose tax class had no row
+mapped (exports, the Canary Islands, Ceuta and Melilla, intra-community goods
+and services, and services to buyers outside the EU). This plugin does not. A
+Spanish merchant must map the rows their 0% lines fall on: typically each
+class's exempt row, its no-rule row and any 0% rate rows, including the class
+shipping is taxed under. A 0% line with no row set goes out without a code, and
+Two refuses it.
 
-The derived intra-community codes also need the buyer's VAT number, with a prefix
-naming an EU member state other than the merchant's country (the prefix need
-not match the buyer or delivery country). The plugin collects no VAT number of
-its own; it reads the first of these order meta keys that holds a number, which
-the common EU VAT plugins store: `_billing_vat_number`, `_vat_number`,
-`vat_number`, `VAT Number`, `_billing_eu_vat_number`, then passes it through
-the `twoinc_buyer_vat_number` filter (see below). The number is used and sent
-as entered, trimmed of leading and trailing whitespace and nothing else; only a
-value that is empty once trimmed is skipped for the next key. Its first two
-letters, as entered, name its country (`EL` reads as Greece), so a number with
-no upper-case two-letter prefix derives no code. `MC`
-is not a VAT prefix, so it never qualifies. With no such number the line gets
-no code, so Two refuses it.
+**The buyer's VAT number.** The plugin collects no VAT number of its own; it
+reads the first of these order meta keys that holds a number, which the common
+EU VAT plugins store: `_billing_vat_number`, `_vat_number`, `vat_number`,
+`VAT Number`, `_billing_eu_vat_number`, then passes it through the
+`twoinc_buyer_vat_number` filter (see below). The number is used and sent as
+entered, trimmed of leading and trailing whitespace and nothing else; only a
+value that is empty once trimmed is skipped for the next key. Step 1 needs only
+a number: its prefix is not checked.
 
 Where a VAT plugin records that its check got an answer and the answer was
 "invalid", that number is not used, and the later keys are not tried either,
@@ -472,39 +465,18 @@ Spanish buyer's VAT number to equal its organisation number, so it is never
 sent for one. Edits leave it out, which keeps the number Two stored, and
 refunds use the stored number. Other merchants' payloads are unchanged, and
 nothing is sent until the merchant record has given the merchant's country (the
-shop's base country does not stand in for this). The intra-community codes
-need the number to be sent, so they are not derived in that window either. A
-VAT number changed after the order is placed is not sent again: an edit cannot
-change the number Two holds.
+shop's base country does not stand in for this). A VAT number changed after the
+order is placed is not sent again: an edit cannot change the number Two holds.
 
-The derivation's rules:
-
-| Line     | Where it goes, or who buys                                       | Code sent                         |
-| -------- | ---------------------------------------------------------------- | --------------------------------- |
-| Goods    | Delivered outside the EU                                         | `ES_IVA_EXPORT`                   |
-| Goods    | Delivered to the Canary Islands, Ceuta or Melilla                | `ES_IVA_EXPORT`                   |
-| Goods    | Delivered to another EU state, for a buyer in another EU state   | `ES_IVA_INTRA_COMMUNITY`          |
-| Goods    | As above, with no qualifying buyer VAT number                    | none                              |
-| Goods    | Delivered in mainland Spain or the Balearics                     | none                              |
-| Goods    | Delivered to another EU state, for a Spanish buyer               | none                              |
-| Services | Buyer in another EU state                                        | `ES_IVA_INTRA_COMMUNITY_SERVICES` |
-| Services | As above, with no qualifying buyer VAT number                    | none                              |
-| Services | Buyer outside the EU, or in the Canary Islands, Ceuta or Melilla | `ES_IVA_NON_EU_SERVICES`          |
-| Services | Buyer in mainland Spain or the Balearics                         | none                              |
-
-Where the table gives no code, the line is sent without one. **The plugin never
-refuses; the API does.** Two's API checks every code it receives, and refuses a
-Spanish merchant's 0% line that has none, with a reason the plugin logs and
-writes to the order note. To send those lines, map their rows. The codes
-are added in the line builder, before `twoinc_payment_terms_line`,
-`twoinc_order_payload` and `twoinc_order_postprocessing`, so any of them can
-change or remove a code. A code that needs an exemption reason, such as
-`ES_IVA_EXEMPT_OTHER`, can be sent from `twoinc_order_postprocessing` with
-`tax_exemption_reason_code` set beside it.
-
-Known limits of the derivation: goods to Northern Ireland derive as an export,
-and other member states' special territories derive by their ISO country code.
-Map the class's rows, or use the hook, where that is wrong for you.
+A line no row codes is sent without a code. **The plugin never refuses; the
+API does.** Two's API checks every code it receives, and refuses a Spanish
+merchant's 0% line that has none, with a reason the plugin logs and writes to
+the order note. To send those lines, map their rows. The codes are added in the
+line builder, before `twoinc_payment_terms_line`, `twoinc_order_payload` and
+`twoinc_order_postprocessing`, so any of them can change or remove a code. A
+code that needs an exemption reason, such as `ES_IVA_EXEMPT_OTHER`, can be sent
+from `twoinc_order_postprocessing` with `tax_exemption_reason_code` set beside
+it.
 
 ## Extension point: buyer VAT number
 
@@ -513,8 +485,8 @@ source the plugin does not read itself, such as a block checkout additional
 field (stored as order meta `_wc_billing/<namespace>/<field>`) or a theme's
 custom field. It receives the number the keys above give, or `''` for none,
 and the order; return the number, or `''` for none. It runs before the tax
-codes are chosen, so the number decides the exempt-buyer row (and the derived
-intra-community codes) as well as the `buyer_vat_number` sent.
+codes are chosen, so the number decides the exempt-buyer row as well as the
+`buyer_vat_number` sent.
 `twoinc_order_postprocessing` runs after that, so setting `buyer_vat_number`
 there cannot change the code.
 The filter can run several times per request, so keep it pure and cheap.
