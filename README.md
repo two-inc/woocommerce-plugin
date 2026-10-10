@@ -561,10 +561,13 @@ before calling it is overwritten: the helper's result wins.
 **The buyer surcharge is priced before the hook**. The plugin's fee
 calculations operate on the order as WooCommerce built it, before any
 subscriber runs. The surcharge for a payment term is quoted on the cart's
-contents and shipping, including their tax, and enters the order as a
-WooCommerce fee; the request then sends that fee line as recorded. The plugin
-does not re-price the surcharge on the payload a subscriber returns, so a
-subscriber that adds a line or changes gross, net or tax does not change it.
+contents after discounts and its shipping, including their tax, and enters the
+order as a WooCommerce fee. Every request (create, update, refund) sends that
+fee as recorded on the order or refund. The plugin does not re-price the
+surcharge on the payload a subscriber returns, so a subscriber that adds a line
+or changes gross, net or tax does not change it. The order's own fee item stays
+at the plugin's price, so a subscriber that changes the fee line re-applies
+that change on every request.
 Any fee consequence of the amounts a subscriber declares is the merchant's,
 and their subscriber handles it. With a percentage surcharge, for example, no
 surcharge is charged on a line the subscriber adds; a merchant who wants it
