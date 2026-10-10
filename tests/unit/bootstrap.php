@@ -551,6 +551,22 @@ class WC_Tax
         return $GLOBALS['__twoinc_test_find_rates'][$class] ?? [];
     }
 
+    /**
+     * Every rate row of a tax class ('' = Standard), keyed by tax_rate_id, as objects carrying tax_rate_id, tax_rate,
+     * tax_rate_country, tax_rate_state, tax_rate_name and, when set, postcode and city lists. Controlled by
+     * $GLOBALS['__twoinc_test_class_rates'], keyed by class.
+     *
+     * @return array<int, object>
+     */
+    public static function get_rates_for_tax_class($tax_class)
+    {
+        $rows = [];
+        foreach ($GLOBALS['__twoinc_test_class_rates'][(string) $tax_class] ?? [] as $id => $row) {
+            $rows[$id] = (object) ($row + ['tax_rate_id' => $id, 'tax_rate_country' => '', 'tax_rate_state' => '', 'tax_rate_name' => '']);
+        }
+        return $rows;
+    }
+
     /** Core's filter: only rows flagged for shipping. */
     public static function find_shipping_rates($args = [])
     {

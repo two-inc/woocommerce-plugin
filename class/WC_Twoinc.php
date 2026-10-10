@@ -109,6 +109,7 @@ if (!class_exists('WC_Twoinc')) {
             $this->drop_renamed_option_rows();
             $this->drop_fabricated_due_in_days();
             $this->migrate_se_tax_subtotals();
+            $this->migrate_tax_code_map_to_rows();
 
             $this->title = $this->get_pay_title();
             /**
@@ -612,8 +613,12 @@ if (!class_exists('WC_Twoinc')) {
             return strtoupper((string) get_option(WC_Twoinc_Brand::prefixed_name('merchant_country'), ''));
         }
 
+        /** The stored mapping's shape (TWO-26153): 2 keys it by row, migrate_tax_code_map_to_rows() moves older ones. */
+        private const TAX_CODE_MAP_VERSION = 2;
+
         /**
-         * The merchant's mapping of WooCommerce tax class (slug, the standard class as `standard`) to Two tax code.
+         * The merchant's tax code mapping by row (TWO-26153): `<class>|exempt`, `<class>|none` and `rate:<tax_rate_id>`,
+         * with the standard class as `standard`. See WC_Twoinc_Helper::apply_tax_codes().
          *
          * @return array<string, string>
          */
@@ -621,6 +626,68 @@ if (!class_exists('WC_Twoinc')) {
         {
             $map = self::get_instance()->get_option('tax_code_map');
             return is_array($map) ? array_filter($map, 'is_string') : [];
+        }
+
+        /** A tax class's row for a buyer in another EU country with a VAT number (step 1). */
+        public static function tax_code_exempt_key($tax_class)
+        {
+            return $tax_class . '|exempt';
+        }
+
+        /** A tax class's row for an address none of its rates covers (step 3). */
+        public static function tax_code_no_rule_key($tax_class)
+        {
+            return $tax_class . '|none';
+        }
+
+        /** A 0% tax rate's row (step 2). A rate belongs to one tax class, so its id alone names it. */
+        public static function tax_code_rate_key($rate_id)
+        {
+            return 'rate:' . $rate_id;
+        }
+
+        /**
+         * A tax class's 0% rates, in the order WooCommerce lists them, labelled as its tax settings describe them.
+         *
+         * @param string $tax_class the mapping key, the standard class as `standard`
+         *
+         * @return array<string, string> label by tax rate id
+         */
+        public static function zero_tax_rates($tax_class)
+        {
+            if (!class_exists('WC_Tax') || !method_exists('WC_Tax', 'get_rates_for_tax_class')) {
+                return [];
+            }
+            $rates = [];
+            foreach ((array) WC_Tax::get_rates_for_tax_class('standard' === $tax_class ? '' : $tax_class) as $rate) {
+                $rate = (object) $rate;
+                if (isset($rate->tax_rate_id) && 0.0 === (float) ($rate->tax_rate ?? 0)) {
+                    $rates[(string) $rate->tax_rate_id] = self::tax_rate_label($rate);
+                }
+            }
+            return $rates;
+        }
+
+        /**
+         * A tax rate as WooCommerce's tax rate table shows it: country (`*` for any), state, postcodes, cities, rate
+         * and, in brackets, its name. For example "ES 35*;38* 0% (IVA 0%)".
+         *
+         * @return string
+         */
+        private static function tax_rate_label($rate)
+        {
+            $parts = [trim((string) ($rate->tax_rate_country ?? '')) ?: '*'];
+            if (trim((string) ($rate->tax_rate_state ?? '')) !== '') {
+                $parts[] = trim((string) $rate->tax_rate_state);
+            }
+            foreach (['postcode', 'city'] as $location) {
+                if (!empty($rate->$location) && is_array($rate->$location)) {
+                    $parts[] = implode(';', $rate->$location);
+                }
+            }
+            $parts[] = rtrim(rtrim(number_format((float) ($rate->tax_rate ?? 0), 4, '.', ''), '0'), '.') . '%';
+            $name = trim((string) ($rate->tax_rate_name ?? ''));
+            return implode(' ', $parts) . ($name !== '' ? ' (' . $name . ')' : '');
         }
 
         /**
@@ -703,9 +770,32 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Render the tax code mapping (WC Settings API custom field `two_tax_code_map`, TWO-24877): one row per tax
-         * class, each a dropdown of the merchant country's codes plus "(none)". A saved code the list no longer
-         * offers is still shown, so a save cannot drop it silently.
+         * The rows of the tax code mapping (TWO-26153), by tax class: the exempt buyer, each 0% rate of the class,
+         * then no rule. Rates above 0% are not listed: they never give a 0% line.
+         *
+         * @return array<string, array{name: string, rows: array<string, string>}>
+         */
+        public static function tax_code_map_rows()
+        {
+            $classes = [];
+            foreach (self::tax_code_map_classes() as $slug => $name) {
+                $rows = [self::tax_code_exempt_key($slug) => __('Buyer in another EU country with a VAT number', 'twoinc-payment-gateway')];
+                foreach (self::zero_tax_rates($slug) as $rate_id => $label) {
+                    $rows[self::tax_code_rate_key($rate_id)] = $label;
+                }
+                $rows[self::tax_code_no_rule_key($slug)] = __('No rule for the address', 'twoinc-payment-gateway');
+                $classes[$slug] = ['name' => $name, 'rows' => $rows];
+            }
+            return $classes;
+        }
+
+        /**
+         * Render the tax code mapping (WC Settings API custom field `two_tax_code_map`, TWO-24877, TWO-26153): a block
+         * of rows per tax class, each a dropdown of the merchant country's codes plus "(none)". A saved code the list
+         * no longer offers is still shown, so a save cannot drop it silently.
+         *
+         * The dropdowns post nothing themselves: the form posts the whole mapping as one JSON field, which admin.js
+         * rewrites on every change, so a large rate table cannot run past PHP's max_input_vars and lose rows.
          */
         public function generate_two_tax_code_map_html($key, $data)
         {
@@ -714,6 +804,13 @@ if (!class_exists('WC_Twoinc')) {
             $stored = self::get_tax_code_map();
             $list = $this->get_tax_codes(self::get_merchant_country());
             $options = self::tax_code_options($list['codes']);
+            $classes = self::tax_code_map_rows();
+            $posted = [];
+            foreach ($classes as $class) {
+                foreach (array_keys($class['rows']) as $row) {
+                    $posted[$row] = $stored[$row] ?? '';
+                }
+            }
 
             ob_start();
             ?>
@@ -727,27 +824,34 @@ if (!class_exists('WC_Twoinc')) {
                             $list['error']
                         )); ?></p>
                     <?php endif; ?>
+                    <input type="hidden" class="twoinc-tax-code-map-value" name="<?php echo esc_attr($field_key); ?>" value="<?php echo esc_attr((string) wp_json_encode(['rows' => count($posted), 'map' => (object) $posted])); ?>" />
                     <table class="widefat twoinc-tax-code-map">
                         <thead><tr>
                             <th><?php esc_html_e('Tax class', 'twoinc-payment-gateway'); ?></th>
+                            <th><?php esc_html_e('Case', 'twoinc-payment-gateway'); ?></th>
                             <th><?php esc_html_e('Tax code', 'twoinc-payment-gateway'); ?></th>
                         </tr></thead>
                         <tbody>
-                        <?php foreach (self::tax_code_map_classes() as $slug => $name) :
-                            $current = $stored[$slug] ?? '';
-                            $row_options = ['' => __('(none)', 'twoinc-payment-gateway')] + $options;
-                            if ($current !== '' && !isset($row_options[$current])) {
-                                $row_options[$current] = $current;
-                            } ?>
+                        <?php foreach ($classes as $class) :
+                            $first = true;
+                            foreach ($class['rows'] as $row => $label) :
+                                $current = $stored[$row] ?? '';
+                                $row_options = ['' => __('(none)', 'twoinc-payment-gateway')] + $options;
+                                if ($current !== '' && !isset($row_options[$current])) {
+                                    $row_options[$current] = $current;
+                                } ?>
                             <tr>
-                                <td><?php echo esc_html($name); ?></td>
-                                <td><select name="<?php echo esc_attr($field_key); ?>[<?php echo esc_attr($slug); ?>]">
-                                    <?php foreach ($row_options as $value => $label) : ?>
-                                        <option value="<?php echo esc_attr($value); ?>"<?php echo $value === $current ? ' selected="selected"' : ''; ?>><?php echo esc_html($label); ?></option>
+                                <td><?php echo $first ? esc_html($class['name']) : ''; ?></td>
+                                <td><?php echo esc_html($label); ?></td>
+                                <td><select data-twoinc-tax-code-row="<?php echo esc_attr($row); ?>">
+                                    <?php foreach ($row_options as $value => $option_label) : ?>
+                                        <option value="<?php echo esc_attr($value); ?>"<?php echo $value === $current ? ' selected="selected"' : ''; ?>><?php echo esc_html($option_label); ?></option>
                                     <?php endforeach; ?>
                                 </select></td>
                             </tr>
-                        <?php endforeach; ?>
+                                <?php $first = false;
+                            endforeach;
+                        endforeach; ?>
                         </tbody>
                     </table>
                     <?php if ($data['description']) : ?>
@@ -760,22 +864,99 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Keep a code for each tax class the shop defines, "(none)" dropped. The code is checked for shape only:
-         * Two's API validates it on every order.
+         * Keep a code for each row the shop has now, "(none)" dropped. The code is checked for shape only: Two's API
+         * validates it on every order. The field is the JSON the form posts, `{"rows": n, "map": {row: code}}`; one
+         * that is unreadable or holds fewer rows than it says arrived cut short, so the save is refused and the
+         * stored mapping kept rather than rows deleted. A save without the field keeps the stored mapping.
          *
          * @return array<string, string>
+         * @throws Exception when the posted mapping arrived incomplete
          */
         public function validate_two_tax_code_map_field($key, $value)
         {
+            if (null === $value) {
+                $stored = $this->get_option($key);
+                return is_array($stored) ? array_filter($stored, 'is_string') : [];
+            }
+            $posted = is_string($value) ? json_decode(wp_unslash($value), true) : null;
+            $complete = is_array($posted) && is_array($posted['map'] ?? null) && is_int($posted['rows'] ?? null)
+                && $posted['rows'] === count($posted['map']);
+            if (!$complete) {
+                throw new Exception(__('The tax codes for 0% lines arrived incomplete, so they were not saved and your saved codes are unchanged. Reload the page and try again.', 'twoinc-payment-gateway'));
+            }
+            $rows = [];
+            foreach (self::tax_code_map_rows() as $class) {
+                $rows += $class['rows'];
+            }
             $map = [];
-            $classes = self::tax_code_map_classes();
-            foreach (is_array($value) ? $value : [] as $slug => $code) {
-                $code = strtoupper(trim(sanitize_text_field(wp_unslash((string) $code))));
-                if (isset($classes[$slug]) && preg_match('/^[A-Z0-9_]+$/', $code)) {
-                    $map[$slug] = $code;
+            foreach ($posted['map'] as $row => $code) {
+                $code = strtoupper(trim(sanitize_text_field(is_scalar($code) ? (string) $code : '')));
+                if (isset($rows[$row]) && preg_match('/^[A-Z0-9_]+$/', $code)) {
+                    $map[(string) $row] = $code;
                 }
             }
             return $map;
+        }
+
+        /**
+         * One-time move of a mapping stored per tax class (TWO-24877) to rows (TWO-26153): each class's code is
+         * copied to its exempt row, its no-rule row and every 0% rate it has now, so every line the old mapping
+         * covered keeps its code. Rates added later start on (none). Gated on TAX_CODE_MAP_VERSION.
+         *
+         * @return void
+         */
+        private function migrate_tax_code_map_to_rows()
+        {
+            $marker = WC_Twoinc_Brand::prefixed_name('tax_code_map_version');
+            if ((int) get_option($marker, 0) >= self::TAX_CODE_MAP_VERSION) {
+                return;
+            }
+            // Retry on a later load rather than burning the marker before WooCommerce's tax tables can be read.
+            if (!class_exists('WC_Tax')) {
+                return;
+            }
+            $stored = is_array($this->settings) && is_array($this->settings['tax_code_map'] ?? null) ? $this->settings['tax_code_map'] : null;
+            if (null !== $stored) {
+                $rows = self::fan_out_tax_code_map($stored);
+                if ($rows !== $stored) {
+                    $this->settings['tax_code_map'] = $rows;
+                    update_option($this->get_option_key(), $this->settings);
+                }
+            }
+            update_option($marker, (string) self::TAX_CODE_MAP_VERSION);
+        }
+
+        /**
+         * A mapping with every per-class entry fanned out to that class's rows. Entries already keyed by row are kept,
+         * and win over a fanned-out code for the same row.
+         *
+         * @return array<string, string>
+         */
+        public static function fan_out_tax_code_map(array $map)
+        {
+            $rows = [];
+            $classes = [];
+            foreach ($map as $key => $code) {
+                if (!is_string($code) || '' === $code) {
+                    continue;
+                }
+                $key = (string) $key;
+                if (false !== strpos($key, '|') || 0 === strpos($key, 'rate:')) {
+                    $rows[$key] = $code;
+                } else {
+                    $classes[$key] = $code;
+                }
+            }
+            foreach ($classes as $class => $code) {
+                $fan = [self::tax_code_exempt_key($class), self::tax_code_no_rule_key($class)];
+                foreach (array_keys(self::zero_tax_rates($class)) as $rate_id) {
+                    $fan[] = self::tax_code_rate_key($rate_id);
+                }
+                foreach ($fan as $row) {
+                    $rows[$row] = $rows[$row] ?? $code;
+                }
+            }
+            return $rows;
         }
 
         /** Display copy only: 14 stands in for a merchant with no default. */
@@ -6556,7 +6737,7 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'two_tax_code_map',
                     'description' => sprintf(
                         /* translators: %s is the brand product name (e.g. "Two") */
-                        __('The tax code sent with each order line charged at 0%%, by the tax class it was charged under. Leave a class on (none) to send no code; for a Spanish merchant the plugin then works the code out from the order where it can (export, intra-community supply of goods or services to a buyer with an EU VAT number from a member state other than yours, or services outside the EU). %s checks every code when the order arrives.', 'twoinc-payment-gateway'),
+                        __('The tax code sent with each order line charged at 0%%. Choose a code for each case your tax classes give a 0%% line: a buyer billed and taxed in another EU country (the 27 member states, Monaco and Northern Ireland) with a VAT number; each 0%% tax rate; and an address none of the class\'s rates covers, such as an export. The plugin sends the code you choose and decides nothing about how the line is taxed. A row on (none) sends no code. Shipping with no tax class of its own takes the code the order\'s other 0%% lines share. Northern Ireland is in the EU VAT area for goods only: if you sell services there, do not map a services class\'s EU row to an intra-community services code. While a class has no code chosen at all, a Spanish merchant\'s line still gets a code worked out from the order, as before. %s checks every code when the order arrives.', 'twoinc-payment-gateway'),
                         WC_Twoinc_Brand::get('product_name')
                     ),
                     'default'     => [],

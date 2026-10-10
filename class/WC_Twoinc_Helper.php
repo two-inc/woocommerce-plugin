@@ -43,6 +43,22 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /** Spanish postcodes outside the EU VAT area: the Canary Islands, Ceuta and Melilla. */
         private const ES_OUTSIDE_VAT_AREA_POSTCODES = ['35', '38', '51', '52'];
 
+        /** Northern Ireland, which shops hold as GB with a BT postcode, is in the EU VAT area (TWO-26153). */
+        private const NI_COUNTRY = 'GB';
+        private const NI_POSTCODE_PREFIX = 'BT';
+
+        /**
+         * Order meta (TWO-26153): the tax code each 0% line was placed with, by order item id, as
+         * ['code' => string|null, 'step' => one of the TAX_CODE_STEP_* values]. Written when the order is created
+         * with Two; edits and refunds send the recorded code rather than resolving again.
+         */
+        private const TAX_CODES_META = 'tax_codes';
+
+        /** How a recorded code was reached: steps 1 to 3 (the merchant's rows), derivation, or step 4. */
+        private const TAX_CODE_STEP_ROW = 'row';
+        private const TAX_CODE_STEP_DERIVED = 'derived';
+        private const TAX_CODE_STEP_KEYLESS = 'keyless';
+
         /**
          * The code a Spanish merchant's 0% line derives when its tax class is unmapped (TWO-24877, TWO-26151). First
          * matching row wins; a null zone matches any. Goods follow where they are delivered, services where the buyer
@@ -524,6 +540,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @param mixed $rate_order order whose tax rows declare the rates; a refund passes its parent,
          *                          because core restamps the refund's own rows from the live rate table.
          * @param array|null $shipping_rates receives each shipping line's resolved rate, keyed as $shippings.
+         * @param bool $record_tax_codes whether an order not yet placed with Two records its lines' tax codes; false
+         *                               for a partial build, such as the shipping-only one for tax subtotals.
          *
          * @return array
          */
@@ -534,18 +552,19 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $order,
             $is_refund = false,
             $rate_order = null,
-            &$shipping_rates = null
+            &$shipping_rates = null,
+            $record_tax_codes = true
         ) {
             $rate_order = $rate_order ?? $order;
             self::$shop_match_refusals = [];
 
             $items = [];
-            // Per line, what the tax code resolver needs: the tax class it was charged under and, for a product,
-            // whether it is goods.
+            // Per line, what the tax code resolver needs: the tax class it was charged under, the shop's tax rates on
+            // it, the order item id the placement record keys it by and, for a product, whether it is goods.
             $sources = [];
 
             /** @var WC_Order_Item_Product $line_item */
-            foreach ($line_items as $line_item) {
+            foreach ($line_items as $line_item_key => $line_item) {
                 $product_simple = WC_Twoinc_Helper::get_product($line_item);
 
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate(
@@ -624,9 +643,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 }
 
                 $items[] = $product;
+                $rate_line = self::get_rate_line($line_item, $rate_order, $is_refund);
                 $sources[] = [
-                    'tax_class' => self::get_line_tax_class(self::get_rate_line($line_item, $rate_order, $is_refund)),
+                    'tax_class' => self::get_line_tax_class($rate_line),
                     'goods' => self::is_goods($product_simple),
+                    'rate_ids' => self::get_line_rate_ids($rate_line),
+                    'record_key' => self::tax_code_record_key($line_item, $line_item_key, $is_refund),
                 ];
             }
 
@@ -659,10 +681,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 }
 
                 $items[] = $shipping_line;
-                $sources[] = ['tax_class' => 'shipping', 'goods' => null];
+                $sources[] = [
+                    'tax_class' => 'shipping',
+                    'goods' => null,
+                    'rate_ids' => self::get_line_rate_ids(self::get_rate_line($shipping, $rate_order, $is_refund)),
+                    'record_key' => self::tax_code_record_key($shipping, $key, $is_refund),
+                ];
             }
 
-            foreach ($fees as $fee) {
+            foreach ($fees as $fee_key => $fee) {
                 if (self::is_zero_line($fee)) {
                     continue;
                 }
@@ -691,29 +718,54 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 ];
 
                 $items[] = $fee_line;
+                $rate_line = self::get_rate_line($fee, $rate_order, $is_refund);
                 $sources[] = [
-                    'tax_class' => self::get_line_tax_class(self::get_rate_line($fee, $rate_order, $is_refund)),
+                    'tax_class' => self::get_line_tax_class($rate_line),
                     'goods' => null,
+                    'rate_ids' => self::get_line_rate_ids($rate_line),
+                    'record_key' => self::tax_code_record_key($fee, $fee_key, $is_refund),
                 ];
             }
 
-            return self::apply_tax_codes($items, $sources, $rate_order);
+            return self::apply_tax_codes($items, $sources, $rate_order, $record_tax_codes && !$is_refund);
         }
 
         /**
-         * Adds `tax_code` to each line sent at 0% (TWO-24877). The merchant's mapping of the line's tax class wins;
-         * an unmapped line of a Spanish merchant takes the code ES_ZERO_RATE_DERIVATION derives, if any. Any other
-         * line is sent as built: the plugin never refuses, and Two's API validates what arrives. A non-zero line is
-         * never touched. Runs inside the builder, so every hook after it sees the code and can change it.
+         * Adds `tax_code` to each line sent at 0% (TWO-24877, TWO-26153), from the merchant's rows in "Tax codes for
+         * 0% lines". The merchant decides how their shop levies tax; the plugin only reads which of their rows a line
+         * falls under. For each 0% line the first match wins:
+         *
+         * 1. Exempt buyer: the billing address and the tax address (the address WooCommerce taxes the order on) are
+         *    both in the EU VAT area and neither is in the Two merchant's country, and the buyer VAT number is not
+         *    empty. The line's tax class's exempt row. A tax address outside the EU VAT area (an export) skips this
+         *    step, and so does every line while the merchant record has not given the merchant's country.
+         * 2. The shop's 0% tax rate on the line (the first, when it carries several): that rate's row. A line whose
+         *    rates are not all 0% gets no code.
+         * 3. No rate: the tax class's no-rule row. A line WooCommerce did not tax (a VAT-exempt order, a product
+         *    whose tax status is none) is looked up in the shop's rates at the tax address, as core would have.
+         * 4. A line with no tax class (shipping that follows the items and finds none) takes the one code the
+         *    order's lines coded by steps 1 to 3 share; none if they disagree.
+         * 5. Otherwise no code. The plugin never refuses an order over a missing code: Two's API validates it.
+         *
+         * A matched row left on (none) gives no code; it never falls through to a later step. Until derivation is
+         * removed, a Spanish merchant's line whose tax class has no row mapped at all (or, for a line with no class,
+         * whose order has no line coded by steps 1 to 3) still takes the code ES_ZERO_RATE_DERIVATION derives.
+         *
+         * An order not yet placed with Two records each 0% line's code, "no code" included, in TAX_CODES_META. Once
+         * placed, a recorded line is sent with its recorded code, so a changed address, mapping or tax rate never
+         * moves a placed order. A line the record does not cover (an order placed before the record existed, a line
+         * added by an edit) is resolved as at placement, step 4 sharing the codes the record holds from steps 1 to 3.
+         * A non-zero line is never touched. Runs inside the builder, so every hook after it sees the code.
          *
          * @param array $items   the built lines
-         * @param array $sources per line, its tax class ('shipping' for a shipping line) and, for a product, whether
-         *                       it is goods (null for shipping and fees, which follow the order)
-         * @param mixed $order   the order whose addresses and products decide the derivation
+         * @param array $sources per line: its tax class key ('shipping' for a shipping line), whether a product is
+         *                       goods (null for shipping and fees), its tax rate ids and its placement record key
+         * @param mixed $order   the order (a refund's parent) whose addresses, taxes and record decide the codes
+         * @param bool  $record  whether to record the codes on an order not yet placed with Two
          *
          * @return array
          */
-        private static function apply_tax_codes(array $items, array $sources, $order)
+        private static function apply_tax_codes(array $items, array $sources, $order, $record = false)
         {
             $zero = [];
             foreach ($items as $i => $item) {
@@ -721,26 +773,296 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $zero[] = $i;
                 }
             }
+            $placed = self::is_placed_with_two($order);
+            $record = $record && !$placed && is_object($order) && method_exists($order, 'update_meta_data');
+            $stored = $placed ? self::stored_tax_codes($order) : null;
             $map = WC_Twoinc::get_tax_code_map();
             $derive = 'ES' === WC_Twoinc::get_merchant_country();
-            if (!$zero || (!$map && !$derive)) {
+            if (!$zero || (!$map && !$derive && !$record && null === $stored)) {
+                if ($record && null !== self::stored_tax_codes($order)) {
+                    $order->update_meta_data(WC_Twoinc_Brand::meta_key(self::TAX_CODES_META), []);
+                }
                 return $items;
             }
 
-            $context = $derive ? self::tax_code_context($order, WC_Twoinc::get_merchant_country()) : null;
-            foreach ($zero as $i) {
-                $source = $sources[$i];
-                $tax_class = 'shipping' === $source['tax_class'] ? self::get_shipping_tax_class_key($order) : $source['tax_class'];
-                $code = null !== $tax_class && isset($map[$tax_class]) ? $map[$tax_class] : null;
-                if (null === $code && $context) {
-                    $goods = $source['goods'] ?? $context['order_has_goods'];
-                    $code = self::derive_es_zero_rate_code($goods, $context['destination'], $context['buyer'], $context['vat_qualifies']);
-                }
-                if (null !== $code) {
-                    $items[$i]['tax_code'] = $code;
+            $context = [
+                'map' => $map,
+                'derive' => $derive ? self::tax_code_context($order, WC_Twoinc::get_merchant_country()) : null,
+                // With no row mapped nothing reads it, so the buyer is not looked at.
+                'exempt' => $map && self::is_exempt_buyer($order),
+            ];
+            // Step 4's pool: the codes steps 1 to 3 gave, never derived ones, including those the record holds.
+            $shared = [];
+            foreach ($stored ?? [] as $entry) {
+                if (self::TAX_CODE_STEP_ROW === $entry['step'] && null !== $entry['code']) {
+                    $shared[$entry['code']] = true;
                 }
             }
+            $recorded = [];
+            $keyless = [];
+            foreach ($zero as $i) {
+                $source = $sources[$i];
+                $key = $source['record_key'] ?? null;
+                if (null !== $key && isset($stored[$key])) {
+                    $items[$i] = self::with_tax_code($items[$i], $stored[$key]['code']);
+                    continue;
+                }
+                $tax_class = 'shipping' === $source['tax_class'] ? self::get_shipping_tax_class_key($order) : $source['tax_class'];
+                if (null === $tax_class) {
+                    $keyless[] = $i;
+                    continue;
+                }
+                [$code, $step] = self::resolve_tax_code($tax_class, $source, $order, $context, $shared);
+                $items[$i] = self::with_tax_code($items[$i], $code);
+                if (null !== $key) {
+                    $recorded[$key] = ['code' => $code, 'step' => $step];
+                }
+            }
+            foreach ($keyless as $i) {
+                $source = $sources[$i];
+                $code = 1 === count($shared) ? (string) key($shared) : null;
+                $step = self::TAX_CODE_STEP_KEYLESS;
+                if (!$shared && $context['derive']) {
+                    $code = self::derive_from_context($source, $context['derive']);
+                    $step = self::TAX_CODE_STEP_DERIVED;
+                }
+                $items[$i] = self::with_tax_code($items[$i], $code);
+                if (null !== ($source['record_key'] ?? null)) {
+                    $recorded[$source['record_key']] = ['code' => $code, 'step' => $step];
+                }
+            }
+            if ($record) {
+                $order->update_meta_data(WC_Twoinc_Brand::meta_key(self::TAX_CODES_META), $recorded);
+            }
             return $items;
+        }
+
+        /**
+         * Steps 1 to 3 for a line with a tax class, adding a code they give to step 4's pool. Derivation only for a
+         * class with no row mapped at all.
+         *
+         * @param array<string, true> $shared step 4's pool
+         *
+         * @return array{0: string|null, 1: string} the code and the TAX_CODE_STEP_* that reached it
+         */
+        private static function resolve_tax_code($tax_class, array $source, $order, array $context, array &$shared)
+        {
+            $map = $context['map'];
+            $row = $map ? self::matched_tax_code_row($tax_class, $source, $order, $context['exempt']) : null;
+            $code = null !== $row && isset($map[$row]) ? $map[$row] : null;
+            if (null !== $code) {
+                $shared[$code] = true;
+                return [$code, self::TAX_CODE_STEP_ROW];
+            }
+            if ($context['derive'] && !self::tax_class_has_rows($tax_class, $source['rate_ids'], $map)) {
+                return [self::derive_from_context($source, $context['derive']), self::TAX_CODE_STEP_DERIVED];
+            }
+            return [null, self::TAX_CODE_STEP_ROW];
+        }
+
+        /**
+         * The key of the merchant's row a 0% line falls under (steps 1 to 3), or null when the shop's rate for it is
+         * not 0% (or taxes are off), which no row covers.
+         *
+         * @return string|null
+         */
+        private static function matched_tax_code_row($tax_class, array $source, $order, $exempt)
+        {
+            if ($exempt) {
+                return WC_Twoinc::tax_code_exempt_key($tax_class);
+            }
+            if ($source['rate_ids']) {
+                $percents = self::order_rate_percents($order, $source['rate_ids']);
+            } else {
+                if (!wc_tax_enabled() || !class_exists('WC_Tax')) {
+                    return null;
+                }
+                $args = self::tax_location($order) + ['tax_class' => 'standard' === $tax_class ? '' : $tax_class];
+                $rates = 'shipping' === $source['tax_class'] ? WC_Tax::find_shipping_rates($args) : WC_Tax::find_rates($args);
+                if (!$rates) {
+                    return WC_Twoinc::tax_code_no_rule_key($tax_class);
+                }
+                $percents = array_map(static function ($rate) {
+                    return (float) ($rate['rate'] ?? 0);
+                }, $rates);
+            }
+            foreach ($percents as $percent) {
+                if (0.0 !== (float) $percent) {
+                    return null;
+                }
+            }
+            return WC_Twoinc::tax_code_rate_key(array_key_first($percents));
+        }
+
+        /**
+         * Each tax rate id's percentage, as the order's tax rows record it. A rate the order has no row for is taken
+         * as charged at 0, which is what the line charged on it.
+         *
+         * @param array $rate_ids
+         *
+         * @return array<int|string, float>
+         */
+        private static function order_rate_percents($order, array $rate_ids)
+        {
+            $known = [];
+            if (is_object($order) && method_exists($order, 'get_taxes')) {
+                foreach ($order->get_taxes() as $order_tax) {
+                    $known[(string) $order_tax->get_rate_id()] = (float) $order_tax->get_rate_percent();
+                }
+            }
+            $percents = [];
+            foreach ($rate_ids as $rate_id) {
+                $percents[$rate_id] = $known[(string) $rate_id] ?? 0.0;
+            }
+            return $percents;
+        }
+
+        /**
+         * Whether the merchant mapped any row of a tax class: its exempt row, its no-rule row or one of its 0% rates,
+         * the line's own rates among them (a rate belongs to the class it was charged under).
+         *
+         * @return bool
+         */
+        private static function tax_class_has_rows($tax_class, array $line_rate_ids, array $map)
+        {
+            if (isset($map[WC_Twoinc::tax_code_exempt_key($tax_class)]) || isset($map[WC_Twoinc::tax_code_no_rule_key($tax_class)])) {
+                return true;
+            }
+            foreach (array_merge($line_rate_ids, array_keys(WC_Twoinc::zero_tax_rates($tax_class))) as $rate_id) {
+                if (isset($map[WC_Twoinc::tax_code_rate_key($rate_id)])) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Step 1's buyer test: a buyer VAT number, a known merchant country, and the billing address and the tax
+         * address both in the EU VAT area and neither in the merchant's country.
+         *
+         * @return bool
+         */
+        private static function is_exempt_buyer($order)
+        {
+            $merchant = WC_Twoinc::get_recorded_merchant_country();
+            $readable = is_object($order) && method_exists($order, 'get_billing_country');
+            if ('' === $merchant || !$readable || null === self::get_buyer_vat_number($order)) {
+                return false;
+            }
+            $tax_address = self::tax_location($order);
+            return self::in_eu_vat_area_abroad($order->get_billing_country(), $order->get_billing_postcode(), $merchant)
+                && self::in_eu_vat_area_abroad($tax_address['country'], $tax_address['postcode'], $merchant);
+        }
+
+        /**
+         * In the EU VAT area (the 27 member states, Monaco, and Northern Ireland as GB with a postcode starting BT)
+         * and not the merchant's country.
+         *
+         * @return bool
+         */
+        private static function in_eu_vat_area_abroad($country, $postcode, $merchant_country)
+        {
+            $country = strtoupper(trim((string) $country));
+            $in_area = in_array($country, self::EU_VAT_COUNTRIES, true) || (self::NI_COUNTRY === $country
+                && 0 === strpos(strtoupper(trim((string) $postcode)), self::NI_POSTCODE_PREFIX));
+            return $in_area && $country !== strtoupper(trim((string) $merchant_country));
+        }
+
+        /**
+         * The address WooCommerce taxes the order on, as its tax rate lookup takes it.
+         *
+         * @return array{country: string, state: string, postcode: string, city: string}
+         */
+        private static function tax_location($order)
+        {
+            $location = is_object($order) && method_exists($order, 'get_taxable_location') ? (array) $order->get_taxable_location() : [];
+            return [
+                'country' => (string) ($location['country'] ?? ''),
+                'state' => (string) ($location['state'] ?? ''),
+                'postcode' => (string) ($location['postcode'] ?? ''),
+                'city' => (string) ($location['city'] ?? ''),
+            ];
+        }
+
+        /**
+         * The tax rate ids on a line's own taxes, 0% rates included: WooCommerce keeps a rate that charged nothing.
+         *
+         * @return array<int, int|string>
+         */
+        private static function get_line_rate_ids($line)
+        {
+            if (!is_object($line) || !method_exists($line, 'get_taxes')) {
+                return [];
+            }
+            $taxes = $line->get_taxes();
+            return is_array($taxes['total'] ?? null) ? array_keys($taxes['total']) : [];
+        }
+
+        /**
+         * The placement record's key for a line: its order item id, or for a refund line the id of the line it
+         * refunds. Null when there is none.
+         *
+         * @param int|string $list_key the line's key in the order's item list, which WooCommerce keys by item id
+         *
+         * @return string|null
+         */
+        private static function tax_code_record_key($line, $list_key, $is_refund)
+        {
+            if ($is_refund) {
+                $id = is_object($line) && method_exists($line, 'get_meta') ? (int) $line->get_meta('_refunded_item_id') : 0;
+            } else {
+                $id = is_object($line) && method_exists($line, 'get_id') ? (int) $line->get_id() : 0;
+                $id = $id ?: (is_int($list_key) ? $list_key : 0);
+            }
+            return $id > 0 ? (string) $id : null;
+        }
+
+        /**
+         * Whether the order has been created with Two.
+         *
+         * @return bool
+         */
+        private static function is_placed_with_two($order)
+        {
+            return is_object($order) && method_exists($order, 'get_meta')
+                && ($order->get_meta(WC_Twoinc_Brand::prefixed_name('order_id')) || $order->get_meta('tillit_order_id'));
+        }
+
+        /**
+         * The placement record, or null when the order has none.
+         *
+         * @return array<string, array{code: string|null, step: string}>|null
+         */
+        private static function stored_tax_codes($order)
+        {
+            $raw = is_object($order) && method_exists($order, 'get_meta') ? $order->get_meta(WC_Twoinc_Brand::meta_key(self::TAX_CODES_META)) : null;
+            if (!is_array($raw)) {
+                return null;
+            }
+            $stored = [];
+            foreach ($raw as $key => $entry) {
+                if (is_array($entry) && array_key_exists('code', $entry)) {
+                    $stored[(string) $key] = [
+                        'code' => is_string($entry['code']) && '' !== $entry['code'] ? $entry['code'] : null,
+                        'step' => (string) ($entry['step'] ?? ''),
+                    ];
+                }
+            }
+            return $stored;
+        }
+
+        private static function with_tax_code(array $line, $code)
+        {
+            if (null !== $code) {
+                $line['tax_code'] = $code;
+            }
+            return $line;
+        }
+
+        private static function derive_from_context(array $source, array $context)
+        {
+            $goods = $source['goods'] ?? $context['order_has_goods'];
+            return self::derive_es_zero_rate_code($goods, $context['destination'], $context['buyer'], $context['vat_qualifies']);
         }
 
         /**
@@ -992,7 +1314,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public static function get_tax_subtotals($line_items, $shippings, $fees, $order, $shipping_rates = null)
         {
             if ($shipping_rates === null) {
-                self::get_line_items([], $shippings, [], $order, false, null, $shipping_rates);
+                self::get_line_items([], $shippings, [], $order, false, null, $shipping_rates, false);
             }
 
             $tax_subtotal_dict = array();
@@ -1445,7 +1767,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $line_items = array_map(static function ($line) {
                 unset($line['tax_code'], $line['tax_exemption_reason_code']);
                 return $line;
-            }, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order));
+            }, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates, false));
             $req_body = self::order_totals($order) + [
                 'invoice_type' => 'FUNDED_INVOICE',
                 'buyer' => $buyer,

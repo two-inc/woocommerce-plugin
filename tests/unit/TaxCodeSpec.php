@@ -11,6 +11,8 @@ final class TaxCodeSpec
     public static function runAll(): void
     {
         $tests = [
+            'testTheSharedCaseTable',
+            'testThePlacementRecordKeepsTheCodes',
             'testZeroRateLinesCarryTheResolvedCode',
             'testIntraCommunityCodesNeedABuyerVatNumber',
             'testTheVatNumberFilterRunsBeforeTheDerivation',
@@ -21,6 +23,7 @@ final class TaxCodeSpec
             'testTheDropdownHidesCodesNeedingACallerReason',
             'testTheLabelShowsTheRateOnce',
             'testTheMappingScreenRendersAndSaves',
+            'testTheMigrationFansTheClassCodeOut',
             'testTheMerchantCountryComesFromTheMerchantRecord',
         ];
         foreach ($tests as $test) {
@@ -40,7 +43,7 @@ final class TaxCodeSpec
         $GLOBALS['__twoinc_test_options'] = ['woocommerce_shipping_tax_class' => ''];
         $GLOBALS['__twoinc_test_http_calls'] = [];
         $GLOBALS['__twoinc_test_tax_classes'] = [];
-        unset($GLOBALS['__twoinc_test_base_country']);
+        unset($GLOBALS['__twoinc_test_base_country'], $GLOBALS['__twoinc_test_find_rates'], $GLOBALS['__twoinc_test_class_rates']);
         foreach (['twoinc_payment_terms_line', 'twoinc_order_payload', 'two_order_create', 'two_order_edit'] as $tag) {
             remove_all_filters($tag);
         }
@@ -80,11 +83,11 @@ final class TaxCodeSpec
             ['ES', ['goods', 'service', 'shipping'], 'ES', ['country' => 'NO', 'postcode' => '0150'], [], ['ES_IVA_EXPORT', null, 'ES_IVA_EXPORT'], 'shipping follows the goods'],
             ['ES', ['service', 'shipping'], 'FR', $es, [], [null, null], 'shipping follows services to an EU buyer with no VAT number'],
             ['ES', ['service', 'shipping'], 'NO', ['country' => 'NO', 'postcode' => '0150'], [], ['ES_IVA_NON_EU_SERVICES', 'ES_IVA_NON_EU_SERVICES'], 'shipping follows non-EU services'],
-            ['ES', ['goods', 'shipping'], 'ES', ['country' => 'NO', 'postcode' => '0150'], ['standard' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20', 'ES_IVA_EXEMPT_ART20'], 'the mapping beats the derivation'],
-            ['ES', ['goods'], 'ES', $es, ['reduced-rate' => 'ES_IVA_ZERO'], [null], 'a mapping of another class does not apply'],
+            ['ES', ['goods', 'shipping'], 'ES', ['country' => 'NO', 'postcode' => '0150'], ['standard|none' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20', 'ES_IVA_EXEMPT_ART20'], 'the mapping beats the derivation'],
+            ['ES', ['goods'], 'ES', $es, ['reduced-rate|none' => 'ES_IVA_ZERO'], [null], 'a mapping of another class does not apply'],
             ['NO', ['goods', 'shipping'], 'NO', ['country' => 'US', 'postcode' => '10001'], [], [null, null], 'a non-ES merchant with no mapping is untouched'],
-            ['FR', ['goods'], 'FR', ['country' => 'US', 'postcode' => '10001'], ['standard' => 'FR_EXPORT'], ['FR_EXPORT'], 'a mapping applies whatever the merchant country'],
-            ['ES', ['goods21', 'shipping21'], 'ES', ['country' => 'NO', 'postcode' => '0150'], ['standard' => 'ES_IVA_ZERO'], [null, null], 'a non-zero line is untouched'],
+            ['FR', ['goods'], 'FR', ['country' => 'US', 'postcode' => '10001'], ['standard|none' => 'FR_EXPORT'], ['FR_EXPORT'], 'a mapping applies whatever the merchant country'],
+            ['ES', ['goods21', 'shipping21'], 'ES', ['country' => 'NO', 'postcode' => '0150'], ['standard|none' => 'ES_IVA_ZERO'], [null, null], 'a non-zero line is untouched'],
         ];
 
         foreach ($cases as [$merchant, $lines, $buyer, $delivery, $map, $want, $description]) {
@@ -139,7 +142,7 @@ final class TaxCodeSpec
             ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => "\tDE\u{00A0}123\t456\n"], [], $intraServices, "DE\u{00A0}123\t456", 'leading and trailing tabs and newlines are trimmed, inner ones kept'],
             ['ES', ['service'], 'MC', $es, ['_billing_vat_number' => '12345678901'], [], [null], '12345678901', 'an unprefixed number billed in Monaco gains no prefix'],
             ['ES', ['service'], 'MC', $es, ['_billing_vat_number' => 'MC12345678901'], [], [null], 'MC12345678901', 'an MC prefix is no VAT prefix and derives nothing'],
-            ['ES', ['goods', 'shipping'], 'DE', $fr, [], ['standard' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20', 'ES_IVA_EXEMPT_ART20'], null, 'the mapping still wins with no VAT number'],
+            ['ES', ['goods', 'shipping'], 'DE', $fr, [], ['standard|none' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20', 'ES_IVA_EXEMPT_ART20'], null, 'the mapping still wins with no VAT number'],
             ['ES', ['service'], 'NO', $no, [], [], ['ES_IVA_NON_EU_SERVICES'], null, 'services outside the EU need no VAT number'],
             ['ES', ['goods'], 'DE', $no, [], [], ['ES_IVA_EXPORT'], null, 'an export needs no VAT number'],
             ['ES', ['goods'], 'ES', $no, ['_billing_vat_number' => 'ESB12345678'], [], ['ES_IVA_EXPORT'], null, 'never sent for a Spanish buyer'],
@@ -248,7 +251,7 @@ final class TaxCodeSpec
             [['goods', 'shipping'], 'ES', ['country' => 'NO', 'postcode' => '0150'], [], [], ['ES_IVA_EXPORT', 'ES_IVA_EXPORT'], 'export'],
             [['goods'], 'DE', ['country' => 'FR', 'postcode' => '75001'], ['_billing_vat_number' => 'DE123456789'], [], ['ES_IVA_INTRA_COMMUNITY'], 'intra-community goods'],
             [['service'], 'FR', $es, ['_billing_vat_number' => 'FR12345678901'], [], ['ES_IVA_INTRA_COMMUNITY_SERVICES'], 'a service to an EU buyer'],
-            [['goods'], 'ES', $es, [], ['standard' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20'], 'a mapped tax class'],
+            [['goods'], 'ES', $es, [], ['standard|none' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20'], 'a mapped tax class'],
         ];
         foreach ($cases as [$lines, $buyer, $delivery, $meta, $map, $create, $description]) {
             self::useGateway($map);
@@ -372,29 +375,289 @@ final class TaxCodeSpec
         }
     }
 
+    /**
+     * The screen (TWO-26153): per tax class, the exempt row, each 0% rate labelled as WooCommerce's tax table shows
+     * it (a rate above 0% is not listed), then the no-rule row. The dropdowns post nothing; one JSON field carries the
+     * whole mapping, and the save keeps only rows the shop has now.
+     */
     private static function testTheMappingScreenRendersAndSaves(): void
     {
-        $GLOBALS['__twoinc_test_tax_classes'] = ['Reduced rate', 'Zero rate'];
+        $GLOBALS['__twoinc_test_tax_classes'] = ['Reduced rate'];
+        $GLOBALS['__twoinc_test_class_rates'] = [
+            '' => [
+                11 => ['tax_rate' => '0.0000', 'tax_rate_country' => 'ES', 'tax_rate_name' => 'IVA 0%', 'postcode' => ['35*', '38*']],
+                21 => ['tax_rate' => '21.0000', 'tax_rate_country' => 'ES', 'tax_rate_name' => 'IVA'],
+                12 => ['tax_rate' => '0.0000', 'tax_rate_country' => '', 'tax_rate_state' => '', 'tax_rate_name' => ''],
+            ],
+            'reduced-rate' => [31 => ['tax_rate' => '0', 'tax_rate_country' => 'US', 'tax_rate_state' => 'NY', 'tax_rate_name' => 'Export', 'city' => ['NEW YORK']]],
+        ];
         $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = 'ES';
-        $gateway = self::apiGateway(['standard' => 'ES_IVA_EXPORT', 'zero-rate' => 'ES_RETIRED_CODE']);
+        $gateway = self::apiGateway(['standard|exempt' => 'ES_IVA_EXPORT', 'rate:11' => 'ES_RETIRED_CODE']);
         $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode(['data' => [self::entry('ES_IVA_EXPORT', 'VATEX-EU-G'), self::entry('ES_IVA_EXEMPT_OTHER', null)]])]];
 
+        $rows = array_map(static function (array $class) {
+            return $class['rows'];
+        }, WC_Twoinc::tax_code_map_rows());
+        TinyAssert::same([
+            'standard' => [
+                'standard|exempt' => 'Buyer in another EU country with a VAT number',
+                'rate:11' => 'ES 35*;38* 0% (IVA 0%)',
+                'rate:12' => '* 0%',
+                'standard|none' => 'No rule for the address',
+            ],
+            'reduced-rate' => [
+                'reduced-rate|exempt' => 'Buyer in another EU country with a VAT number',
+                'rate:31' => 'US NY NEW YORK 0% (Export)',
+                'reduced-rate|none' => 'No rule for the address',
+            ],
+        ], $rows, 'the rows of each class (got: ' . json_encode($rows) . ')');
+
         $html = $gateway->generate_two_tax_code_map_html('tax_code_map', ['title' => 'Tax codes']);
-        foreach (['[standard]', '[reduced-rate]', '[zero-rate]', '(none)', '<option value="ES_IVA_EXPORT" selected="selected">', '<option value="ES_RETIRED_CODE" selected="selected">'] as $needle) {
+        foreach (['data-twoinc-tax-code-row="standard|exempt"', 'data-twoinc-tax-code-row="rate:31"', 'ES 35*;38* 0% (IVA 0%)', '(none)', '<option value="ES_IVA_EXPORT" selected="selected">', '<option value="ES_RETIRED_CODE" selected="selected">'] as $needle) {
             TinyAssert::true(strpos($html, $needle) !== false, "the screen shows $needle");
         }
         TinyAssert::true(strpos($html, 'ES_IVA_EXEMPT_OTHER') === false, 'EXEMPT_OTHER is not offered');
+        TinyAssert::true(strpos($html, 'rate:21') === false, 'a rate above 0% has no row');
+        TinyAssert::true(strpos($html, '<select name=') === false, 'no dropdown posts a field of its own');
+        preg_match('/class="twoinc-tax-code-map-value" name="([^"]+)" value="([^"]*)"/', $html, $hidden);
+        TinyAssert::same('woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_tax_code_map', $hidden[1] ?? null, 'one field carries the mapping');
+        $initial = json_decode(html_entity_decode($hidden[2] ?? '', ENT_QUOTES), true);
+        TinyAssert::same(7, $initial['rows'] ?? null, 'it counts every row');
+        TinyAssert::same(['ES_IVA_EXPORT', 'ES_RETIRED_CODE', ''], [$initial['map']['standard|exempt'], $initial['map']['rate:11'], $initial['map']['reduced-rate|none']], 'and holds each row\'s code, (none) as empty');
+        TinyAssert::same($gateway->map, $gateway->validate_two_tax_code_map_field('tax_code_map', $hidden[2] ? html_entity_decode($hidden[2], ENT_QUOTES) : ''), 'saving the screen unchanged keeps the mapping');
 
-        $saved = $gateway->validate_two_tax_code_map_field('tax_code_map', [
-            'standard' => 'ES_IVA_EXPORT', 'reduced-rate' => '', 'zero-rate' => 'es_iva_zero', 'deleted-class' => 'ES_IVA_ZERO', 'x' => '<b>',
-        ]);
-        TinyAssert::same(['standard' => 'ES_IVA_EXPORT', 'zero-rate' => 'ES_IVA_ZERO'], $saved, 'one map of live classes, (none) dropped');
+        $post = static function (array $map, ?int $rows = null) {
+            return json_encode(['rows' => $rows ?? count($map), 'map' => $map]);
+        };
+        $cases = [
+            // posted field, expected map (null: refused), description
+            [$post(['standard|exempt' => 'ES_IVA_EXPORT', 'rate:11' => '', 'rate:31' => 'es_iva_zero', 'standard|none' => 'ES_IVA_EXPORT']), ['standard|exempt' => 'ES_IVA_EXPORT', 'rate:31' => 'ES_IVA_ZERO', 'standard|none' => 'ES_IVA_EXPORT'], '(none) dropped, codes upper-cased'],
+            [$post(['rate:21' => 'ES_IVA_ZERO', 'rate:99' => 'ES_IVA_ZERO', 'deleted|none' => 'ES_IVA_ZERO', 'standard' => 'ES_IVA_ZERO', 'reduced-rate|exempt' => '<b>']), [], 'only rows the shop has now, with a code of the right shape'],
+            [addslashes($post(['standard|none' => 'ES_IVA_EXPORT'])), ['standard|none' => 'ES_IVA_EXPORT'], 'WordPress slashes the posted field'],
+            [$post(['standard|none' => 'ES_IVA_EXPORT'], 7), null, 'fewer rows than the form counted: refused'],
+            [substr($post(['standard|none' => 'ES_IVA_EXPORT']), 0, -3), null, 'a field cut short: refused'],
+            ['', null, 'an empty field: refused'],
+            [json_encode(['map' => []]), null, 'no row count: refused'],
+        ];
+        foreach ($cases as [$field, $expected, $description]) {
+            try {
+                $saved = $gateway->validate_two_tax_code_map_field('tax_code_map', $field);
+            } catch (Exception $e) {
+                $saved = null;
+                TinyAssert::true(strpos($e->getMessage(), 'not saved') !== false, "$description: the refusal says nothing was saved");
+            }
+            TinyAssert::same($expected, $saved, $description);
+        }
+        TinyAssert::same($gateway->map, $gateway->validate_two_tax_code_map_field('tax_code_map', null), 'a save without the field keeps the mapping');
 
         $gateway->responses = [['response' => ['code' => 503], 'body' => '{}']];
         delete_option(WC_Twoinc_Brand::prefixed_name('tax_codes'));
         $html = $gateway->generate_two_tax_code_map_html('tax_code_map', ['title' => 'Tax codes']);
         TinyAssert::true(strpos($html, 'The list of tax codes could not be loaded') !== false, 'the screen says the list failed');
         TinyAssert::true(strpos($html, '<option value="ES_IVA_EXPORT" selected="selected">') !== false, 'a saved mapping still shows');
+    }
+
+    /**
+     * Shared case 18 (TWO-26153): the upgrade copies each class's code to its exempt row, its no-rule row and every
+     * 0% rate it has, and nothing else; it runs once, gated on the mapping's version.
+     */
+    private static function testTheMigrationFansTheClassCodeOut(): void
+    {
+        $GLOBALS['__twoinc_test_tax_classes'] = ['Reduced rate', 'Zero rate'];
+        $GLOBALS['__twoinc_test_class_rates'] = [
+            '' => [11 => ['tax_rate' => '0'], 21 => ['tax_rate' => '21'], 12 => ['tax_rate' => '0']],
+            'reduced-rate' => [31 => ['tax_rate' => '0']],
+            'zero-rate' => [41 => ['tax_rate' => '0']],
+        ];
+        $cases = [
+            // stored map, migrated map, description
+            [['standard' => 'X'], ['standard|exempt' => 'X', 'standard|none' => 'X', 'rate:11' => 'X', 'rate:12' => 'X'], '18: EX, NR and every 0% rate of the class take its code; the 21% rate and other classes none'],
+            [['standard' => 'X', 'reduced-rate' => 'Y'], ['standard|exempt' => 'X', 'standard|none' => 'X', 'rate:11' => 'X', 'rate:12' => 'X', 'reduced-rate|exempt' => 'Y', 'reduced-rate|none' => 'Y', 'rate:31' => 'Y'], 'each class fans out to its own rows'],
+            [['standard|none' => 'Z', 'standard' => 'X'], ['standard|none' => 'Z', 'standard|exempt' => 'X', 'rate:11' => 'X', 'rate:12' => 'X'], 'a row already set wins over the fanned-out code'],
+            [['rate:41' => 'Z', 'zero-rate|exempt' => 'Y'], ['rate:41' => 'Z', 'zero-rate|exempt' => 'Y'], 'a mapping already in rows is left as it is'],
+            [[], [], 'nothing to move'],
+        ];
+        foreach ($cases as [$stored, $expected, $description]) {
+            TinyAssert::same($expected, WC_Twoinc::fan_out_tax_code_map($stored), $description);
+        }
+
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $migrate = new ReflectionMethod(WC_Twoinc::class, 'migrate_tax_code_map_to_rows');
+        // Required before PHP 8.1.
+        $migrate->setAccessible(true);
+        $gateway->settings = ['tax_code_map' => ['reduced-rate' => 'Y'], 'title' => 'Two'];
+        $migrate->invoke($gateway);
+        $moved = ['reduced-rate|exempt' => 'Y', 'reduced-rate|none' => 'Y', 'rate:31' => 'Y'];
+        TinyAssert::same($moved, get_option($gateway->get_option_key())['tax_code_map'] ?? null, 'the upgrade stores the rows');
+        TinyAssert::same('Two', get_option($gateway->get_option_key())['title'] ?? null, 'and keeps every other setting');
+        TinyAssert::same('2', get_option(WC_Twoinc_Brand::prefixed_name('tax_code_map_version')), 'and records the version');
+        $gateway->settings = ['tax_code_map' => ['standard' => 'X']];
+        $migrate->invoke($gateway);
+        TinyAssert::same($moved, get_option($gateway->get_option_key())['tax_code_map'] ?? null, 'it runs once');
+    }
+
+    /** Tax rates of the case table by tax_rate_id, as the order's tax rows record them: percent. */
+    private const CASE_RATES = [11 => 0.0, 12 => 0.0, 13 => 0.0, 21 => 21.0];
+
+    /**
+     * The shared tax-code case table (TWO-26153), rows 1 to 17 in the design's order, then the rows the sibling
+     * plugins' reviews added. Merchant ES unless the last column says otherwise. WooCommerce taxes on the delivery
+     * address here, so it is the tax address.
+     *
+     * Columns: lines ('goods' a standard-class product; 'service' one of class `services`; 'keyless' shipping whose
+     * class follows the items and finds none; the expected code is the last line's), billing country and postcode,
+     * tax address, buyer VAT number meta, the line's taxes (rate id => tax charged on 100, see CASE_RATES), the rates
+     * WooCommerce finds at the tax address for a line it did not tax (rate id => percent), rows mapped (EX and NR of
+     * `standard`, EX2 the exempt row of `services`, else a row key), expected code, description, merchant country.
+     *
+     * @return array<int, array>
+     */
+    private static function caseRows(): array
+    {
+        $intra = 'ES_IVA_INTRA_COMMUNITY';
+        $export = 'ES_IVA_EXPORT';
+        $services = 'ES_IVA_INTRA_COMMUNITY_SERVICES';
+        return [
+            [['goods'], 'ES 28001', 'ES 28001', '', [21 => 21.0], [], ['EX' => $intra], null, '1: non-0% lines are never touched'],
+            [['goods'], 'DE 10115', 'DE 10115', 'DE123', [], [], ['EX' => $intra], $intra, '2: step 1 exempt buyer'],
+            [['goods'], 'DE 10115', 'DE 10115', 'de 123', [], [], ['EX' => $intra], $intra, '3: VAT read as entered, any non-empty value counts'],
+            [['goods'], 'DE 10115', 'DE 10115', '   ', [], [], ['EX' => $intra], null, '4: whitespace-only VAT is empty; NR on (none) gives no code'],
+            [['goods'], 'DE 10115', 'US 10001', 'DE123', [12 => 0.0], [], ['EX' => $intra, 'rate:12' => $export], $export, '5: export: tax address outside the EU skips step 1'],
+            [['goods'], 'ES 35001', 'ES 35001', '', [11 => 0.0], [], ['rate:11' => $export], $export, '6: step 2 shop\'s 0% rate'],
+            [['goods'], 'US 10001', 'US 10001', '', [], [], ['NR' => $export], $export, '7: step 3 no-rule row'],
+            [['goods'], 'DE 10115', 'DE 10115', 'DE123', [], [], ['NR' => $intra], null, '8: a matched row on (none) never falls through'],
+            [['goods'], 'ES 28001', 'ES 28001', 'ESB123', [], [], ['EX' => $intra], null, '9: merchant-country buyer is never exempt'],
+            [['goods'], 'MC 98000', 'MC 98000', 'FR123', [], [], ['EX' => $intra], $intra, '10: Monaco is in the EU VAT area'],
+            [['goods'], 'GB BT1 1AA', 'GB BT1 1AA', 'XI123', [], [], ['EX' => $intra], $intra, '11: Northern Ireland (GB + BT postcode) is in the EU VAT area'],
+            [['goods'], 'GB SW1A 1AA', 'GB SW1A 1AA', 'GB123', [], [], ['EX' => $intra, 'NR' => $export], $export, '12: Great Britain is outside'],
+            [['goods'], 'CH 8001', 'CH 8001', 'CHE123', [], [], ['EX' => $intra, 'NR' => $export], $export, '13: Switzerland is outside'],
+            [['service'], 'FR 75001', 'FR 75001', 'FR123', [], [], ['EX2' => $services], $services, '14: goods vs services comes from the merchant\'s per-class mapping'],
+            [['goods', 'keyless'], 'DE 10115', 'DE 10115', 'DE123', [], [], ['EX' => $intra], $intra, '15: step 4: shared code of the order\'s coded 0% lines'],
+            [['goods', 'service', 'keyless'], 'DE 10115', 'DE 10115', 'DE123', [], [], ['EX' => $intra, 'EX2' => $services], null, '16: step 4: disagreeing codes give no code'],
+            [['goods', 'keyless'], 'DE 10115', 'DE 10115', '', [], [], ['EX' => $intra], null, '17: step 4 with nothing to share'],
+            [['goods'], 'ES 28001', 'DE 10115', 'DE123', [], [], ['EX' => $intra, 'NR' => $export], $export, 'a buyer billed in the merchant\'s country is not exempt, wherever the goods go'],
+            [['goods'], 'US 10001', 'DE 10115', 'DE123', [], [], ['EX' => $intra, 'NR' => $export], $export, 'a buyer billed outside the EU VAT area is not exempt'],
+            [['goods'], 'DE 10115', 'DE 10115', 'DE123', [], [], ['EX' => $intra, 'NR' => $export], $export, 'step 1 needs a known merchant country', ''],
+            [['goods'], 'ES 35001', 'ES 35001', '', [11 => 0.0, 13 => 0.0], [], ['rate:11' => $export, 'rate:13' => $intra], $export, 'the first 0% rate on the line wins'],
+            [['goods'], 'ES 35001', 'ES 35001', '', [11 => 0.0, 21 => 0.0], [], ['rate:11' => $export], null, 'a 0% rate alongside a 21% one gives no code'],
+            [['goods'], 'ES 35001', 'ES 35001', '', [], [11 => 0.0], ['rate:11' => $export, 'NR' => $intra], $export, 'a line WooCommerce did not tax takes the 0% rate it finds at the tax address'],
+            [['goods'], 'US 10001', 'US 10001', '', [], [21 => 21.0], ['NR' => $export], null, 'a line WooCommerce did not tax where its rate is above 0% gets no code'],
+            [['goods', 'keyless'], 'US 10001', 'US 10001', '', [], [], ['NR' => $export], $export, 'step 4 shares a step 3 code'],
+        ];
+    }
+
+    private static function testTheSharedCaseTable(): void
+    {
+        $GLOBALS['__twoinc_test_tax_classes'] = ['Services'];
+        $GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'] = 'inherit';
+        $keys = ['EX' => 'standard|exempt', 'NR' => 'standard|none', 'EX2' => 'services|exempt'];
+        foreach (self::caseRows() as $row) {
+            [$lines, $billing, $taxAddress, $vat, $taxes, $shopRates, $rows, $expected, $description] = $row;
+            $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = $row[9] ?? 'ES';
+            $GLOBALS['__twoinc_test_find_rates'] = ['' => array_map(static function ($percent) {
+                return ['rate' => $percent, 'shipping' => 'yes', 'compound' => 'no', 'label' => 'Tax'];
+            }, $shopRates)];
+            $map = [];
+            foreach ($rows as $row_key => $code) {
+                $map[$keys[$row_key] ?? $row_key] = $code;
+            }
+            self::useGateway($map);
+            $order = self::caseOrder($lines, $billing, $taxAddress, $taxes);
+            $order->meta = ['_billing_vat_number' => $vat];
+            $sent = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true);
+            $line = end($sent['line_items']);
+            TinyAssert::same($expected, $line['tax_code'] ?? null, $description . ' (got: ' . json_encode($line['tax_code'] ?? null) . ')');
+        }
+    }
+
+    /**
+     * The placement record (TWO-26153): an order created with Two keeps the codes it was placed with on edit and
+     * refund, whatever changes later. A line the record does not cover is resolved now, and step 4 shares only the
+     * codes the record holds from steps 1 to 3, never derived ones.
+     */
+    private static function testThePlacementRecordKeepsTheCodes(): void
+    {
+        $GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'] = 'inherit';
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = 'ES';
+        $meta = WC_Twoinc_Brand::meta_key('tax_codes');
+        $codes = static function (array $payload) {
+            return array_map(static function ($line) {
+                return $line['tax_code'] ?? null;
+            }, $payload['line_items']);
+        };
+        $intra = 'ES_IVA_INTRA_COMMUNITY';
+        self::useGateway(['standard|exempt' => $intra]);
+        $order = self::caseOrder(['goods', 'keyless'], 'DE 10115', 'DE 10115', []);
+        $order->meta = ['_billing_vat_number' => 'DE123'];
+
+        TinyAssert::same([$intra, $intra], $codes(WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true)), 'create');
+        TinyAssert::same(['1' => ['code' => $intra, 'step' => 'row'], '6' => ['code' => $intra, 'step' => 'keyless']], $order->meta[$meta] ?? null, 'create records each 0% line by item id and how its code was reached');
+        $order->meta[$meta] = ['1' => ['code' => 'MARK', 'step' => 'row']];
+        TinyAssert::same([null, null], $codes(WC_Twoinc_Helper::compose_twoinc_intent($order, [])), 'the intent sends no code');
+        TinyAssert::same(['1' => ['code' => 'MARK', 'step' => 'row']], $order->meta[$meta], 'and records nothing');
+        WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true);
+
+        $order->meta[WC_Twoinc_Brand::prefixed_name('order_id')] = 'two-order';
+        $order->meta['_billing_vat_number'] = '';
+        self::useGateway(['standard|exempt' => 'ES_IVA_EXEMPT_ART20', 'standard|none' => 'ES_IVA_EXEMPT_ART20']);
+        $record = $order->meta[$meta];
+        TinyAssert::same([$intra, $intra], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '')), 'an edit after the mapping and the VAT number changed sends the recorded codes');
+        $refund = new StubRefund(['shipping' => [new StubShippingItem(-10.0, 0.0, [], ['_refunded_item_id' => 6])]], []);
+        TinyAssert::same([$intra], $codes(WC_Twoinc_Helper::compose_twoinc_refund($refund, 10.0, $order)), 'so does a refund');
+        TinyAssert::same($record, $order->meta[$meta], 'and neither rewrites the record');
+
+        $order->addLine(3, 'goods');
+        TinyAssert::same([$intra, 'ES_IVA_EXEMPT_ART20', $intra], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '')), 'a line added by an edit is resolved now');
+
+        $cases = [
+            // record of item 1, the code an unrecorded keyless line takes, description
+            [['code' => $intra, 'step' => 'row'], $intra, 'a recorded step 1 to 3 code is shared'],
+            [['code' => 'ES_IVA_EXPORT', 'step' => 'derived'], null, 'a recorded derived code is not shared, and derivation for a domestic order gives none'],
+            [['code' => 'ES_IVA_EXPORT', 'step' => 'keyless'], null, 'a recorded step 4 code is not shared'],
+        ];
+        self::useGateway([]);
+        foreach ($cases as [$entry, $expected, $description]) {
+            $placed = self::caseOrder(['goods', 'keyless'], 'ES 28001', 'ES 28001', []);
+            $placed->meta = [WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order', $meta => ['1' => $entry]];
+            TinyAssert::same([$entry['code'], $expected], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($placed, '', '', '', '')), $description);
+        }
+    }
+
+    /**
+     * An order for the case table: product lines of 100 at the given taxes (the first standard-class product is item
+     * 1), and 'keyless' a 0% shipping line, item 6, that carries no rate.
+     */
+    private static function caseOrder(array $lines, string $billing, string $taxAddress, array $taxes): TaxCodeSpecOrder
+    {
+        $items = [];
+        $shipping = [];
+        $tax = array_sum($taxes);
+        foreach ($lines as $i => $kind) {
+            if ($kind === 'keyless') {
+                $shipping[6] = new StubShippingItem(10.0, 0.0, []);
+                continue;
+            }
+            $items[1 + $i] = self::caseLine($kind, $i === 0 ? $taxes : []);
+        }
+        [$country, $postcode] = explode(' ', $taxAddress, 2);
+        $order = new TaxCodeSpecOrder($items, $shipping, $billing, ['country' => $country, 'postcode' => $postcode], 100.0 * count($items) + ($shipping ? 10.0 : 0.0) + $tax, $tax);
+        $order->orderTaxes = array_map(static function ($id) {
+            return new StubOrderTaxItem($id, self::CASE_RATES[$id]);
+        }, array_keys(self::CASE_RATES));
+        return $order;
+    }
+
+    public static function caseLine(string $kind, array $taxes): StubProductLineItem
+    {
+        return new StubProductLineItem([
+            'name' => ucfirst($kind), 'line_subtotal' => 100.0, 'line_total' => 100.0, 'line_tax' => array_sum($taxes),
+            'taxes' => $taxes, 'tax_class' => $kind === 'service' ? 'services' : '', 'data' => new TaxCodeSpecProduct($kind === 'service'),
+        ]);
     }
 
     private static function testTheMerchantCountryComesFromTheMerchantRecord(): void
@@ -562,6 +825,8 @@ final class TaxCodeSpecProduct
 
 final class TaxCodeSpecOrder extends StubOrder
 {
+    /** @var StubOrderTaxItem[]|null the order's tax rows; null for one 21% row, id 1 */
+    public $orderTaxes;
     private $items;
     private $shipping;
     private $buyer;
@@ -592,7 +857,21 @@ final class TaxCodeSpecOrder extends StubOrder
 
     public function get_taxes()
     {
-        return [new StubOrderTaxItem(1, 21.0)];
+        return $this->orderTaxes ?? [new StubOrderTaxItem(1, 21.0)];
+    }
+
+    /** The address WooCommerce taxes on: delivery, or billing when there is none. */
+    public function get_taxable_location()
+    {
+        return $this->delivery
+            ? ['country' => $this->delivery['country'], 'state' => '', 'postcode' => $this->delivery['postcode'], 'city' => 'City']
+            : ['country' => $this->buyer, 'state' => '', 'postcode' => $this->buyerPostcode, 'city' => 'City'];
+    }
+
+    public function addLine(int $id, string $kind): void
+    {
+        $this->items[$id] = TaxCodeSpec::caseLine($kind, []);
+        $this->total += 100.0;
     }
 
     public function get_total()
