@@ -476,7 +476,7 @@ line in the WooCommerce log at info level, naming the handler (a function,
 sends nothing, logs nothing.
 
 What always runs, with or without a merchant handler: the builders' own
-refusals where they cannot build a payload at all (a negative discount, a
+refusals where they cannot build a payload at all (a negative line discount, a
 shipping refund with no order line to take its rate from), the code-fault
 checks below, and Two's API. The plugin has no internal-consistency checks of
 its own: whether the lines add up to the totals and subtotals is validated by

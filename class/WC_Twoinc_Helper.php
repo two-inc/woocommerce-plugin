@@ -210,6 +210,24 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * The order-level discount_amount, which is informational and never
+         * refused on (TWO-26285). WooCommerce stores the order discount as a
+         * positive amount, so a negative one is a markup, not a discount: the
+         * total is rounded once, then floored at a plain "0.00". Line-level
+         * discounts keep their guard.
+         *
+         * @param WC_Order $order
+         *
+         * @return string
+         */
+        public static function order_discount_amount($order)
+        {
+            $rounded = WC_Twoinc_Helper::round_amt((float) $order->get_total_discount());
+            // Floor at 0, which also strips a negative zero ("-0.00").
+            return (float) $rounded > 0 ? $rounded : WC_Twoinc_Helper::round_amt(0);
+        }
+
+        /**
          * Round a computed discount once at the payload boundary and fail
          * loud if it is genuinely negative (TWO-25097).
          *
@@ -1091,13 +1109,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             $req_body = ['currency' => $order->get_currency()] + self::order_totals($order) + [
-                // Guard rounds once at the payload boundary, fails loud on a
-                // negative (TWO-25097).
-                'discount_amount' => WC_Twoinc_Helper::guard_negative_discount(
-                    $order->get_total_discount(),
-                    sprintf('order %s', $order->get_id()),
-                    sprintf('total discount %s', var_export($order->get_total_discount(), true))
-                ),
+                'discount_amount' => WC_Twoinc_Helper::order_discount_amount($order),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
                 'invoice_details' => $invoice_details,
@@ -1230,13 +1242,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             $req_body = ['currency' => $order->get_currency()] + self::order_totals($order) + [
-                // Guard rounds once at the payload boundary, fails loud on a
-                // negative (TWO-25097).
-                'discount_amount' => WC_Twoinc_Helper::guard_negative_discount(
-                    $order->get_total_discount(),
-                    sprintf('order %s', $order->get_id()),
-                    sprintf('total discount %s', var_export($order->get_total_discount(), true))
-                ),
+                'discount_amount' => WC_Twoinc_Helper::order_discount_amount($order),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
                 'buyer_department' => $department,
