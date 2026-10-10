@@ -510,6 +510,69 @@ let twoincCompanyCapture = {
     return twoincUtilHelper.blankToEmpty(twoincCompanyCapture.numberField(role).val()) !== "";
   },
 
+  /**
+   * The country a role's capture was made under: the pin `write()` records
+   * beside every captured number. Empty where the role holds no capture, and
+   * for a sole-trader number: Two mints that one rather than a country's
+   * register, and the sole-trader flow owns what a country change does to it.
+   *
+   * @returns {string}
+   */
+  capturedCountry: function (role) {
+    if (!twoincCompanyCapture.hasCapture(role)) return "";
+    if (twoincUtilHelper.isSyntheticCompanyNumber(twoincCompanyCapture.numberField(role).val())) {
+      return "";
+    }
+    return twoincUtilHelper
+      .blankToEmpty(twoincCompanyCapture.record(role).countryPrefix)
+      .toUpperCase();
+  },
+
+  /**
+   * Was this role's capture made under a country its address has since left
+   * (TWO-26286)? Only two known countries that differ count, the same rule as
+   * `countryDidChange()`.
+   *
+   * Asked of the capture rather than of a country event, because not every
+   * country move arrives as one: block checkout writes the country into the
+   * classic fields with no `change` at all.
+   *
+   * @returns {boolean}
+   */
+  isFromAnotherCountry: function (role) {
+    const captured = twoincCompanyCapture.capturedCountry(role);
+    const current = twoincAddressRoles.country(role);
+    return !!captured && !!current && captured !== current;
+  },
+
+  /**
+   * Would the order intent pair its company number with a country other than
+   * the one that number was captured under (TWO-26286)?
+   *
+   * Judged on `customerCompany`, the record the request body is built from,
+   * against every role whose number field holds that number: true when a
+   * holder's pin names another country and no holder's names this one. Every
+   * capture path goes through `write()`, which pins, so a holder with no pin
+   * is not evidence either way, the same rule as `isFromAnotherCountry()`.
+   *
+   * @returns {boolean}
+   */
+  orderCompanyIsCrossCountry: function () {
+    const company = Twoinc.getInstance().customerCompany || {};
+    const number = twoincUtilHelper.blankToEmpty(company.organization_number);
+    if (!number) return false;
+    const country = twoincUtilHelper.blankToEmpty(company.country_prefix).toUpperCase();
+    const pins = [twoincAddressRoles.invoice(), twoincAddressRoles.delivery()]
+      .filter(function (role) {
+        return (
+          twoincUtilHelper.blankToEmpty(twoincCompanyCapture.numberField(role).val()) === number
+        );
+      })
+      .map(twoincCompanyCapture.capturedCountry)
+      .filter(Boolean);
+    return pins.length > 0 && pins.indexOf(country) === -1;
+  },
+
   /** sessionStorage key holding the last capture mode and the pair it described. */
   CAPTURE_MODE_KEY: "twoincCaptureMode",
 
@@ -5664,6 +5727,41 @@ class Twoinc {
   }
 
   /**
+   * Drop any captured company whose address has since moved to another
+   * country, and say whether the order company is now safe to send
+   * (TWO-26286).
+   *
+   * A company is found under one country's register, and its number means
+   * nothing under another. The country handlers clear a capture on a country
+   * `change`, but block checkout moves the country into the classic fields
+   * with no event, so a delivery-role capture outlived the move and the next
+   * check paired the new country with the old company's number. Checking the
+   * capture itself, here, holds whichever way the country moved.
+   *
+   * A role mid sole-trader decision is left alone, as the country handlers
+   * leave it; its pair is still refused below.
+   *
+   * @returns {boolean} false while the order company still pairs a number with
+   *   another country, in which case nothing may be sent
+   */
+  withdrawCrossCountryCompany() {
+    let withdrew = false;
+    twoincCompanySearchControls.forEach(function (search) {
+      if (!twoincCompanyCapture.isFromAnotherCountry(search.role)) return;
+      if (search.soleTrader.isDeciding()) return;
+      // Answers to questions asked under the outgoing country must not land.
+      search.companySearchSeq += 1;
+      Twoinc.getInstance().addressStateFor(search.role).lookupSeq += 1;
+      search.clearSelectedCompany();
+      withdrew = true;
+    });
+    if (withdrew || twoincCompanyCapture.orderCompanyIsCrossCountry()) {
+      twoincCompanyCapture.syncOrderCompany();
+    }
+    return !twoincCompanyCapture.orderCompanyIsCrossCountry();
+  }
+
+  /**
    * Check the company approval status by creating an order intent
    */
   getApproval() {
@@ -5679,9 +5777,13 @@ class Twoinc {
       twoincCompanySearchControls.some(function (control) {
         return control.soleTrader.isDeciding();
       });
+    // First, so a company from another country is gone before anything below
+    // reads the record (TWO-26286).
+    const sendable = this.withdrawCrossCountryCompany();
     if (
-      !twoincUtilHelper.blankToEmpty(this.customerCompany.organization_number) &&
-      !soleTraderPending
+      !sendable ||
+      (!twoincUtilHelper.blankToEmpty(this.customerCompany.organization_number) &&
+        !soleTraderPending)
     ) {
       if (
         this.orderIntentCheck.inFlightSeq !== null ||
@@ -5739,6 +5841,13 @@ class Twoinc {
     }
 
     this.orderIntentCheck.interval = setInterval(function () {
+      // Asked again on the tick that sends: the country can move in the second
+      // between arming and here (TWO-26286).
+      if (!Twoinc.getInstance().withdrawCrossCountryCompany()) {
+        Twoinc.getInstance().abandonOrderIntentCheck();
+        twoincDomHelper.togglePaySubtitleDesc("no-company");
+        return;
+      }
       // Only the buyer is sent: the server composes amounts and lines from the cart (TWO-26092).
       let jsonBody = JSON.stringify({
         buyer: {
@@ -6445,6 +6554,10 @@ class Twoinc {
     // left alone, the same way the address mirror leaves shipping field values
     // in place — only which pair the order intent SEES changes).
     twoincCompanyCapture.syncOrderCompany();
+    // Re-read here as well as on blur (TWO-26286): block checkout writes the
+    // buyer's details into the classic fields with no blur to read them on,
+    // so without this the representative stayed as it was at page load.
+    Twoinc.getInstance().customerRepresentative = twoincDomHelper.getRepresentativeData();
     Twoinc.getInstance().getApproval();
   }
 
@@ -6486,6 +6599,10 @@ class Twoinc {
       Twoinc.getInstance().customerCompany.organization_number = typed;
       if (numberMoved && twoincUtilHelper.blankToEmpty(typed)) {
         Twoinc.getInstance().customerCompany.country_prefix =
+          twoincSelectWooHelper.currentCountry();
+        // The capture's own pin too, so the typed number is vouched for under
+        // the country it was typed under (TWO-26286).
+        twoincCompanyCapture.record(twoincAddressRoles.invoice()).countryPrefix =
           twoincSelectWooHelper.currentCountry();
       }
     } else if (inputName === "billing_company_display") {
@@ -6787,6 +6904,9 @@ class Twoinc {
         country_prefix: country,
         organization_number: domNumber
       };
+      // The re-render restored this pair under `country`, so the capture's pin
+      // follows it; `orderCompanyIsCrossCountry()` reads the pin (TWO-26286).
+      twoincCompanyCapture.record(twoincAddressRoles.invoice()).countryPrefix = country;
       return;
     }
 
