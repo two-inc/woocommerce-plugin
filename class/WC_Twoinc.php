@@ -85,6 +85,9 @@ if (!class_exists('WC_Twoinc')) {
 
         private bool $twoinc_process_confirmation_called = false;
 
+        // What each status change dispatched this request returned, by order id: read by the bulk-action notices.
+        private static array $status_change_results = [];
+
         // api_key/checkout_env as stored when a settings save began; null outside a save.
         private ?array $identity_before_save = null;
 
@@ -185,16 +188,8 @@ if (!class_exists('WC_Twoinc')) {
                 // The admin order-form save is registered in load_twoinc_classes() (TWO-26175).
             }
 
-            // Each merchant-configured fulfilment trigger status gets its own
-            // woocommerce_order_status_* hook, since that is how WooCommerce
-            // core fires them (TWO-25386).
-            foreach ($this->get_fulfilment_trigger_statuses() as $trigger_status) {
-                add_action('woocommerce_order_status_' . $trigger_status, [$this, 'on_order_completed']);
-            }
-
-            add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
-            add_action('woocommerce_cancelled_order', [$this, 'on_order_cancelled']);
-            add_action('woocommerce_order_status_refunded', [$this, 'on_order_refunded']);
+            // Order status changes reach Two through one hook registered in
+            // load_twoinc_classes(), see on_order_status_changed() (TWO-26291).
 
             self::$instance = $this;
             new WC_Twoinc_Checkout($this);
@@ -4701,69 +4696,76 @@ if (!class_exists('WC_Twoinc')) {
             $gateway->process_update_twoinc_order($order, $twoinc_meta);
         }
 
-        public static function on_order_edit_status($order_id, $to_status)
+        /**
+         * The one place an order status change is sent to Two (TWO-26291).
+         *
+         * Bound to woocommerce_order_status_changed in load_twoinc_classes(),
+         * which WooCommerce fires once per saved transition on every path:
+         * the order screen, the list-table action buttons and bulk actions
+         * (legacy and HPOS), the customer's own cancel link, REST and code.
+         * The per-status hooks it replaces were bound in the gateway
+         * constructor alongside woocommerce_order_edit_status, and a manual
+         * change fires both, so each change was sent to Two twice.
+         */
+        public static function on_order_status_changed($order_id, $from_status, $to_status)
         {
             $wc_twoinc_instance = WC_Twoinc::get_instance();
+            if (!$wc_twoinc_instance->get_option('api_key') || !$wc_twoinc_instance->get_merchant_id()) {
+                return;
+            }
 
-            $to_status = strtolower($to_status);
+            $to_status = strtolower(self::strip_wc_status_prefix($to_status));
             // Cancelled/refunded are checked FIRST and unconditionally,
             // ahead of the merchant-configured trigger set (TWO-25386):
             // 'cancelled' and 'refunded' are excluded from the
             // fulfilment-trigger multiselect's own options list, but
-            // this ordering is the actual safety net — it holds even
+            // this ordering is the actual safety net. It holds even
             // against a stale/hand-edited settings row that somehow
             // contains one of them, so a cancellation can never be
             // mis-dispatched as a fulfilment.
             if ($to_status == 'cancelled') {
-                $wc_twoinc_instance->on_order_cancelled($order_id);
+                $result = $wc_twoinc_instance->on_order_cancelled($order_id);
             } elseif ($to_status == 'refunded') {
-                $wc_twoinc_instance->on_order_refunded($order_id);
+                $result = $wc_twoinc_instance->on_order_refunded($order_id);
             } elseif (in_array($to_status, $wc_twoinc_instance->get_fulfilment_trigger_statuses(), true)) {
-                $wc_twoinc_instance->on_order_completed($order_id);
+                $result = $wc_twoinc_instance->on_order_completed($order_id);
+            } else {
+                return;
             }
+            self::$status_change_results[(int) $order_id] = $result;
         }
 
+        /**
+         * Notices for the legacy order list's "Change status to completed /
+         * cancelled" bulk actions. Registered after WooCommerce's own handler,
+         * which changes the statuses and so sends them to Two through
+         * on_order_status_changed(); this only reports what those sends
+         * returned, and sends nothing itself.
+         */
         public static function on_order_bulk_edit_action($redirect, $doaction, $object_ids)
         {
-            $wc_twoinc_instance = WC_Twoinc::get_instance();
+            $actions = ['mark_completed' => 'marked_completed', 'mark_cancelled' => 'marked_cancelled'];
+            if (!isset($actions[$doaction])) {
+                return $redirect;
+            }
             $success = [];
             $failure = [];
-            if ('mark_completed' === $doaction) {
-                foreach ($object_ids as $order_id) {
-                    $result = $wc_twoinc_instance->on_order_completed($order_id);
-                    if ($result === true) {
-                        $success[] = $order_id;
-                    } elseif ($result === false) {
-                        $failure[] = $order_id;
-                    }
+            foreach ($object_ids as $order_id) {
+                $result = self::$status_change_results[(int) $order_id] ?? null;
+                if ($result === true) {
+                    $success[] = $order_id;
+                } elseif ($result === false) {
+                    $failure[] = $order_id;
                 }
-                $redirect = add_query_arg(
-                    array(
-                        'bulk_action' => 'marked_completed',
-                        'two_success' => implode(",", $success),
-                        'two_failure' => implode(",", $failure),
-                    ),
-                    $redirect
-                );
-            } elseif ('mark_cancelled' === $doaction) {
-                foreach ($object_ids as $order_id) {
-                    $result = $wc_twoinc_instance->on_order_cancelled($order_id);
-                    if ($result === true) {
-                        $success[] = $order_id;
-                    } elseif ($result === false) {
-                        $failure[] = $order_id;
-                    }
-                }
-                $redirect = add_query_arg(
-                    array(
-                        'bulk_action' => 'marked_cancelled',
-                        'two_success' => implode(",", $success),
-                        'two_failure' => implode(",", $failure),
-                    ),
-                    $redirect
-                );
             }
-            return $redirect;
+            return add_query_arg(
+                array(
+                    'bulk_action' => $actions[$doaction],
+                    'two_success' => implode(",", $success),
+                    'two_failure' => implode(",", $failure),
+                ),
+                $redirect
+            );
         }
 
         public static function on_order_bulk_edit_notices()
@@ -4817,7 +4819,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Statuses that must never appear as a fulfilment trigger: each has
          * its own dedicated dispatch (on_order_cancelled / on_order_refunded)
-         * with different Two API semantics, and on_order_edit_status() checks
+         * with different Two API semantics, and on_order_status_changed() checks
          * them ahead of the trigger set specifically so a stale settings row
          * containing one of these can never override that (TWO-25386 review
          * finding — a merchant could otherwise select "Cancelled" in the

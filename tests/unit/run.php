@@ -339,6 +339,9 @@ final class BrandConfigSpec
             'testFulfilmentTriggerStatusDoesNotFireForUnconfiguredStatus',
             'testFulfilmentTriggerExcludesCancelledAndRefundedFromOptionsAndStoredValue',
             'testCancelledOrderNeverMisdispatchesAsFulfilmentEvenIfConfiguredAsTrigger',
+            'testStatusChangeIsSentToTwoOnceOnEveryWooCommercePath',
+            'testStatusChangeSendsNothingForAnUnconfiguredGateway',
+            'testLegacyBulkActionReportsTheStatusChangeWithoutSendingAgain',
             'testShouldDisableSslVerifyFollowsToggleInEveryEnvironment',
             'testPaymentSubtitlePrefersMerchantFreeTextOverBrandTagline',
             'testPaymentSubtitleOfOnlyDroppedMarkupEmitsNoElement',
@@ -8628,16 +8631,15 @@ final class BrandConfigSpec
      * only on the hardcoded 'completed' hook, silently desyncing any
      * merchant whose workflow never reaches that status (e.g. a
      * custom-order-status plugin). A merchant-configured non-'completed'
-     * status must now dispatch fulfilment via the woocommerce_order_edit_status
-     * fallback hook, the same path the constructor's per-status add_action
-     * loop uses for the primary WooCommerce core status hooks.
+     * status must now dispatch fulfilment through the one status-change
+     * dispatcher (TWO-26291).
      */
     private static function testFulfilmentTriggerStatusHonoursMerchantConfiguredNonCompletedStatus(): void
     {
-        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['processing']]);
+        $gateway = self::fulfilmentTriggerGateway(self::CONFIGURED + ['fulfilment_trigger_statuses' => ['processing']]);
 
         self::withGatewayInstance($gateway, function () {
-            WC_Twoinc::on_order_edit_status(501, 'processing');
+            WC_Twoinc::on_order_status_changed(501, 'pending', 'processing');
         });
 
         TinyAssert::same(
@@ -8654,10 +8656,10 @@ final class BrandConfigSpec
      */
     private static function testFulfilmentTriggerStatusDoesNotFireForUnconfiguredStatus(): void
     {
-        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['processing']]);
+        $gateway = self::fulfilmentTriggerGateway(self::CONFIGURED + ['fulfilment_trigger_statuses' => ['processing']]);
 
         self::withGatewayInstance($gateway, function () {
-            WC_Twoinc::on_order_edit_status(502, 'completed');
+            WC_Twoinc::on_order_status_changed(502, 'processing', 'completed');
         });
 
         TinyAssert::same(
@@ -8695,21 +8697,149 @@ final class BrandConfigSpec
 
     /**
      * The actual safety net, independent of the multiselect's own options
-     * list: on_order_edit_status() checks cancelled/refunded FIRST and
+     * list: on_order_status_changed() checks cancelled/refunded FIRST and
      * unconditionally, ahead of the merchant-configured trigger set, so a
      * cancellation can never be mis-dispatched as a fulfilment even against
      * a stale settings row.
      */
     private static function testCancelledOrderNeverMisdispatchesAsFulfilmentEvenIfConfiguredAsTrigger(): void
     {
-        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['cancelled']]);
+        $gateway = self::fulfilmentTriggerGateway(self::CONFIGURED + ['fulfilment_trigger_statuses' => ['cancelled']]);
 
         self::withGatewayInstance($gateway, function () {
-            WC_Twoinc::on_order_edit_status(503, 'cancelled');
+            WC_Twoinc::on_order_status_changed(503, 'processing', 'cancelled');
         });
 
         TinyAssert::same([503], $gateway->cancelledCalls, 'cancelled must still dispatch on_order_cancelled');
         TinyAssert::same([], $gateway->completedCalls, 'cancelled must never dispatch on_order_completed');
+    }
+
+    /** A gateway with an API key and merchant id, so status changes are sent. */
+    private const CONFIGURED = ['api_key' => 'key', 'merchant_id' => 'merchant'];
+
+    /**
+     * TWO-26291: one status change sends one request. Fires the hooks
+     * WooCommerce 9.9 core fires, in its order, on each path that changes a
+     * status, against the dispatch hooks the plugin file registers. Before,
+     * the constructor's per-status hooks and the woocommerce_order_edit_status
+     * fallback both ran on a manual change, so Two got the fulfilment or
+     * cancellation twice (three times from an action button).
+     */
+    private static function testStatusChangeIsSentToTwoOnceOnEveryWooCommercePath(): void
+    {
+        TinyAssert::same(
+            0,
+            preg_match("/add_action\([^;]*'on_order_(completed|cancelled|refunded)'/", file_get_contents(__DIR__ . '/../../class/WC_Twoinc.php')),
+            'the gateway constructor binds no status hook of its own'
+        );
+
+        preg_match_all(
+            "/add_action\('(woocommerce_[a-z_]+)', 'WC_Twoinc::(on_order_[a-z_]+)', \d+, (\d+)\)/",
+            file_get_contents(__DIR__ . '/../../tillit-payment-gateway.php'),
+            $registrations,
+            PREG_SET_ORDER
+        );
+        $edit = static function ($id, $to) {
+            return ['woocommerce_order_edit_status', $id, $to];
+        };
+        $saved = static function ($id, $from, $to) {
+            return [
+                ['woocommerce_order_status_' . $to, $id],
+                ['woocommerce_order_status_' . $from . '_to_' . $to, $id],
+                ['woocommerce_order_status_changed', $id, $from, $to],
+            ];
+        };
+        // [hooks fired, each [hook, ...args], expected fulfilments, expected cancellations, description]
+        $paths = [
+            [array_merge([$edit(701, 'completed')], $saved(701, 'processing', 'completed')), [701], [], 'order screen save'],
+            [array_merge([$edit(702, 'completed')], $saved(702, 'processing', 'completed'), [$edit(702, 'completed')]), [702], [], 'action button or bulk action'],
+            [array_merge([$edit(703, 'cancelled')], $saved(703, 'processing', 'cancelled')), [], [703], 'order screen cancel'],
+            [array_merge($saved(704, 'pending', 'cancelled'), [['woocommerce_cancelled_order', 704]]), [], [704], 'customer cancel link'],
+            [$saved(705, 'processing', 'completed'), [705], [], 'REST or code'],
+        ];
+        $saved_filters = $GLOBALS['__twoinc_test_filters'] ?? [];
+        try {
+            foreach ($paths as [$fired, $expected_fulfilments, $expected_cancellations, $description]) {
+                $GLOBALS['__twoinc_test_filters'] = [];
+                foreach ($registrations as [, $hook, $method, $accepted_args]) {
+                    add_action($hook, 'WC_Twoinc::' . $method, 10, (int) $accepted_args);
+                }
+                $gateway = self::fulfilmentTriggerGateway(self::CONFIGURED);
+                self::withGatewayInstance($gateway, function () use ($fired) {
+                    foreach ($fired as $call) {
+                        do_action(...$call);
+                    }
+                });
+                TinyAssert::same($expected_fulfilments, $gateway->completedCalls, $description . ': fulfilments sent');
+                TinyAssert::same($expected_cancellations, $gateway->cancelledCalls, $description . ': cancellations sent');
+            }
+        } finally {
+            $GLOBALS['__twoinc_test_filters'] = $saved_filters;
+        }
+    }
+
+    /** As when the constructor bound the status hooks only once an API key and merchant id were set. */
+    private static function testStatusChangeSendsNothingForAnUnconfiguredGateway(): void
+    {
+        $cases = [
+            [[], 'no API key or merchant id'],
+            [['api_key' => 'key'], 'no merchant id'],
+            [['merchant_id' => 'merchant'], 'no API key'],
+        ];
+        foreach ($cases as [$options, $description]) {
+            $gateway = self::fulfilmentTriggerGateway($options);
+            self::withGatewayInstance($gateway, function () {
+                WC_Twoinc::on_order_status_changed(801, 'processing', 'completed');
+                WC_Twoinc::on_order_status_changed(802, 'processing', 'cancelled');
+            });
+            TinyAssert::same([], array_merge($gateway->completedCalls, $gateway->cancelledCalls), $description);
+        }
+    }
+
+    /**
+     * TWO-26291: the legacy list's bulk handler used to fulfil or cancel each
+     * order itself, on top of WooCommerce's own status change. It now reports
+     * what that status change returned and sends nothing.
+     */
+    private static function testLegacyBulkActionReportsTheStatusChangeWithoutSendingAgain(): void
+    {
+        $gateway = new class (self::CONFIGURED) extends WC_Twoinc {
+            private $options;
+            public $completedCalls = [];
+            public function __construct($options)
+            {
+                $this->options = $options;
+            }
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+            public function on_order_completed($order_id)
+            {
+                $this->completedCalls[] = $order_id;
+                return [901 => true, 902 => false][$order_id] ?? null;
+            }
+        };
+        $redirect = self::withGatewayInstance($gateway, function () {
+            foreach ([901, 902, 903] as $order_id) {
+                WC_Twoinc::on_order_status_changed($order_id, 'processing', 'completed');
+            }
+            return WC_Twoinc::on_order_bulk_edit_action('edit.php', 'mark_completed', ['901', '902', '903', '904']);
+        });
+        TinyAssert::same([901, 902, 903], $gateway->completedCalls, 'one send per status change, none from the bulk handler');
+        TinyAssert::same(
+            'edit.php?' . http_build_query(['bulk_action' => 'marked_completed', 'two_success' => '901', 'two_failure' => '902']),
+            $redirect,
+            'success and failure are the status change results'
+        );
+        TinyAssert::same('edit.php', WC_Twoinc::on_order_bulk_edit_action('edit.php', 'trash', ['901']), 'other bulk actions pass through');
+        TinyAssert::true(
+            strpos(
+                file_get_contents(__DIR__ . '/../../tillit-payment-gateway.php'),
+                "add_filter('handle_bulk_actions-edit-shop_order', 'WC_Twoinc::on_order_bulk_edit_action', 20, 3);"
+            ) !== false,
+            'registered after the WooCommerce handler (priority 10)'
+        );
     }
 
     /**
