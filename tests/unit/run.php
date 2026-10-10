@@ -211,7 +211,7 @@ final class BrandConfigSpec
             'testInvoiceStreamFilenameSanitizesOrderId',
             'testNegativeDiscountGuardPassesLegitimateDiscount',
             'testNegativeDiscountGuardThrowsOnNegativeLineDiscount',
-            'testOrderDiscountIsSentAsAbsoluteAndNeverRefused',
+            'testOrderDiscountIsFlooredAtZeroAndNeverRefused',
             'testNegativeDiscountGuardNoFalsePositiveFromEarlyRounding',
             'testNegativeDiscountGuardSkipsRefundLineItems',
             'testFxSameCurrencyShortCircuitsWithoutNetwork',
@@ -9373,17 +9373,19 @@ final class BrandConfigSpec
         );
     }
 
-    private static function testOrderDiscountIsSentAsAbsoluteAndNeverRefused(): void
+    private static function testOrderDiscountIsFlooredAtZeroAndNeverRefused(): void
     {
         // TWO-26285: the order-level discount_amount is informational. It is
-        // sent as abs(get_total_discount()), rounded once and floored at 0,
-        // on both compose bodies, and never refuses the order.
+        // get_total_discount() rounded once and floored at 0, on both compose
+        // bodies, and never refuses the order. A negative total is a markup,
+        // so it is not reported as a discount.
         $cases = [
             [0.0, '0.00', 'no discount'],
             [12.5, '12.50', 'a positive discount, untouched'],
-            [-5.0, '5.00', 'a negative discount, sent as its absolute value'],
+            [-5.0, '0.00', 'a negative total (a markup), floored at zero, not refused'],
             [-0.002, '0.00', 'negative sub-cent residue, plain zero'],
             [0.004, '0.00', 'positive sub-cent residue, plain zero'],
+            [0.005, '0.01', 'half a cent rounds up before the floor'],
         ];
         foreach ($cases as [$native, $expected, $description]) {
             $order = new class ($native) extends StubOrder {

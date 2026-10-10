@@ -210,9 +210,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * The order-level discount_amount, which is informational: sent as
-         * abs(get_total_discount()) rounded once, floored at 0, and never
-         * refused on (TWO-26285). Line-level discounts keep their guard.
+         * The order-level discount_amount, which is informational and never
+         * refused on (TWO-26285). WooCommerce stores the order discount as a
+         * positive amount, so a negative one is a markup, not a discount: the
+         * total is rounded once, then floored at a plain "0.00". Line-level
+         * discounts keep their guard.
          *
          * @param WC_Order $order
          *
@@ -220,7 +222,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function order_discount_amount($order)
         {
-            return WC_Twoinc_Helper::round_amt(max(0.0, abs((float) $order->get_total_discount())));
+            $rounded = WC_Twoinc_Helper::round_amt((float) $order->get_total_discount());
+            // Floor at 0, which also strips a negative zero ("-0.00").
+            return (float) $rounded > 0 ? $rounded : WC_Twoinc_Helper::round_amt(0);
         }
 
         /**
