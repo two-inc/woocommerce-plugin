@@ -92,6 +92,7 @@ describe("getCompanyName reads the posted field", () => {
       act: () => {
         ctx.twoinc.billing_company = "Returning Buyer Ltd";
         ctx.twoinc.company_id = "912345678";
+        ctx.twoinc.company_country = "GB";
         ctx.dom.loadUserMetaInputs();
       },
       mode: "search",

@@ -1289,6 +1289,7 @@ describe("TWO-40 — sole-trader flow", () => {
           // a fiction.
           ctx.twoinc.billing_company = echo.metaName;
           ctx.twoinc.company_id = echo.metaId;
+          ctx.twoinc.company_country = "GB";
           $("#billing_company").val(dom.name);
           $("#company_id").val(dom.id);
 

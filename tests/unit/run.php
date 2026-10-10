@@ -16695,6 +16695,10 @@ final class CaptureMemorySpec
             'testAProfileSaveOmittingTheFieldsLeavesThemStanding',
             'testAProfileSaveStoresSanitisedText',
             'testAProfileSaveCanClearAField',
+            'testTheCaptureCountryIsRememberedWithIt',
+            'testACaptureRememberedWithNoCountryReplaysNone',
+            'testTheMerchantSetCompanyTakesTheBuyersSavedCountry',
+            'testTheOrderBeingPaidReplaysItsBillingCountry',
         ];
         foreach ($tests as $test) {
             self::$test();
@@ -16889,6 +16893,74 @@ final class CaptureMemorySpec
             );
         } finally {
             $_POST = $saved;
+            self::reset();
+        }
+    }
+
+    /**
+     * [what is posted, the country replayed, description]. TWO-26286: a replay names the country it was captured
+     * under, so the browser never pairs the number with another one.
+     */
+    private static function testTheCaptureCountryIsRememberedWithIt(): void
+    {
+        $cases = [
+            ['es', 'ES', 'a posted country is replayed upper-cased'],
+            ['', '', 'no posted country replays none'],
+            ['Spain', '', 'anything but a two-letter code replays none'],
+        ];
+        foreach ($cases as [$posted, $expected, $description]) {
+            self::liveCart();
+            $saved = $_POST;
+            $_POST = self::CAPTURED + ['country' => $posted];
+            try {
+                WC_Twoinc_Checkout::ajax_remember_company();
+                TinyAssert::same($expected, self::bootstrap()['company_country'] ?? null, $description);
+            } finally {
+                $_POST = $saved;
+                self::reset();
+            }
+        }
+    }
+
+    /** Given a capture remembered before the country was kept; When the checkout renders; Then it names no country. */
+    private static function testACaptureRememberedWithNoCountryReplaysNone(): void
+    {
+        self::liveCart();
+        WC()->session->set(WC_Twoinc_Checkout::CAPTURED_COMPANY_SESSION_KEY, self::CAPTURED);
+
+        $rendered = self::bootstrap();
+        TinyAssert::same(self::CAPTURED['company_id'], $rendered['company_id'], 'the number still reaches the browser');
+        TinyAssert::same('', $rendered['company_country'] ?? null, 'with no country, which the browser refuses to replay');
+        self::reset();
+    }
+
+    /** Given a merchant-set company; When the checkout renders; Then it is taken as the buyer's saved billing country's. */
+    private static function testTheMerchantSetCompanyTakesTheBuyersSavedCountry(): void
+    {
+        self::liveCart();
+        $GLOBALS['__twoinc_test_user_id'] = 7;
+        $GLOBALS['__twoinc_test_user_meta'] = [7 => [
+            WC_Twoinc_Brand::prefixed_name('company_id') => '811223344',
+            WC_Twoinc_Brand::prefixed_name('billing_company') => 'Second Company AS',
+            'billing_country' => 'no',
+        ]];
+
+        TinyAssert::same('NO', self::bootstrap()['company_country'] ?? null, 'the buyer saved billing country');
+        self::reset();
+    }
+
+    /** Given the pay-for-order page; When it renders; Then the order's company is replayed with the order's billing country. */
+    private static function testTheOrderBeingPaidReplaysItsBillingCountry(): void
+    {
+        self::liveCart();
+        $order = new StubOrder();
+        $order->meta = ['company_id' => '811223344', 'company_name' => 'Second Company AS'];
+        $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+
+        try {
+            self::onTheOrderPayPage(42, $order);
+            TinyAssert::same('NO', self::bootstrap()['company_country'] ?? null, 'the order billing country');
+        } finally {
             self::reset();
         }
     }

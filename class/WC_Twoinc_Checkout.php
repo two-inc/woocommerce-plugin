@@ -454,8 +454,12 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             return $cart && method_exists($cart, 'is_empty') && !$cart->is_empty();
         }
 
-        /** @return void */
-        public static function remember_captured_company($company_id, $company_name)
+        /**
+         * @param string $country the country the company was captured under; kept so a
+         *   replay can never pair the number with another country (TWO-26286)
+         * @return void
+         */
+        public static function remember_captured_company($company_id, $company_name, $country = '')
         {
             $session = self::capture_session();
             if (!$session) {
@@ -476,6 +480,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             $session->set(self::CAPTURED_COMPANY_SESSION_KEY, [
                 'company_id' => (string) $company_id,
                 'company_name' => (string) $company_name,
+                'country' => self::country_code($country),
             ]);
         }
 
@@ -501,7 +506,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          * cart, or on the pay-for-order page the one the order carries
          * (ABN-554).
          *
-         * @return array{company_id: string, company_name: string}
+         * Each carries the country it was captured under, blank where none was
+         * recorded (TWO-26286).
+         *
+         * @return array{company_id: string, company_name: string, country: string}
          */
         public static function remembered_company(): array
         {
@@ -510,10 +518,11 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 return [
                     'company_id' => method_exists($order, 'get_meta') ? (string) $order->get_meta('company_id') : '',
                     'company_name' => method_exists($order, 'get_meta') ? (string) $order->get_meta('company_name') : '',
+                    'country' => method_exists($order, 'get_billing_country') ? self::country_code($order->get_billing_country()) : '',
                 ];
             }
 
-            $blank = ['company_id' => '', 'company_name' => ''];
+            $blank = ['company_id' => '', 'company_name' => '', 'country' => ''];
             $session = self::capture_session();
             if (!$session) {
                 return $blank;
@@ -534,7 +543,17 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             return [
                 'company_id' => (string) ($remembered['company_id'] ?? ''),
                 'company_name' => (string) ($remembered['company_name'] ?? ''),
+                // A capture remembered before the country was kept has none, and is not replayed.
+                'country' => self::country_code($remembered['country'] ?? ''),
             ];
+        }
+
+        /** An ISO 3166-1 alpha-2 code, upper-cased, or blank for anything else. */
+        private static function country_code($value): string
+        {
+            $code = strtoupper(trim((string) $value));
+
+            return preg_match('/^[A-Z]{2}$/', $code) === 1 ? $code : '';
         }
 
         public static function ajax_remember_company(): void
@@ -546,7 +565,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             self::remember_captured_company(
                 self::posted_capture_field('company_id'),
-                self::posted_capture_field('company_name')
+                self::posted_capture_field('company_name'),
+                self::posted_capture_field('country')
             );
             wp_send_json_success();
         }
@@ -737,6 +757,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             if ($user_id) {
                 $properties['company_id'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), true);
                 $properties['billing_company'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), true);
+                // The profile records no country for the merchant-set company, so it is
+                // taken as belonging to the buyer's own saved billing country (TWO-26286).
+                $properties['company_country'] = self::country_code(get_user_meta($user_id, 'billing_country', true));
                 $properties['department'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('department'), true);
                 $properties['project'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('project'), true);
             }
@@ -746,6 +769,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             if ($captured['company_id'] !== '' || $captured['company_name'] !== '') {
                 $properties['company_id'] = $captured['company_id'];
                 $properties['billing_company'] = $captured['company_name'];
+                $properties['company_country'] = $captured['country'];
             }
 
             return $properties;

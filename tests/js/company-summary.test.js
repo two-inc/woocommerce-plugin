@@ -623,6 +623,7 @@ describe("read-only captured-company summary", () => {
       // would show the name with an empty number.
       ctx.twoinc.billing_company = "ACME Widgets Ltd";
       ctx.twoinc.company_id = "12345678";
+      ctx.twoinc.company_country = "GB";
       $("#company_id").val("");
 
       dom.loadUserMetaInputs();

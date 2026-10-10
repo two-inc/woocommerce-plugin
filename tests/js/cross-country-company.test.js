@@ -36,6 +36,7 @@ function buildForm() {
     '  <input type="text" id="shipping_company" name="shipping_company" value="" />',
     '  <input type="text" id="shipping_company_display" name="shipping_company_display" value="" />',
     '  <input type="text" id="shipping_company_id" name="shipping_company_id" value="" />',
+    '  <input type="checkbox" id="ship-to-different-address-checkbox" checked />',
     "</form>"
   ].join("\n");
 }
@@ -92,7 +93,13 @@ describe("TWO-26286: a country move drops the company captured under the old cou
     ["invoice", "#billing_country", "updated", "billing capture, block checkout resync"],
     ["delivery", "#shipping_country", "approval", "shipping capture, a check with no resync"],
     ["invoice", "#billing_country", "approval", "billing capture, a check with no resync"],
-    ["delivery", "#shipping_country", "armed", "shipping capture, moved after the check armed"]
+    ["delivery", "#shipping_country", "armed", "shipping capture, moved after the check armed"],
+    [
+      "delivery",
+      "#shipping_country",
+      "change",
+      "classic, ship to a different address, change event"
+    ]
   ];
 
   test.each(cases)("%s / %s / %s: %s", (role, countryField, after) => {
@@ -104,6 +111,8 @@ describe("TWO-26286: a country move drops the company captured under the old cou
     $(countryField).val("ES");
     if (after === "updated") instance.onUpdatedCheckout();
     if (after === "approval") instance.getApproval();
+    // What the classic checkout's `change` binding on the shipping country runs.
+    if (after === "change") instance.syncShippingCountry();
     // A record re-derived from the live fields, as `updated_checkout` leaves it.
     if (after === "armed") ctx.capture.syncOrderCompany();
     tick();
@@ -154,4 +163,41 @@ describe("TWO-26286: a country move drops the company captured under the old cou
       }
     ]);
   });
+
+  // [country remembered with the company, billing country now, restored, description]
+  const restores = [
+    ["GB", "ES", false, "remembered under GB, billing now ES"],
+    ["GB", "GB", true, "remembered under the country still selected"],
+    ["", "GB", false, "remembered before the country was kept"]
+  ];
+
+  test.each(restores)(
+    "remembered under '%s', billing %s, restored %s: %s",
+    (remembered, billing, restored) => {
+      Object.assign(window.twoinc, {
+        billing_company: GB_COMPANY.name,
+        company_id: GB_COMPANY.number,
+        company_country: remembered
+      });
+      $("#billing_country").val(billing);
+      ctx.helper.attach();
+
+      ctx.dom.loadUserMetaInputs();
+      instance.getApproval();
+      tick();
+
+      expect($("#company_id").val()).toBe(restored ? GB_COMPANY.number : "");
+      expect(sentIntents().map((intent) => intent.buyer.company)).toEqual(
+        restored
+          ? [
+              {
+                company_name: GB_COMPANY.name,
+                country_prefix: "GB",
+                organization_number: GB_COMPANY.number
+              }
+            ]
+          : []
+      );
+    }
+  );
 });
