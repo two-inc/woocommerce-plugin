@@ -689,8 +689,8 @@ whose prefix is an EU member state other than the merchant's country
 (TWO-26153); without one the line gets no code, never a later row. The number
 comes from `get_buyer_vat_number()`, the first of `BUYER_VAT_NUMBER_META_KEYS`
 read with `$order->get_meta()` that `normalise_vat_number()` turns into a
-number (uppercase, letters and digits only, at least one digit, `GR` written
-`EL`), passed through the `twoinc_buyer_vat_number` filter, then normalised
+number (uppercase, letters and digits only, any non-empty value, prefix kept
+as entered), passed through the `twoinc_buyer_vat_number` filter, then normalised
 again. A key listed in `BUYER_VAT_NUMBER_REFUSED` whose VAT plugin recorded an
 answered check as invalid gives no number and stops the lookup; a failed check
 keeps the number. List a plugin there only once its source shows it stores an

@@ -864,20 +864,20 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * Uppercases and keeps only letters and digits, so spaces of every kind, dots, hyphens, slashes and stray
-         * punctuation go. A prefix `GR` is written `EL`, as on Greek VAT numbers. A number that does not start with two
-         * letters gets the address country in front, with Greece `EL` and Monaco `FR`, since its businesses hold French
-         * ones; with no country it stays as it is.
+         * punctuation go. Any value left is taken as a number, with its prefix as entered. A number that does not start
+         * with two letters gets the address country in front, with Greece `EL` and Monaco `FR`, since its businesses
+         * hold French ones; with no country it stays as it is.
          *
-         * @return string|null null when no digit is left, so a placeholder such as "n/a" or a bare "FR" is no number
+         * @return string|null null when nothing is left
          */
         public static function normalise_vat_number($raw, $country)
         {
             $vat = (string) preg_replace('/[^A-Z0-9]+/', '', strtoupper((string) $raw));
-            if (!preg_match('/\d/', $vat)) {
+            if ('' === $vat) {
                 return null;
             }
             if (preg_match('/^[A-Z]{2}/', $vat)) {
-                return 0 === strpos($vat, 'GR') ? 'EL' . substr($vat, 2) : $vat;
+                return $vat;
             }
             $country = strtoupper(trim((string) $country));
             $country = ['GR' => 'EL', 'MC' => 'FR'][$country] ?? $country;
