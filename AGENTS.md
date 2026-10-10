@@ -702,14 +702,17 @@ back to one input per row: `max_input_vars` drops the excess silently.
 old per-class map out to the rows once. A shop that maps nothing must not pay
 for any of this: no exempt test and no `zero_tax_rates()` read with an empty
 map, and `zero_tax_rates()` is memoised per class per request
-(`testAnUnconfiguredShopLooksNothingUp` counts both).
+(`testAnUnconfiguredShopLooksNothingUp` counts both). The memo is reset on
+WooCommerce's tax rate added, updated and deleted actions.
 
 The placement record is order meta `_<prefix>_tax_codes`, written through
 `update_meta_data()` while the order is not yet placed with Two and saved with
 the order after a successful create. Each entry, by order item id (a refund
 line uses `_refunded_item_id`), holds the code and the step that reached it
-(`row`, `derived` or `keyless`); an order whose lines got no code at all
-writes none. Placed orders send recorded codes; an
+(`row`, `derived` or `keyless`), "no code" included, so rows mapped after
+placement never move the order. Only a merchant outside Spain with no row
+mapped writes none, and a create attempt clears an earlier attempt's record.
+Placed orders send recorded codes; an
 unrecorded line is resolved now, and step 4's pool takes only `row` codes,
 never derived ones. A partial build (the shipping-only one for tax subtotals,
 the intent) passes `$record_tax_codes = false`.

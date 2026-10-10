@@ -413,8 +413,10 @@ plugin cannot tell goods from services: if you sell services there, do not map
 a services class's exempt row to an intra-community services code.
 
 **Placement record.** When the order is created with Two, the plugin records
-the code each 0% line was sent with on the order, unless no line got a code (through the order API, so it
-works with High-Performance Order Storage). Edits and refunds send the recorded
+the code each 0% line was sent with on the order, "no code" included (through
+the order API, so it works with High-Performance Order Storage). A merchant
+outside Spain with no row mapped records nothing, since nothing could code
+those lines. Edits and refunds send the recorded
 code, so a changed address, mapping or tax rate never moves a placed order. A
 line the record does not cover (an order placed before the record existed, or a
 line added by an edit) is resolved as at placement, and step 4 shares only codes the record
