@@ -9343,7 +9343,6 @@ final class BrandConfigSpec
         TinyAssert::same(1, count($items));
         TinyAssert::same('10.00', $items[0]['discount_amount']);
         TinyAssert::same('90.00', $items[0]['net_amount']);
-
     }
 
     private static function testNegativeDiscountGuardThrowsOnNegativeLineDiscount(): void
