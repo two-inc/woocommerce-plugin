@@ -383,7 +383,10 @@ is refused and the saved codes stay as they were.
 1. **Exempt buyer.** The billing address and the tax address (the address
    WooCommerce taxes the order on, per its "Calculate tax based on" setting)
    are both in the EU VAT area and neither is in the Two merchant's country,
-   and the buyer's VAT number (below) is not empty once trimmed. The line takes
+   and the buyer's VAT number is not empty once trimmed. The number is read only
+   from the order meta keys listed below and the `twoinc_buyer_vat_number`
+   filter: a number your VAT plugin stores under any other key does not make
+   the buyer exempt until the filter supplies it. The line takes
    its tax class's exempt row. A tax address outside the EU VAT area is an
    export, so it skips this step and takes step 2 or 3. The EU VAT area is the
    27 member states, Monaco, and Northern Ireland (GB with a postcode starting
@@ -392,10 +395,11 @@ is refused and the saved codes stay as they were.
 2. **The shop's 0% rate.** The 0% tax rate WooCommerce applied to the line (the
    first, if it applied several). A line whose rates are not all 0% gets no
    code.
-3. **No rule.** No rate of the line's class covers the address: the class's
-   no-rule row. A line WooCommerce did not tax (a VAT-exempt order, a product
-   whose tax status is none) is looked up in the shop's rates at the tax
-   address, as WooCommerce itself would have.
+3. **No rule.** No rate of the line's class covers the address, or the line's
+   tax status is not taxable: the class's no-rule row. A taxable line that a
+   VAT-exempt order left untaxed is looked up in the shop's rates at the tax
+   address, as WooCommerce would have applied them, and takes step 2 or 3 from
+   that. With taxes switched off shop-wide, a line gets no code.
 4. **No tax class.** Shipping whose tax class follows the cart items and finds
    none takes the one code the order's lines coded by steps 1 to 3 share. If
    they carry different codes, or none, it gets no code.
@@ -409,7 +413,7 @@ plugin cannot tell goods from services: if you sell services there, do not map
 a services class's exempt row to an intra-community services code.
 
 **Placement record.** When the order is created with Two, the plugin records
-the code each 0% line was sent with on the order (through the order API, so it
+the code each 0% line was sent with on the order, unless no line got a code (through the order API, so it
 works with High-Performance Order Storage). Edits and refunds send the recorded
 code, so a changed address, mapping or tax rate never moves a placed order. A
 line the record does not cover (an order placed before the record existed, or a

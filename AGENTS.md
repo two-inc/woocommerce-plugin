@@ -687,8 +687,10 @@ the EU VAT area (EU27, MC, GB with a `BT` postcode) and neither is the recorded
 merchant country, and the VAT number is non-empty; never while the merchant
 country is unknown; (2) the first rate id on the line's own taxes, which keep
 0% rates, when every rate on the line is 0% (any rate above 0% gives no code);
-a line with no rate ids is looked up with `WC_Tax::find_rates()` at the tax
-address; (3) the class's no-rule row when no rate covers the address; (4) a
+(3) the class's no-rule row for a line with no rate ids, whether no rate covers
+the address or its tax status is not taxable. Only a taxable line on a
+VAT-exempt order is looked up (`find_rates()`, or `find_shipping_rates()` for
+shipping) at the tax address, and taxes off shop-wide give no code; (4) a
 line with no class (shipping whose inherited class finds none) takes the one
 code steps 1 to 3 gave the order, none if they disagree. A matched row on
 (none) never falls through. The admin rows come from
@@ -697,13 +699,17 @@ field (`{"rows": n, "map": {...}}`, written by `admin.js`), and the save
 refuses one whose count does not match rather than deleting rows. Never go
 back to one input per row: `max_input_vars` drops the excess silently.
 `migrate_tax_code_map_to_rows()` (gated on `TAX_CODE_MAP_VERSION`) fans an
-old per-class map out to the rows once.
+old per-class map out to the rows once. A shop that maps nothing must not pay
+for any of this: no exempt test and no `zero_tax_rates()` read with an empty
+map, and `zero_tax_rates()` is memoised per class per request
+(`testAnUnconfiguredShopLooksNothingUp` counts both).
 
 The placement record is order meta `_<prefix>_tax_codes`, written through
 `update_meta_data()` while the order is not yet placed with Two and saved with
 the order after a successful create. Each entry, by order item id (a refund
 line uses `_refunded_item_id`), holds the code and the step that reached it
-(`row`, `derived` or `keyless`). Placed orders send recorded codes; an
+(`row`, `derived` or `keyless`); an order whose lines got no code at all
+writes none. Placed orders send recorded codes; an
 unrecorded line is resolved now, and step 4's pool takes only `row` codes,
 never derived ones. A partial build (the shipping-only one for tax subtotals,
 the intent) passes `$record_tax_codes = false`.
