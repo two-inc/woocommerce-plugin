@@ -356,27 +356,86 @@ the buyer's details, such as the VAT number, may still be incomplete then. A
 line at any other rate is sent exactly as before, and so is every line of a
 merchant outside Spain who has mapped nothing.
 
+It is the merchant's job to set the shop's taxes up correctly. The plugin does
+not decide how a line is taxed: it sends the code the merchant chose for the
+case the shop's own tax setup puts the line in (TWO-26153).
+
 **Mapping.** Under WooCommerce > Settings > Payments > Two, "Tax codes for 0%
-lines" lists the standard tax class and every tax class the shop defines. Each
-has a dropdown of the tax codes Two offers for the merchant's country, fetched
-from Two's API and cached for a day, plus "(none)", the default. A code that
-needs an exemption reason Two cannot supply itself is not offered. A shipping
-line is looked up by the class WooCommerce's "Shipping tax class" setting gives
-it. A mapped class always wins, whatever the merchant's country.
+lines" has a block of rows for the standard tax class and for every tax class
+the shop defines:
 
-**Derivation.** For a Spanish merchant, a 0% line whose class is unmapped gets
-a code worked out from the order. A product line is a service when its product
-is virtual or downloadable, and goods otherwise. A shipping or fee line is goods
-when the order has at least one goods line, and a service otherwise. Goods
-follow the delivery address (the billing address when the order has no separate
-one). Services follow the buyer company's country, which is the billing
-country the order sends as `buyer.company.country_prefix`. The EU below is the
-27 member states plus Monaco. The Canary Islands, Ceuta and Melilla are Spanish
-postcodes starting 35 or 38, 51 and 52, and count as outside the EU: the
-delivery postcode decides for goods, the billing postcode for a Spanish buyer
-of services.
+- "Buyer in another EU country with a VAT number".
+- One row per 0% tax rate of the class, labelled as WooCommerce's tax rate
+  table shows it: country, state, postcodes, cities, rate and name, for example
+  `ES 35*;38* 0% (IVA 0%)`. Rates above 0% are not listed, because they never
+  give a 0% line.
+- "No rule for the address".
 
-Both intra-community codes also need the buyer's VAT number, with a prefix
+Each row has a dropdown of the tax codes Two offers for the merchant's country,
+fetched from Two's API and cached for a day, plus "(none)", the default. A code
+that needs an exemption reason Two cannot supply itself is not offered. The
+form sends the whole mapping as one field, so a large rate table cannot be cut
+short by the server's input limits; if the field arrives incomplete, the save
+is refused and the saved codes stay as they were.
+
+**Which row a line takes.** For each 0% line the first match wins:
+
+1. **Exempt buyer.** The billing address and the tax address (the address
+   WooCommerce taxes the order on, per its "Calculate tax based on" setting)
+   are both in the EU VAT area and neither is in the Two merchant's country,
+   and the buyer's VAT number (below) is not empty once trimmed. The line takes
+   its tax class's exempt row. A tax address outside the EU VAT area is an
+   export, so it skips this step and takes step 2 or 3. The EU VAT area is the
+   27 member states, Monaco, and Northern Ireland (GB with a postcode starting
+   `BT`). Until the merchant record has given the merchant's country, no buyer
+   is exempt.
+2. **The shop's 0% rate.** The 0% tax rate WooCommerce applied to the line (the
+   first, if it applied several). A line whose rates are not all 0% gets no
+   code.
+3. **No rule.** No rate of the line's class covers the address: the class's
+   no-rule row. A line WooCommerce did not tax (a VAT-exempt order, a product
+   whose tax status is none) is looked up in the shop's rates at the tax
+   address, as WooCommerce itself would have.
+4. **No tax class.** Shipping whose tax class follows the cart items and finds
+   none takes the one code the order's lines coded by steps 1 to 3 share. If
+   they carry different codes, or none, it gets no code.
+
+A row left on "(none)" gives no code: it never falls through to a later row. A
+product or fee line belongs to its own tax class, and a shipping line to the
+class WooCommerce's "Shipping tax class" setting gives it. Goods and services
+are told apart only by the classes the merchant puts products in and the codes
+mapped to them. Northern Ireland is in the EU VAT area for goods only, and the
+plugin cannot tell goods from services: if you sell services there, do not map
+a services class's exempt row to an intra-community services code.
+
+**Placement record.** When the order is created with Two, the plugin records
+the code each 0% line was sent with on the order (through the order API, so it
+works with High-Performance Order Storage). Edits and refunds send the recorded
+code, so a changed address, mapping or tax rate never moves a placed order. A
+line the record does not cover (an order placed before the record existed, or a
+line added by an edit) is resolved as at placement, and step 4 shares only codes the record
+holds from steps 1 to 3.
+
+**Upgrading.** A mapping saved per tax class by an earlier build is moved once
+to the rows: each class's code is copied to its exempt row, its no-rule row and
+every 0% rate it has at that moment, so every line the old mapping covered
+keeps its code. Rates added later start on "(none)".
+
+**Derivation, while it is retired.** For a Spanish merchant, a 0% line whose
+tax class has no row mapped at all, or shipping with no tax class when no line
+of the order was coded by steps 1 to 3, still gets a code worked out from the
+order, as below. A follow-up release removes this. A product line is a service
+when its product is virtual or downloadable, and goods otherwise. A shipping or
+fee line is goods when the order has at least one goods line, and a service
+otherwise. Goods follow the delivery address (the billing address when the
+order has no separate one). Services follow the buyer company's country, which
+is the billing country the order sends as `buyer.company.country_prefix`. The
+EU below is the 27 member states plus Monaco. The Canary Islands, Ceuta and
+Melilla are Spanish postcodes starting 35 or 38, 51 and 52, and count as
+outside the EU: the delivery postcode decides for goods, the billing postcode
+for a Spanish buyer of services.
+
+The derived intra-community codes also need the buyer's VAT number, with a prefix
 naming an EU member state other than the merchant's country (the prefix need
 not match the buyer or delivery country). The plugin collects no VAT number of
 its own; it reads the first of these order meta keys that holds a number, which
@@ -412,6 +471,8 @@ need the number to be sent, so they are not derived in that window either. A
 VAT number changed after the order is placed is not sent again: an edit cannot
 change the number Two holds.
 
+The derivation's rules:
+
 | Line     | Where it goes, or who buys                                       | Code sent                         |
 | -------- | ---------------------------------------------------------------- | --------------------------------- |
 | Goods    | Delivered outside the EU                                         | `ES_IVA_EXPORT`                   |
@@ -428,16 +489,16 @@ change the number Two holds.
 Where the table gives no code, the line is sent without one. **The plugin never
 refuses; the API does.** Two's API checks every code it receives, and refuses a
 Spanish merchant's 0% line that has none, with a reason the plugin logs and
-writes to the order note. To send those lines, map their tax class. The codes
+writes to the order note. To send those lines, map their rows. The codes
 are added in the line builder, before `twoinc_payment_terms_line`,
 `twoinc_order_payload` and `twoinc_order_postprocessing`, so any of them can
 change or remove a code. A code that needs an exemption reason, such as
 `ES_IVA_EXEMPT_OTHER`, can be sent from `twoinc_order_postprocessing` with
 `tax_exemption_reason_code` set beside it.
 
-Known limits: goods to Northern Ireland derive as an export, and other member
-states' special territories derive by their ISO country code. Map the class, or
-use the hook, where that is wrong for you.
+Known limits of the derivation: goods to Northern Ireland derive as an export,
+and other member states' special territories derive by their ISO country code.
+Map the class's rows, or use the hook, where that is wrong for you.
 
 ## Extension point: buyer VAT number
 
@@ -445,10 +506,11 @@ use the hook, where that is wrong for you.
 source the plugin does not read itself, such as a block checkout additional
 field (stored as order meta `_wc_billing/<namespace>/<field>`) or a theme's
 custom field. It receives the number the keys above give, or `''` for none,
-and the order; return the number, or `''` for none. It runs before the tax code
-derivation, so the number decides the intra-community codes as well as the
-`buyer_vat_number` sent. `twoinc_order_postprocessing` runs after the
-derivation, so setting `buyer_vat_number` there cannot add the missing code.
+and the order; return the number, or `''` for none. It runs before the tax
+codes are chosen, so the number decides the exempt-buyer row (and the derived
+intra-community codes) as well as the `buyer_vat_number` sent.
+`twoinc_order_postprocessing` runs after that, so setting `buyer_vat_number`
+there cannot change the code.
 The filter can run several times per request, so keep it pure and cheap.
 
 ```php
