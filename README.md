@@ -352,8 +352,9 @@ at 0% tax must carry one, because a 0% rate on its own does not say why the
 line is untaxed. The plugin adds the code to every line it sends at 0%: order
 create, order edit and refund lines. Fulfilment sends no lines, so there is
 nothing to add. The availability check (order intent) carries no codes, because
-the buyer's details, such as the VAT number, may still be incomplete then. A line at any other rate is sent exactly as before,
-and so is every line of a merchant outside Spain who has mapped nothing.
+the buyer's details, such as the VAT number, may still be incomplete then. A
+line at any other rate is sent exactly as before, and so is every line of a
+merchant outside Spain who has mapped nothing.
 
 **Mapping.** Under WooCommerce > Settings > Payments > Two, "Tax codes for 0%
 lines" lists the standard tax class and every tax class the shop defines. Each
@@ -375,14 +376,54 @@ postcodes starting 35 or 38, 51 and 52, and count as outside the EU: the
 delivery postcode decides for goods, the billing postcode for a Spanish buyer
 of services.
 
+Both intra-community codes also need the buyer's VAT number, with a prefix
+naming an EU member state other than the merchant's country (the prefix need
+not match the buyer or delivery country). The plugin collects no VAT number of
+its own; it reads the first of these order meta keys that holds a number, which
+the common EU VAT plugins store: `_billing_vat_number`, `_vat_number`,
+`vat_number`, `VAT Number`, `_billing_eu_vat_number`, then passes it through
+the `twoinc_buyer_vat_number` filter (see below). The number is uppercased and
+everything but letters and digits is stripped (spaces of every kind, dots,
+hyphens, slashes, stray punctuation). What is left must hold a digit, so a
+placeholder such as `n/a` or a bare `FR` is no number and the next key is
+tried. A `GR` prefix is written `EL`, as on Greek VAT numbers, and a number
+without a two-letter prefix gets the billing country's (`EL` for Greece, `FR`
+for Monaco, whose businesses hold French numbers); `EL` reads as Greece. `MC`
+is not a VAT prefix, so it never qualifies. With no such number the line gets
+no code, so Two refuses it.
+
+Where a VAT plugin records that its check got an answer and the answer was
+"invalid", that number is not used, and the later keys are not tried either,
+since they often hold the same number. A check that could not run (the VAT
+service down or unreachable) keeps the number. This applies to Aelia EU VAT
+Assistant (`vat_number` with `_vat_number_validated` set to `not-valid`). The
+other plugins are not covered: WooCommerce EU VAT Number stores the same
+result for an invalid number and for a failed check, EU VAT for WooCommerce
+stores no result, and EU/UK VAT Compliance records its result only in its
+premium edition. Use the filter to drop a number another source marks
+invalid.
+
+A Spanish merchant's order create also sends that number as the top-level
+`buyer_vat_number`, unless the buyer company's country is Spain: Two requires a
+Spanish buyer's VAT number to equal its organisation number, so it is never
+sent for one. Edits leave it out, which keeps the number Two stored, and
+refunds use the stored number. Other merchants' payloads are unchanged, and
+nothing is sent until the merchant record has given the merchant's country (the
+shop's base country does not stand in for this). The intra-community codes
+need the number to be sent, so they are not derived in that window either. A
+VAT number changed after the order is placed is not sent again: an edit cannot
+change the number Two holds.
+
 | Line     | Where it goes, or who buys                                       | Code sent                         |
 | -------- | ---------------------------------------------------------------- | --------------------------------- |
 | Goods    | Delivered outside the EU                                         | `ES_IVA_EXPORT`                   |
 | Goods    | Delivered to the Canary Islands, Ceuta or Melilla                | `ES_IVA_EXPORT`                   |
 | Goods    | Delivered to another EU state, for a buyer in another EU state   | `ES_IVA_INTRA_COMMUNITY`          |
+| Goods    | As above, with no qualifying buyer VAT number                    | none                              |
 | Goods    | Delivered in mainland Spain or the Balearics                     | none                              |
 | Goods    | Delivered to another EU state, for a Spanish buyer               | none                              |
 | Services | Buyer in another EU state                                        | `ES_IVA_INTRA_COMMUNITY_SERVICES` |
+| Services | As above, with no qualifying buyer VAT number                    | none                              |
 | Services | Buyer outside the EU, or in the Canary Islands, Ceuta or Melilla | `ES_IVA_NON_EU_SERVICES`          |
 | Services | Buyer in mainland Spain or the Balearics                         | none                              |
 
@@ -399,6 +440,24 @@ change or remove a code. A code that needs an exemption reason, such as
 Known limits: goods to Northern Ireland derive as an export, and other member
 states' special territories derive by their ISO country code. Map the class, or
 use the hook, where that is wrong for you.
+
+## Extension point: buyer VAT number
+
+`twoinc_buyer_vat_number` lets a shop supply the buyer's VAT number from any
+source the plugin does not read itself, such as a block checkout additional
+field (stored as order meta `_wc_billing/<namespace>/<field>`) or a theme's
+custom field. It receives the number the keys above give, or `''` for none,
+and the order; return the number, or `''` for none. It runs before the tax code
+derivation, so the number decides the intra-community codes as well as the
+`buyer_vat_number` sent. `twoinc_order_postprocessing` runs after the
+derivation, so setting `buyer_vat_number` there cannot add the missing code.
+The filter can run several times per request, so keep it pure and cheap.
+
+```php
+add_filter('twoinc_buyer_vat_number', function ($vat, $order) {
+    return '' !== $vat ? $vat : (string) $order->get_meta('_wc_billing/my-shop/vat-number');
+}, 10, 2);
+```
 
 ## Stable extension contract: order postprocessing
 

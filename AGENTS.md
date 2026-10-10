@@ -673,7 +673,8 @@ tillit-payment-gateway.php uninstall.php views`.
 `WC_Twoinc_Helper::apply_tax_codes()`, called at the end of `get_line_items()`,
 is the only place a `tax_code` is added (TWO-24877). Every builder that sends
 lines goes through it, so a new payload type gets codes by using the line
-builder, not by calling the resolver again. The merchant's mapping (the
+builder, not by calling the resolver again. The order intent is the one
+exception: it uses the line builder, then strips the codes (see below). The merchant's mapping (the
 `tax_code_map` setting, keyed by tax class slug with the standard class as
 `standard`) wins; otherwise a Spanish merchant's line derives from the
 `ES_ZERO_RATE_DERIVATION` table. Change the rules by editing that table and
@@ -683,6 +684,31 @@ country and postcode for the buyer, so a Spanish buyer billed in the Canaries,
 Ceuta or Melilla is `es_outside` and its services derive
 `ES_IVA_NON_EU_SERVICES` (TWO-26151). The plugin never derives
 `ES_IVA_REVERSE_CHARGE`, which is Spanish domestic reverse charge only.
+Rows marked `vat` (both intra-community codes) also need a buyer VAT number
+whose prefix is an EU member state other than the merchant's country
+(TWO-26153); without one the line gets no code, never a later row. The number
+comes from `get_buyer_vat_number()`, the first of `BUYER_VAT_NUMBER_META_KEYS`
+read with `$order->get_meta()` that `normalise_vat_number()` turns into a
+number (uppercase, letters and digits only, at least one digit, `GR` written
+`EL`), passed through the `twoinc_buyer_vat_number` filter, then normalised
+again. A key listed in `BUYER_VAT_NUMBER_REFUSED` whose VAT plugin recorded an
+answered check as invalid gives no number and stops the lookup; a failed check
+keeps the number. List a plugin there only once its source shows it stores an
+invalid answer differently from a failed check (Aelia EU VAT Assistant does;
+WooCommerce EU VAT Number stores both alike, EU VAT for WooCommerce stores no
+result, and EU/UK VAT Compliance writes its result only in its premium edition,
+so none of those is confirmed). Add a key only once its plugin is confirmed to
+store it; anything else is the filter's job. Only the order create sends it, as
+top-level `buyer_vat_number`, and only for a Spanish merchant and a buyer
+company outside Spain; otherwise the key is absent. At create the `vat` rows
+qualify only on the number create sends, so the codes and the number agree
+there. Edits and refunds never send the number and re-derive from the order's
+current meta, so a number changed since create can change their codes while Two
+keeps the number it stored.
+The intent carries no tax code at all (TWO-26226): `compose_twoinc_intent`
+strips `tax_code` and `tax_exemption_reason_code` from every line, because
+buyer details such as the VAT number may still be partial when it is raised.
+Codes are derived, and checked by Two, at order create.
 
 - A non-zero line, and every line of a non-Spanish merchant with no mapping,
   must stay byte-identical: the spec compares those payloads with the builder

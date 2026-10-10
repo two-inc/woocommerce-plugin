@@ -598,12 +598,23 @@ if (!class_exists('WC_Twoinc')) {
          */
         public static function get_merchant_country()
         {
-            // Read, never fetched: the order paths calling this must not add a request of their own.
-            $country = (string) get_option(WC_Twoinc_Brand::prefixed_name('merchant_country'), '');
+            $country = self::get_recorded_merchant_country();
             if ('' === $country && function_exists('WC') && WC()->countries) {
                 $country = (string) WC()->countries->get_base_country();
             }
             return strtoupper($country);
+        }
+
+        /**
+         * The merchant country the merchant record gave, or '' while it has not been read (no shop fallback), for a
+         * decision that must fail closed.
+         *
+         * @return string
+         */
+        public static function get_recorded_merchant_country()
+        {
+            // Read, never fetched: the order paths calling this must not add a request of their own.
+            return strtoupper((string) get_option(WC_Twoinc_Brand::prefixed_name('merchant_country'), ''));
         }
 
         /**
@@ -6543,7 +6554,7 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'two_tax_code_map',
                     'description' => sprintf(
                         /* translators: %s is the brand product name (e.g. "Two") */
-                        __('The tax code sent with each order line charged at 0%%, by the tax class it was charged under. Leave a class on (none) to send no code; for a Spanish merchant the plugin then works the code out from the order where it can (export, intra-community supply of goods or services, or services outside the EU). %s checks every code when the order arrives.', 'twoinc-payment-gateway'),
+                        __('The tax code sent with each order line charged at 0%%, by the tax class it was charged under. Leave a class on (none) to send no code; for a Spanish merchant the plugin then works the code out from the order where it can (export, intra-community supply of goods or services to a buyer with an EU VAT number from a member state other than yours, or services outside the EU). %s checks every code when the order arrives.', 'twoinc-payment-gateway'),
                         WC_Twoinc_Brand::get('product_name')
                     ),
                     'default'     => [],
