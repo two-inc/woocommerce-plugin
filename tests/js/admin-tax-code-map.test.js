@@ -54,7 +54,11 @@ describe("tax code mapping field", () => {
       "ES_IVA_EXPORT",
       {
         rows: 3,
-        map: { "standard|exempt": "ES_IVA_INTRA_COMMUNITY", "rate:11": "", "standard|none": "ES_IVA_EXPORT" }
+        map: {
+          "standard|exempt": "ES_IVA_INTRA_COMMUNITY",
+          "rate:11": "",
+          "standard|none": "ES_IVA_EXPORT"
+        }
       }
     ],
     [
@@ -70,9 +74,11 @@ describe("tax code mapping field", () => {
   ])("%s", async (description, rows, changed, value, expected) => {
     const { $ } = await loadAdmin();
     addMappingField($, rows);
-    expect($('select[data-twoinc-tax-code-row][name]').length).toBe(0);
+    expect($("select[data-twoinc-tax-code-row][name]").length).toBe(0);
 
-    $('select[data-twoinc-tax-code-row="' + changed + '"]').val(value).trigger("change");
+    $('select[data-twoinc-tax-code-row="' + changed + '"]')
+      .val(value)
+      .trigger("change");
 
     expect(JSON.parse($(".twoinc-tax-code-map-value").val())).toEqual(expected);
   });
