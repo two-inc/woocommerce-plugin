@@ -210,6 +210,20 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * The order-level discount_amount, which is informational: sent as
+         * abs(get_total_discount()) rounded once, floored at 0, and never
+         * refused on (TWO-26285). Line-level discounts keep their guard.
+         *
+         * @param WC_Order $order
+         *
+         * @return string
+         */
+        public static function order_discount_amount($order)
+        {
+            return WC_Twoinc_Helper::round_amt(max(0.0, abs((float) $order->get_total_discount())));
+        }
+
+        /**
          * Round a computed discount once at the payload boundary and fail
          * loud if it is genuinely negative (TWO-25097).
          *
@@ -1091,13 +1105,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             $req_body = ['currency' => $order->get_currency()] + self::order_totals($order) + [
-                // Guard rounds once at the payload boundary, fails loud on a
-                // negative (TWO-25097).
-                'discount_amount' => WC_Twoinc_Helper::guard_negative_discount(
-                    $order->get_total_discount(),
-                    sprintf('order %s', $order->get_id()),
-                    sprintf('total discount %s', var_export($order->get_total_discount(), true))
-                ),
+                'discount_amount' => WC_Twoinc_Helper::order_discount_amount($order),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
                 'invoice_details' => $invoice_details,
@@ -1230,13 +1238,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             $req_body = ['currency' => $order->get_currency()] + self::order_totals($order) + [
-                // Guard rounds once at the payload boundary, fails loud on a
-                // negative (TWO-25097).
-                'discount_amount' => WC_Twoinc_Helper::guard_negative_discount(
-                    $order->get_total_discount(),
-                    sprintf('order %s', $order->get_id()),
-                    sprintf('total discount %s', var_export($order->get_total_discount(), true))
-                ),
+                'discount_amount' => WC_Twoinc_Helper::order_discount_amount($order),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
                 'buyer_department' => $department,
