@@ -16698,7 +16698,9 @@ final class CaptureMemorySpec
             'testTheCaptureCountryIsRememberedWithIt',
             'testACaptureRememberedWithNoCountryReplaysNone',
             'testTheMerchantSetCompanyTakesTheBuyersSavedCountry',
-            'testTheOrderBeingPaidReplaysItsBillingCountry',
+            'testTheOrderBeingPaidReplaysNoCountry',
+            'testTheCaptureFieldsAreNeverKeptOnTheCustomer',
+            'testTheCaptureFieldsAreNeverPrefilled',
         ];
         foreach ($tests as $test) {
             self::$test();
@@ -16949,8 +16951,8 @@ final class CaptureMemorySpec
         self::reset();
     }
 
-    /** Given the pay-for-order page; When it renders; Then the order's company is replayed with the order's billing country. */
-    private static function testTheOrderBeingPaidReplaysItsBillingCountry(): void
+    /** Given the pay-for-order page, which has no billing country to judge against; When it renders; Then the order's company carries none. */
+    private static function testTheOrderBeingPaidReplaysNoCountry(): void
     {
         self::liveCart();
         $order = new StubOrder();
@@ -16959,9 +16961,51 @@ final class CaptureMemorySpec
 
         try {
             self::onTheOrderPayPage(42, $order);
-            TinyAssert::same('NO', self::bootstrap()['company_country'] ?? null, 'the order billing country');
+            $rendered = self::bootstrap();
+            TinyAssert::same('811223344', $rendered['company_id'], 'the order company is replayed');
+            TinyAssert::same('', $rendered['company_country'] ?? null, 'with no country');
         } finally {
             self::reset();
+        }
+    }
+
+    /**
+     * Given a checkout saving the customer; When core has copied the posted capture fields onto it; Then none of
+     * them is kept, so no later checkout can replay a company number under a moved address (TWO-26286).
+     */
+    private static function testTheCaptureFieldsAreNeverKeptOnTheCustomer(): void
+    {
+        $customer = new class () {
+            public $meta = [
+                'shipping_company_id' => '00000001',
+                'shipping_company_display' => 'Fake Widgets Test Ltd',
+                'billing_company_display' => 'Fake Widgets Test Ltd',
+                'shipping_company' => 'Fake Widgets Test Ltd',
+            ];
+
+            public function delete_meta_data($key)
+            {
+                unset($this->meta[$key]);
+            }
+        };
+
+        WC_Twoinc_Checkout::keep_capture_fields_off_customer($customer);
+
+        TinyAssert::same(['shipping_company' => 'Fake Widgets Test Ltd'], $customer->meta, 'only the native company line is kept');
+    }
+
+    /** [field, value core would prefill, value rendered, description] */
+    private static function testTheCaptureFieldsAreNeverPrefilled(): void
+    {
+        $cases = [
+            ['shipping_company_id', null, '', 'a delivery company number'],
+            ['shipping_company_display', null, '', 'the delivery company shown'],
+            ['billing_company_display', null, '', 'the billing company shown'],
+            ['shipping_company', null, null, 'the native company line is left to core'],
+            ['billing_email', 'buyer@example.test', 'buyer@example.test', 'any other field is left alone'],
+        ];
+        foreach ($cases as [$field, $value, $expected, $description]) {
+            TinyAssert::same($expected, WC_Twoinc_Checkout::never_prefill_capture_fields($value, $field), $description);
         }
     }
 

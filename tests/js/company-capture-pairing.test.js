@@ -343,8 +343,7 @@ describe("TWO-40 — captured-company write path", () => {
       ctx.helper.onPick({
         id: "ACME Widgets Ltd",
         text: "ACME Widgets Ltd",
-        company_id: "12345678",
-        company_country: "GB"
+        company_id: "12345678"
       });
       ajax.restore();
 

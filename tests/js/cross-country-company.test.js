@@ -200,4 +200,64 @@ describe("TWO-26286: a country move drops the company captured under the old cou
       );
     }
   );
+
+  test("a delivery number the page was rendered holding is dropped, not sent", () => {
+    // WooCommerce replays an earlier order's shipping fields for a signed-in buyer.
+    $("#shipping_company_id").val(GB_COMPANY.number);
+    $("#shipping_company").val(GB_COMPANY.name);
+    $("#shipping_country").val("ES");
+
+    ctx.dom.restoreCapturedCompany();
+    instance.onUpdatedCheckout();
+    tick();
+
+    expect($("#shipping_company_id").val()).toBe("");
+    expect($("#shipping_company").val()).toBe("");
+    expect(sentIntents()).toEqual([]);
+  });
+
+  test("a company restored before the saved inputs move the country is dropped, not painted", () => {
+    Object.assign(window.twoinc, {
+      billing_company: GB_COMPANY.name,
+      company_id: GB_COMPANY.number,
+      company_country: "GB"
+    });
+    harness.seedCheckoutInputs([
+      {
+        htmlTag: "SELECT",
+        id: "billing_country",
+        name: "billing_country",
+        val: "ES",
+        optionHtml: '<option value="ES">Spain</option>'
+      }
+    ]);
+    $("form[name='checkout']").after('<div id="order_review"></div>');
+
+    instance.initialize(true);
+    jest.advanceTimersByTime(1000);
+    tick();
+
+    expect($("#billing_country").val()).toBe("ES");
+    expect($("#company_id").val()).toBe("");
+    expect($("#billing_company_display").val()).toBe("");
+    expect(
+      sentIntents().filter(
+        (intent) => intent.buyer.company.organization_number === GB_COMPANY.number
+      )
+    ).toEqual([]);
+  });
+
+  test("the order-pay page replays the order's own company, having no country to judge it by", () => {
+    Object.assign(window.twoinc, {
+      billing_company: GB_COMPANY.name,
+      company_id: GB_COMPANY.number,
+      company_country: "",
+      order_pay: true
+    });
+    ctx.helper.attach();
+
+    ctx.dom.loadUserMetaInputs();
+
+    expect($("#company_id").val()).toBe(GB_COMPANY.number);
+  });
 });

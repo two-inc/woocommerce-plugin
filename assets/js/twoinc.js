@@ -520,10 +520,11 @@ let twoincCompanyCapture = {
    * for a sole-trader number: Two mints that one rather than a country's
    * register, and the sole-trader flow owns what a country change does to it.
    *
-   * Every capture is pinned: `write()` pins each one, and the restore pins a
-   * number the page was rendered holding. A blank pin therefore only comes
-   * from a capture made while the role's country field was empty, which the
-   * company search cannot produce, since it searches by that country.
+   * Every capture is pinned: `write()` pins each one, and the restore drops a
+   * delivery number the page was rendered holding rather than leave it
+   * unpinned. A blank pin therefore only comes from a capture made while the
+   * role's country field was empty or absent: the order-pay page, which has
+   * none, or a search, which cannot run without one.
    *
    * @returns {string}
    */
@@ -3072,7 +3073,8 @@ let twoincDomHelper = {
    * country, its number would be sent paired with that country. A company
    * remembered before the country was kept carries none and is withheld too,
    * so the buyer picks it once more. A name alone is no capture and is kept,
-   * and so is a sole-trader number, as `capturedCountry()` explains.
+   * and so is a sole-trader number, as `capturedCountry()` explains, and the
+   * company of the order being paid.
    */
   rememberedCompany: function () {
     const meta = window.twoinc || {};
@@ -3084,11 +3086,29 @@ let twoincDomHelper = {
     if (
       remembered.company_id &&
       !twoincUtilHelper.isSyntheticCompanyNumber(remembered.company_id) &&
+      // The order-pay page has no billing country to judge against; the order's
+      // own company is replayed there as it was placed.
+      !meta.order_pay &&
       remembered.country !== twoincAddressRoles.country(twoincAddressRoles.invoice())
     ) {
       return { billing_company: "", company_id: "", country: "" };
     }
     return remembered;
+  },
+  /**
+   * Take a role's capture off the page: number, name, pairing and the name the
+   * control shows (TWO-26286).
+   *
+   * @param {string} role
+   * @returns {void}
+   */
+  dropCapture: function (role) {
+    const control = twoincCompanyCapture.controllerFor(role);
+    twoincCompanyCapture.write("", "", { role: role });
+    control.setDisplayName("");
+    // Clearing a capture changes the visible company-name surface (TWO-25503).
+    twoincDomHelper.toggleBusinessFields();
+    control.renderCompanySummary();
   },
   loadUserMetaInputs: function () {
     const remembered = twoincDomHelper.rememberedCompany();
@@ -3121,16 +3141,22 @@ let twoincDomHelper = {
    * later).
    */
   restoreCapturedCompany: function () {
-    // A delivery number the page was rendered holding came with the delivery
-    // address beside it, so it is pinned to that country, as a billing pair the
-    // form holds is below. Left unpinned, a later country move could not be
-    // judged against it (TWO-26286).
+    // A delivery number no capture on this page wrote can only be WooCommerce
+    // replaying an earlier order's, and the shipping address may have moved to
+    // another country since. Delivery captures are never replayed, so it is
+    // dropped rather than trusted (TWO-26286).
     const delivery = twoincAddressRoles.delivery();
     if (
       twoincCompanyCapture.hasCapture(delivery) &&
       !twoincCompanyCapture.record(delivery).countryPrefix
     ) {
-      twoincCompanyCapture.record(delivery).countryPrefix = twoincAddressRoles.country(delivery);
+      twoincDomHelper.dropCapture(delivery);
+    }
+    // A billing capture an earlier restore pass made, whose country the saved
+    // inputs have since moved, goes too: kept, it would be painted and then
+    // pinned again under the new country below.
+    if (twoincCompanyCapture.isFromAnotherCountry(twoincAddressRoles.invoice())) {
+      twoincDomHelper.dropCapture(twoincAddressRoles.invoice());
     }
 
     const remembered = twoincDomHelper.rememberedCompany();

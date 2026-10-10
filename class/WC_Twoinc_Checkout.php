@@ -433,6 +433,47 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         {
             add_action('woocommerce_cart_emptied', ['WC_Twoinc_Checkout', 'forget_captured_company']);
             add_action('woocommerce_cart_item_removed', ['WC_Twoinc_Checkout', 'forget_captured_company_when_cart_ends']);
+            add_action('woocommerce_checkout_update_customer', ['WC_Twoinc_Checkout', 'keep_capture_fields_off_customer']);
+            add_filter('woocommerce_checkout_get_value', ['WC_Twoinc_Checkout', 'never_prefill_capture_fields'], 10, 2);
+        }
+
+        /**
+         * The plugin's own capture fields that WooCommerce would otherwise keep:
+         * core saves every posted `billing_`/`shipping_` field it has no setter for
+         * as customer meta, and prefills the next checkout from it. A company
+         * number replayed that way outlives an address the buyer has since moved to
+         * another country (TWO-26286), so none of them is kept or replayed.
+         */
+        private const CUSTOMER_UNSAVED_CAPTURE_FIELDS = ['billing_company_display', 'shipping_company_display', 'shipping_company_id'];
+
+        /**
+         * Before the customer is saved at checkout, drop the capture fields core
+         * just copied onto it, along with any copy an earlier order left.
+         *
+         * @param object $customer WC_Customer
+         * @return void
+         */
+        public static function keep_capture_fields_off_customer($customer)
+        {
+            if (!is_object($customer) || !method_exists($customer, 'delete_meta_data')) {
+                return;
+            }
+            foreach (self::CUSTOMER_UNSAVED_CAPTURE_FIELDS as $key) {
+                $customer->delete_meta_data($key);
+            }
+        }
+
+        /**
+         * Render the capture fields empty, whatever an earlier order left on the
+         * customer.
+         *
+         * @param mixed $value
+         * @param string $input
+         * @return mixed
+         */
+        public static function never_prefill_capture_fields($value, $input)
+        {
+            return in_array($input, self::CUSTOMER_UNSAVED_CAPTURE_FIELDS, true) ? '' : $value;
         }
 
         /** @return object|null */
@@ -518,7 +559,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 return [
                     'company_id' => method_exists($order, 'get_meta') ? (string) $order->get_meta('company_id') : '',
                     'company_name' => method_exists($order, 'get_meta') ? (string) $order->get_meta('company_name') : '',
-                    'country' => method_exists($order, 'get_billing_country') ? self::country_code($order->get_billing_country()) : '',
+                    // The order-pay page carries no billing country to judge it against; the browser replays it as is.
+                    'country' => '',
                 ];
             }
 
