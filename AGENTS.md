@@ -678,6 +678,11 @@ builder, not by calling the resolver again. The merchant's mapping (the
 `standard`) wins; otherwise a Spanish merchant's line derives from the
 `ES_ZERO_RATE_DERIVATION` table. Change the rules by editing that table and
 its row in `tests/unit/TaxCodeSpec.php`, and keep the README table in step.
+The zones come from `tax_zone()`: the delivery address for goods, the billing
+country and postcode for the buyer, so a Spanish buyer billed in the Canaries,
+Ceuta or Melilla is `es_outside` and its services derive
+`ES_IVA_NON_EU_SERVICES` (TWO-26151). The plugin never derives
+`ES_IVA_REVERSE_CHARGE`, which is Spanish domestic reverse charge only.
 
 - A non-zero line, and every line of a non-Spanish merchant with no mapping,
   must stay byte-identical: the spec compares those payloads with the builder

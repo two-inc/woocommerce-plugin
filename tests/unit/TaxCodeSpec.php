@@ -53,7 +53,7 @@ final class TaxCodeSpec
     {
         $es = ['country' => 'ES', 'postcode' => '28001'];
         $cases = [
-            // merchant, lines, buyer (billing) country, delivery address (null: none, so billing), map, want, description
+            // merchant, lines, buyer (billing) country and optional postcode, delivery address (null: none, so billing), map, want, description
             ['ES', ['goods'], 'ES', ['country' => 'NO', 'postcode' => '0150'], [], ['ES_IVA_EXPORT'], 'goods delivered outside the EU'],
             ['ES', ['goods'], 'ES', ['country' => 'ES', 'postcode' => '35001'], [], ['ES_IVA_EXPORT'], 'goods delivered to Las Palmas'],
             ['ES', ['goods'], 'ES', ['country' => 'ES', 'postcode' => '38001'], [], ['ES_IVA_EXPORT'], 'goods delivered to Tenerife'],
@@ -65,11 +65,19 @@ final class TaxCodeSpec
             ['ES', ['goods'], 'FR', $es, [], [null], 'goods delivered in mainland Spain'],
             ['ES', ['goods'], 'ES', ['country' => 'ES', 'postcode' => '07001'], [], [null], 'goods delivered to the Balearics'],
             ['ES', ['goods'], 'US', null, [], ['ES_IVA_EXPORT'], 'no delivery address: billing is the destination'],
-            ['ES', ['service'], 'FR', $es, [], ['ES_IVA_REVERSE_CHARGE'], 'service to an EU buyer of another state'],
+            ['ES', ['service'], 'FR', $es, [], ['ES_IVA_INTRA_COMMUNITY_SERVICES'], 'service to an EU buyer of another state'],
             ['ES', ['service'], 'ES', ['country' => 'FR', 'postcode' => '75001'], [], [null], 'service to a Spanish buyer'],
-            ['ES', ['service'], 'NO', ['country' => 'NO', 'postcode' => '0150'], [], [null], 'service to a buyer outside the EU'],
+            ['ES', ['service'], 'NO', ['country' => 'NO', 'postcode' => '0150'], [], ['ES_IVA_NON_EU_SERVICES'], 'service to a buyer outside the EU'],
+            ['ES', ['service'], 'US', $es, [], ['ES_IVA_NON_EU_SERVICES'], 'service to a buyer outside the EU, delivered in Spain'],
+            ['ES', ['service'], 'ES 35001', $es, [], ['ES_IVA_NON_EU_SERVICES'], 'service to a buyer billed in Las Palmas'],
+            ['ES', ['service'], 'ES 38001', null, [], ['ES_IVA_NON_EU_SERVICES'], 'service to a buyer billed in Tenerife'],
+            ['ES', ['service'], 'ES 51001', $es, [], ['ES_IVA_NON_EU_SERVICES'], 'service to a buyer billed in Ceuta'],
+            ['ES', ['service'], 'ES 52001', $es, [], ['ES_IVA_NON_EU_SERVICES'], 'service to a buyer billed in Melilla'],
+            ['ES', ['service'], 'ES 28001', ['country' => 'ES', 'postcode' => '35001'], [], [null], 'service delivered to the Canaries for a mainland buyer'],
+            ['ES', ['goods'], 'ES 35001', $es, [], [null], 'goods delivered in mainland Spain for a buyer billed in the Canaries'],
             ['ES', ['goods', 'service', 'shipping'], 'ES', ['country' => 'NO', 'postcode' => '0150'], [], ['ES_IVA_EXPORT', null, 'ES_IVA_EXPORT'], 'shipping follows the goods'],
-            ['ES', ['service', 'shipping'], 'FR', $es, [], ['ES_IVA_REVERSE_CHARGE', 'ES_IVA_REVERSE_CHARGE'], 'shipping follows the services'],
+            ['ES', ['service', 'shipping'], 'FR', $es, [], ['ES_IVA_INTRA_COMMUNITY_SERVICES', 'ES_IVA_INTRA_COMMUNITY_SERVICES'], 'shipping follows the services'],
+            ['ES', ['service', 'shipping'], 'NO', ['country' => 'NO', 'postcode' => '0150'], [], ['ES_IVA_NON_EU_SERVICES', 'ES_IVA_NON_EU_SERVICES'], 'shipping follows non-EU services'],
             ['ES', ['goods', 'shipping'], 'ES', ['country' => 'NO', 'postcode' => '0150'], ['standard' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20', 'ES_IVA_EXEMPT_ART20'], 'the mapping beats the derivation'],
             ['ES', ['goods'], 'ES', $es, ['reduced-rate' => 'ES_IVA_ZERO'], [null], 'a mapping of another class does not apply'],
             ['NO', ['goods', 'shipping'], 'NO', ['country' => 'US', 'postcode' => '10001'], [], [null, null], 'a non-ES merchant with no mapping is untouched'],
@@ -111,7 +119,7 @@ final class TaxCodeSpec
             // lines, buyer (billing) country, delivery address, map, create's codes, description
             [['goods', 'shipping'], 'ES', ['country' => 'NO', 'postcode' => '0150'], [], ['ES_IVA_EXPORT', 'ES_IVA_EXPORT'], 'export'],
             [['goods'], 'DE', ['country' => 'FR', 'postcode' => '75001'], [], ['ES_IVA_INTRA_COMMUNITY'], 'intra-community goods'],
-            [['service'], 'FR', $es, [], ['ES_IVA_REVERSE_CHARGE'], 'a service to an EU buyer'],
+            [['service'], 'FR', $es, [], ['ES_IVA_INTRA_COMMUNITY_SERVICES'], 'a service to an EU buyer'],
             [['goods'], 'ES', $es, ['standard' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20'], 'a mapped tax class'],
         ];
         foreach ($cases as [$lines, $buyer, $delivery, $map, $create, $description]) {
@@ -427,6 +435,7 @@ final class TaxCodeSpecOrder extends StubOrder
     private $items;
     private $shipping;
     private $buyer;
+    private $buyerPostcode;
     private $delivery;
     private $total;
     private $tax;
@@ -435,7 +444,7 @@ final class TaxCodeSpecOrder extends StubOrder
     {
         $this->items = $items;
         $this->shipping = $shipping;
-        $this->buyer = $buyer;
+        [$this->buyer, $this->buyerPostcode] = array_pad(explode(' ', $buyer, 2), 2, '10001');
         $this->delivery = $delivery;
         $this->total = $total;
         $this->tax = $tax;
@@ -476,6 +485,11 @@ final class TaxCodeSpecOrder extends StubOrder
         return $this->buyer;
     }
 
+    public function get_billing_postcode()
+    {
+        return $this->buyerPostcode;
+    }
+
     public function get_shipping_address_1()
     {
         return $this->delivery ? 'Street 1' : '';
@@ -494,10 +508,5 @@ final class TaxCodeSpecOrder extends StubOrder
     public function get_shipping_country()
     {
         return $this->delivery['country'] ?? '';
-    }
-
-    public function get_billing_postcode()
-    {
-        return '10001';
     }
 }
