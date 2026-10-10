@@ -344,6 +344,7 @@ describe("billing country switch", () => {
       // fields come back from sessionStorage (ABN-554).
       window.twoinc.billing_company = "Ejemplo SL";
       window.twoinc.company_id = "B12345678";
+      window.twoinc.company_country = "ES";
 
       ctx.Twoinc.getInstance().initialize(true);
 

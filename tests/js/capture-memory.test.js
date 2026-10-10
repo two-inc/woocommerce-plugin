@@ -45,7 +45,7 @@ describe("ABN-554 — the captured company lives in the WC session", () => {
   }
 
   test("the company the page was rendered with is restored", () => {
-    load({ billing_company: NAME, company_id: NUMBER });
+    load({ billing_company: NAME, company_id: NUMBER, company_country: "GB" });
 
     ctx.dom.loadUserMetaInputs();
 
@@ -102,6 +102,8 @@ describe("ABN-554 — the captured company lives in the WC session", () => {
       expect(ajax.calls[ajax.calls.length - 1].url).toBe(harness.REMEMBER_COMPANY_URL);
       expect(sent.get("company_id")).toBe(NUMBER);
       expect(sent.get("company_name")).toBe(NAME);
+      // With the country it was captured under, so a replay keeps the pair (TWO-26286).
+      expect(sent.get("country")).toBe("GB");
 
       ctx.capture.write("", "");
       jest.runAllTimers();
@@ -129,7 +131,7 @@ describe("ABN-554 — the captured company lives in the WC session", () => {
   });
 
   test("restoring what the page already carried posts nothing back", () => {
-    load({ billing_company: NAME, company_id: NUMBER });
+    load({ billing_company: NAME, company_id: NUMBER, company_country: "GB" });
     const ajax = harness.stubAjax(ctx.$);
 
     try {

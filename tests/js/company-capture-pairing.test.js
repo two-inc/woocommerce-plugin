@@ -292,6 +292,7 @@ describe("TWO-40 — captured-company write path", () => {
       // retype guard then wipes.
       ctx.twoinc.billing_company = "ACME Widgets Ltd";
       ctx.twoinc.company_id = "12345678";
+      ctx.twoinc.company_country = "GB";
       ctx.dom.loadUserMetaInputs();
 
       expect(retype()).toBe(false);
@@ -307,6 +308,7 @@ describe("TWO-40 — captured-company write path", () => {
       // restore that ran at the wrong point in that sequence.
       window.twoinc.billing_company = "ACME Widgets Ltd";
       window.twoinc.company_id = "12345678";
+      window.twoinc.company_country = "GB";
 
       ctx.Twoinc.getInstance().initialize(true);
 

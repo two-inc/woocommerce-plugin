@@ -344,7 +344,11 @@ let twoincCompanyCapture = {
     const opts = options || {};
     const role = opts.role || twoincAddressRoles.primary();
     if (role === twoincAddressRoles.invoice()) {
-      twoincCompanyCapture.rememberOnServer(companyName, companyId);
+      twoincCompanyCapture.rememberOnServer(
+        companyName,
+        companyId,
+        opts.country || twoincAddressRoles.country(role)
+      );
     }
     const name = twoincUtilHelper.blankToEmpty(companyName);
     const number = twoincUtilHelper.blankToEmpty(companyId);
@@ -510,6 +514,75 @@ let twoincCompanyCapture = {
     return twoincUtilHelper.blankToEmpty(twoincCompanyCapture.numberField(role).val()) !== "";
   },
 
+  /**
+   * The country a role's capture was made under: the pin `write()` records
+   * beside every captured number. Empty where the role holds no capture, and
+   * for a sole-trader number: Two mints that one rather than a country's
+   * register, and the sole-trader flow owns what a country change does to it.
+   *
+   * Every capture is pinned: `write()` pins each one, and the restore drops a
+   * delivery number the page was rendered holding rather than leave it
+   * unpinned. A blank pin therefore only comes from a capture made while the
+   * role's country field was empty or absent: the order-pay page, which has
+   * none, or a search, which cannot run without one.
+   *
+   * @returns {string}
+   */
+  capturedCountry: function (role) {
+    if (!twoincCompanyCapture.hasCapture(role)) return "";
+    if (twoincUtilHelper.isSyntheticCompanyNumber(twoincCompanyCapture.numberField(role).val())) {
+      return "";
+    }
+    return twoincUtilHelper
+      .blankToEmpty(twoincCompanyCapture.record(role).countryPrefix)
+      .toUpperCase();
+  },
+
+  /**
+   * Was this role's capture made under a country its address has since left
+   * (TWO-26286)? Only two known countries that differ count, the same rule as
+   * `countryDidChange()`.
+   *
+   * Asked of the capture rather than of a country event, because not every
+   * country move arrives as one: block checkout writes the country into the
+   * classic fields with no `change` at all.
+   *
+   * @returns {boolean}
+   */
+  isFromAnotherCountry: function (role) {
+    const captured = twoincCompanyCapture.capturedCountry(role);
+    const current = twoincAddressRoles.country(role);
+    return !!captured && !!current && captured !== current;
+  },
+
+  /**
+   * Would the order intent pair its company number with a country other than
+   * the one that number was captured under (TWO-26286)?
+   *
+   * Judged on `customerCompany`, the record the request body is built from,
+   * against every role whose number field holds that number: true when a
+   * holder's pin names another country and no holder's names this one. A
+   * holder with no pin (see `capturedCountry()` for when that can happen) is
+   * not evidence either way, the same rule as `isFromAnotherCountry()`.
+   *
+   * @returns {boolean}
+   */
+  orderCompanyIsCrossCountry: function () {
+    const company = Twoinc.getInstance().customerCompany || {};
+    const number = twoincUtilHelper.blankToEmpty(company.organization_number);
+    if (!number) return false;
+    const country = twoincUtilHelper.blankToEmpty(company.country_prefix).toUpperCase();
+    const pins = [twoincAddressRoles.invoice(), twoincAddressRoles.delivery()]
+      .filter(function (role) {
+        return (
+          twoincUtilHelper.blankToEmpty(twoincCompanyCapture.numberField(role).val()) === number
+        );
+      })
+      .map(twoincCompanyCapture.capturedCountry)
+      .filter(Boolean);
+    return pins.length > 0 && pins.indexOf(country) === -1;
+  },
+
   /** sessionStorage key holding the last capture mode and the pair it described. */
   CAPTURE_MODE_KEY: "twoincCaptureMode",
 
@@ -592,19 +665,24 @@ let twoincCompanyCapture = {
    * @param {string} companyId
    * @returns {void}
    */
-  rememberOnServer: function (companyName, companyId) {
+  rememberOnServer: function (companyName, companyId, country) {
     // The cart's memory, and the order-pay page is not a cart (ABN-554).
     if (window.twoinc && window.twoinc.order_pay) return;
     const url = twoincUtilHelper.blankToEmpty(window.twoinc && window.twoinc.remember_company_url);
     if (url === "") return;
     const name = twoincUtilHelper.blankToEmpty(companyName);
     const number = twoincUtilHelper.blankToEmpty(companyId);
+    // Remembered with its country, so a replay is never paired with another (TWO-26286).
+    const capturedIn = number ? twoincUtilHelper.blankToEmpty(country).toUpperCase() : "";
     if (twoincCompanyCapture.rememberedPair === null) {
       const rendered = twoincDomHelper.rememberedCompany();
-      twoincCompanyCapture.rememberedPair =
-        rendered.billing_company + "\u0000" + rendered.company_id;
+      twoincCompanyCapture.rememberedPair = [
+        rendered.billing_company,
+        rendered.company_id,
+        rendered.country
+      ].join("\u0000");
     }
-    const pair = name + "\u0000" + number;
+    const pair = [name, number, capturedIn].join("\u0000");
     if (pair === twoincCompanyCapture.rememberedPair) return;
     twoincCompanyCapture.rememberedPair = pair;
     window.clearTimeout(twoincCompanyCapture.rememberTimer);
@@ -615,7 +693,8 @@ let twoincCompanyCapture = {
         data: {
           csrf_token: twoincUtilHelper.proxyCsrfToken(),
           company_id: number,
-          company_name: name
+          company_name: name,
+          country: capturedIn
         }
       });
     }, twoincCompanyCapture.REMEMBER_DEBOUNCE_MS);
@@ -2985,13 +3064,51 @@ let twoincDomHelper = {
       }
     }
   },
-  /** The company the page was rendered with: this cart's capture, this order's, or the merchant's own (ABN-554). */
+  /**
+   * The company the page was rendered with: this cart's capture, this order's,
+   * or the merchant's own (ABN-554).
+   *
+   * Withheld, name and number alike, unless it was remembered under the
+   * country the billing address holds now (TWO-26286): replayed under another
+   * country, its number would be sent paired with that country. A company
+   * remembered before the country was kept carries none and is withheld too,
+   * so the buyer picks it once more. A name alone is no capture and is kept,
+   * and so is a sole-trader number, as `capturedCountry()` explains, and the
+   * company of the order being paid.
+   */
   rememberedCompany: function () {
     const meta = window.twoinc || {};
-    return {
+    const remembered = {
       billing_company: twoincUtilHelper.blankToEmpty(meta.billing_company),
-      company_id: twoincUtilHelper.blankToEmpty(meta.company_id)
+      company_id: twoincUtilHelper.blankToEmpty(meta.company_id),
+      country: twoincUtilHelper.blankToEmpty(meta.company_country).toUpperCase()
     };
+    if (
+      remembered.company_id &&
+      !twoincUtilHelper.isSyntheticCompanyNumber(remembered.company_id) &&
+      // The order-pay page has no billing country to judge against; the order's
+      // own company is replayed there as it was placed.
+      !meta.order_pay &&
+      remembered.country !== twoincAddressRoles.country(twoincAddressRoles.invoice())
+    ) {
+      return { billing_company: "", company_id: "", country: "" };
+    }
+    return remembered;
+  },
+  /**
+   * Take a role's capture off the page: number, name, pairing and the name the
+   * control shows (TWO-26286).
+   *
+   * @param {string} role
+   * @returns {void}
+   */
+  dropCapture: function (role) {
+    const control = twoincCompanyCapture.controllerFor(role);
+    twoincCompanyCapture.write("", "", { role: role });
+    control.setDisplayName("");
+    // Clearing a capture changes the visible company-name surface (TWO-25503).
+    twoincDomHelper.toggleBusinessFields();
+    control.renderCompanySummary();
   },
   loadUserMetaInputs: function () {
     const remembered = twoincDomHelper.rememberedCompany();
@@ -3024,6 +3141,24 @@ let twoincDomHelper = {
    * later).
    */
   restoreCapturedCompany: function () {
+    // A delivery number no capture on this page wrote can only be WooCommerce
+    // replaying an earlier order's, and the shipping address may have moved to
+    // another country since. Delivery captures are never replayed, so it is
+    // dropped rather than trusted (TWO-26286).
+    const delivery = twoincAddressRoles.delivery();
+    if (
+      twoincCompanyCapture.hasCapture(delivery) &&
+      !twoincCompanyCapture.record(delivery).countryPrefix
+    ) {
+      twoincDomHelper.dropCapture(delivery);
+    }
+    // A billing capture an earlier restore pass made, whose country the saved
+    // inputs have since moved, goes too: kept, it would be painted and then
+    // pinned again under the new country below.
+    if (twoincCompanyCapture.isFromAnotherCountry(twoincAddressRoles.invoice())) {
+      twoincDomHelper.dropCapture(twoincAddressRoles.invoice());
+    }
+
     const remembered = twoincDomHelper.rememberedCompany();
     const metaName = remembered.billing_company;
     const metaId = remembered.company_id;
@@ -3045,7 +3180,14 @@ let twoincDomHelper = {
     // let a later country switch clear it as plugin-written.
     if (!restoredId && !(fromUserMeta && restoredName)) return;
 
-    twoincCompanyCapture.write(restoredName, restoredId);
+    // The remembered company's own country, which `rememberedCompany()` has
+    // already matched to the form's. A pair the form itself holds was
+    // rendered with the country beside it, so it takes the form's.
+    twoincCompanyCapture.write(
+      restoredName,
+      restoredId,
+      fromUserMeta ? { country: remembered.country } : undefined
+    );
 
     // Paint the restored name into the search field too. It is the visible
     // company-NAME surface for a restored capture and `toggleBusinessFields()`
@@ -5664,6 +5806,41 @@ class Twoinc {
   }
 
   /**
+   * Drop any captured company whose address has since moved to another
+   * country, and say whether the order company is now safe to send
+   * (TWO-26286).
+   *
+   * A company is found under one country's register, and its number means
+   * nothing under another. The country handlers clear a capture on a country
+   * `change`, but block checkout moves the country into the classic fields
+   * with no event, so a delivery-role capture outlived the move and the next
+   * check paired the new country with the old company's number. Checking the
+   * capture itself, here, holds whichever way the country moved.
+   *
+   * A role mid sole-trader decision is left alone, as the country handlers
+   * leave it; its pair is still refused below.
+   *
+   * @returns {boolean} false while the order company still pairs a number with
+   *   another country, in which case nothing may be sent
+   */
+  withdrawCrossCountryCompany() {
+    let withdrew = false;
+    twoincCompanySearchControls.forEach(function (search) {
+      if (!twoincCompanyCapture.isFromAnotherCountry(search.role)) return;
+      if (search.soleTrader.isDeciding()) return;
+      // Answers to questions asked under the outgoing country must not land.
+      search.companySearchSeq += 1;
+      Twoinc.getInstance().addressStateFor(search.role).lookupSeq += 1;
+      search.clearSelectedCompany();
+      withdrew = true;
+    });
+    if (withdrew || twoincCompanyCapture.orderCompanyIsCrossCountry()) {
+      twoincCompanyCapture.syncOrderCompany();
+    }
+    return !twoincCompanyCapture.orderCompanyIsCrossCountry();
+  }
+
+  /**
    * Check the company approval status by creating an order intent
    */
   getApproval() {
@@ -5679,9 +5856,13 @@ class Twoinc {
       twoincCompanySearchControls.some(function (control) {
         return control.soleTrader.isDeciding();
       });
+    // First, so a company from another country is gone before anything below
+    // reads the record (TWO-26286).
+    const sendable = this.withdrawCrossCountryCompany();
     if (
-      !twoincUtilHelper.blankToEmpty(this.customerCompany.organization_number) &&
-      !soleTraderPending
+      !sendable ||
+      (!twoincUtilHelper.blankToEmpty(this.customerCompany.organization_number) &&
+        !soleTraderPending)
     ) {
       if (
         this.orderIntentCheck.inFlightSeq !== null ||
@@ -5739,6 +5920,21 @@ class Twoinc {
     }
 
     this.orderIntentCheck.interval = setInterval(function () {
+      // Asked again on the tick that sends: the country can move in the second
+      // between arming and here (TWO-26286).
+      const hadCompany = twoincUtilHelper.blankToEmpty(
+        Twoinc.getInstance().customerCompany.organization_number
+      );
+      const sendable = Twoinc.getInstance().withdrawCrossCountryCompany();
+      const withdrawn =
+        hadCompany &&
+        !twoincUtilHelper.blankToEmpty(Twoinc.getInstance().customerCompany.organization_number);
+      if (!sendable || withdrawn) {
+        // The same prompt the arming path shows, so the buyer knows to pick again.
+        Twoinc.getInstance().abandonOrderIntentCheck();
+        twoincDomHelper.togglePaySubtitleDesc("no-company");
+        return;
+      }
       // Only the buyer is sent: the server composes amounts and lines from the cart (TWO-26092).
       let jsonBody = JSON.stringify({
         buyer: {
@@ -6445,6 +6641,10 @@ class Twoinc {
     // left alone, the same way the address mirror leaves shipping field values
     // in place — only which pair the order intent SEES changes).
     twoincCompanyCapture.syncOrderCompany();
+    // Re-read here as well as on blur (TWO-26286): block checkout writes the
+    // buyer's details into the classic fields with no blur to read them on,
+    // so without this the representative stayed as it was at page load.
+    Twoinc.getInstance().customerRepresentative = twoincDomHelper.getRepresentativeData();
     Twoinc.getInstance().getApproval();
   }
 
@@ -6486,6 +6686,10 @@ class Twoinc {
       Twoinc.getInstance().customerCompany.organization_number = typed;
       if (numberMoved && twoincUtilHelper.blankToEmpty(typed)) {
         Twoinc.getInstance().customerCompany.country_prefix =
+          twoincSelectWooHelper.currentCountry();
+        // The capture's own pin too, so the typed number is vouched for under
+        // the country it was typed under (TWO-26286).
+        twoincCompanyCapture.record(twoincAddressRoles.invoice()).countryPrefix =
           twoincSelectWooHelper.currentCountry();
       }
     } else if (inputName === "billing_company_display") {
@@ -6787,6 +6991,9 @@ class Twoinc {
         country_prefix: country,
         organization_number: domNumber
       };
+      // The re-render restored this pair under `country`, so the capture's pin
+      // follows it; `orderCompanyIsCrossCountry()` reads the pin (TWO-26286).
+      twoincCompanyCapture.record(twoincAddressRoles.invoice()).countryPrefix = country;
       return;
     }
 
