@@ -488,10 +488,13 @@ with
 `WC_Twoinc_Helper::check_shop_match(array $payload, string $scope = WC_Twoinc_Helper::SHOP_MATCH_ALL): array`.
 It returns the payload unchanged, or throws `WC_Twoinc_Shop_Match_Exception`
 with the error the default handler would have raised; the plugin lets it
-through unwrapped. It applies each check to the line it was made for while that
-line's name, type, amounts and rate are as built. Called on the payload the
-handler returns, it checks every line the handler left as built. Called on the payload it received, before any
-edit, it checks them all.
+through unwrapped. It applies each check to the line it was made for while
+that line's name, type, amounts and rate are as built. Called on the payload
+the handler returns, it checks every line the handler left as built. Called on
+the payload it received, before any edit, it checks them all. Register a
+handler that calls it at a priority below `PHP_INT_MAX`: the plugin's default
+handler runs at `PHP_INT_MAX` and clears the record of the build's refusals,
+so a call from a handler that runs after it finds nothing to refuse.
 
 `$scope` chooses which checks run. `SHOP_MATCH_ALL`, the default, runs every
 shop-match check. `SHOP_MATCH_PER_LINE` runs only the checks made for single
