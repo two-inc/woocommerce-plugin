@@ -833,12 +833,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * The buyer's VAT number, normalised, or null (TWO-26153). The first of BUYER_VAT_NUMBER_META_KEYS that holds a
-         * number, read through the order API so it works with HPOS, unless BUYER_VAT_NUMBER_REFUSED says its VAT plugin
-         * found it invalid: then no number, without trying the later keys, which often hold the same one. The result
-         * passes through the `twoinc_buyer_vat_number` filter ('' for none) before it is normalised, so a shop can
-         * supply a number from any other source. The filter runs before the derivation, which
-         * `twoinc_order_postprocessing` cannot. An unprefixed number is read in the billing country.
+         * The buyer's VAT number as entered, trimmed of leading and trailing whitespace and nothing else, or null
+         * (TWO-26153). The first of BUYER_VAT_NUMBER_META_KEYS that holds anything once trimmed, read through the order
+         * API so it works with HPOS, unless BUYER_VAT_NUMBER_REFUSED says its VAT plugin found it invalid: then no
+         * number, without trying the later keys, which often hold the same one. The result passes through the
+         * `twoinc_buyer_vat_number` filter ('' for none) before it is trimmed, so a shop can supply a number from any
+         * other source. The filter runs before the derivation, which `twoinc_order_postprocessing` cannot.
          *
          * @return string|null
          */
@@ -847,11 +847,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if (!is_object($order) || !method_exists($order, 'get_meta')) {
                 return null;
             }
-            $country = $order->get_billing_country();
             $raw = '';
             foreach (self::BUYER_VAT_NUMBER_META_KEYS as $key) {
                 $value = $order->get_meta($key);
-                if (is_scalar($value) && null !== self::normalise_vat_number((string) $value, $country)) {
+                if (is_scalar($value) && '' !== trim((string) $value)) {
                     [$result_key, $invalid] = self::BUYER_VAT_NUMBER_REFUSED[$key] ?? [null, null];
                     $refused = null !== $result_key && $invalid === $order->get_meta($result_key);
                     $raw = $refused ? '' : (string) $value;
@@ -859,29 +858,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 }
             }
             $raw = apply_filters('twoinc_buyer_vat_number', $raw, $order);
-            return is_scalar($raw) ? self::normalise_vat_number((string) $raw, $country) : null;
-        }
-
-        /**
-         * Uppercases and keeps only letters and digits, so spaces of every kind, dots, hyphens, slashes and stray
-         * punctuation go. A prefix `GR` is written `EL`, as on Greek VAT numbers. A number that does not start with two
-         * letters gets the address country in front, with Greece `EL` and Monaco `FR`, since its businesses hold French
-         * ones; with no country it stays as it is.
-         *
-         * @return string|null null when no digit is left, so a placeholder such as "n/a" or a bare "FR" is no number
-         */
-        public static function normalise_vat_number($raw, $country)
-        {
-            $vat = (string) preg_replace('/[^A-Z0-9]+/', '', strtoupper((string) $raw));
-            if (!preg_match('/\d/', $vat)) {
-                return null;
-            }
-            if (preg_match('/^[A-Z]{2}/', $vat)) {
-                return 0 === strpos($vat, 'GR') ? 'EL' . substr($vat, 2) : $vat;
-            }
-            $country = strtoupper(trim((string) $country));
-            $country = ['GR' => 'EL', 'MC' => 'FR'][$country] ?? $country;
-            return preg_match('/^[A-Z]{2}$/', $country) ? $country . $vat : $vat;
+            $vat = is_scalar($raw) ? trim((string) $raw) : '';
+            return '' === $vat ? null : $vat;
         }
 
         /**

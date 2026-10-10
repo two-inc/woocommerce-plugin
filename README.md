@@ -382,13 +382,11 @@ not match the buyer or delivery country). The plugin collects no VAT number of
 its own; it reads the first of these order meta keys that holds a number, which
 the common EU VAT plugins store: `_billing_vat_number`, `_vat_number`,
 `vat_number`, `VAT Number`, `_billing_eu_vat_number`, then passes it through
-the `twoinc_buyer_vat_number` filter (see below). The number is uppercased and
-everything but letters and digits is stripped (spaces of every kind, dots,
-hyphens, slashes, stray punctuation). What is left must hold a digit, so a
-placeholder such as `n/a` or a bare `FR` is no number and the next key is
-tried. A `GR` prefix is written `EL`, as on Greek VAT numbers, and a number
-without a two-letter prefix gets the billing country's (`EL` for Greece, `FR`
-for Monaco, whose businesses hold French numbers); `EL` reads as Greece. `MC`
+the `twoinc_buyer_vat_number` filter (see below). The number is used and sent
+as entered, trimmed of leading and trailing whitespace and nothing else; only a
+value that is empty once trimmed is skipped for the next key. Its first two
+letters, as entered, name its country (`EL` reads as Greece), so a number with
+no upper-case two-letter prefix derives no code. `MC`
 is not a VAT prefix, so it never qualifies. With no such number the line gets
 no code, so Two refuses it.
 
