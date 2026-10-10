@@ -80,6 +80,11 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
                 // checkout emits the same block from its own hook (ABN-554).
                 'terms' => $gateway ? $gateway->get_terms_consent_html() : '',
                 'iconUrl' => $gateway ? $gateway->icon : '',
+                // Refuses the submit after a declined or failed availability check (TWO-26292).
+                'unavailable' => sprintf(
+                    __('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name')
+                ),
                 // TWO-25800: the product-page button preselects this gateway
                 // by writing the session key classic checkout already reads.
                 // Blocks has no server-side equivalent, so the tile selects

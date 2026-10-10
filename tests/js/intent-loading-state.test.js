@@ -2410,6 +2410,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         jest.advanceTimersByTime(1000);
 
         expect(placeable()).toBe(expected);
+        // What the Blocks tile reads at payment setup (TWO-26292).
+        expect(ctx.dom.paymentMethodSelectable).toBe(expected);
       } finally {
         ajax.restore();
       }
