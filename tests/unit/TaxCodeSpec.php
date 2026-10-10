@@ -153,6 +153,16 @@ final class TaxCodeSpec
             ['ES', ['goods'], 'DE', $fr, ['VAT Number' => 'AT333', '_billing_eu_vat_number' => 'BE444'], [], $intraGoods, 'AT333', 'source order: VAT Number before _billing_eu_vat_number'],
             ['ES', ['goods'], 'DE', $fr, ['_billing_eu_vat_number' => 'BE444'], [], $intraGoods, 'BE444', 'source order: _billing_eu_vat_number is read'],
             ['ES', ['goods'], 'DE', $fr, ['billing_vat' => 'DE123456789'], [], [null], null, 'an unknown key is not read'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'n/a'], [], [null], null, 'a placeholder with no digit is no number'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'FR'], [], [null], null, 'a bare prefix is no number'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'NONE'], [], [null], null, 'a word with no digit is no number'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'DE123456789,'], [], $intraServices, 'DE123456789', 'trailing punctuation is stripped'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'DE/123456789'], [], $intraServices, 'DE123456789', 'a slash is stripped'],
+            ['ES', ['service'], 'GR', $es, ['_billing_vat_number' => 'GR123456789'], [], $intraServices, 'EL123456789', 'a GR prefix is written EL'],
+            ['ES', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'n/a', '_vat_number' => 'FR12345678901'], [], $intraGoods, 'FR12345678901', 'junk in an earlier key falls through to the next'],
+            ['ES', ['goods'], 'DE', $fr, ['vat_number' => 'IT12345678901', '_vat_number_validated' => 'not-valid', 'VAT Number' => 'IT12345678901'], [], [null], null, 'Aelia: a number checked and found invalid is no number, and stops the lookup'],
+            ['ES', ['goods'], 'DE', $fr, ['vat_number' => 'IT12345678901', '_vat_number_validated' => 'could-not-be-validated'], [], $intraGoods, 'IT12345678901', 'Aelia: a check that failed keeps the number'],
+            ['ES', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'DE123456789', '_vat_number_validated' => 'not-valid'], [], $intraGoods, 'DE123456789', 'Aelia\'s result applies to its own key only'],
         ];
 
         $codes = static function (array $payload) {
@@ -249,6 +259,7 @@ final class TaxCodeSpec
             $none = array_fill(0, count($lines), null);
             TinyAssert::same($none, $codes($intent, 'tax_code'), "$description: the intent carries no code");
             TinyAssert::same($none, $codes($intent, 'tax_exemption_reason_code'), "$description: nor an exemption reason");
+            TinyAssert::true(!array_key_exists('buyer_vat_number', $intent), "$description: nor a buyer VAT number");
         }
     }
 

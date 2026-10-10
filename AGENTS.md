@@ -687,14 +687,24 @@ Ceuta or Melilla is `es_outside` and its services derive
 Rows marked `vat` (both intra-community codes) also need a buyer VAT number
 whose prefix is an EU member state other than the merchant's country
 (TWO-26153); without one the line gets no code, never a later row. The number
-comes from `get_buyer_vat_number()`, the first non-empty of
-`BUYER_VAT_NUMBER_META_KEYS` read with `$order->get_meta()`, passed through the
-`twoinc_buyer_vat_number` filter, then normalised by `normalise_vat_number()`.
-Add a key only once its plugin is confirmed to store it; anything else is the
-filter's job. Only the order create sends it, as top-level
-`buyer_vat_number`, and only for a Spanish merchant and a buyer company
-outside Spain; otherwise the key is absent. The `vat` rows qualify only on a
-number that create sends, so the derivation and the payload always agree.
+comes from `get_buyer_vat_number()`, the first of `BUYER_VAT_NUMBER_META_KEYS`
+read with `$order->get_meta()` that `normalise_vat_number()` turns into a
+number (uppercase, letters and digits only, at least one digit, `GR` written
+`EL`), passed through the `twoinc_buyer_vat_number` filter, then normalised
+again. A key listed in `BUYER_VAT_NUMBER_REFUSED` whose VAT plugin recorded an
+answered check as invalid gives no number and stops the lookup; a failed check
+keeps the number. List a plugin there only once its source shows it stores an
+invalid answer differently from a failed check (Aelia EU VAT Assistant does;
+WooCommerce EU VAT Number stores both alike, EU VAT for WooCommerce stores no
+result, and EU/UK VAT Compliance writes its result only in its premium edition,
+so none of those is confirmed). Add a key only once its plugin is confirmed to
+store it; anything else is the filter's job. Only the order create sends it, as
+top-level `buyer_vat_number`, and only for a Spanish merchant and a buyer
+company outside Spain; otherwise the key is absent. At create the `vat` rows
+qualify only on the number create sends, so the codes and the number agree
+there. Edits and refunds never send the number and re-derive from the order's
+current meta, so a number changed since create can change their codes while Two
+keeps the number it stored.
 The intent carries no tax code at all (TWO-26226): `compose_twoinc_intent`
 strips `tax_code` and `tax_exemption_reason_code` from every line, because
 buyer details such as the VAT number may still be partial when it is raised.

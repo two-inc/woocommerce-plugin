@@ -71,6 +71,16 @@ if (!class_exists('WC_Twoinc_Helper')) {
         ];
 
         /**
+         * A VAT plugin's record that its check got an answer and the answer was "invalid", by the meta key holding the
+         * number it checked: [meta key of the result, value meaning invalid]. Aelia EU VAT Assistant stores
+         * `_vat_number_validated` as `not-valid` for that, and `could-not-be-validated` when the check itself failed,
+         * which keeps the number. A plugin is listed only once its source confirms it tells the two apart.
+         */
+        private const BUYER_VAT_NUMBER_REFUSED = [
+            'vat_number' => ['_vat_number_validated', 'not-valid'],
+        ];
+
+        /**
          * Reduces buyer-facing copy to text plus links: an `<a>` with an
          * http(s) href survives, every other tag is dropped and its text kept,
          * and all other markup is escaped.
@@ -823,11 +833,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * The buyer's VAT number, normalised, or null (TWO-26153). The first non-empty of BUYER_VAT_NUMBER_META_KEYS,
-         * read through the order API so it works with HPOS, passes through the `twoinc_buyer_vat_number` filter
-         * ('' when no key has one) before it is normalised, so a shop can supply a number from any other source. The
-         * filter runs before the derivation, which `twoinc_order_postprocessing` cannot. An unprefixed number is read
-         * in the billing country.
+         * The buyer's VAT number, normalised, or null (TWO-26153). The first of BUYER_VAT_NUMBER_META_KEYS that holds a
+         * number, read through the order API so it works with HPOS, unless BUYER_VAT_NUMBER_REFUSED says its VAT plugin
+         * found it invalid: then no number, without trying the later keys, which often hold the same one. The result
+         * passes through the `twoinc_buyer_vat_number` filter ('' for none) before it is normalised, so a shop can
+         * supply a number from any other source. The filter runs before the derivation, which
+         * `twoinc_order_postprocessing` cannot. An unprefixed number is read in the billing country.
          *
          * @return string|null
          */
@@ -841,7 +852,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             foreach (self::BUYER_VAT_NUMBER_META_KEYS as $key) {
                 $value = $order->get_meta($key);
                 if (is_scalar($value) && null !== self::normalise_vat_number((string) $value, $country)) {
-                    $raw = (string) $value;
+                    [$result_key, $invalid] = self::BUYER_VAT_NUMBER_REFUSED[$key] ?? [null, null];
+                    $refused = null !== $result_key && $invalid === $order->get_meta($result_key);
+                    $raw = $refused ? '' : (string) $value;
                     break;
                 }
             }
@@ -850,23 +863,25 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Strips spaces (a pasted no-break space too), dots and hyphens and uppercases. A number that does not start with two letters gets the
-         * address country in front, with Greece written `EL` as on its VAT numbers and Monaco `FR`, since its businesses
-         * hold French ones; with no country it stays as it is.
+         * Uppercases and keeps only letters and digits, so spaces of every kind, dots, hyphens, slashes and stray
+         * punctuation go. A prefix `GR` is written `EL`, as on Greek VAT numbers. A number that does not start with two
+         * letters gets the address country in front, with Greece `EL` and Monaco `FR`, since its businesses hold French
+         * ones; with no country it stays as it is.
          *
-         * @return string|null null when nothing is left
+         * @return string|null null when no digit is left, so a placeholder such as "n/a" or a bare "FR" is no number
          */
         public static function normalise_vat_number($raw, $country)
         {
-            $vat = strtoupper((string) preg_replace('/[\s\x{00A0}.\-]+/u', '', (string) $raw));
-            if ('' === $vat) {
+            $vat = (string) preg_replace('/[^A-Z0-9]+/', '', strtoupper((string) $raw));
+            if (!preg_match('/\d/', $vat)) {
                 return null;
             }
-            if (!preg_match('/^[A-Z]{2}/', $vat)) {
-                $country = strtoupper(trim((string) $country));
-                $vat = (['GR' => 'EL', 'MC' => 'FR'][$country] ?? $country) . $vat;
+            if (preg_match('/^[A-Z]{2}/', $vat)) {
+                return 0 === strpos($vat, 'GR') ? 'EL' . substr($vat, 2) : $vat;
             }
-            return $vat;
+            $country = strtoupper(trim((string) $country));
+            $country = ['GR' => 'EL', 'MC' => 'FR'][$country] ?? $country;
+            return preg_match('/^[A-Z]{2}$/', $country) ? $country . $vat : $vat;
         }
 
         /**
