@@ -364,10 +364,9 @@ msgstr ""
 
 #: class/WC_Twoinc.php:1911
 #: class/WC_Twoinc.php:5691
-#: class/WC_Twoinc.php:5701
-#: class/WC_Twoinc.php:5791
-#: class/WC_Twoinc.php:5821
-#: class/WC_Twoinc_Helper.php:303
+#: class/WC_Twoinc.php:5781
+#: class/WC_Twoinc.php:5811
+#: class/WC_Twoinc_Helper.php:317
 #, php-format
 msgid "Invoice purchase with %s is not available for this order."
 msgstr ""
@@ -1834,13 +1833,13 @@ msgid "The %1$s request was not sent to %2$s: the twoinc_order_postprocessing fi
 msgstr ""
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:2063
+#: class/WC_Twoinc_Helper.php:2150
 #, php-format
 msgid "Shipping \"%s\" cannot be refunded: the order line it refunds was not found."
 msgstr ""
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:2238
+#: class/WC_Twoinc_Helper.php:2325
 #, php-format
 msgid "The tax charged on \"%s\" does not match the shop's tax rates."
 msgstr ""

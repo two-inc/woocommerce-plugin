@@ -360,9 +360,9 @@ msgstr "Deze bestelling van %2$s wordt waarschijnlijk geaccepteerd door %1$s"
 msgid "Your invoice with %1$s is likely to be accepted, subject to additional checks."
 msgstr "Uw factuur met %1$s wordt waarschijnlijk geaccepteerd, mits er aanvullende controles worden uitgevoerd."
 
-#: class/WC_Twoinc.php:1911 class/WC_Twoinc.php:5691 class/WC_Twoinc.php:5701
-#: class/WC_Twoinc.php:5791 class/WC_Twoinc.php:5821
-#: class/WC_Twoinc_Helper.php:303
+#: class/WC_Twoinc.php:1911 class/WC_Twoinc.php:5681 class/WC_Twoinc.php:5691
+#: class/WC_Twoinc.php:5781 class/WC_Twoinc.php:5811
+#: class/WC_Twoinc_Helper.php:317
 #, php-format
 msgid "Invoice purchase with %s is not available for this order."
 msgstr "Aankoop op factuur met %s is niet beschikbaar voor deze bestelling."
@@ -1784,13 +1784,13 @@ msgid "The %1$s request was not sent to %2$s: the twoinc_order_postprocessing fi
 msgstr ""
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:2063
+#: class/WC_Twoinc_Helper.php:2150
 #, php-format
 msgid "Shipping \"%s\" cannot be refunded: the order line it refunds was not found."
 msgstr "Verzending \"%s\" kan niet worden terugbetaald: de orderregel die wordt terugbetaald is niet gevonden."
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:2238
+#: class/WC_Twoinc_Helper.php:2325
 #, php-format
 msgid "The tax charged on \"%s\" does not match the shop's tax rates."
 msgstr "De btw berekend op \"%s\" komt niet overeen met de btw-tarieven van de winkel."

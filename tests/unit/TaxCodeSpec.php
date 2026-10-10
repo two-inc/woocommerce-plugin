@@ -233,15 +233,16 @@ final class TaxCodeSpec
             }, $payload['line_items']);
         };
         $cases = [
-            // lines, buyer (billing) country, delivery address, map, create's codes, description
-            [['goods', 'shipping'], 'ES', ['country' => 'NO', 'postcode' => '0150'], [], ['ES_IVA_EXPORT', 'ES_IVA_EXPORT'], 'export'],
-            [['goods'], 'DE', ['country' => 'FR', 'postcode' => '75001'], [], ['ES_IVA_INTRA_COMMUNITY'], 'intra-community goods'],
-            [['service'], 'FR', $es, [], ['ES_IVA_INTRA_COMMUNITY_SERVICES'], 'a service to an EU buyer'],
-            [['goods'], 'ES', $es, ['standard' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20'], 'a mapped tax class'],
+            // lines, buyer (billing) country, delivery address, order meta, map, create's codes, description
+            [['goods', 'shipping'], 'ES', ['country' => 'NO', 'postcode' => '0150'], [], [], ['ES_IVA_EXPORT', 'ES_IVA_EXPORT'], 'export'],
+            [['goods'], 'DE', ['country' => 'FR', 'postcode' => '75001'], ['_billing_vat_number' => 'DE123456789'], [], ['ES_IVA_INTRA_COMMUNITY'], 'intra-community goods'],
+            [['service'], 'FR', $es, ['_billing_vat_number' => 'FR12345678901'], [], ['ES_IVA_INTRA_COMMUNITY_SERVICES'], 'a service to an EU buyer'],
+            [['goods'], 'ES', $es, [], ['standard' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20'], 'a mapped tax class'],
         ];
-        foreach ($cases as [$lines, $buyer, $delivery, $map, $create, $description]) {
+        foreach ($cases as [$lines, $buyer, $delivery, $meta, $map, $create, $description]) {
             self::useGateway($map);
             $order = self::order($lines, $buyer, $delivery);
+            $order->meta = $meta;
             $sent = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true);
             TinyAssert::same($create, $codes($sent, 'tax_code'), "$description: create carries the code");
             $intent = WC_Twoinc_Helper::compose_twoinc_intent($order, []);
