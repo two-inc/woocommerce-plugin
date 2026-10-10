@@ -13,6 +13,7 @@ final class TaxCodeSpec
         $tests = [
             'testTheSharedCaseTable',
             'testThePlacementRecordKeepsTheCodes',
+            'testAnUnconfiguredShopLooksNothingUp',
             'testZeroRateLinesCarryTheResolvedCode',
             'testIntraCommunityCodesNeedABuyerVatNumber',
             'testTheVatNumberFilterRunsBeforeTheDerivation',
@@ -43,7 +44,8 @@ final class TaxCodeSpec
         $GLOBALS['__twoinc_test_options'] = ['woocommerce_shipping_tax_class' => ''];
         $GLOBALS['__twoinc_test_http_calls'] = [];
         $GLOBALS['__twoinc_test_tax_classes'] = [];
-        unset($GLOBALS['__twoinc_test_base_country'], $GLOBALS['__twoinc_test_find_rates'], $GLOBALS['__twoinc_test_class_rates']);
+        unset($GLOBALS['__twoinc_test_base_country'], $GLOBALS['__twoinc_test_find_rates'], $GLOBALS['__twoinc_test_class_rates'], $GLOBALS['__twoinc_test_tax_enabled']);
+        WC_Twoinc::reset_zero_tax_rates_memo();
         foreach (['twoinc_payment_terms_line', 'twoinc_order_payload', 'two_order_create', 'two_order_edit'] as $tag) {
             remove_all_filters($tag);
         }
@@ -513,7 +515,10 @@ final class TaxCodeSpec
      * class follows the items and finds none; the expected code is the last line's), billing country and postcode,
      * tax address, buyer VAT number meta, the line's taxes (rate id => tax charged on 100, see CASE_RATES), the rates
      * WooCommerce finds at the tax address for a line it did not tax (rate id => percent), rows mapped (EX and NR of
-     * `standard`, EX2 the exempt row of `services`, else a row key), expected code, description, merchant country.
+     * `standard`, EX2 the exempt row of `services`, else a row key), expected code, description, merchant country,
+     * and setup: `vat_exempt` (the order is VAT-exempt), `tax_status` (of the first product), `taxes_off` (taxes
+     * disabled shop-wide), `class_rates` (the standard class's rates, rate id => percent).
+     * Lines may also hold 'shipping', a 0% shipping line of the standard class.
      *
      * @return array<int, array>
      */
@@ -545,8 +550,16 @@ final class TaxCodeSpec
             [['goods'], 'DE 10115', 'DE 10115', 'DE123', [], [], ['EX' => $intra, 'NR' => $export], $export, 'step 1 needs a known merchant country', ''],
             [['goods'], 'ES 35001', 'ES 35001', '', [11 => 0.0, 13 => 0.0], [], ['rate:11' => $export, 'rate:13' => $intra], $export, 'the first 0% rate on the line wins'],
             [['goods'], 'ES 35001', 'ES 35001', '', [11 => 0.0, 21 => 0.0], [], ['rate:11' => $export], null, 'a 0% rate alongside a 21% one gives no code'],
-            [['goods'], 'ES 35001', 'ES 35001', '', [], [11 => 0.0], ['rate:11' => $export, 'NR' => $intra], $export, 'a line WooCommerce did not tax takes the 0% rate it finds at the tax address'],
-            [['goods'], 'US 10001', 'US 10001', '', [], [21 => 21.0], ['NR' => $export], null, 'a line WooCommerce did not tax where its rate is above 0% gets no code'],
+            [['goods'], 'ES 35001', 'ES 35001', '', [], [11 => 0.0], ['rate:11' => $export, 'NR' => $intra], $export, 'a VAT-exempt order\'s untaxed line takes the 0% rate the shop has at the tax address', 'ES', ['vat_exempt' => true]],
+            [['goods'], 'US 10001', 'US 10001', '', [], [21 => 21.0], ['NR' => $export], null, 'a VAT-exempt order\'s untaxed line whose rate is above 0% gets no code', 'ES', ['vat_exempt' => true]],
+            [['goods'], 'US 10001', 'US 10001', '', [], [], ['NR' => $export], $export, 'a VAT-exempt order\'s untaxed line with no rate at the address takes the no-rule row', 'ES', ['vat_exempt' => true]],
+            [['goods'], 'ES 28001', 'ES 28001', '', [], [21 => 21.0], ['NR' => 'ES_IVA_EXEMPT_ART20'], 'ES_IVA_EXEMPT_ART20', 'a product whose tax status is none takes the no-rule row, whatever rate its class has', 'ES', ['tax_status' => 'none']],
+            [['goods'], 'ES 28001', 'ES 28001', '', [], [21 => 21.0], ['NR' => 'ES_IVA_EXEMPT_ART20'], 'ES_IVA_EXEMPT_ART20', 'a product whose tax status is none takes the no-rule row on a VAT-exempt order too, with no lookup', 'ES', ['tax_status' => 'none', 'vat_exempt' => true]],
+            [['goods'], 'ES 28001', 'ES 28001', '', [], [21 => 21.0], ['NR' => 'ES_IVA_EXEMPT_ART20'], 'ES_IVA_EXEMPT_ART20', 'a taxable line with no rate on an order that is not VAT-exempt matched no rule: the no-rule row'],
+            [['goods', 'shipping'], 'ES 35001', 'ES 35001', '', [], [11 => 0.0], ['rate:11' => $intra, 'NR' => $export], $export, 'shipping is looked up in the rates that apply to shipping', 'ES', ['vat_exempt' => true, 'shipping_rate_flag' => 'no']],
+            [['goods'], 'US 10001', 'US 10001', '', [], [], ['NR' => $export], null, 'taxes disabled shop-wide: no code', 'ES', ['taxes_off' => true]],
+            [['goods'], 'US 10001', 'US 10001', '', [], [], ['rate:13' => $intra], null, 'a mapped 0% rate of the class, though not on the line, stops the derivation', 'ES', ['class_rates' => [13 => 0.0]]],
+            [['goods'], 'US 10001', 'US 10001', '', [], [], ['rate:99' => $intra], $export, 'a mapped rate of another class leaves the class unmapped, so the derivation applies', 'ES', ['class_rates' => [13 => 0.0]]],
             [['goods', 'keyless'], 'US 10001', 'US 10001', '', [], [], ['NR' => $export], $export, 'step 4 shares a step 3 code'],
         ];
     }
@@ -559,16 +572,22 @@ final class TaxCodeSpec
         foreach (self::caseRows() as $row) {
             [$lines, $billing, $taxAddress, $vat, $taxes, $shopRates, $rows, $expected, $description] = $row;
             $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = $row[9] ?? 'ES';
-            $GLOBALS['__twoinc_test_find_rates'] = ['' => array_map(static function ($percent) {
-                return ['rate' => $percent, 'shipping' => 'yes', 'compound' => 'no', 'label' => 'Tax'];
+            $setup = $row[10] ?? [];
+            $GLOBALS['__twoinc_test_find_rates'] = ['' => array_map(static function ($percent) use ($setup) {
+                return ['rate' => $percent, 'shipping' => $setup['shipping_rate_flag'] ?? 'yes', 'compound' => 'no', 'label' => 'Tax'];
             }, $shopRates)];
+            $GLOBALS['__twoinc_test_tax_enabled'] = empty($setup['taxes_off']);
+            $GLOBALS['__twoinc_test_class_rates'] = ['' => array_map(static function ($percent) {
+                return ['tax_rate' => (string) $percent];
+            }, $setup['class_rates'] ?? [])];
+            WC_Twoinc::reset_zero_tax_rates_memo();
             $map = [];
             foreach ($rows as $row_key => $code) {
                 $map[$keys[$row_key] ?? $row_key] = $code;
             }
             self::useGateway($map);
-            $order = self::caseOrder($lines, $billing, $taxAddress, $taxes);
-            $order->meta = ['_billing_vat_number' => $vat];
+            $order = self::caseOrder($lines, $billing, $taxAddress, $taxes, $setup['tax_status'] ?? 'taxable');
+            $order->meta = ['_billing_vat_number' => $vat] + (empty($setup['vat_exempt']) ? [] : ['is_vat_exempt' => 'yes']);
             $sent = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true);
             $line = end($sent['line_items']);
             TinyAssert::same($expected, $line['tax_code'] ?? null, $description . ' (got: ' . json_encode($line['tax_code'] ?? null) . ')');
@@ -629,33 +648,71 @@ final class TaxCodeSpec
     }
 
     /**
+     * What an order costs a shop that maps nothing (TWO-26153): no buyer VAT lookup for the exempt test and no read
+     * of the shop's rate table, and no placement record when no line got a code. A shop that maps rows reads each
+     * class's rates once per request.
+     */
+    private static function testAnUnconfiguredShopLooksNothingUp(): void
+    {
+        $vatReads = 0;
+        add_filter('twoinc_buyer_vat_number', static function ($vat) use (&$vatReads) {
+            $vatReads++;
+            return $vat;
+        });
+        $GLOBALS['__twoinc_test_class_rates'] = ['' => [13 => ['tax_rate' => '0']]];
+        $cases = [
+            // merchant, map, VAT reads, rate table reads, recorded, description
+            ['NO', [], 0, 0, false, 'a merchant outside Spain with nothing mapped reads neither, and records no codes'],
+            ['ES', [], 3, 0, true, 'a Spanish merchant with nothing mapped reads the VAT number only for the derivation and the payload, and no rates'],
+            ['NO', ['rate:99' => 'X'], 1, 0, false, 'a mapped shop runs the exempt test; with no derivation it never asks whether a class is mapped'],
+            ['ES', ['rate:99' => 'X'], 4, 1, true, 'a Spanish merchant\'s class with no row reads its rates once for two lines'],
+        ];
+        foreach ($cases as [$merchant, $map, $wantVat, $wantRates, $recorded, $description]) {
+            $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = $merchant;
+            $GLOBALS['__twoinc_test_class_rate_reads'] = 0;
+            WC_Twoinc::reset_zero_tax_rates_memo();
+            self::useGateway($map);
+            $order = self::caseOrder(['goods', 'goods'], 'DE 10115', 'DE 10115', []);
+            $order->meta = ['_billing_vat_number' => 'DE123'];
+            $vatReads = 0;
+            WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true);
+            TinyAssert::same([$wantVat, $wantRates], [$vatReads, $GLOBALS['__twoinc_test_class_rate_reads']], $description . ' (VAT reads, rate table reads)');
+            TinyAssert::same($recorded, array_key_exists(WC_Twoinc_Brand::meta_key('tax_codes'), $order->meta), $description . ': a record only when a line got a code');
+        }
+        remove_all_filters('twoinc_buyer_vat_number');
+    }
+
+    /**
      * An order for the case table: product lines of 100 at the given taxes (the first standard-class product is item
      * 1), and 'keyless' a 0% shipping line, item 6, that carries no rate.
      */
-    private static function caseOrder(array $lines, string $billing, string $taxAddress, array $taxes): TaxCodeSpecOrder
+    private static function caseOrder(array $lines, string $billing, string $taxAddress, array $taxes, string $taxStatus = 'taxable'): TaxCodeSpecOrder
     {
         $items = [];
         $shipping = [];
         $tax = array_sum($taxes);
+        $classed = false;
         foreach ($lines as $i => $kind) {
-            if ($kind === 'keyless') {
+            if ($kind === 'keyless' || $kind === 'shipping') {
                 $shipping[6] = new StubShippingItem(10.0, 0.0, []);
+                $classed = $kind === 'shipping';
                 continue;
             }
-            $items[1 + $i] = self::caseLine($kind, $i === 0 ? $taxes : []);
+            $items[1 + $i] = self::caseLine($kind, $i === 0 ? $taxes : [], $i === 0 ? $taxStatus : 'taxable');
         }
         [$country, $postcode] = explode(' ', $taxAddress, 2);
         $order = new TaxCodeSpecOrder($items, $shipping, $billing, ['country' => $country, 'postcode' => $postcode], 100.0 * count($items) + ($shipping ? 10.0 : 0.0) + $tax, $tax);
+        $order->itemClasses = $classed ? [''] : [];
         $order->orderTaxes = array_map(static function ($id) {
             return new StubOrderTaxItem($id, self::CASE_RATES[$id]);
         }, array_keys(self::CASE_RATES));
         return $order;
     }
 
-    public static function caseLine(string $kind, array $taxes): StubProductLineItem
+    public static function caseLine(string $kind, array $taxes, string $taxStatus = 'taxable'): StubProductLineItem
     {
         return new StubProductLineItem([
-            'name' => ucfirst($kind), 'line_subtotal' => 100.0, 'line_total' => 100.0, 'line_tax' => array_sum($taxes),
+            'name' => ucfirst($kind), 'line_subtotal' => 100.0, 'line_total' => 100.0, 'line_tax' => array_sum($taxes), 'tax_status' => $taxStatus,
             'taxes' => $taxes, 'tax_class' => $kind === 'service' ? 'services' : '', 'data' => new TaxCodeSpecProduct($kind === 'service'),
         ]);
     }
@@ -827,6 +884,14 @@ final class TaxCodeSpecOrder extends StubOrder
 {
     /** @var StubOrderTaxItem[]|null the order's tax rows; null for one 21% row, id 1 */
     public $orderTaxes;
+
+    /** @var string[] the tax classes of the order's items, which "Shipping tax class: based on cart items" follows */
+    public $itemClasses = [];
+
+    public function get_items_tax_classes()
+    {
+        return $this->itemClasses;
+    }
     private $items;
     private $shipping;
     private $buyer;

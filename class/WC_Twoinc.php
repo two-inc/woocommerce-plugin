@@ -616,6 +616,9 @@ if (!class_exists('WC_Twoinc')) {
         /** The stored mapping's shape (TWO-26153): 2 keys it by row, migrate_tax_code_map_to_rows() moves older ones. */
         private const TAX_CODE_MAP_VERSION = 2;
 
+        /** @var array<string, array<string, string>> zero_tax_rates() by tax class, for this request */
+        private static $zero_tax_rates = [];
+
         /**
          * The merchant's tax code mapping by row (TWO-26153): `<class>|exempt`, `<class>|none` and `rate:<tax_rate_id>`,
          * with the standard class as `standard`. See WC_Twoinc_Helper::apply_tax_codes().
@@ -655,6 +658,10 @@ if (!class_exists('WC_Twoinc')) {
          */
         public static function zero_tax_rates($tax_class)
         {
+            // WooCommerce reads the whole rate locations table for each class, so once per class per request.
+            if (isset(self::$zero_tax_rates[$tax_class])) {
+                return self::$zero_tax_rates[$tax_class];
+            }
             if (!class_exists('WC_Tax') || !method_exists('WC_Tax', 'get_rates_for_tax_class')) {
                 return [];
             }
@@ -665,7 +672,13 @@ if (!class_exists('WC_Twoinc')) {
                     $rates[(string) $rate->tax_rate_id] = self::tax_rate_label($rate);
                 }
             }
-            return $rates;
+            return self::$zero_tax_rates[$tax_class] = $rates;
+        }
+
+        /** Forget the memoised 0% rates, for a caller that has just changed the shop's tax rates. */
+        public static function reset_zero_tax_rates_memo()
+        {
+            self::$zero_tax_rates = [];
         }
 
         /**

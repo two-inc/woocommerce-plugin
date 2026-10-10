@@ -648,6 +648,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'tax_class' => self::get_line_tax_class($rate_line),
                     'goods' => self::is_goods($product_simple),
                     'rate_ids' => self::get_line_rate_ids($rate_line),
+                    'taxable' => self::is_taxable_line($rate_line),
                     'record_key' => self::tax_code_record_key($line_item, $line_item_key, $is_refund),
                 ];
             }
@@ -685,6 +686,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'tax_class' => 'shipping',
                     'goods' => null,
                     'rate_ids' => self::get_line_rate_ids(self::get_rate_line($shipping, $rate_order, $is_refund)),
+                    'taxable' => self::is_taxable_line(self::get_rate_line($shipping, $rate_order, $is_refund)),
                     'record_key' => self::tax_code_record_key($shipping, $key, $is_refund),
                 ];
             }
@@ -723,6 +725,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'tax_class' => self::get_line_tax_class($rate_line),
                     'goods' => null,
                     'rate_ids' => self::get_line_rate_ids($rate_line),
+                    'taxable' => self::is_taxable_line($rate_line),
                     'record_key' => self::tax_code_record_key($fee, $fee_key, $is_refund),
                 ];
             }
@@ -741,8 +744,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *    step, and so does every line while the merchant record has not given the merchant's country.
          * 2. The shop's 0% tax rate on the line (the first, when it carries several): that rate's row. A line whose
          *    rates are not all 0% gets no code.
-         * 3. No rate: the tax class's no-rule row. A line WooCommerce did not tax (a VAT-exempt order, a product
-         *    whose tax status is none) is looked up in the shop's rates at the tax address, as core would have.
+         * 3. No rate: the tax class's no-rule row, also for a line whose tax status is not taxable. A taxable line
+         *    left untaxed by a VAT-exempt order is looked up in the shop's rates at the tax address, as WooCommerce
+         *    would have applied them.
          * 4. A line with no tax class (shipping that follows the items and finds none) takes the one code the
          *    order's lines coded by steps 1 to 3 share; none if they disagree.
          * 5. Otherwise no code. The plugin never refuses an order over a missing code: Two's API validates it.
@@ -751,7 +755,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * removed, a Spanish merchant's line whose tax class has no row mapped at all (or, for a line with no class,
          * whose order has no line coded by steps 1 to 3) still takes the code ES_ZERO_RATE_DERIVATION derives.
          *
-         * An order not yet placed with Two records each 0% line's code, "no code" included, in TAX_CODES_META. Once
+         * An order not yet placed with Two records each 0% line's code, "no code" included, in TAX_CODES_META, unless
+         * no line got a code at all. Once
          * placed, a recorded line is sent with its recorded code, so a changed address, mapping or tax rate never
          * moves a placed order. A line the record does not cover (an order placed before the record existed, a line
          * added by an edit) is resolved as at placement, step 4 sharing the codes the record holds from steps 1 to 3.
@@ -788,8 +793,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $context = [
                 'map' => $map,
                 'derive' => $derive ? self::tax_code_context($order, WC_Twoinc::get_merchant_country()) : null,
-                // With no row mapped nothing reads it, so the buyer is not looked at.
+                // With no row mapped nothing reads them, so neither the buyer nor the order is looked at.
                 'exempt' => $map && self::is_exempt_buyer($order),
+                'vat_exempt_order' => $map && self::is_vat_exempt_order($order),
             ];
             // Step 4's pool: the codes steps 1 to 3 gave, never derived ones, including those the record holds.
             $shared = [];
@@ -831,8 +837,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $recorded[$source['record_key']] = ['code' => $code, 'step' => $step];
                 }
             }
-            if ($record) {
-                $order->update_meta_data(WC_Twoinc_Brand::meta_key(self::TAX_CODES_META), $recorded);
+            // An order whose 0% lines got no code at all keeps no record (no meta row for every order), so its later
+            // requests resolve as at placement.
+            $coded = array_filter(array_column($recorded, 'code'), 'is_string');
+            if ($record && ($coded || null !== self::stored_tax_codes($order))) {
+                $order->update_meta_data(WC_Twoinc_Brand::meta_key(self::TAX_CODES_META), $coded ? $recorded : []);
             }
             return $items;
         }
@@ -848,7 +857,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         private static function resolve_tax_code($tax_class, array $source, $order, array $context, array &$shared)
         {
             $map = $context['map'];
-            $row = $map ? self::matched_tax_code_row($tax_class, $source, $order, $context['exempt']) : null;
+            $row = $map ? self::matched_tax_code_row($tax_class, $source, $order, $context) : null;
             $code = null !== $row && isset($map[$row]) ? $map[$row] : null;
             if (null !== $code) {
                 $shared[$code] = true;
@@ -862,20 +871,27 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * The key of the merchant's row a 0% line falls under (steps 1 to 3), or null when the shop's rate for it is
-         * not 0% (or taxes are off), which no row covers.
+         * not 0% (or taxes are off shop-wide), which no row covers.
+         *
+         * A line with no rate is in step 3, no rule, when it is not taxable or no rate of its class covers the
+         * address. Only a VAT-exempt order leaves a taxable line untaxed while a rate covers it, so only then are the
+         * shop's rates looked up at the tax address, as WooCommerce would have applied them.
          *
          * @return string|null
          */
-        private static function matched_tax_code_row($tax_class, array $source, $order, $exempt)
+        private static function matched_tax_code_row($tax_class, array $source, $order, array $context)
         {
-            if ($exempt) {
+            if ($context['exempt']) {
                 return WC_Twoinc::tax_code_exempt_key($tax_class);
             }
             if ($source['rate_ids']) {
                 $percents = self::order_rate_percents($order, $source['rate_ids']);
             } else {
-                if (!wc_tax_enabled() || !class_exists('WC_Tax')) {
+                if (!wc_tax_enabled()) {
                     return null;
+                }
+                if (!$source['taxable'] || !$context['vat_exempt_order'] || !class_exists('WC_Tax')) {
+                    return WC_Twoinc::tax_code_no_rule_key($tax_class);
                 }
                 $args = self::tax_location($order) + ['tax_class' => 'standard' === $tax_class ? '' : $tax_class];
                 $rates = 'shipping' === $source['tax_class'] ? WC_Tax::find_shipping_rates($args) : WC_Tax::find_rates($args);
@@ -892,6 +908,27 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 }
             }
             return WC_Twoinc::tax_code_rate_key(array_key_first($percents));
+        }
+
+        /**
+         * Whether WooCommerce taxes the line at all: its tax status is `taxable` (a line that does not say is).
+         *
+         * @return bool
+         */
+        private static function is_taxable_line($line)
+        {
+            return !is_object($line) || !method_exists($line, 'get_tax_status') || 'taxable' === $line->get_tax_status();
+        }
+
+        /**
+         * Whether the order is VAT-exempt, as WooCommerce decides it when it calculates the order's taxes.
+         *
+         * @return bool
+         */
+        private static function is_vat_exempt_order($order)
+        {
+            return is_object($order) && method_exists($order, 'get_meta')
+                && (bool) apply_filters('woocommerce_order_is_vat_exempt', 'yes' === $order->get_meta('is_vat_exempt'), $order);
         }
 
         /**
@@ -925,6 +962,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         private static function tax_class_has_rows($tax_class, array $line_rate_ids, array $map)
         {
+            if (!$map) {
+                return false;
+            }
             if (isset($map[WC_Twoinc::tax_code_exempt_key($tax_class)]) || isset($map[WC_Twoinc::tax_code_no_rule_key($tax_class)])) {
                 return true;
             }

@@ -560,6 +560,7 @@ class WC_Tax
      */
     public static function get_rates_for_tax_class($tax_class)
     {
+        $GLOBALS['__twoinc_test_class_rate_reads'] = ($GLOBALS['__twoinc_test_class_rate_reads'] ?? 0) + 1;
         $rows = [];
         foreach ($GLOBALS['__twoinc_test_class_rates'][(string) $tax_class] ?? [] as $id => $row) {
             $rows[$id] = (object) ($row + ['tax_rate_id' => $id, 'tax_rate_country' => '', 'tax_rate_state' => '', 'tax_rate_name' => '']);
@@ -983,6 +984,11 @@ class StubProductLineItem implements ArrayAccess
         return ['total' => $this->data['taxes'] ?? []];
     }
 
+    public function get_tax_status()
+    {
+        return $this->data['tax_status'] ?? 'taxable';
+    }
+
     public function get_meta($key)
     {
         return $this->data['meta'][$key] ?? '';
@@ -1195,7 +1201,7 @@ class StubTaxOrder
 
 function wc_tax_enabled()
 {
-    return true;
+    return $GLOBALS['__twoinc_test_tax_enabled'] ?? true;
 }
 
 class StubOrder
