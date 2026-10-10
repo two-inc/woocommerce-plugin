@@ -131,12 +131,13 @@ final class TaxCodeSpec
             ['ES', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'GB123456789'], [], [null], 'GB123456789', 'goods: a VAT prefix outside the EU derives nothing'],
             ['ES', ['service'], 'FR', $es, ['_billing_vat_number' => 'CHE123456789'], [], [null], 'CHE123456789', 'services: a VAT prefix outside the EU derives nothing, never NON_EU_SERVICES'],
             ['ES', ['goods'], 'GR', ['country' => 'GR', 'postcode' => '10431'], ['_billing_vat_number' => 'EL123456789'], [], $intraGoods, 'EL123456789', 'EL reads as Greece'],
-            ['ES', ['service'], 'GR', $es, ['_billing_vat_number' => '123456789'], [], $intraServices, 'EL123456789', 'an unprefixed Greek number gains EL'],
-            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => '123456789'], [], $intraServices, 'DE123456789', 'an unprefixed number gains the billing country'],
-            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => ' de 123.456-789 '], [], $intraServices, 'DE123456789', 'spaces, dots and hyphens are stripped and the number uppercased'],
-            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => ' .- '], [], [null], null, 'a number of only separators is no number'],
-            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => "DE\u{00A0}123\t456\u{00A0}789"], [], $intraServices, 'DE123456789', 'no-break spaces and tabs are stripped'],
-            ['ES', ['service'], 'MC', $es, ['_billing_vat_number' => '12345678901'], [], $intraServices, 'FR12345678901', 'an unprefixed number billed in Monaco gains FR'],
+            ['ES', ['service'], 'GR', $es, ['_billing_vat_number' => '123456789'], [], [null], '123456789', 'an unprefixed Greek number is sent as entered, with no prefix to derive from'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => '123456789'], [], [null], '123456789', 'an unprefixed number gains no prefix'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => ' DE 123.456-789 '], [], $intraServices, 'DE 123.456-789', 'only leading and trailing spaces are trimmed'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'de123456789'], [], [null], 'de123456789', 'case is kept, and a lower-case prefix names no country'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => ' .- '], [], [null], '.-', 'a value of only separators is sent as entered'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => "\tDE\u{00A0}123\t456\n"], [], $intraServices, "DE\u{00A0}123\t456", 'leading and trailing tabs and newlines are trimmed, inner ones kept'],
+            ['ES', ['service'], 'MC', $es, ['_billing_vat_number' => '12345678901'], [], [null], '12345678901', 'an unprefixed number billed in Monaco gains no prefix'],
             ['ES', ['service'], 'MC', $es, ['_billing_vat_number' => 'MC12345678901'], [], [null], 'MC12345678901', 'an MC prefix is no VAT prefix and derives nothing'],
             ['ES', ['goods', 'shipping'], 'DE', $fr, [], ['standard' => 'ES_IVA_EXEMPT_ART20'], ['ES_IVA_EXEMPT_ART20', 'ES_IVA_EXEMPT_ART20'], null, 'the mapping still wins with no VAT number'],
             ['ES', ['service'], 'NO', $no, [], [], ['ES_IVA_NON_EU_SERVICES'], null, 'services outside the EU need no VAT number'],
@@ -153,13 +154,13 @@ final class TaxCodeSpec
             ['ES', ['goods'], 'DE', $fr, ['VAT Number' => 'AT333', '_billing_eu_vat_number' => 'BE444'], [], $intraGoods, 'AT333', 'source order: VAT Number before _billing_eu_vat_number'],
             ['ES', ['goods'], 'DE', $fr, ['_billing_eu_vat_number' => 'BE444'], [], $intraGoods, 'BE444', 'source order: _billing_eu_vat_number is read'],
             ['ES', ['goods'], 'DE', $fr, ['billing_vat' => 'DE123456789'], [], [null], null, 'an unknown key is not read'],
-            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'n/a'], [], [null], 'NA', 'a value with no digit is still taken as entered'],
-            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'FR'], [], $intraServices, 'FR', 'a bare prefix is taken as entered'],
-            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'NONE'], [], [null], 'NONE', 'a word is taken as entered, its prefix NO outside the EU'],
-            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'DE123456789,'], [], $intraServices, 'DE123456789', 'trailing punctuation is stripped'],
-            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'DE/123456789'], [], $intraServices, 'DE123456789', 'a slash is stripped'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'n/a'], [], [null], 'n/a', 'a value with no digit is sent as entered'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'FR'], [], $intraServices, 'FR', 'a bare prefix is sent as entered'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'NONE'], [], [null], 'NONE', 'a word is sent as entered, its prefix NO outside the EU'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'DE123456789,'], [], $intraServices, 'DE123456789,', 'trailing punctuation is kept'],
+            ['ES', ['service'], 'DE', $es, ['_billing_vat_number' => 'DE/123456789'], [], $intraServices, 'DE/123456789', 'a slash is kept'],
             ['ES', ['service'], 'GR', $es, ['_billing_vat_number' => 'GR123456789'], [], $intraServices, 'GR123456789', 'a GR prefix is kept as entered'],
-            ['ES', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'n/a', '_vat_number' => 'FR12345678901'], [], [null], 'NA', 'any value in an earlier key is used, and the next is not tried'],
+            ['ES', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'n/a', '_vat_number' => 'FR12345678901'], [], [null], 'n/a', 'any value in an earlier key is used, and the next is not tried'],
             ['ES', ['goods'], 'DE', $fr, ['vat_number' => 'IT12345678901', '_vat_number_validated' => 'not-valid', 'VAT Number' => 'IT12345678901'], [], [null], null, 'Aelia: a number checked and found invalid is no number, and stops the lookup'],
             ['ES', ['goods'], 'DE', $fr, ['vat_number' => 'IT12345678901', '_vat_number_validated' => 'could-not-be-validated'], [], $intraGoods, 'IT12345678901', 'Aelia: a check that failed keeps the number'],
             ['ES', ['goods'], 'DE', $fr, ['_billing_vat_number' => 'DE123456789', '_vat_number_validated' => 'not-valid'], [], $intraGoods, 'DE123456789', 'Aelia\'s result applies to its own key only'],
@@ -186,7 +187,7 @@ final class TaxCodeSpec
     }
 
     /**
-     * `twoinc_buyer_vat_number` receives the first non-empty meta value ('' for none) and its result is normalised
+     * `twoinc_buyer_vat_number` receives the first non-empty meta value ('' for none) and its result is trimmed
      * and used for both the derivation and the payload (TWO-26153). `filter` is what the filter returns given what it
      * received; null means no filter is added.
      */
@@ -198,8 +199,8 @@ final class TaxCodeSpec
         $cases = [
             // meta, filter, want codes, sent, received by the filter, description
             [[], static function ($vat) {
-                return $vat === '' ? 'fr 123 456 789 01' : $vat;
-            }, ['ES_IVA_INTRA_COMMUNITY'], 'FR12345678901', '', 'the filter supplies a number when no meta has one'],
+                return $vat === '' ? ' FR12345678901 ' : $vat;
+            }, ['ES_IVA_INTRA_COMMUNITY'], 'FR12345678901', '', 'the filter supplies a number when no meta has one, trimmed'],
             [['_billing_vat_number' => 'DE123456789'], static function () {
                 return 'NL123456789B01';
             }, ['ES_IVA_INTRA_COMMUNITY'], 'NL123456789B01', 'DE123456789', 'the filter overrides the meta'],
