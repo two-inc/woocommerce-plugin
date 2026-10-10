@@ -39,6 +39,21 @@ jQuery(function ($) {
     $(this).closest("tr.twoinc-custom-header-row").remove();
   });
 
+  // ── Tax codes for 0% lines (TWO-26153) ──────────────────────────────
+  // The dropdowns post nothing: the whole mapping goes as one JSON field, so
+  // a large rate table cannot run past PHP's max_input_vars and silently lose
+  // rows. "rows" lets the server refuse a field that arrived cut short.
+  $("body").on("change", ".twoinc-tax-code-map select[data-twoinc-tax-code-row]", function () {
+    const $field = $(this).closest(".twoinc-tax-code-map-field");
+    const map = {};
+    let rows = 0;
+    $field.find("select[data-twoinc-tax-code-row]").each(function () {
+      map[$(this).attr("data-twoinc-tax-code-row")] = $(this).val() || "";
+      rows++;
+    });
+    $field.find(".twoinc-tax-code-map-value").val(JSON.stringify({ rows: rows, map: map }));
+  });
+
   $("body").on("click", ".woocommerce-twoinc-logo", function (e) {
     e.preventDefault();
 
