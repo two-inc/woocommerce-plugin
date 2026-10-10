@@ -675,7 +675,7 @@ if (!class_exists('WC_Twoinc')) {
             return self::$zero_tax_rates[$tax_class] = $rates;
         }
 
-        /** Forget the memoised 0% rates, for a caller that has just changed the shop's tax rates. */
+        /** Forget the memoised 0% rates. Hooked to WooCommerce's tax rate added, updated and deleted actions. */
         public static function reset_zero_tax_rates_memo()
         {
             self::$zero_tax_rates = [];

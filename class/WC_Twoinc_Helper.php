@@ -756,7 +756,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * whose order has no line coded by steps 1 to 3) still takes the code ES_ZERO_RATE_DERIVATION derives.
          *
          * An order not yet placed with Two records each 0% line's code, "no code" included, in TAX_CODES_META, unless
-         * no line got a code at all. Once
+         * its merchant is outside Spain and has no row mapped, whose lines nothing can code. Once
          * placed, a recorded line is sent with its recorded code, so a changed address, mapping or tax rate never
          * moves a placed order. A line the record does not cover (an order placed before the record existed, a line
          * added by an edit) is resolved as at placement, step 4 sharing the codes the record holds from steps 1 to 3.
@@ -783,7 +783,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $stored = $placed ? self::stored_tax_codes($order) : null;
             $map = WC_Twoinc::get_tax_code_map();
             $derive = 'ES' === WC_Twoinc::get_merchant_country();
-            if (!$zero || (!$map && !$derive && !$record && null === $stored)) {
+            // Nothing can ever code the lines of a merchant outside Spain with no row mapped, so such an order keeps
+            // no record (sparing the meta row), and resolving later gives the same "no code". A record an earlier
+            // attempt left is cleared.
+            if (!$zero || (!$map && !$derive && null === $stored)) {
                 if ($record && null !== self::stored_tax_codes($order)) {
                     $order->update_meta_data(WC_Twoinc_Brand::meta_key(self::TAX_CODES_META), []);
                 }
@@ -837,11 +840,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $recorded[$source['record_key']] = ['code' => $code, 'step' => $step];
                 }
             }
-            // An order whose 0% lines got no code at all keeps no record (no meta row for every order), so its later
-            // requests resolve as at placement.
-            $coded = array_filter(array_column($recorded, 'code'), 'is_string');
-            if ($record && ($coded || null !== self::stored_tax_codes($order))) {
-                $order->update_meta_data(WC_Twoinc_Brand::meta_key(self::TAX_CODES_META), $coded ? $recorded : []);
+            // Every 0% line is recorded, "no code" included, so mapping rows after placement never moves the order.
+            // This replaces any record an earlier attempt left.
+            if ($record) {
+                $order->update_meta_data(WC_Twoinc_Brand::meta_key(self::TAX_CODES_META), $recorded);
             }
             return $items;
         }

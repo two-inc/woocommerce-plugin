@@ -14,6 +14,7 @@ final class TaxCodeSpec
             'testTheSharedCaseTable',
             'testThePlacementRecordKeepsTheCodes',
             'testAnUnconfiguredShopLooksNothingUp',
+            'testARetryReplacesTheRecord',
             'testZeroRateLinesCarryTheResolvedCode',
             'testIntraCommunityCodesNeedABuyerVatNumber',
             'testTheVatNumberFilterRunsBeforeTheDerivation',
@@ -648,6 +649,39 @@ final class TaxCodeSpec
     }
 
     /**
+     * A create attempt replaces the record an earlier attempt left on the order (TWO-26153), and an order whose
+     * lines got no code still records that, so mapping rows after placement never moves it. Only a merchant outside
+     * Spain with no row mapped records nothing, which clears an earlier record.
+     */
+    private static function testARetryReplacesTheRecord(): void
+    {
+        $meta = WC_Twoinc_Brand::meta_key('tax_codes');
+        $none = ['code' => null, 'step' => 'row'];
+        $cases = [
+            // merchant, map, line taxes, record after the retry, description
+            ['NO', [], [], [], 'nothing mapped outside Spain: the earlier record is cleared'],
+            ['NO', ['standard|exempt' => 'X'], [21 => 21.0], [], 'no 0% line left: the earlier record is cleared'],
+            ['NO', ['rate:99' => 'X'], [], ['1' => $none], 'a mapped shop records "no code" over the earlier code'],
+            ['ES', ['standard|exempt' => 'X'], [], ['1' => $none], 'a Spanish merchant records "no code" over the earlier code'],
+        ];
+        foreach ($cases as [$merchant, $map, $taxes, $expected, $description]) {
+            $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = $merchant;
+            self::useGateway($map);
+            $order = self::caseOrder(['goods'], 'ES 28001', 'ES 28001', $taxes);
+            $order->meta = [$meta => ['1' => ['code' => 'ES_IVA_EXPORT', 'step' => 'row']]];
+            $sent = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true);
+            TinyAssert::same(null, $sent['line_items'][0]['tax_code'] ?? null, $description . ': the retry sends no code');
+            TinyAssert::same($expected, $order->meta[$meta] ?? null, $description);
+        }
+
+        // The last order is placed; rows mapped afterwards do not give its line a code.
+        $order->meta[WC_Twoinc_Brand::prefixed_name('order_id')] = 'two-order';
+        self::useGateway(['standard|exempt' => 'X', 'standard|none' => 'ES_IVA_EXEMPT_ART20']);
+        $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+        TinyAssert::same(null, $edit['line_items'][0]['tax_code'] ?? null, 'a placed line recorded with no code keeps none after the mapping changes');
+    }
+
+    /**
      * What an order costs a shop that maps nothing (TWO-26153): no buyer VAT lookup for the exempt test and no read
      * of the shop's rate table, and no placement record when no line got a code. A shop that maps rows reads each
      * class's rates once per request.
@@ -664,7 +698,7 @@ final class TaxCodeSpec
             // merchant, map, VAT reads, rate table reads, recorded, description
             ['NO', [], 0, 0, false, 'a merchant outside Spain with nothing mapped reads neither, and records no codes'],
             ['ES', [], 3, 0, true, 'a Spanish merchant with nothing mapped reads the VAT number only for the derivation and the payload, and no rates'],
-            ['NO', ['rate:99' => 'X'], 1, 0, false, 'a mapped shop runs the exempt test; with no derivation it never asks whether a class is mapped'],
+            ['NO', ['rate:99' => 'X'], 1, 0, true, 'a mapped shop runs the exempt test, and records its lines\' "no code"; with no derivation it never asks whether a class is mapped'],
             ['ES', ['rate:99' => 'X'], 4, 1, true, 'a Spanish merchant\'s class with no row reads its rates once for two lines'],
         ];
         foreach ($cases as [$merchant, $map, $wantVat, $wantRates, $recorded, $description]) {
@@ -677,7 +711,7 @@ final class TaxCodeSpec
             $vatReads = 0;
             WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true);
             TinyAssert::same([$wantVat, $wantRates], [$vatReads, $GLOBALS['__twoinc_test_class_rate_reads']], $description . ' (VAT reads, rate table reads)');
-            TinyAssert::same($recorded, array_key_exists(WC_Twoinc_Brand::meta_key('tax_codes'), $order->meta), $description . ': a record only when a line got a code');
+            TinyAssert::same($recorded, array_key_exists(WC_Twoinc_Brand::meta_key('tax_codes'), $order->meta), $description . ': a record unless nothing could code the lines');
         }
         remove_all_filters('twoinc_buyer_vat_number');
     }
