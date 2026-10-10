@@ -561,6 +561,11 @@
       function () {
         if (!events) return undefined;
         return events.onPaymentSetup(function () {
+          // The classic checkout's TWO-25657 gate: a declined or failed
+          // availability check leaves Two unplaceable (TWO-26292).
+          if (twoincDomHelper.paymentMethodSelectable === false) {
+            return { type: responses.responseTypes.ERROR, message: data.unavailable };
+          }
           var refusal = twoincTermsConsent.validate();
           if (refusal) {
             return { type: responses.responseTypes.ERROR, message: refusal };
