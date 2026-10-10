@@ -736,9 +736,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * its recorded code, so a changed address, mapping or tax rate never moves a placed order. A line the record
          * does not cover (a line added by an edit) is resolved as at placement, step 4 sharing the codes the record
          * holds from steps 1 to 3. An order placed before the record existed has no record: its lines are resolved
-         * again, and a line with no tax class takes the one code all its other 0% lines get, none when they disagree
-         * or one has none. A non-zero line is never touched. Runs inside the builder, so every hook after it sees the
-         * code.
+         * again, and a line with no tax class takes the one code all the other 0% lines in the request being sent
+         * get, none when they disagree or one has none. A non-zero line is never touched. Runs inside the builder, so
+         * every hook after it sees the code.
          *
          * @param array $items   the built lines
          * @param array $sources per line: its tax class key ('shipping' for a shipping line), its tax rate ids, whether
@@ -809,8 +809,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
             $code = 1 === count($shared) ? (string) key($shared) : null;
             if ($placed && null === $stored) {
-                // Placed before the record existed: the one code all the order's other 0% lines get, none when they
-                // disagree or one has none.
+                // Placed before the record existed: the one code all the other 0% lines in the request being sent
+                // get, none when they disagree or one has none.
                 $others = array_values(array_unique($others));
                 $code = 1 === count($others) && '' !== $others[0] ? $others[0] : null;
             }

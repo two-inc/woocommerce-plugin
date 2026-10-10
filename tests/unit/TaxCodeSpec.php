@@ -599,6 +599,7 @@ final class TaxCodeSpec
         $cases = [
             // record of item 1, the code an unrecorded keyless line takes, description
             [['code' => $intra, 'step' => 'row'], $intra, 'a recorded step 1 to 3 code is shared'],
+            [['code' => 'ES_IVA_EXPORT', 'step' => 'derived'], null, 'a code a pre-release build derived is not shared'],
             [['code' => 'ES_IVA_EXPORT', 'step' => 'keyless'], null, 'a recorded step 4 code is not shared'],
         ];
         self::useGateway([]);
@@ -611,8 +612,8 @@ final class TaxCodeSpec
 
     /**
      * An order placed before the placement record existed has none (TWO-26153): its lines are resolved again on each
-     * edit, and a line with no tax class takes the one code all the order's other 0% lines get, none when they
-     * disagree or one has none. Never a derived code. `rows` are the rows mapped (NR the standard class's no-rule row,
+     * edit, and a line with no tax class takes the one code all the other 0% lines in the request being sent get,
+     * none when they disagree or one has none. Never a derived code. `rows` are the rows mapped (NR the standard class's no-rule row,
      * NR2 the services class's); `want` is each line's code.
      */
     private static function testAnOrderPlacedBeforeTheRecordSharesOnlyAgreedCodes(): void

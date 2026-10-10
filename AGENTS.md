@@ -716,8 +716,8 @@ included, so rows mapped after placement never move the order. Only a shop with
 no row mapped writes none, and a create attempt clears an earlier attempt's
 record. Placed orders send recorded codes; an unrecorded line is resolved now,
 and step 4's pool takes only `row` codes. An order placed before the record
-existed has none: its keyless line takes the one code all its other 0% lines
-resolve to, and none when they disagree or one has none. A partial build (the
+existed has none: its keyless line takes the one code all the other 0% lines
+in the request being sent resolve to, and none when they disagree or one has none. A partial build (the
 shipping-only one for tax subtotals, the intent) passes
 `$record_tax_codes = false`.
 

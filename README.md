@@ -422,8 +422,8 @@ moves a placed order. A line the record does not cover (a line added by an
 edit) is resolved as at placement, and step 4 shares only codes the record
 holds from steps 1 to 3. An order placed before the record existed has none:
 its lines are resolved again on each edit or refund, and shipping with no tax
-class takes the one code all the order's other 0% lines get, and none when they
-disagree or one has none.
+class takes the one code all the other 0% lines in the request being sent get,
+and none when they disagree or one has none.
 
 **Upgrading.** A mapping saved per tax class by an earlier build is moved once
 to the rows: each class's code is copied to its exempt row, its no-rule row and
