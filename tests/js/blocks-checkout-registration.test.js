@@ -19,6 +19,7 @@ const METHOD_DATA = {
   about: '<div class="abt-twoinc">about</div>',
   terms: '<div class="twoinc-terms-consent"><input name="twoinc_terms_accepted" /></div>',
   iconUrl: "https://example.test/logo.svg",
+  unavailable: "Invoice purchase with Two is not available for this order.",
   supports: ["products", "refunds"]
 };
 
@@ -678,10 +679,11 @@ describe("blocks-checkout.js reuses the classic controller", () => {
 });
 
 describe("blocks-checkout.js gates on the shared terms consent", () => {
-  /** The skin's own payment-setup handler, over the given consent state. */
-  function paymentSetup(accepted) {
+  /** The skin's own payment-setup handler, over the given consent state and verdict. */
+  function paymentSetup(accepted, selectable) {
     consentState.accepted = accepted;
     const base = baseGlobals("address_area");
+    if (selectable !== undefined) window.twoincDomHelper.paymentMethodSelectable = selectable;
     const { env, registered } = globals({});
     env.wp.data = base.data;
     evaluate(env);
@@ -708,6 +710,21 @@ describe("blocks-checkout.js gates on the shared terms consent", () => {
 
   test("a ticked consent travels as payment data under the name the server reads", () => {
     expect(paymentSetup(true).meta.paymentMethodData.twoinc_terms_accepted).toBe("1");
+  });
+
+  // TWO-26292: the classic checkout disables Two after a declined or failed
+  // availability check (TWO-25657); Blocks keeps its own radio selected, so
+  // the submit itself is refused.
+  test.each([
+    [true, true, "success", "an approved or pending check places"],
+    [true, false, "error", "a declined or failed check refuses the submit, ticked consent or not"],
+    [false, false, "error", "a declined check is refused before the consent is asked about"]
+  ])("consent %p, placeable %p -> %s: %s", (accepted, selectable, type) => {
+    const result = paymentSetup(accepted, selectable);
+    expect(result.type).toBe(type);
+    if (!selectable) {
+      expect(result.message).toBe("Invoice purchase with Two is not available for this order.");
+    }
   });
 });
 

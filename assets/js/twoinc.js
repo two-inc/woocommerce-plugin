@@ -2595,8 +2595,15 @@ let twoincDomHelper = {
       paymentMethodRadioObj.prop("checked", false);
     }
   },
+  /**
+   * Whether the latest verdict lets the buyer pay with Two. The Blocks tile
+   * reads it at payment setup (TWO-26292): there the radio is Blocks' own, and
+   * neither unticking nor disabling it changes the method Blocks submits.
+   */
+  paymentMethodSelectable: true,
   /** TWO-25657: unticking alone let the buyer re-tick and submit a declined order. */
   setPaymentMethodSelectable: function (selectable) {
+    twoincDomHelper.paymentMethodSelectable = selectable;
     jQuery(':input[value="' + window.twoinc.gateway_id + '"]').prop("disabled", !selectable);
   },
   toggleTooltip: function (selectorStr, tooltip) {

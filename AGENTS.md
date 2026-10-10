@@ -688,11 +688,11 @@ Rows marked `vat` (both intra-community codes) also need a buyer VAT number
 whose prefix is an EU member state other than the merchant's country
 (TWO-26153); without one the line gets no code, never a later row. The number
 comes from `get_buyer_vat_number()`, the first of `BUYER_VAT_NUMBER_META_KEYS`
-read with `$order->get_meta()` that `normalise_vat_number()` turns into a
-number (uppercase, letters and digits only, at least one digit, `GR` written
-`EL`), passed through the `twoinc_buyer_vat_number` filter, then normalised
-again. A key listed in `BUYER_VAT_NUMBER_REFUSED` whose VAT plugin recorded an
-answered check as invalid gives no number and stops the lookup; a failed check
+read with `$order->get_meta()` that is non-empty once trimmed, passed through
+the `twoinc_buyer_vat_number` filter, then trimmed again. Trimming leading and
+trailing whitespace is the only change made to it: no case change, stripping,
+prefix rewrite or added prefix. A key listed in `BUYER_VAT_NUMBER_REFUSED`
+whose VAT plugin recorded an answered check as invalid gives no number and stops the lookup; a failed check
 keeps the number. List a plugin there only once its source shows it stores an
 invalid answer differently from a failed check (Aelia EU VAT Assistant does;
 WooCommerce EU VAT Number stores both alike, EU VAT for WooCommerce stores no
