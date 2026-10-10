@@ -2232,7 +2232,9 @@ final class BrandConfigSpec
 
             $sent = null;
             $failures[] = self::shippingRateCaseFailure($expected, static function () use ($shippings, $order, &$sent) {
-                $sent = WC_Twoinc_Helper::get_line_items([], $shippings, [], $order);
+                $lines = WC_Twoinc_Helper::get_line_items([], $shippings, [], $order);
+                // With no merchant handler, the default handler applies the shop-match checks after the hook (TWO-26275).
+                $sent = WC_Twoinc_Helper::check_shop_match(['line_items' => $lines])['line_items'];
                 return implode(',', array_column($sent, 'tax_rate'));
             }, $description);
             // Every sent line carries its tax as charged; a rate is stored only when resolved from the control at checkout.
@@ -2316,7 +2318,7 @@ final class BrandConfigSpec
             $refund = new StubRefund([$c['type'] => [$item]], self::stubTaxRows($c['refundRows']));
 
             $failures[] = self::shippingRateCaseFailure($expected, static function () use ($refund, $parent, $net, $tax) {
-                $lines = WC_Twoinc_Helper::compose_twoinc_refund($refund, $net + $tax, $parent)['line_items'];
+                $lines = WC_Twoinc_Helper::check_shop_match(WC_Twoinc_Helper::compose_twoinc_refund($refund, $net + $tax, $parent))['line_items'];
                 if (round(array_sum(array_column($lines, 'gross_amount')), 2) !== round($net + $tax, 2)) {
                     return 'lines that do not sum to the refund';
                 }

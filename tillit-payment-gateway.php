@@ -91,6 +91,7 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_Rate_Limiter.php';
     require_once __DIR__ . '/class/WC_Twoinc_Surcharge_Method_Exception.php';
     require_once __DIR__ . '/class/WC_Twoinc_Order_Postprocessing_Exception.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Shop_Match_Exception.php';
     require_once __DIR__ . '/class/WC_Twoinc_Stored_Term.php';
     require_once __DIR__ . '/class/WC_Twoinc_Payment_Terms.php';
     require_once __DIR__ . '/class/WC_Twoinc_Sole_Trader.php';
@@ -109,6 +110,14 @@ function load_twoinc_classes()
     // before an overlay loading at this same priority has registered its own.
     add_filter('pre_update_option', ['WC_Twoinc', 'keep_stored_custom_payment_term'], 10, 3);
     add_filter('woocommerce_locate_template', ['WC_Twoinc', 'locate_payment_method_template'], 10, 2);
+    // The default order postprocessing handler (TWO-26275): runs the shop-match checks unless a merchant handler
+    // is registered on the hook, and then stands down. Last, so it sees the payload every other callback returned.
+    add_filter(
+        WC_Twoinc_Helper::ORDER_POSTPROCESSING_HOOK,
+        ['WC_Twoinc_Helper', 'default_order_postprocessing'],
+        PHP_INT_MAX,
+        2
+    );
 
     // Checkout AJAX endpoints (term-fee chips, term selection, sole-trader
     // availability/tokens). Registered here at plugins_loaded — NOT in the

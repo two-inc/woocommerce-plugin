@@ -24,10 +24,46 @@ define('WC_TWOINC_PLUGIN_URL', 'https://shop.example/wp-content/plugins/tillit-p
 
 $GLOBALS['__twoinc_test_filters'] = [];
 
+/** WordPress keeps each hook's callbacks in $wp_filter as a WP_Hook; the plugin reads it to find who is registered. */
+if (!class_exists('WP_Hook')) {
+    class WP_Hook
+    {
+        /** @var array<int, array<int, array{function: mixed, accepted_args: int}>> */
+        public $callbacks = [];
+    }
+}
+$GLOBALS['wp_filter'] = [];
+
+/** Mirrors the stub registry into $wp_filter, by priority, as WordPress holds it. */
+function __twoinc_test_sync_wp_filter($tag): void
+{
+    $hook = new WP_Hook();
+    foreach ($GLOBALS['__twoinc_test_filters'][$tag] ?? [] as $entry) {
+        $hook->callbacks[$entry['priority']][] = ['function' => $entry['cb'], 'accepted_args' => $entry['args']];
+    }
+    ksort($hook->callbacks);
+    if ($hook->callbacks === []) {
+        unset($GLOBALS['wp_filter'][$tag]);
+    } else {
+        $GLOBALS['wp_filter'][$tag] = $hook;
+    }
+}
+
 function add_filter($tag, $callback, $priority = 10, $accepted_args = 1)
 {
-    $GLOBALS['__twoinc_test_filters'][$tag][] = ['cb' => $callback, 'args' => $accepted_args];
+    $GLOBALS['__twoinc_test_filters'][$tag][] = ['cb' => $callback, 'args' => $accepted_args, 'priority' => $priority];
+    __twoinc_test_sync_wp_filter($tag);
     return true;
+}
+
+function remove_filter($tag, $callback, $priority = 10)
+{
+    $before = $GLOBALS['__twoinc_test_filters'][$tag] ?? [];
+    $GLOBALS['__twoinc_test_filters'][$tag] = array_values(array_filter($before, static function ($entry) use ($callback, $priority) {
+        return $entry['cb'] !== $callback || $entry['priority'] !== $priority;
+    }));
+    __twoinc_test_sync_wp_filter($tag);
+    return count($before) !== count($GLOBALS['__twoinc_test_filters'][$tag]);
 }
 
 function add_action($tag, $callback, $priority = 10, $accepted_args = 1)
@@ -37,7 +73,12 @@ function add_action($tag, $callback, $priority = 10, $accepted_args = 1)
 
 function apply_filters($tag, $value, ...$extra)
 {
-    foreach ($GLOBALS['__twoinc_test_filters'][$tag] ?? [] as $entry) {
+    // By priority, then in the order added, as WordPress runs them.
+    $entries = $GLOBALS['__twoinc_test_filters'][$tag] ?? [];
+    usort($entries, static function ($a, $b) {
+        return $a['priority'] <=> $b['priority'];
+    });
+    foreach ($entries as $entry) {
         $params = array_slice(array_merge([$value], $extra), 0, max(1, $entry['args']));
         $value = call_user_func_array($entry['cb'], $params);
     }
@@ -59,6 +100,7 @@ function has_filter($tag)
 function remove_all_filters($tag)
 {
     unset($GLOBALS['__twoinc_test_filters'][$tag]);
+    __twoinc_test_sync_wp_filter($tag);
     return true;
 }
 
@@ -2039,6 +2081,7 @@ require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_FX.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Rate_Limiter.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Surcharge_Method_Exception.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Order_Postprocessing_Exception.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Shop_Match_Exception.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Stored_Term.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Payment_Terms.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Sole_Trader.php';
