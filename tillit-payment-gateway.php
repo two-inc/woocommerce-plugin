@@ -233,8 +233,9 @@ function load_twoinc_classes()
     add_action('personal_options_update', 'WC_Twoinc::save_user_meta', 10, 1);
     add_action('edit_user_profile_update', 'WC_Twoinc::save_user_meta', 10, 1);
 
-    // Fallback in case woocommerce_order_status_xxx doesn't fire
-    add_action('woocommerce_order_edit_status', 'WC_Twoinc::on_order_edit_status', 10, 2);
+    // Status changes reach Two through this one hook, which WooCommerce fires once per saved
+    // transition; woocommerce_order_edit_status would send a manual change a second time (TWO-26291).
+    add_action('woocommerce_order_status_changed', 'WC_Twoinc::on_order_status_changed', 10, 3);
 
     // Admin order-form save, on both the legacy and the HPOS order screen.
     // Priority 45: after WC_Meta_Box_Order_Data::save (40) has saved the
@@ -242,7 +243,8 @@ function load_twoinc_classes()
     // runs partway through that save (TWO-26175).
     add_action('woocommerce_process_shop_order_meta', 'WC_Twoinc::on_admin_order_save', 45, 1);
 
-    add_action('handle_bulk_actions-edit-shop_order', 'WC_Twoinc::on_order_bulk_edit_action', 10, 3);
+    // Priority 20: after WooCommerce's own handler (10) has changed the statuses.
+    add_filter('handle_bulk_actions-edit-shop_order', 'WC_Twoinc::on_order_bulk_edit_action', 20, 3);
     add_action('admin_notices', 'WC_Twoinc::on_order_bulk_edit_notices');
 }
 
