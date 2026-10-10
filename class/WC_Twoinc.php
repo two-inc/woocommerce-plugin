@@ -586,8 +586,7 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * The Two merchant's country (TWO-24877), which decides whether a 0% line derives a Spanish tax code and
-         * which country's codes the mapping offers. The shop's base country stands in until the merchant record has
+         * The Two merchant's country (TWO-24877), which decides which country's codes the mapping offers. The shop's base country stands in until the merchant record has
          * been read since this was added (at the latest, the nightly refresh).
          *
          * @return string
@@ -6749,8 +6748,8 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Tax codes for 0% lines', 'twoinc-payment-gateway'),
                     'type'        => 'two_tax_code_map',
                     'description' => sprintf(
-                        /* translators: %s is the brand product name (e.g. "Two") */
-                        __('The tax code sent with each order line charged at 0%%. Choose a code for each case your tax classes give a 0%% line: a buyer billed and taxed in another EU country (the 27 member states, Monaco and Northern Ireland) with a VAT number; each 0%% tax rate; and an address none of the class\'s rates covers, such as an export. The plugin sends the code you choose and decides nothing about how the line is taxed. A row on (none) sends no code. Shipping with no tax class of its own takes the code the order\'s other 0%% lines share. Northern Ireland is in the EU VAT area for goods only: if you sell services there, do not map a services class\'s EU row to an intra-community services code. While a class has no code chosen at all, a Spanish merchant\'s line still gets a code worked out from the order, as before. %s checks every code when the order arrives.', 'twoinc-payment-gateway'),
+                        /* translators: %1$s is the brand product name (e.g. "Two") */
+                        __('The tax code sent with each order line charged at 0%%. Choose a code for each case your tax classes give a 0%% line: a buyer billed and taxed in another EU country (the 27 member states, Monaco and Northern Ireland) with a VAT number; each 0%% tax rate; and an address none of the class\'s rates covers, such as an export. The plugin sends the code you choose and decides nothing about how the line is taxed. A row on (none) sends no code. Shipping with no tax class of its own takes the code the order\'s other 0%% lines share. Northern Ireland is in the EU VAT area for goods only: if you sell services there, do not map a services class\'s EU row to an intra-community services code. A 0%% line with no row set gets no code, and %1$s refuses it for a Spanish merchant. %1$s checks every code when the order arrives.', 'twoinc-payment-gateway'),
                         WC_Twoinc_Brand::get('product_name')
                     ),
                     'default'     => [],
