@@ -105,7 +105,7 @@ test("an order part paid by a gift card is sent, updated and refunded with the c
 
   // Fulfil, then refund every line: WooCommerce refunds the order total, the rest of the lines is the card.
   await waitForOrderState(twoOrderId, "CONFIRMED");
-  await wpAdmin.openOrder(page, lastName);
+  // Still on the order's admin screen from the save above.
   await wpAdmin.changeOrderStatus(page, "Completed");
   await untilItWorks("the fulfilment batch", triggerFulfilBatch, 180_000);
   await waitForOrderState(twoOrderId, "FULFILLED", 60_000);
