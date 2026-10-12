@@ -2004,6 +2004,9 @@ final class OrderPostprocessingSpec
             }
             $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
             TinyAssert::same($update, [$edit['gross_amount'], $edit['net_amount'], $edit['prepaid_amount'] ?? null], "$description: update");
+            // The change hash recomposes the create body: it must not see a change the order never had.
+            $create = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
+            TinyAssert::same($update, [$create['gross_amount'], $create['net_amount'], $create['prepaid_amount'] ?? null], "$description: the change hash's create body");
             $body = WC_Twoinc_Helper::compose_twoinc_refund(self::shippingRefund(), 19.0, $order);
             TinyAssert::same($refund, [$body['amount'], $body['prepaid_amount'] ?? null], "$description: refund");
         }

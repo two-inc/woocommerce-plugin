@@ -1472,7 +1472,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             $line_items = self::expect_order_totals($order, 'order_create', true, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates));
-            $totals = self::order_totals($order, self::$whole_order_check['tenders']);
+            // An order placed before tenders were declared is recomposed as it was placed, so the change hash sees no
+            // change it never had (TWO-26309).
+            $totals = self::order_totals($order, self::placed_without_prepaid($order) ? [] : self::$whole_order_check['tenders']);
             // What the order is placed with, so its later requests know Two holds it (TWO-26309).
             if (!self::is_placed_with_two($order) && is_object($order) && method_exists($order, 'update_meta_data')) {
                 $order->update_meta_data(WC_Twoinc_Brand::meta_key(self::PREPAID_META), $totals['prepaid_amount'] ?? '0.00');
