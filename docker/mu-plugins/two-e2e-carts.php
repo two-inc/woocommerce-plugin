@@ -16,6 +16,8 @@
  *   skewed      with rowless, each shipping line is charged 7.00 of tax, which no rate of the shop gives
  *   surcharge   10.00 added to the cart total outside any carrier or line, and kept in the order total when
  *               WooCommerce recalculates it (an admin save does), as a module carrying such a cost would
+ *   giftcard    a PW Gift Cards card worth `two_e2e_gift_card_amount` applied to the cart, as a buyer redeeming
+ *               it would (TWO-26309). The spec activates the gift card plugin; a new card is made per reset
  *
  * The subscriber is the unit suite's CI fixture, inert until `twoinc_order_postprocessing_fixture` names a mode.
  * tests/e2e/provision/cart-shapes-reset.php undoes all of it.
@@ -124,6 +126,20 @@ add_action('wp_loaded', function () {
     }
     if (two_e2e_cart_shape('exempt') && WC()->customer && !WC()->customer->get_is_vat_exempt()) {
         WC()->customer->set_is_vat_exempt(true);
+    }
+    if (two_e2e_cart_shape('giftcard') && class_exists('PW_Gift_Card') && WC()->session) {
+        $number = get_option('two_e2e_gift_card');
+        if (!$number) {
+            $card = PW_Gift_Card::create_card('two e2e');
+            $card->credit((float) get_option('two_e2e_gift_card_amount', '10'));
+            $number = $card->get_number();
+            update_option('two_e2e_gift_card', $number);
+        }
+        $applied = (array) WC()->session->get('pw-gift-card-data');
+        if (!isset($applied['gift_cards'][$number])) {
+            $GLOBALS['pw_gift_cards_redeeming']->add_gift_card_to_session($number);
+            WC()->cart->calculate_totals();
+        }
     }
     if (two_e2e_cart_shape('coupon') && !WC()->cart->has_discount('two-e2e-10')) {
         if (!wc_get_coupon_id_by_code('two-e2e-10')) {
