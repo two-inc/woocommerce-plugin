@@ -652,6 +652,15 @@ jQuery(function ($) {
 
   // ── Diagnostics: on-demand merchant-profile refresh ─────────────────────
   (function initRefreshMerchantRecord() {
+    // The reload after a refresh carries a stamp the server confirms once;
+    // drop it, so the settings form does not post back to it and a later
+    // save does not confirm the refresh again.
+    const landed = new URL(window.location.href);
+    if (landed.searchParams.has("twoinc_refreshed")) {
+      landed.searchParams.delete("twoinc_refreshed");
+      window.history.replaceState(window.history.state, "", landed.toString());
+    }
+
     const $button = $("#twoinc-refresh-merchant-record");
     const $status = $("#twoinc-refresh-merchant-record-status");
     if (!$button.length) {
@@ -660,6 +669,12 @@ jQuery(function ($) {
 
     function render(colour, text) {
       $status.css("color", colour).text(text);
+    }
+
+    // window.twoincAdminNavigate, when set, stands in (the JS tests set it:
+    // jsdom cannot navigate).
+    function navigateTo(href) {
+      window.location.assign(href);
     }
 
     $button.on("click", function () {
@@ -677,6 +692,13 @@ jQuery(function ($) {
           const data = response.data || {};
           if (response.success) {
             render("#2a7f2a", [data.message, data.merchant].filter(Boolean).join(" "));
+            // Reload onto Diagnostics so the tax code section is rendered
+            // afresh; the server confirms the refresh there. The stamp makes
+            // every reload a new URL, so it is never only a hash change.
+            const url = new URL(window.location.href);
+            url.searchParams.set("twoinc_refreshed", String(Date.now()));
+            url.hash = "twoinc-refresh-merchant-record";
+            (window.twoincAdminNavigate || navigateTo)(url.toString());
           } else {
             render("#a94442", data.message || twoinc_admin.i18n_refresh_failed);
           }
