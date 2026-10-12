@@ -662,6 +662,12 @@ jQuery(function ($) {
       $status.css("color", colour).text(text);
     }
 
+    // window.twoincAdminNavigate, when set, stands in (the JS tests set it:
+    // jsdom cannot navigate).
+    function navigateTo(href) {
+      window.location.assign(href);
+    }
+
     $button.on("click", function () {
       $button.prop("disabled", true);
       render("", twoinc_admin.i18n_refreshing);
@@ -677,6 +683,13 @@ jQuery(function ($) {
           const data = response.data || {};
           if (response.success) {
             render("#2a7f2a", [data.message, data.merchant].filter(Boolean).join(" "));
+            // Reload onto Diagnostics so the tax code section is rendered
+            // afresh; the server confirms the refresh there. The stamp makes
+            // every reload a new URL, so it is never only a hash change.
+            const url = new URL(window.location.href);
+            url.searchParams.set("twoinc_refreshed", String(Date.now()));
+            url.hash = "twoinc-refresh-merchant-record";
+            (window.twoincAdminNavigate || navigateTo)(url.toString());
           } else {
             render("#a94442", data.message || twoinc_admin.i18n_refresh_failed);
           }
