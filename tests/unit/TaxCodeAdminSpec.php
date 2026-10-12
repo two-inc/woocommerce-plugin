@@ -301,12 +301,15 @@ final class TaxCodeAdminSpec
             ['aria-label="Reduced rate: VAT-registered buyer, other EU state"', true, 'the exempt select by class and column'],
             ['min-width:calc(' . (int) ceil(strlen('ES_IVA_STANDARD') * 1.1) . 'ch + 3em)', true, 'every select fits the longest code'],
             ['<select name=', false, 'no select posts a field of its own'],
+            ['<h4 class="twoinc-tax-code-title" style="margin:0 0 8px;">Tax codes for 0% lines</h4>', true, 'the section title is a heading'],
+            ['<label', false, 'and no label tied to no control'],
+            ['<th scope="row">Reduced rate</th>', true, 'a class names its row'],
             ['Clear saved tax codes', false, 'no Clear on a readable mapping'],
         ];
         foreach ($cases as [$needle, $shown, $description]) {
             TinyAssert::same($shown, self::has($html, $needle), $description);
         }
-        TinyAssert::same(1, substr_count($html, '<td>Reduced rate</td>'), 'one row per tax class');
+        TinyAssert::same(1, substr_count($html, '<th scope="row">Reduced rate</th>'), 'one row per tax class');
     }
 
     /** Clear wins, rows count only while shown, a changed row must hold a 0% code, a missing field keeps the map. */
@@ -332,18 +335,37 @@ final class TaxCodeAdminSpec
             ['GB', $stored, null, true, [], 'Clear while hidden'],
             ['GB', 'standard|none=X', null, false, 'standard|none=X', 'a save without the field keeps even an unreadable map'],
             ['GB', 'standard|none=X', null, true, [], 'Clear empties an unreadable map'],
+            ['GB', $stored, substr($post($rows([])), 0, -3), false, $stored, 'a field cut short while hidden changes nothing, quietly'],
+            ['ES', $stored, $post($rows(['rate:11' => 'ES_IVA_INTRA'])), 'verify503', $stored, 'edits while the merchant cannot be read are kept out, with a notice'],
+            ['ES', $stored, $post($rows(['rate:11' => 'ES_IVA_INTRA'])), 'list503', $stored, 'edits while the code list cannot be read are kept out, with a notice'],
+            ['ES', $stored, $post($rows([])), 'list503', $stored, 'an unchanged table while the list cannot be read says nothing'],
         ];
         foreach ($cases as [$country, $map, $field, $clear, $expected, $description]) {
             self::reset();
             $gateway = self::gateway($country, $map);
-            $gateway->test_post_data = $clear ? [$gateway->get_field_key('tax_code_map') . '_clear' => '1'] : [];
+            $GLOBALS['__twoinc_test_admin_errors'] = [];
+            if ($clear === 'verify503') {
+                $gateway->routes['/v1/merchant/verify_api_key'] = [503, []];
+            } elseif ($clear === 'list503') {
+                $gateway->routes['/v1/tax_codes/ES'] = [503, []];
+            }
+            $gateway->test_post_data = $clear === true ? [$gateway->get_field_key('tax_code_map') . '_clear' => '1'] : [];
+            $refused = false;
             try {
                 $saved = $gateway->validate_two_tax_code_map_field('tax_code_map', $field);
             } catch (Exception $e) {
                 $saved = null;
+                $refused = true;
                 TinyAssert::true(strpos($e->getMessage(), 'not saved') !== false, "$description: the refusal says nothing was saved");
             }
             TinyAssert::same($expected, $saved, $description);
+            $notices = $GLOBALS['__twoinc_test_admin_errors'] ?? [];
+            $notified = is_string($clear) && strpos($description, 'says nothing') === false;
+            TinyAssert::same($notified ? 1 : 0, count($notices), "$description: admin notices " . json_encode($notices));
+            if ($notified) {
+                TinyAssert::true(strpos($notices[0], 'were not saved') !== false && strpos($notices[0], 'HTTP 503') !== false, "$description: the notice says why: " . $notices[0]);
+            }
+            TinyAssert::true(!$refused || $expected === null, "$description: no validation error");
         }
         $gateway = self::gateway('GB', []);
         $gateway->opts['tax_code_map'] = $gateway->validate_two_tax_code_map_field('tax_code_map', null);
