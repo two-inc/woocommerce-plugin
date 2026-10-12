@@ -69,6 +69,7 @@ final class OrderPostprocessingSpec
             'testEveryPayloadMeetsTheOrderAmountRules',
             'testARefundsPrepaidPartIsWhatTheTendersHaveLeft',
             'testTheExtraLineExampleSeesACostBeyondTheLinesBesideAGiftCard',
+            'testAnOrderPlacedWithoutPrepaidIsSentAsBefore',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -1846,6 +1847,8 @@ final class OrderPostprocessingSpec
             $order->total = 150.0 - $card;
             if ($card > 0) {
                 $order->extra_items['gift_card'] = [new StubTenderItem($card)];
+                // Placed with the card declared as prepaid.
+                $order->meta[WC_Twoinc_Brand::meta_key('prepaid_amount')] = number_format($card, 2, '.', '');
             }
             $payload = $build($order);
             if ($payable === null) {
@@ -1913,6 +1916,7 @@ final class OrderPostprocessingSpec
             $order = self::exampleOrder();
             $order->total = 140.0;
             $order->extra_items['gift_card'] = [new StubTenderItem(10.0)];
+            $order->meta[WC_Twoinc_Brand::meta_key('prepaid_amount')] = '10.00';
             $current = $refund($amount);
             $order->refunds = [$current];
             foreach ($earlier as $i => $earlier_amount) {
@@ -1955,6 +1959,53 @@ final class OrderPostprocessingSpec
             TinyAssert::same('10.00', $handling[0]['gross_amount'] ?? null, "$description: the cost is sent as its own line");
             $broken = self::amountRuleFailures($sent, $card);
             TinyAssert::same([], $broken, "$description: breaks " . implode('; ', $broken));
+        }
+    }
+
+
+    /**
+     * An order placed with Two before tenders were declared (TWO-26309) holds no prepaid amount at Two, so its update
+     * and refund are sent as they were then, with no prepaid fields. The create records the prepaid amount it sent;
+     * an order placed with Two that has no such record is one of these. 150.00 of lines, a 10.00 gift card.
+     */
+    private static function testAnOrderPlacedWithoutPrepaidIsSentAsBefore(): void
+    {
+        $meta = WC_Twoinc_Brand::meta_key('prepaid_amount');
+        $giftCardOrder = static function () {
+            $order = self::exampleOrder();
+            $order->total = 140.0;
+            $order->extra_items['gift_card'] = [new StubTenderItem(10.0)];
+            return $order;
+        };
+
+        // The create records what it declared, on an order not yet placed with Two.
+        foreach ([[10.0, '10.00'], [0.0, '0.00']] as [$card, $expected]) {
+            self::reset();
+            $order = self::exampleOrder();
+            unset($order->meta[WC_Twoinc_Brand::prefixed_name('order_id')]);
+            $order->total = 150.0 - $card;
+            if ($card > 0) {
+                $order->extra_items['gift_card'] = [new StubTenderItem($card)];
+            }
+            WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
+            TinyAssert::same($expected, $order->meta[$meta] ?? null, "the create records a prepaid amount of $expected");
+        }
+
+        // [prepaid recorded at placement, expected update totals, expected refund amount and prepaid, description]
+        $cases = [
+            [null, ['140.00', '119.00', null], ['19.00', null], 'placed before: sent as it was then'],
+            ['10.00', ['140.00', '129.00', '10.00'], ['19.00', '10.00'], 'placed with the card declared: sent with it'],
+        ];
+        foreach ($cases as [$recorded, $update, $refund, $description]) {
+            self::reset();
+            $order = $giftCardOrder();
+            if ($recorded !== null) {
+                $order->meta[$meta] = $recorded;
+            }
+            $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+            TinyAssert::same($update, [$edit['gross_amount'], $edit['net_amount'], $edit['prepaid_amount'] ?? null], "$description: update");
+            $body = WC_Twoinc_Helper::compose_twoinc_refund(self::shippingRefund(), 19.0, $order);
+            TinyAssert::same($refund, [$body['amount'], $body['prepaid_amount'] ?? null], "$description: refund");
         }
     }
 

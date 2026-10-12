@@ -636,7 +636,10 @@ prepaid part included, and carries no amounts. The `order_intent` body is
 unchanged: its totals are what is left to pay.
 
 An order with no tenders carries none of `invoice_amount`, `payable_amount`
-and `prepaid_amount`, and its bodies are as they always were. The tenders
+and `prepaid_amount`, and its bodies are as they always were. So does every
+update and refund of an order placed with Two before its tenders were sent as
+prepaid: Two holds no prepaid amount for it. The plugin tells them apart by the
+prepaid amount it records on the order when it creates it. The tenders
 themselves are given to subscribers, and used by the plugin's own whole-order
 check, so the gap between the lines and the order total is explained rather
 than refused.

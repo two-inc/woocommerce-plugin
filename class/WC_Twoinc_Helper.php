@@ -97,6 +97,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         private const TAX_CODES_META = 'tax_codes';
 
+        /** The prepaid amount an order was placed with Two with (TWO-26309), absent on one placed before it was sent. */
+        private const PREPAID_META = 'prepaid_amount';
+
         /** How a recorded code was reached: steps 1 to 3 (the merchant's rows) or step 4. */
         private const TAX_CODE_STEP_ROW = 'row';
         private const TAX_CODE_STEP_KEYLESS = 'keyless';
@@ -1074,6 +1077,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * Whether the order was placed with Two before its tenders were declared as prepaid (TWO-26309): Two holds no
+         * prepaid amount for it, so its update and refund are sent with none, as they were then.
+         *
+         * @return bool
+         */
+        private static function placed_without_prepaid($order)
+        {
+            return self::is_placed_with_two($order) && '' === (string) $order->get_meta(WC_Twoinc_Brand::meta_key(self::PREPAID_META));
+        }
+
+        /**
          * Whether the order has been created with Two.
          *
          * @return bool
@@ -1458,7 +1472,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             $line_items = self::expect_order_totals($order, 'order_create', true, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates));
-            $req_body = ['currency' => $order->get_currency()] + self::order_totals($order, self::$whole_order_check['tenders']) + [
+            $totals = self::order_totals($order, self::$whole_order_check['tenders']);
+            // What the order is placed with, so its later requests know Two holds it (TWO-26309).
+            if (!self::is_placed_with_two($order) && is_object($order) && method_exists($order, 'update_meta_data')) {
+                $order->update_meta_data(WC_Twoinc_Brand::meta_key(self::PREPAID_META), $totals['prepaid_amount'] ?? '0.00');
+            }
+            $req_body = ['currency' => $order->get_currency()] + $totals + [
                 'discount_amount' => WC_Twoinc_Helper::order_discount_amount($order),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
@@ -1598,7 +1617,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             $line_items = self::expect_order_totals($order, 'order_update', true, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates));
-            $req_body = ['currency' => $order->get_currency()] + self::order_totals($order, self::$whole_order_check['tenders']) + [
+            $req_body = ['currency' => $order->get_currency()] + self::order_totals($order, self::placed_without_prepaid($order) ? [] : self::$whole_order_check['tenders']) + [
                 'discount_amount' => WC_Twoinc_Helper::order_discount_amount($order),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
@@ -1669,7 +1688,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
             // TWO-26309: on an order with tenders, the refunded lines can exceed what WooCommerce refunds, as the
             // order total it caps refunds at is after tenders. `amount` stays what is refunded through Two and the
             // rest of the lines, up to the tenders earlier refunds through Two left, is declared as the prepaid part.
-            $tendered = $order ? self::tender_total(self::order_tenders($order)) : 0.0;
+            // An order placed before tenders were declared holds no prepaid amount at Two: refunded as it was then.
+            $tendered = $order && !self::placed_without_prepaid($order) ? self::tender_total(self::order_tenders($order)) : 0.0;
             if ($tendered > 0) {
                 $earlier = array_filter(method_exists($order, 'get_refunds') ? $order->get_refunds() : [], static function ($refund) use ($order_refund) {
                     return $refund->get_id() !== $order_refund->get_id() && $refund->get_refunded_payment();
