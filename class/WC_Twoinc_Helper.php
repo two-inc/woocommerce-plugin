@@ -34,6 +34,52 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         private static $shop_match_refusals = [];
 
+        /**
+         * The whole-order shop-match check the last order build made (TWO-26309): the order's own totals, which the
+         * payload's lines must sum to within 0.02 each, and whether a drift refuses (create, update) or is only
+         * logged (the intent). Null for a build with no such check (a refund) and after the default handler ran.
+         *
+         * @var array{label: string, gross: float, net: float, tax: float, strict: bool}|null
+         */
+        private static $whole_order_check = null;
+
+        /** The filter a merchant or an adapter declares a tender with (TWO-26309): `($tenders, $order)`. */
+        public const ORDER_TENDERS_FILTER = 'twoinc_order_tenders';
+
+        /** The tender types order_tenders() reports; anything else is reported as `other`. */
+        private const TENDER_TYPES = ['gift_card', 'store_credit', 'other'];
+
+        /**
+         * The order item types gift card plugins record a redemption as, outside the order lines, each reducing the
+         * order total by the item's amount (checked against each plugin's source). By item type: the tender type and
+         * the filter, if any, that converts the item's amount into the order's currency.
+         */
+        private const TENDER_ITEM_TYPES = [
+            'gift_card' => ['type' => 'gift_card', 'currency_filter' => null],
+            'pw_gift_card' => ['type' => 'gift_card', 'currency_filter' => 'pwgc_to_order_currency'],
+        ];
+
+        /**
+         * Before the order exists (the intent), the cart total already has the gift cards off but the order built
+         * from the cart has no gift card items: the plugins keep them in the session until they add the items at
+         * checkout. By session key: the order item type the plugin adds, and the list of cards in the session value,
+         * each an amount in the cart's currency (checked against each plugin's source).
+         */
+        private const TENDER_SESSION_KEYS = [
+            '_wc_gc_giftcards' => ['source' => 'gift_card', 'list' => null, 'amount' => 'amount'],
+            'pw-gift-card-data' => ['source' => 'pw_gift_card', 'list' => 'gift_cards', 'amount' => null],
+        ];
+
+        /** The whole-order check's least tolerance per figure (TWO-26309). */
+        private const WHOLE_ORDER_TOLERANCE = 0.02;
+
+        /** The diff log (TWO-26309): at most this many entries, and each string cut to MAX_DIFF_STRING bytes. */
+        private const MAX_DIFF_ENTRIES = 40;
+        private const MAX_DIFF_STRING = 120;
+
+        /** Diff values outside these paths can carry buyer data, so only their path is logged. */
+        private const DIFF_VALUE_PATHS = '#^/(line_items|tax_subtotals)(/|$)|^/(gross_amount|net_amount|tax_amount|discount_amount|discount_rate|amount|currency)$#';
+
         /** The EU VAT area by ISO code, with Monaco, which counts as France for VAT (TWO-24877). */
         private const EU_VAT_COUNTRIES = [
             'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'IE', 'IT', 'LV', 'LT',
@@ -537,6 +583,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         ) {
             $rate_order = $rate_order ?? $order;
             self::$shop_match_refusals = [];
+            self::$whole_order_check = null;
 
             $items = [];
             // Per line, what the tax code resolver needs: the tax class it was charged under, the shop's tax rates on
@@ -731,13 +778,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * A matched row left on (none) gives no code; it never falls through to a later step. The plugin never picks a
          * code itself: a line no step codes gets none.
          *
-         * An order not yet placed with Two records each 0% line's code, "no code" included, in TAX_CODES_META, unless
-         * the merchant has no row mapped, when nothing can code its lines. Once placed, a recorded line is sent with
-         * its recorded code, so a changed address, mapping or tax rate never moves a placed order. A line the record
-         * does not cover (a line added by an edit) is resolved as at placement, step 4 sharing the codes the record
-         * holds from steps 1 to 3. An order placed before the record existed has no record: its lines are resolved
-         * again, and a line with no tax class takes the one code all the other 0% lines in the request being sent
-         * get, none when they disagree or one has none. A non-zero line is never touched. Runs inside the builder, so
+         * An order not yet placed with Two records each 0% line's code in TAX_CODES_META, only where it has one
+         * (TWO-26309). Once placed, a recorded line is sent with its recorded code, so a changed address, mapping or
+         * tax rate never moves a coded line. A line the record does not cover (a line placed with no code, or added
+         * by an edit) is resolved as at placement against the mapping then, step 4 sharing the codes the record
+         * holds from steps 1 to 3. An order with no code recorded (placed with none, with no row mapped, or before
+         * the record existed) has its lines resolved again, and a line with no tax class takes the one code all the
+         * other 0% lines in the request being sent get, none when they disagree or one has none. A non-zero line is never touched. Runs inside the builder, so
          * every hook after it sees the code.
          *
          * @param array $items   the built lines
@@ -759,11 +806,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $placed = self::is_placed_with_two($order);
             $record = $record && !$placed && is_object($order) && method_exists($order, 'update_meta_data');
             $stored = $placed ? self::stored_tax_codes($order) : null;
-            $map = WC_Twoinc::get_tax_code_map();
-            // With no row mapped nothing can code the lines, so the order keeps no record (sparing the meta row), and
-            // resolving later gives the same "no code". A record an earlier attempt left is cleared.
+            // Read only once a 0% line needs it, so an order with none never depends on the stored mapping. An
+            // unreadable mapping throws (TWO-26309): an order is never built on a mapping nobody chose.
+            $map = $zero ? WC_Twoinc::get_tax_code_map() : [];
+            // With no row mapped nothing can code the lines, so the order keeps no record (sparing the meta row). A
+            // record an earlier attempt left is cleared.
             if (!$zero || (!$map && null === $stored)) {
-                if ($record && null !== self::stored_tax_codes($order)) {
+                if ($record && self::has_tax_code_record($order)) {
                     $order->update_meta_data(WC_Twoinc_Brand::meta_key(self::TAX_CODES_META), []);
                 }
                 return $items;
@@ -803,7 +852,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 }
                 $others[] = (string) $code;
                 $items[$i] = self::with_tax_code($items[$i], $code);
-                if (null !== $key) {
+                if (null !== $key && null !== $code) {
                     $recorded[$key] = ['code' => $code, 'step' => self::TAX_CODE_STEP_ROW];
                 }
             }
@@ -816,13 +865,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
             foreach ($keyless as $i) {
                 $items[$i] = self::with_tax_code($items[$i], $code);
-                if (null !== ($sources[$i]['record_key'] ?? null)) {
+                if (null !== ($sources[$i]['record_key'] ?? null) && null !== $code) {
                     $recorded[$sources[$i]['record_key']] = ['code' => $code, 'step' => self::TAX_CODE_STEP_KEYLESS];
                 }
             }
-            // Every 0% line is recorded, "no code" included, so mapping rows after placement never moves the order.
-            // This replaces any record an earlier attempt left.
-            if ($record) {
+            // Only the codes resolved are recorded, so a line placed with no code is resolved again on an update,
+            // against the mapping then (TWO-26309). This replaces any record an earlier attempt left.
+            if ($record && ($recorded !== [] || self::has_tax_code_record($order))) {
                 $order->update_meta_data(WC_Twoinc_Brand::meta_key(self::TAX_CODES_META), $recorded);
             }
             return $items;
@@ -1030,14 +1079,20 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
             $stored = [];
             foreach ($raw as $key => $entry) {
-                if (is_array($entry) && array_key_exists('code', $entry)) {
-                    $stored[(string) $key] = [
-                        'code' => is_string($entry['code']) && '' !== $entry['code'] ? $entry['code'] : null,
-                        'step' => (string) ($entry['step'] ?? ''),
-                    ];
+                // A line recorded with no code (by a release before TWO-26309) is resolved again, as if unrecorded.
+                if (is_array($entry) && is_string($entry['code'] ?? null) && '' !== $entry['code']) {
+                    $stored[(string) $key] = ['code' => $entry['code'], 'step' => (string) ($entry['step'] ?? '')];
                 }
             }
-            return $stored;
+            // No code recorded is no record: the order's lines are resolved again.
+            return $stored === [] ? null : $stored;
+        }
+
+        /** Whether the order holds a placement record of any kind, for clearing one an earlier attempt left. */
+        private static function has_tax_code_record($order)
+        {
+            $raw = is_object($order) && method_exists($order, 'get_meta') ? $order->get_meta(WC_Twoinc_Brand::meta_key(self::TAX_CODES_META)) : null;
+            return is_array($raw) && $raw !== [];
         }
 
         private static function with_tax_code(array $line, $code)
@@ -1406,7 +1461,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
-                'line_items' => WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates),
+                'line_items' => self::expect_order_totals($order, 'order_create', true, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates)),
                 'recurring' => false,
                 'merchant_additional_info' => '',
                 'merchant_order_id' => strval($order->get_id()),
@@ -1530,7 +1585,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
-                'line_items' => WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates),
+                'line_items' => self::expect_order_totals($order, 'order_update', true, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates)),
                 'recurring' => false,
                 'merchant_additional_info' => '',
                 'merchant_reference' => '',
@@ -1612,7 +1667,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $line_items = array_map(static function ($line) {
                 unset($line['tax_code'], $line['tax_exemption_reason_code']);
                 return $line;
-            }, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates, false));
+            }, self::expect_order_totals($order, 'order_intent', false, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates, false)));
             $req_body = self::order_totals($order) + [
                 'invoice_type' => 'FUNDED_INVOICE',
                 'buyer' => $buyer,
@@ -1621,6 +1676,45 @@ if (!class_exists('WC_Twoinc_Helper')) {
             ];
             $req_body['line_items'] = apply_filters('twoinc_payment_terms_line', $req_body['line_items'], $req_body);
             return $req_body;
+        }
+
+        /**
+         * The whole-order shop-match check for the request being built (TWO-26309): its lines, as the builder made
+         * them, less the order's tenders, must sum to the order's own totals. Judged here, before the deprecated filters run, as the shipping
+         * line check is: a drift is recorded for the default handler to refuse on a create or an update, and only
+         * logged on the intent, which the create that follows checks again.
+         *
+         * @param array $lines the lines just built
+         *
+         * @return array the lines, unchanged
+         */
+        private static function expect_order_totals($order, $label, $strict, array $lines)
+        {
+            // A tender paid part of the order outside its lines: the lines carry it, the order total does not. It is
+            // a payment, so the tax stays on the full lines and only gross and net carry it.
+            $tenders = self::order_tenders($order);
+            $tendered = self::tender_total($tenders);
+            $tax = round((float) $order->get_total_tax(), 2);
+            $gross = round((float) $order->get_total() + $tendered, 2);
+            $check = [
+                'label' => $label,
+                'gross' => $gross,
+                'net' => round($gross - $tax, 2),
+                'tax' => $tax,
+                'tendered' => $tendered,
+                'strict' => $strict,
+                // Read once per request: the hook's context reuses them for the order just built.
+                'tenders' => $tenders,
+                // The object and its id: PHP reuses a freed object's id for another order.
+                'order' => is_object($order) ? spl_object_id($order) : null,
+                'order_id' => is_object($order) && method_exists($order, 'get_id') ? $order->get_id() : null,
+            ];
+            $check['refusal'] = self::whole_order_refusal($lines, $check);
+            if ($check['refusal'] && !$strict && function_exists('wc_get_logger')) {
+                wc_get_logger()->warning($check['refusal']['log'] . ' Logged only: the order create checks it again.', ['source' => 'twoinc-payment-gateway']);
+            }
+            self::$whole_order_check = $check;
+            return $lines;
         }
 
         /**
@@ -1676,13 +1770,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @param string                    $endpoint
          * @param WC_Order                  $order
          * @param WC_Order_Refund|null      $refund
+         * @param array|null                $two_order the order as Two's GET /v1/order/{id} returned it, when the
+         *                                             caller read it (TWO-26309)
          *
          * @return array
          */
-        public static function order_postprocessing_context($request_type, $trigger, $endpoint, $order, $refund = null)
+        public static function order_postprocessing_context($request_type, $trigger, $endpoint, $order, $refund = null, $two_order = null)
         {
             $rate = self::get_configured_shipping_tax_rate($order);
-            $fallback_option = WC_Twoinc_Brand::prefixed_name(WC_Twoinc::SHIPPING_TAX_FROM_SHOP_RATES_OPTION);
+            $fallback = 'yes' === get_option(WC_Twoinc_Brand::prefixed_name(WC_Twoinc::SHIPPING_TAX_FROM_SHOP_RATES_OPTION));
 
             return [
                 'request_type' => $request_type,
@@ -1691,9 +1787,274 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'order' => $order,
                 'refund' => $refund,
                 'shipping_tax_rate' => $rate,
-                'fallback_shipping_tax_rate' => 'yes' === get_option($fallback_option) ? $rate : null,
+                'fallback_shipping_tax_rate' => $fallback ? $rate : null,
+                'fallback_shipping_tax_code' => $fallback ? self::fallback_shipping_tax_code($order) : null,
                 'contract_version' => self::ORDER_POSTPROCESSING_CONTRACT_VERSION,
+                'order_lines' => self::two_order_list($two_order, 'line_items'),
+                'order_refunds' => null === self::two_order_list($two_order, 'refunds') ? null : self::refunds_with_parent_lines($two_order),
+                'order_tenders' => self::built_order_tenders($order),
             ];
+        }
+
+        /**
+         * The context's fallback_shipping_tax_code (TWO-26309): the code steps 1 to 3 of apply_tax_codes() give a 0%
+         * shipping line taxed by WooCommerce's shipping tax class at the order's addresses. Null when the class
+         * follows the items and finds none, when the shop's rate there is not 0%, when the matched row is on (none),
+         * or when the mapping cannot be read.
+         *
+         * @return string|null
+         */
+        private static function fallback_shipping_tax_code($order)
+        {
+            try {
+                $tax_class = self::get_shipping_tax_class_key($order);
+                $map = WC_Twoinc::get_tax_code_map();
+                if (null === $tax_class || !$map) {
+                    return null;
+                }
+                if (self::is_exempt_buyer($order)) {
+                    $row = WC_Twoinc::tax_code_exempt_key($tax_class);
+                } elseif (!wc_tax_enabled() || !class_exists('WC_Tax')) {
+                    return null;
+                } else {
+                    $rates = WC_Tax::find_shipping_rates(self::tax_location($order) + ['tax_class' => 'standard' === $tax_class ? '' : $tax_class]);
+                    $row = WC_Twoinc::tax_code_no_rule_key($tax_class);
+                    if ($rates) {
+                        foreach ($rates as $found) {
+                            if (0.0 !== (float) ($found['rate'] ?? 0)) {
+                                return null;
+                            }
+                        }
+                        $row = WC_Twoinc::tax_code_rate_key(array_key_first($rates));
+                    }
+                }
+                return isset($map[$row]) ? $map[$row] : null;
+            } catch (Throwable $e) {
+                return null;
+            }
+        }
+
+        /**
+         * A list from Two's GET /v1/order/{id} response, re-indexed; null without a successful response carrying it.
+         *
+         * @return array|null
+         */
+        private static function two_order_list($two_order, $key)
+        {
+            if (!is_array($two_order) || !isset($two_order[$key]) || !is_array($two_order[$key])) {
+                return null;
+            }
+            return array_values($two_order[$key]);
+        }
+
+        /**
+         * The context's order_refunds (TWO-26309): Two's refunds on the order, each refund line's prototype_id naming
+         * the order line it credited. Two leaves a refund line's prototype_id empty, so an empty one is filled with
+         * the order line that matches on name, description, type, tax code and rate. Within one refund each order
+         * line is credited by at most one line, so where several order lines match, the refund's matching lines go to
+         * distinct order lines, the largest to the one with the most left to refund; only when a refund has more
+         * matching lines than there are order lines does one take a second. A best match, not Two's record: a refund
+         * line that matches no order line keeps its empty prototype_id.
+         *
+         * @return array
+         */
+        public static function refunds_with_parent_lines($two_order)
+        {
+            $refunds = self::two_order_list($two_order, 'refunds') ?? [];
+            $left = [];
+            $by_look = [];
+            foreach (self::two_order_list($two_order, 'line_items') ?? [] as $line) {
+                if (is_array($line) && !empty($line['id'])) {
+                    $left[(string) $line['id']] = (float) ($line['gross_amount'] ?? 0);
+                    $by_look[self::two_line_look($line)][] = (string) $line['id'];
+                }
+            }
+            // Lines Two already names come off first, so a matched line is judged on what is really left.
+            foreach ($refunds as $refund) {
+                foreach (is_array($refund['line_items'] ?? null) ? $refund['line_items'] : [] as $line) {
+                    if (is_array($line) && !empty($line['prototype_id']) && isset($left[(string) $line['prototype_id']])) {
+                        $left[(string) $line['prototype_id']] -= abs((float) ($line['gross_amount'] ?? 0));
+                    }
+                }
+            }
+            foreach ($refunds as $r => $refund) {
+                if (!is_array($refund['line_items'] ?? null)) {
+                    continue;
+                }
+                $unnamed = [];
+                foreach ($refund['line_items'] as $l => $line) {
+                    if (is_array($line) && empty($line['prototype_id']) && isset($by_look[self::two_line_look($line)])) {
+                        $unnamed[$l] = abs((float) ($line['gross_amount'] ?? 0));
+                    }
+                }
+                // Largest first, each to the matching order line with the most left that this refund has not credited.
+                arsort($unnamed);
+                $used = [];
+                foreach ($unnamed as $l => $gross) {
+                    $candidates = $by_look[self::two_line_look($refund['line_items'][$l])];
+                    $fresh = array_values(array_diff($candidates, $used));
+                    $parent = null;
+                    foreach ($fresh === [] ? $candidates : $fresh as $id) {
+                        if (null === $parent || $left[$id] > $left[$parent] + 0.0001) {
+                            $parent = $id;
+                        }
+                    }
+                    $left[$parent] -= $gross;
+                    $used[] = $parent;
+                    $refunds[$r]['line_items'][$l]['prototype_id'] = $parent;
+                }
+            }
+            return $refunds;
+        }
+
+        /**
+         * The fields a refund line copies from the order line it was made from, as one key.
+         *
+         * @return string
+         */
+        private static function two_line_look(array $line)
+        {
+            $look = [];
+            foreach (['name', 'description', 'type', 'tax_code'] as $field) {
+                $look[] = isset($line[$field]) && is_scalar($line[$field]) ? (string) $line[$field] : '';
+            }
+            $look[] = isset($line['tax_rate']) && is_numeric($line['tax_rate']) ? number_format((float) $line['tax_rate'], 6, '.', '') : '';
+            return implode("\0", $look);
+        }
+
+        /**
+         * The order's tenders (TWO-26309): what has already paid part of the order without being an order line, so its
+         * amount sits outside line_items and the order total is what is left to pay. Read from the order items gift
+         * card plugins record (TENDER_ITEM_TYPES), then passed through `twoinc_order_tenders` so a merchant or an
+         * adapter can declare others. Coupons and negative fees are order lines, never tenders. Each tender is
+         * `{type, label, amount, source}`: type `gift_card`, `store_credit` or `other`, amount a positive 2dp string.
+         * An entry the filter returns that is not a tender is dropped and logged.
+         *
+         * @return array<int, array{type: string, label: string, amount: string, source: string}>
+         */
+        public static function order_tenders($order)
+        {
+            $tenders = [];
+            if (is_object($order) && method_exists($order, 'get_items')) {
+                foreach (self::TENDER_ITEM_TYPES as $item_type => $reader) {
+                    foreach ((array) $order->get_items($item_type) as $item) {
+                        if (!is_object($item) || !method_exists($item, 'get_amount')) {
+                            continue;
+                        }
+                        $amount = (float) $item->get_amount();
+                        if ($reader['currency_filter']) {
+                            $amount = (float) apply_filters($reader['currency_filter'], $amount, $order);
+                        }
+                        // Labelled by kind only: a gift card's name is often its redeemable number.
+                        $tenders[] = ['type' => $reader['type'], 'label' => 'Gift card', 'amount' => $amount, 'source' => $item_type];
+                    }
+                }
+            }
+            if (is_object($order) && method_exists($order, 'get_id') && !$order->get_id()) {
+                $tenders = array_merge($tenders, self::cart_tenders());
+            }
+            // A card worth nothing paid nothing: skipped here, before the filter, so it is never logged as dropped.
+            $tenders = array_values(array_filter($tenders, static function ($tender) {
+                return round((float) $tender['amount'], 2) > 0;
+            }));
+            $declared = apply_filters(self::ORDER_TENDERS_FILTER, $tenders, $order);
+            $valid = [];
+            foreach (is_array($declared) ? $declared : [] as $tender) {
+                $raw = is_array($tender) ? ($tender['amount'] ?? null) : null;
+                $amount = is_numeric($raw) ? round((float) $raw, 2) : null;
+                if (0.0 === $amount) {
+                    // Paid nothing: not worth a line on every build.
+                    continue;
+                }
+                if (null === $amount || $amount < 0) {
+                    // Never the label, which may hold a card number.
+                    if (function_exists('wc_get_logger')) {
+                        $field = static function ($key) use ($tender) {
+                            return is_array($tender) && is_scalar($tender[$key] ?? null) ? self::cut_diff_string((string) $tender[$key]) : 'none';
+                        };
+                        wc_get_logger()->warning(
+                            sprintf('%s: an entry that is not a tender with a positive amount was dropped: type %s, source %s, amount %s', self::ORDER_TENDERS_FILTER, $field('type'), $field('source'), $field('amount')),
+                            ['source' => 'twoinc-payment-gateway']
+                        );
+                    }
+                    continue;
+                }
+                $type = is_string($tender['type'] ?? null) && in_array($tender['type'], self::TENDER_TYPES, true) ? $tender['type'] : 'other';
+                $valid[] = [
+                    'type' => $type,
+                    'label' => is_scalar($tender['label'] ?? null) ? (string) $tender['label'] : '',
+                    'amount' => number_format($amount, 2, '.', ''),
+                    'source' => is_scalar($tender['source'] ?? null) ? (string) $tender['source'] : self::ORDER_TENDERS_FILTER,
+                ];
+            }
+            return $valid;
+        }
+
+        private static function clear_pending_checks()
+        {
+            self::$shop_match_refusals = [];
+            self::$whole_order_check = null;
+        }
+
+        /**
+         * The tenders the request's build read for this order, else read now, so the filter runs once per request.
+         *
+         * @return array
+         */
+        private static function built_order_tenders($order)
+        {
+            $check = self::$whole_order_check;
+            $order_id = is_object($order) && method_exists($order, 'get_id') ? $order->get_id() : null;
+            if ($check && is_object($order) && $check['order'] === spl_object_id($order) && $check['order_id'] === $order_id) {
+                return $check['tenders'];
+            }
+            return self::order_tenders($order);
+        }
+
+        /**
+         * The gift cards applied to the cart (TENDER_SESSION_KEYS), for the unsaved order the intent builds from it.
+         *
+         * @return array
+         */
+        private static function cart_tenders()
+        {
+            $session = function_exists('WC') && WC()->session ? WC()->session : null;
+            $tenders = [];
+            foreach ($session ? self::TENDER_SESSION_KEYS : [] as $key => $reader) {
+                $value = $session->get($key);
+                $cards = null === $reader['list'] ? $value : ($value[$reader['list']] ?? null);
+                foreach (is_array($cards) ? $cards : [] as $card) {
+                    $amount = null === $reader['amount'] ? $card : (is_array($card) ? ($card[$reader['amount']] ?? null) : null);
+                    if (is_numeric($amount)) {
+                        $tenders[] = ['type' => 'gift_card', 'label' => 'Gift card', 'amount' => (float) $amount, 'source' => $reader['source']];
+                    }
+                }
+            }
+            return $tenders;
+        }
+
+        /**
+         * @param array $tenders order_tenders(), or the context's order_tenders
+         *
+         * @return float
+         */
+        private static function tender_total($tenders)
+        {
+            $total = 0.0;
+            foreach (is_array($tenders) ? $tenders : [] as $tender) {
+                $total += is_array($tender) && is_numeric($tender['amount'] ?? null) ? (float) $tender['amount'] : 0.0;
+            }
+            return round($total, 2);
+        }
+
+        /**
+         * Whether a merchant handler is on `twoinc_order_postprocessing`: any callback other than the plugin's own.
+         *
+         * @return bool
+         */
+        public static function has_merchant_order_postprocessing_handler()
+        {
+            return self::merchant_order_postprocessing_handlers() !== [];
         }
 
         /**
@@ -1721,13 +2082,18 @@ if (!class_exists('WC_Twoinc_Helper')) {
                  *
                  * @param array $payload The complete request body.
                  * @param array $context request_type, trigger, endpoint, order, refund, shipping_tax_rate,
-                 *                       fallback_shipping_tax_rate, contract_version.
+                 *                       fallback_shipping_tax_rate, fallback_shipping_tax_code, contract_version,
+                 *                       order_lines, order_refunds, order_tenders.
                  */
                 $processed = apply_filters(self::ORDER_POSTPROCESSING_HOOK, $payload, $context);
             } catch (WC_Twoinc_Shop_Match_Exception $e) {
+                self::clear_pending_checks();
                 throw $e;
             } catch (Throwable $e) {
-                self::fail_postprocessing($context, 'a subscriber threw ' . get_class($e) . ': ' . $e->getMessage());
+                // The default handler never ran to consume this build's checks: a later request must not meet them.
+                self::clear_pending_checks();
+                // Never the subscriber's message, which can carry buyer data: its class and where it was thrown.
+                self::fail_postprocessing($context, 'a subscriber threw ' . get_class($e) . ' at ' . self::throw_site($e), $e);
             }
             if (!is_array($processed)) {
                 self::fail_postprocessing($context, 'a subscriber returned ' . gettype($processed) . ', not an array');
@@ -1739,8 +2105,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if ($record && function_exists('wc_get_logger')) {
                 $diff = self::payload_diff($payload, $processed);
                 if ($diff !== []) {
+                    // Debug level: recorded only when the WooCommerce log threshold includes debug.
                     wc_get_logger()->debug(
-                        sprintf('twoinc_order_postprocessing changed the %s request: %s', $context['request_type'], self::describe_payload_diff($diff)),
+                        sprintf(
+                            'twoinc_order_postprocessing changed the %s request (%s). Diff: %s',
+                            $context['request_type'],
+                            $context['trigger'] ?? '',
+                            (string) json_encode(self::compact_diff($diff), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                        ),
                         ['source' => 'twoinc-payment-gateway']
                     );
                 }
@@ -1766,7 +2138,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
         {
             // Consumed here, last on the hook, so a later request in the same PHP request cannot pick them up.
             $refusals = self::$shop_match_refusals;
+            $whole_order = self::$whole_order_check;
             self::$shop_match_refusals = [];
+            self::$whole_order_check = null;
             $merchant = self::merchant_order_postprocessing_handlers();
             if ($merchant === []) {
                 // Every refusal this build recorded, whatever the deprecated filters did to its line since: the
@@ -1775,6 +2149,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $refusal = reset($refusals);
                 $lines = isset($payload['line_items']) && is_array($payload['line_items']) && $payload['line_items'] !== [];
                 if ($refusal && $lines) {
+                    self::refuse($refusal['log'], $refusal['message'], WC_Twoinc_Shop_Match_Exception::class);
+                }
+                // As the build judged it. The change hash sends nothing: the request it is taken for refuses.
+                $refusal = $whole_order['refusal'] ?? null;
+                if ($refusal && $whole_order['strict'] && $lines && ($context['trigger'] ?? '') !== 'change_hash') {
                     self::refuse($refusal['log'], $refusal['message'], WC_Twoinc_Shop_Match_Exception::class);
                 }
                 return $payload;
@@ -1794,16 +2173,16 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * The shop-match checks (TWO-26275): whether what a payload sends matches what the shop worked out. Today one
-         * check: a shipping line with no rate row, sent at the rate the shipping tax control resolves, must carry the
+         * The shop-match checks (TWO-26275): whether what a payload sends matches what the shop worked out. On a
+         * single line: a shipping line with no rate row, sent at the rate the shipping tax control resolves, must carry the
          * tax that rate gives (within 0.02). Each check applies to the line the plugin built it for, while that line
          * is in the payload with its name, type, amounts and rate unchanged. A merchant handler calls it to opt back
          * in, on the payload it returns or on the one it received; with no merchant handler the default handler
          * refuses on every refusal the build recorded instead. Part of the stable contract.
          *
          * `$scope` SHOP_MATCH_PER_LINE runs only the checks made for single lines, on the lines left as built, for a
-         * handler that declares its own split of the order. This plugin has no whole-order shop-match check today,
-         * so both scopes run the same checks; the scope keeps a handler's call correct if one is added.
+         * handler that declares its own split of the order. SHOP_MATCH_ALL also runs the whole-order check: the
+         * payload's lines against the order's totals (TWO-26309).
          *
          * @param array  $payload
          * @param string $scope   SHOP_MATCH_ALL (the default) or SHOP_MATCH_PER_LINE
@@ -1824,7 +2203,53 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     self::refuse($refusal['log'], $refusal['message'], WC_Twoinc_Shop_Match_Exception::class);
                 }
             }
+            $check = self::$whole_order_check;
+            $refusal = self::SHOP_MATCH_ALL === $scope && $check && $lines !== [] ? self::whole_order_refusal($lines, $check) : null;
+            if ($refusal) {
+                self::refuse($refusal['log'], $refusal['message'], WC_Twoinc_Shop_Match_Exception::class);
+            }
             return $payload;
+        }
+
+        /**
+         * The whole-order shop-match check (TWO-26309): lines against the order's own totals plus its tenders (gross
+         * and net; tax is not reduced by a payment), each within 0.02, whether or not each line's gross is its net plus tax.
+         *
+         * @param array $check from expect_order_totals()
+         *
+         * @return array{log: string, message: string}|null null when the lines add up
+         */
+        private static function whole_order_refusal(array $lines, array $check)
+        {
+            $sums = self::sum_lines($lines);
+            // Each line is rounded to the price decimals on its own, by up to half a unit, and the order rounds its
+            // totals once more (taxes rounded at subtotal, or no decimals at all). So the lines may drift by up to half
+            // a unit per line plus half for the order; never less than 0.02. Epsilon: neither bound is exactly
+            // representable.
+            $tolerance = max(self::WHOLE_ORDER_TOLERANCE, (count($lines) + 1) * 0.5 / pow(10, max(0, (int) wc_get_price_decimals()))) + 1e-9;
+            $drifted = [];
+            foreach (['gross', 'net', 'tax'] as $figure) {
+                $sum = round($sums[$figure], 2);
+                if (abs($sum - $check[$figure]) > $tolerance) {
+                    $drifted[] = sprintf('%s order %s vs order lines %s', $figure, number_format($check[$figure], 2, '.', ''), number_format($sum, 2, '.', ''));
+                }
+            }
+            if ($drifted === []) {
+                return null;
+            }
+            $gap = round($sums['gross'] - $check['gross'], 2);
+            return [
+                'log' => sprintf(
+                    'The %s request\'s order lines do not add up to the order totals plus tenders of %s: %s. Unexplained gap %s:'
+                        . ' a payment taken outside the order lines (a gift card, store credit) can be declared with the %s filter.',
+                    $check['label'],
+                    number_format($check['tendered'] ?? 0.0, 2, '.', ''),
+                    implode('; ', $drifted),
+                    number_format($gap, 2, '.', ''),
+                    self::ORDER_TENDERS_FILTER
+                ),
+                'message' => __('The order lines do not add up to the order total.', 'twoinc-payment-gateway'),
+            ];
         }
 
         /**
@@ -1886,19 +2311,28 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * Opt-in for `twoinc_order_postprocessing` subscribers (TWO-26092): sets each order total, each per-rate tax
          * subtotal and a refund's amount to the sum over the payload's own lines plus the residual the original
-         * carried beyond its lines (store credit, a gift card, rounding), touching only the fields the payload
-         * already carries. `$original` is the payload as the subscriber received it. A total the subscriber edited
+         * carried beyond its lines (rounding), touching only the fields the payload already carries. `$original` is
+         * the payload as the subscriber received it. `$tenders`, the context's order_tenders (TWO-26309), is taken
+         * off the order's gross and net, so they stay what is left to pay, whatever `$original` carries; tax stays on
+         * the full lines, and a refund's amount is its lines. A total the subscriber edited
          * by hand before calling this is overwritten: the helper's result wins. Arithmetic only; part of the stable
          * contract.
          *
          * @param array $payload
          * @param array $original the payload before the subscriber's edits
+         * @param array $tenders  the context's order_tenders
          *
          * @return array
          */
-        public static function recompute_totals_from_lines(array $payload, array $original)
+        public static function recompute_totals_from_lines(array $payload, array $original, array $tenders = [])
         {
             $carry = self::residuals($original);
+            // An original that carries a gross or net already holds its tenders in that residual. One that carries
+            // none has no residual to hold them, so the tenders are taken off here.
+            $tendered = self::tender_total($tenders);
+            foreach (['net_amount', 'gross_amount'] as $field) {
+                $carry[$field] = $carry[$field] ?? -$tendered;
+            }
             $lines = isset($payload['line_items']) && is_array($payload['line_items']) ? $payload['line_items'] : [];
             $sums = self::sum_lines($lines);
             if (array_key_exists('gross_amount', $payload)) {
@@ -1970,14 +2404,20 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * Logs and throws a subscriber's code failure: the request is not sent.
+         *
+         * @param string         $detail   never a subscriber's exception message, which can carry buyer data
+         * @param Throwable|null $previous
+         *
          * @return never
          * @throws WC_Twoinc_Order_Postprocessing_Exception
          */
-        private static function fail_postprocessing(array $context, $detail)
+        private static function fail_postprocessing(array $context, $detail, $previous = null)
         {
+            $code = WC_Twoinc_Order_Postprocessing_Exception::CODE;
             if (function_exists('wc_get_logger')) {
                 wc_get_logger()->error(
-                    sprintf('twoinc_order_postprocessing failed on the %s request, which was not sent: %s', $context['request_type'], $detail),
+                    sprintf('%s - twoinc_order_postprocessing failed on the %s request (%s), which was not sent: %s', $code, $context['request_type'], $context['trigger'] ?? '', $detail),
                     ['source' => 'twoinc-payment-gateway']
                 );
             }
@@ -1986,8 +2426,27 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 __('The %1$s request was not sent to %2$s: the twoinc_order_postprocessing filter failed (%3$s).', 'twoinc-payment-gateway'),
                 $context['request_type'],
                 WC_Twoinc_Brand::get('product_name'),
-                $detail
-            ));
+                $code . ': ' . $detail
+            ), 0, $previous);
+        }
+
+        /**
+         * Where an exception was thrown, relative to the plugin or the WordPress root; any other path is cut to its
+         * file name.
+         *
+         * @return string
+         */
+        public static function throw_site(Throwable $e)
+        {
+            $file = str_replace('\\', '/', (string) $e->getFile());
+            $roots = [dirname(__DIR__), defined('ABSPATH') ? (string) ABSPATH : ''];
+            foreach ($roots as $root) {
+                $root = rtrim(str_replace('\\', '/', $root), '/') . '/';
+                if ('/' !== $root && 0 === strpos($file, $root)) {
+                    return substr($file, strlen($root)) . ':' . (int) $e->getLine();
+                }
+            }
+            return basename($file) . ':' . (int) $e->getLine();
         }
 
         /**
@@ -2015,13 +2474,45 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * @return string
+         * What the subscribers changed, for the debug log (TWO-26309): the merchant handlers, the number of changes,
+         * and at most MAX_DIFF_ENTRIES of them with values outside the amount, line and tax subtotal paths withheld
+         * and long strings cut.
+         *
+         * @return array{subscribers: string[], changes: int, diff: array}
          */
-        private static function describe_payload_diff(array $diff)
+        public static function compact_diff(array $diff)
         {
-            return implode('; ', array_map(static function ($entry) {
-                return sprintf('%s: %s -> %s', $entry['path'], json_encode($entry['before']), json_encode($entry['after']));
-            }, $diff));
+            $entries = [];
+            foreach (array_slice($diff, 0, self::MAX_DIFF_ENTRIES) as $entry) {
+                $keep = 1 === preg_match(self::DIFF_VALUE_PATHS, $entry['path']);
+                $entries[] = [
+                    'path' => self::cut_diff_string($entry['path']),
+                    'before' => $keep ? self::diff_scalar($entry['before']) : (null === $entry['before'] ? null : 'redacted'),
+                    'after' => $keep ? self::diff_scalar($entry['after']) : (null === $entry['after'] ? null : 'redacted'),
+                ];
+            }
+            return [
+                'subscribers' => self::merchant_order_postprocessing_handlers(),
+                'changes' => count($diff),
+                'diff' => $entries,
+            ];
+        }
+
+        private static function diff_scalar($value)
+        {
+            if (is_array($value) || is_object($value)) {
+                return self::cut_diff_string((string) json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            }
+            return is_string($value) ? self::cut_diff_string($value) : $value;
+        }
+
+        private static function cut_diff_string($value)
+        {
+            $value = (string) $value;
+            if (strlen($value) <= self::MAX_DIFF_STRING) {
+                return $value;
+            }
+            return (function_exists('mb_strcut') ? mb_strcut($value, 0, self::MAX_DIFF_STRING, 'UTF-8') : substr($value, 0, self::MAX_DIFF_STRING)) . '...';
         }
 
         /**
@@ -2591,6 +3082,22 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
             $resolved = self::get_shop_shipping_tax_rate($line, $order);
             $refusal = self::tax_reconcile_refusal($line, $resolved['rate']);
+            // A warning, as the shop is on the fallback: that must show in the log without reading the code.
+            if (function_exists('wc_get_logger')) {
+                $tax_class = self::get_shop_shipping_tax_class($order);
+                wc_get_logger()->warning(
+                    sprintf(
+                        'Shipping "%s"%s has no tax rate row; assuming the shop\'s shipping tax class "%s" (%s, rate=%s%%) for the whole shipping charge of %s.',
+                        $line->get_name(),
+                        $order->get_id() ? ' on order ' . $order->get_id() : '',
+                        null === $tax_class ? 'none found' : self::tax_class_key($tax_class),
+                        (string) ($resolved['name'] ?? ''),
+                        round((float) $resolved['rate'] * 100, 2),
+                        self::round_amt((float) $line->get_total() + (float) $line->get_total_tax())
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
             // Persisted by the order save that follows a successful create. A line the default handler will refuse
             // records nothing, as when the builder refused it; with the check delegated to a merchant handler the
             // line goes out at this rate, so later requests must take it too.

@@ -28,6 +28,7 @@ final class TaxCodeSpec
             'testTheMappingScreenRendersAndSaves',
             'testTheMigrationFansTheClassCodeOut',
             'testTheMerchantCountryComesFromTheMerchantRecord',
+            'testAnUnreadableMappingWithholdsTwo',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -312,6 +313,8 @@ final class TaxCodeSpec
         $options = WC_Twoinc::tax_code_options([
             self::entry('ES_IVA_EXPORT', 'VATEX-EU-G'),
             self::entry('ES_IVA_EXEMPT_OTHER', null),
+            // An empty default is no default (TWO-26309).
+            self::entry('ES_IVA_EXEMPT_EMPTY', ''),
             ['code' => 'ES_IVA_STANDARD', 'rate' => '0.21', 'display_name' => 'IVA general', 'requires_exemption_reason' => false, 'exemption_reason_code' => null],
         ]);
         TinyAssert::same(['ES_IVA_EXPORT', 'ES_IVA_STANDARD'], array_keys($options), 'EXEMPT_OTHER is hidden');
@@ -656,14 +659,13 @@ final class TaxCodeSpec
     private static function testARetryReplacesTheRecord(): void
     {
         $meta = WC_Twoinc_Brand::meta_key('tax_codes');
-        $none = ['code' => null, 'step' => 'row'];
         $cases = [
             // merchant, map, line taxes, record after the retry, description
             ['NO', [], [], [], 'nothing mapped: the earlier record is cleared'],
             ['ES', [], [], [], 'nothing mapped by a Spanish merchant: the earlier record is cleared too'],
             ['NO', ['standard|exempt' => 'X'], [21 => 21.0], [], 'no 0% line left: the earlier record is cleared'],
-            ['NO', ['rate:99' => 'X'], [], ['1' => $none], 'a mapped shop records "no code" over the earlier code'],
-            ['ES', ['standard|exempt' => 'X'], [], ['1' => $none], 'a Spanish merchant records "no code" over the earlier code'],
+            ['NO', ['rate:99' => 'X'], [], [], 'a mapped shop whose line gets no code clears the earlier code'],
+            ['ES', ['standard|exempt' => 'X'], [], [], 'a Spanish merchant whose line gets no code clears it too'],
         ];
         foreach ($cases as [$merchant, $map, $taxes, $expected, $description]) {
             $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = $merchant;
@@ -675,11 +677,15 @@ final class TaxCodeSpec
             TinyAssert::same($expected, $order->meta[$meta] ?? null, $description);
         }
 
-        // The last order is placed; rows mapped afterwards do not give its line a code.
-        $order->meta[WC_Twoinc_Brand::prefixed_name('order_id')] = 'two-order';
-        self::useGateway(['standard|exempt' => 'X', 'standard|none' => 'ES_IVA_EXEMPT_ART20']);
-        $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
-        TinyAssert::same(null, $edit['line_items'][0]['tax_code'] ?? null, 'a placed line recorded with no code keeps none after the mapping changes');
+        // The last order is placed with no code (TWO-26309): an update resolves its line against the mapping then, as
+        // does one whose record a release before TWO-26309 wrote with "no code" in it.
+        foreach ([[], ['1' => ['code' => null, 'step' => 'row']]] as $record) {
+            $order->meta[$meta] = $record;
+            $order->meta[WC_Twoinc_Brand::prefixed_name('order_id')] = 'two-order';
+            self::useGateway(['standard|exempt' => 'X', 'standard|none' => 'ES_IVA_EXEMPT_ART20']);
+            $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+            TinyAssert::same('ES_IVA_EXEMPT_ART20', $edit['line_items'][0]['tax_code'] ?? null, 'a line placed with no code is resolved on an update: ' . json_encode($record));
+        }
     }
 
     /**
@@ -698,8 +704,9 @@ final class TaxCodeSpec
             // merchant, map, VAT reads, rate table reads, recorded, description
             ['NO', [], 0, 0, false, 'a merchant outside Spain with nothing mapped reads neither, and records no codes'],
             ['ES', [], 1, 0, false, 'a Spanish merchant with nothing mapped reads the VAT number only for the payload, and records no codes'],
-            ['NO', ['rate:99' => 'X'], 1, 0, true, 'a mapped shop runs the exempt test, and records its lines\' "no code"'],
-            ['ES', ['rate:99' => 'X'], 2, 0, true, 'a mapped Spanish merchant reads the VAT number for the exempt test and the payload'],
+            ['NO', ['rate:99' => 'X'], 1, 0, false, 'a mapped shop runs the exempt test, and records no "no code" (TWO-26309)'],
+            ['ES', ['rate:99' => 'X'], 2, 0, false, 'a mapped Spanish merchant reads the VAT number for the exempt test and the payload'],
+            ['NO', ['standard|exempt' => 'X'], 1, 0, true, 'a mapped shop records the codes its lines got'],
         ];
         foreach ($cases as [$merchant, $map, $wantVat, $wantRates, $recorded, $description]) {
             $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = $merchant;
@@ -711,7 +718,7 @@ final class TaxCodeSpec
             $vatReads = 0;
             WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true);
             TinyAssert::same([$wantVat, $wantRates], [$vatReads, $GLOBALS['__twoinc_test_class_rate_reads']], $description . ' (VAT reads, rate table reads)');
-            TinyAssert::same($recorded, array_key_exists(WC_Twoinc_Brand::meta_key('tax_codes'), $order->meta), $description . ': a record unless nothing could code the lines');
+            TinyAssert::same($recorded, array_key_exists(WC_Twoinc_Brand::meta_key('tax_codes'), $order->meta), $description . ': a record only of the codes resolved');
         }
         remove_all_filters('twoinc_buyer_vat_number');
     }
@@ -761,6 +768,51 @@ final class TaxCodeSpec
         WC_Twoinc::reset_merchant_record_memo();
         TinyAssert::true($gateway->refresh_merchant_record_caches(true), 'the record was stored');
         TinyAssert::same('SE', WC_Twoinc::get_merchant_country(), 'the merchant record wins');
+    }
+
+    /** An unreadable stored mapping is never read as "nothing mapped" (TWO-26309): Two is withheld until it is re-saved. */
+    private static function testAnUnreadableMappingWithholdsTwo(): void
+    {
+        // [stored value, read_tax_code_map(), description]
+        $cases = [
+            [null, [], 'nothing stored'],
+            ['', [], 'an empty value'],
+            [['standard|none' => 'X', 'rate:1' => ''], ['standard|none' => 'X'], 'a mapping, an empty row skipped'],
+            ['standard|none=X', null, 'a string'],
+            [['standard|none' => ['X']], null, 'a row that is not a code'],
+            [['standard|none' => 7], null, 'a number'],
+        ];
+        $instance = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $instance->setAccessible(true);
+        $previous = $instance->getValue();
+        try {
+            foreach ($cases as [$stored, $expected, $description]) {
+                $instance->setValue(null, new class ($stored) extends WC_Twoinc {
+                    private $stored;
+
+                    public function __construct($stored)
+                    {
+                        $this->stored = $stored;
+                    }
+
+                    public function get_option($key, $empty_value = null)
+                    {
+                        return $key === 'tax_code_map' ? $this->stored : ($empty_value ?? '');
+                    }
+                });
+                TinyAssert::same($expected, WC_Twoinc::read_tax_code_map(), $description);
+                $order = self::caseOrder(['goods'], 'ES 28001', 'ES 28001', []);
+                try {
+                    WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
+                    $built = true;
+                } catch (Exception $e) {
+                    $built = false;
+                }
+                TinyAssert::same($expected !== null, $built, "$description: an order with a 0% line is built");
+            }
+        } finally {
+            $instance->setValue(null, $previous);
+        }
     }
 
     private static function entry(string $code, ?string $reason): array

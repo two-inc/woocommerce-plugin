@@ -19,7 +19,11 @@ final class OrderPostprocessingSpec
         'refund',
         'shipping_tax_rate',
         'fallback_shipping_tax_rate',
+        'fallback_shipping_tax_code',
         'contract_version',
+        'order_lines',
+        'order_refunds',
+        'order_tenders',
     ];
 
     public static function runAll(): void
@@ -49,6 +53,19 @@ final class OrderPostprocessingSpec
             'testNoSubscriberBuildersMatchTheShippingTaxRelease',
             'testRecomputeTotalsFromLines',
             'testTheChangeHashIsTakenOverThePostHookPayload',
+            'testTheDiffLogIsRedactedAndCapped',
+            'testTheContextCarriesTheOrderAtTwo',
+            'testRefundLinesAreMatchedToTheirOrderLines',
+            'testTheFallbackShippingTaxCode',
+            'testEachShopRateFallbackIsLogged',
+            'testARefusedEditRunsTheHookUnsent',
+            'testTheWholeOrderCheck',
+            'testTheOrderTenders',
+            'testRoundingNeverRefusesAGenuineOrder',
+            'testTheIntentSeesTheCartsGiftCards',
+            'testADroppedTenderLogsNoLabel',
+            'testTendersAreReadOncePerRequest',
+            'testABuildsCheckNeverReachesAnotherOrder',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -61,7 +78,7 @@ final class OrderPostprocessingSpec
     /** @param bool $fixture register the fixture subscriber, unarmed: a merchant handler that changes nothing */
     private static function reset(bool $fixture = false): void
     {
-        foreach (['twoinc_order_postprocessing', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'two_order_edit'] as $tag) {
+        foreach (['twoinc_order_postprocessing', 'twoinc_order_tenders', 'pwgc_to_order_currency', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'two_order_edit'] as $tag) {
             remove_all_filters($tag);
         }
         // A fresh PHP request: no shop-match refusal left by an earlier build.
@@ -141,12 +158,25 @@ final class OrderPostprocessingSpec
             {
                 switch ($type) {
                     case 'line_item':
-                        return [new StubProductLineItem(['name' => 'Widget', 'line_total' => 100.0, 'line_subtotal' => 100.0, 'line_tax' => 21.0, 'taxes' => [1 => 21.0]])];
+                        return $this->products ?? [new StubProductLineItem(['name' => 'Widget', 'line_total' => 100.0, 'line_subtotal' => 100.0, 'line_tax' => 21.0, 'taxes' => [1 => 21.0]])];
                     case 'shipping':
-                        return [5 => $this->get_item(5)];
+                        return $this->products === null ? [5 => $this->get_item(5)] : [];
                     default:
-                        return [];
+                        return $this->extra_items[$type] ?? [];
                 }
+            }
+
+            public $extra_items = [];
+
+            /** @var array|null product lines standing in for the Widget, with no shipping */
+            public $products = null;
+
+            /** 0 for the unsaved order the intent builds from the cart */
+            public $id = 42;
+
+            public function get_id()
+            {
+                return $this->id;
             }
 
             public function get_taxes()
@@ -162,14 +192,17 @@ final class OrderPostprocessingSpec
                 return $id === 5 ? $this->shipping : false;
             }
 
+            public $total = 150.0;
+            public $total_tax = 21.0;
+
             public function get_total()
             {
-                return 150.0;
+                return $this->total;
             }
 
             public function get_total_tax()
             {
-                return 21.0;
+                return $this->total_tax;
             }
 
             public function get_currency()
@@ -271,8 +304,13 @@ final class OrderPostprocessingSpec
                 return 'mid';
             }
 
+            public $tax_code_map = [];
+
             public function get_option($key, $empty_value = null)
             {
+                if ($key === 'tax_code_map') {
+                    return $this->tax_code_map;
+                }
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
@@ -281,8 +319,18 @@ final class OrderPostprocessingSpec
                 return null;
             }
 
+            /** @var array the GETs, apart from what is sent; each answered with $two_order, or a 404 when null */
+            public $reads = [];
+            public $two_order = ['id' => 'two-1', 'line_items' => [], 'refunds' => []];
+
             public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
             {
+                if ($method === 'GET') {
+                    $this->reads[] = $endpoint;
+                    return null === $this->two_order
+                        ? ['response' => ['code' => 404], 'body' => '{}']
+                        : ['response' => ['code' => 200], 'body' => json_encode($this->two_order)];
+                }
                 $this->sent[] = ['endpoint' => $endpoint, 'method' => $method, 'payload' => $payload];
                 return [
                     'response' => ['code' => $this->status],
@@ -411,7 +459,7 @@ final class OrderPostprocessingSpec
     {
         // [fixture mode, request type, payload, what the log names, description]
         $cases = [
-            ['throws', 'order_intent', self::examplePayload(), 'RuntimeException', 'a subscriber that throws'],
+            ['throws', 'order_intent', self::examplePayload(), 'RuntimeException at tests/unit/fixtures/orderpostprocessing.php:', 'a subscriber that throws: its class and throw site'],
             ['non_array', 'capture', [], 'returned NULL, not an array', 'a subscriber that returns no array'],
             ['non_json', 'order_create', self::examplePayload(), 'cannot be encoded as JSON', 'a subscriber that returns what JSON cannot carry'],
         ];
@@ -433,9 +481,14 @@ final class OrderPostprocessingSpec
             }));
             $log = $logs[0] ?? ['level' => '', 'message' => ''];
             TinyAssert::same('error', $log['level'], "$description: not logged at error level");
-            foreach (['twoinc_order_postprocessing', $type, $named] as $needle) {
+            foreach (['TWO_ORDER_POSTPROCESSING_HOOK_FAILED', 'twoinc_order_postprocessing', $type, '(test)', $named] as $needle) {
                 TinyAssert::true(strpos($log['message'], $needle) !== false, "$description: the log does not name $needle: {$log['message']}");
             }
+            // The subscriber's own message can carry buyer data: never logged or shown (TWO-26309).
+            foreach ([$log['message'], $caught->getMessage()] as $text) {
+                TinyAssert::same(false, strpos($text, 'fixture subscriber failed'), "$description: the subscriber's message leaked: $text");
+            }
+            TinyAssert::true(strpos($caught->getMessage(), 'TWO_ORDER_POSTPROCESSING_HOOK_FAILED') !== false, "$description: the note does not carry the code");
         }
     }
 
@@ -454,6 +507,9 @@ final class OrderPostprocessingSpec
             unset($order->meta[WC_Twoinc_Brand::prefixed_name('order_id')]);
         }
         $order->shipping = new StubShippingItem(29.0, 7.0, [], $meta);
+        // The totals its lines add up to, so only the shipping line's own check refuses it.
+        $order->total = 157.0;
+        $order->total_tax = 28.0;
         return $order;
     }
 
@@ -519,7 +575,8 @@ final class OrderPostprocessingSpec
                 }
             }
             unset($line);
-            return WC_Twoinc_Helper::check_shop_match($body);
+            // Per line: its new figures no longer add up to the order's totals, which the whole-order check owns.
+            return WC_Twoinc_Helper::check_shop_match($body, WC_Twoinc_Helper::SHOP_MATCH_PER_LINE);
         };
         // [what is registered beside the default handler, expected outcome, a merchant handler named in the log, description]
         $cases = [
@@ -626,10 +683,11 @@ final class OrderPostprocessingSpec
             [$built, WC_Twoinc_Helper::SHOP_MATCH_PER_LINE, true, 'the payload as built, per-line scope: the untouched mismatching line is refused'],
             [$moved, WC_Twoinc_Helper::SHOP_MATCH_ALL, true, 'the line moved to another position, unchanged'],
             [$edit(['description' => 'edited', 'tax_code' => 'X']), WC_Twoinc_Helper::SHOP_MATCH_ALL, true, 'a field the check does not read changed'],
-            [$edit(['tax_amount' => '6.09', 'gross_amount' => '35.09']), WC_Twoinc_Helper::SHOP_MATCH_ALL, false, 'the tax changed'],
+            [$edit(['tax_amount' => '6.09', 'gross_amount' => '35.09']), WC_Twoinc_Helper::SHOP_MATCH_PER_LINE, false, 'per-line scope: the tax changed'],
+            [$edit(['tax_amount' => '6.09', 'gross_amount' => '35.09']), WC_Twoinc_Helper::SHOP_MATCH_ALL, true, 'all scope: the tax changed, so the lines no longer add up to the order'],
             [$edit(['tax_rate' => '0.240000']), WC_Twoinc_Helper::SHOP_MATCH_ALL, false, 'the rate changed'],
             [$resplit, WC_Twoinc_Helper::SHOP_MATCH_PER_LINE, false, 'per-line scope: the line re-split at 21% passes'],
-            [$resplit, WC_Twoinc_Helper::SHOP_MATCH_ALL, false, 'all scope: the line re-split at 21% passes'],
+            [$resplit, WC_Twoinc_Helper::SHOP_MATCH_ALL, true, 'all scope: the re-split net and tax no longer match the order\'s'],
             [$edit(['name' => 'Shipping - Other']), WC_Twoinc_Helper::SHOP_MATCH_ALL, false, 'the line renamed'],
             [$edit(['type' => 'SERVICE']), WC_Twoinc_Helper::SHOP_MATCH_ALL, false, 'the line retyped'],
             [['line_items' => []] + $built, WC_Twoinc_Helper::SHOP_MATCH_ALL, false, 'the line removed'],
@@ -1257,5 +1315,514 @@ final class OrderPostprocessingSpec
                 }
             }
         }
+    }
+
+    private static function testTheDiffLogIsRedactedAndCapped(): void
+    {
+        $before = self::examplePayload() + ['buyer' => ['email' => 'a@b.example'], 'order_note' => 'note'];
+        $long = str_repeat('x', 200);
+        $many = $before;
+        for ($i = 0; $i < 45; $i++) {
+            $many['line_items'][0]['extra' . $i] = (string) $i;
+        }
+        // [payload after the hook, expected changes, expected entries as [path, before, after], description]
+        $cases = [
+            [['buyer' => ['email' => 'c@d.example']] + $before, 1, [['/buyer/email', 'redacted', 'redacted']], 'a buyer field is redacted'],
+            [['order_note' => null] + $before, 1, [['/order_note', 'redacted', null]], 'a removed value is null, not redacted'],
+            [['gross_amount' => '151.00'] + $before, 1, [['/gross_amount', '150.00', '151.00']], 'an amount keeps its values'],
+            [array_replace_recursive($before, ['line_items' => [1 => ['name' => $long]]]), 1, [['/line_items/1/name', 'Shipping - Courier', str_repeat('x', 120) . '...']], 'a line keeps its values, cut to 120'],
+            [$many, 45, null, 'at most 40 entries, and the change count'],
+        ];
+        foreach ($cases as [$after, $changes, $entries, $description]) {
+            self::reset();
+            add_filter('twoinc_order_postprocessing', static function () use ($after) {
+                return $after;
+            }, 10, 2);
+            WC_Twoinc_Helper::postprocess_order_request($before, self::context('order_create'));
+            $logs = array_values(array_filter($GLOBALS['__twoinc_test_logs'], static function ($log) {
+                return $log['level'] === 'debug';
+            }));
+            TinyAssert::same(1, count($logs), "$description: one debug line");
+            TinyAssert::true(strpos($logs[0]['message'], 'changed the order_create request (test). Diff: ') !== false, "$description: " . $logs[0]['message']);
+            $diff = json_decode(substr($logs[0]['message'], strpos($logs[0]['message'], 'Diff: ') + 6), true);
+            TinyAssert::same($changes, $diff['changes'] ?? null, "$description: change count");
+            TinyAssert::true(strpos($diff['subscribers'][0] ?? '', 'closure at ') === 0, "$description: subscribers named");
+            TinyAssert::same(min($changes, 40), count($diff['diff']), "$description: entries");
+            if ($entries !== null) {
+                TinyAssert::same($entries, array_map(static function ($e) {
+                    return [$e['path'], $e['before'], $e['after']];
+                }, $diff['diff']), $description);
+            }
+            TinyAssert::same(false, strpos($logs[0]['message'], 'c@d.example'), "$description: buyer data logged");
+        }
+    }
+
+    private static function testTheContextCarriesTheOrderAtTwo(): void
+    {
+        $two = ['id' => 'two-1', 'line_items' => [['id' => 'L1', 'name' => 'Widget', 'gross_amount' => '121.00']], 'refunds' => []];
+        $capture = static function () {
+            add_filter('twoinc_order_postprocessing', static function ($payload, $context) {
+                $GLOBALS['__seen_context'] = [$context['order_lines'], $context['order_refunds']];
+                return $payload;
+            }, 10, 2);
+        };
+        // [request type, merchant handler registered, GET answer (null: 404), expected reads, expected [order_lines, order_refunds], description]
+        $cases = [
+            ['order_update', true, $two, 1, [$two['line_items'], []], 'an update with a merchant handler reads the order first'],
+            ['refund', true, $two, 1, [$two['line_items'], []], 'so does a refund'],
+            ['order_update', true, null, 1, [null, null], 'a failed read gives null'],
+            ['capture', true, $two, 0, [null, null], 'a capture reads nothing'],
+            ['order_update', false, $two, 0, null, 'no merchant handler: no read'],
+        ];
+        foreach ($cases as [$type, $handler, $answer, $reads, $expected, $description]) {
+            self::reset();
+            $GLOBALS['__seen_context'] = null;
+            if ($handler) {
+                $capture();
+            }
+            $gateway = self::recordingGateway();
+            $gateway->two_order = $answer;
+            $gateway->make_order_request($type, 'test', '/v1/order/two-1', [], 'POST', self::exampleOrder());
+            TinyAssert::same($reads, count($gateway->reads), "$description: reads");
+            TinyAssert::same($expected, $GLOBALS['__seen_context'], $description);
+        }
+        unset($GLOBALS['__seen_context']);
+    }
+
+    private static function testRefundLinesAreMatchedToTheirOrderLines(): void
+    {
+        $line = static function (string $id, string $name, string $gross, string $proto = '') {
+            return ['id' => $id, 'name' => $name, 'description' => '', 'type' => 'PHYSICAL', 'tax_rate' => '0.25', 'gross_amount' => $gross, 'prototype_id' => $proto];
+        };
+        $order = [$line('A', 'Widget', '100.00'), $line('B', 'Widget', '100.00'), $line('C', 'Gadget', '50.00')];
+        // [refunds as lists of lines, expected prototype_ids per refund, description]
+        $cases = [
+            [[[$line('r1', 'Gadget', '-50.00')]], [['C']], 'a unique match'],
+            [[[$line('r1', 'Widget', '-30.00'), $line('r2', 'Widget', '-60.00')]], [['B', 'A']], 'two matches in one refund go to distinct lines, the largest first'],
+            [[[$line('r1', 'Widget', '-80.00', 'A')], [$line('r2', 'Widget', '-50.00')]], [['A'], ['B']], 'a named line counts against what is left'],
+            [[[$line('r1', 'Other', '-5.00')]], [['']], 'no match keeps the empty prototype_id'],
+        ];
+        foreach ($cases as [$refunds, $expected, $description]) {
+            $result = WC_Twoinc_Helper::refunds_with_parent_lines(['line_items' => $order, 'refunds' => array_map(static function ($lines) {
+                return ['line_items' => $lines];
+            }, $refunds)]);
+            TinyAssert::same($expected, array_map(static function ($refund) {
+                return array_column($refund['line_items'], 'prototype_id');
+            }, $result), $description);
+        }
+    }
+
+    private static function testTheFallbackShippingTaxCode(): void
+    {
+        $option = WC_Twoinc_Brand::prefixed_name('shipping_tax_from_shop_rates');
+        // [control, shop shipping rates found, mapping, expected code, description]
+        $cases = [
+            ['no', [7 => ['rate' => 0.0, 'shipping' => 'yes']], ['rate:7' => 'ZERO'], null, 'the control off: null'],
+            ['yes', [7 => ['rate' => 0.0, 'shipping' => 'yes']], ['rate:7' => 'ZERO'], 'ZERO', 'a 0% shipping rate: its row'],
+            ['yes', [1 => ['rate' => 21.0, 'shipping' => 'yes']], ['standard|none' => 'NONE'], null, 'a non-zero rate: no code'],
+            ['yes', [], ['standard|none' => 'NONE'], 'NONE', 'no rate: the no-rule row'],
+            ['yes', [], [], null, 'nothing mapped: null'],
+            ['yes', [], 'garbage', null, 'an unreadable mapping: null'],
+        ];
+        foreach ($cases as [$control, $rates, $map, $expected, $description]) {
+            self::reset();
+            $GLOBALS['__twoinc_test_options'][$option] = $control;
+            $GLOBALS['__twoinc_test_find_rates'] = ['' => $rates];
+            self::useTaxCodeMap($map);
+            try {
+                TinyAssert::same($expected, self::context('order_create')['fallback_shipping_tax_code'], $description);
+            } finally {
+                self::useTaxCodeMap(null);
+            }
+        }
+    }
+
+    /** Stands in a gateway whose stored tax code mapping is $map; null removes it. */
+    private static function useTaxCodeMap($map): void
+    {
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
+        if ($map === null) {
+            $prop->setValue(null, null);
+            return;
+        }
+        $gateway = self::recordingGateway();
+        $gateway->tax_code_map = $map;
+        $prop->setValue(null, $gateway);
+    }
+
+    private static function testEachShopRateFallbackIsLogged(): void
+    {
+        // [shipping tax control, warnings expected per build, description]
+        $cases = [
+            ['yes', 1, 'the control supplies the rate: one warning per build'],
+            ['no', 0, 'the control off: none'],
+        ];
+        foreach ($cases as [$control, $expected, $description]) {
+            self::reset();
+            $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('shipping_tax_from_shop_rates')] = $control;
+            $order = self::exampleOrder();
+            unset($order->meta[WC_Twoinc_Brand::prefixed_name('order_id')]);
+            $order->shipping = new StubShippingItem(29.0, 6.09, []);
+            WC_Twoinc_Helper::compose_twoinc_intent($order, []);
+            $warnings = array_values(array_filter($GLOBALS['__twoinc_test_logs'], static function ($log) {
+                return $log['level'] === 'warning' && strpos($log['message'], 'has no tax rate row; assuming the shop\'s shipping tax class "standard"') !== false;
+            }));
+            TinyAssert::same($expected, count($warnings), $description . ': ' . json_encode($GLOBALS['__twoinc_test_logs']));
+            if ($expected) {
+                TinyAssert::true(strpos($warnings[0]['message'], 'rate=21%') !== false, "$description: names the rate");
+            }
+        }
+    }
+
+    private static function testARefusedEditRunsTheHookUnsent(): void
+    {
+        $meta = [
+            'order_reference' => 'ref', 'company_id' => '912345678', 'department' => '', 'project' => '',
+            'purchase_order_number' => '', 'invoice_emails' => [], 'payment_reference_message' => '',
+            'payment_reference_ocr' => '', 'payment_reference' => '', 'payment_reference_type' => '', 'vendor_name' => '',
+        ];
+        // [order state, trigger, expected hook calls as [type, trigger], description]
+        $cases = [
+            ['CANCELLED', 'admin_edit', [['order_update', 'admin_edit']], 'a refused admin edit is built and the hook runs'],
+            ['CANCELLED', 'tracking_number', [], 'a refused tracking sync builds nothing'],
+            ['VERIFIED', 'admin_edit', [['order_update', 'admin_edit']], 'an edit Two accepts runs it once, as before'],
+        ];
+        foreach ($cases as [$state, $trigger, $expected, $description]) {
+            self::reset();
+            self::arm('record');
+            $gateway = self::recordingGateway();
+            $order = self::exampleOrder();
+            $order->meta[WC_Twoinc_Brand::meta_key('order_state')] = $state;
+            $update = new ReflectionMethod(WC_Twoinc::class, 'process_update_twoinc_order');
+            $update->setAccessible(true);
+            $update->invoke($gateway, $order, $meta, false, $trigger);
+            TinyAssert::same($expected, array_map(static function ($c) {
+                return [$c['request_type'], $c['trigger']];
+            }, self::fixtureCalls()), $description);
+            $sent = array_column($gateway->sent, 'endpoint');
+            TinyAssert::same($state === 'VERIFIED' ? ['/v1/order/two-1'] : [], $sent, "$description: sent");
+            TinyAssert::same($expected === [] ? [] : ['/v1/order/two-1'], $gateway->reads, "$description: the order is read for order_lines");
+        }
+    }
+
+    private static function testTheOrderTenders(): void
+    {
+        $card = ['type' => 'gift_card', 'label' => 'Gift card', 'amount' => '10.00', 'source' => 'gift_card'];
+        // [order items by type, tenders the filter adds, expected order_tenders, description]
+        $cases = [
+            [[], [], [], 'no tender'],
+            [['gift_card' => [10.0]], [], [$card], 'a gift card item'],
+            [['pw_gift_card' => [5.0]], [], [array_replace($card, ['source' => 'pw_gift_card', 'amount' => '10.00'])], 'the other item type, converted to the order currency'],
+            [[], [['type' => 'loyalty', 'label' => 7, 'amount' => 3.456]], [['type' => 'other', 'label' => '7', 'amount' => '3.46', 'source' => 'twoinc_order_tenders']], 'a declared tender, normalised'],
+            [[], ['x', ['amount' => '0']], [], 'entries that are not tenders are dropped'],
+        ];
+        foreach ($cases as [$items, $declared, $expected, $description]) {
+            self::reset();
+            // A currency filter that doubles, so the conversion shows.
+            add_filter('pwgc_to_order_currency', static function ($amount) {
+                return $amount * 2;
+            }, 10, 2);
+            add_filter('twoinc_order_tenders', static function ($tenders) use ($declared) {
+                return array_merge($tenders, $declared);
+            }, 10, 2);
+            $order = self::exampleOrder();
+            foreach ($items as $type => $amounts) {
+                $order->extra_items[$type] = array_map(static function ($amount) {
+                    return new StubTenderItem($amount);
+                }, $amounts);
+            }
+            $context = self::context('order_update', $order);
+            TinyAssert::same($expected, $context['order_tenders'], $description);
+            // A gift card's code redeems it: never in what subscribers see or in the log.
+            TinyAssert::same(false, strpos(json_encode([$context['order_tenders'], $GLOBALS['__twoinc_test_logs']]), StubTenderItem::CODE), "$description: the card code leaked");
+        }
+
+        // recompute_totals_from_lines() takes the tenders off gross and net, whatever the original carries.
+        $lines = [['net_amount' => '100.00', 'tax_amount' => '21.00', 'gross_amount' => '121.00', 'tax_rate' => '0.21']];
+        $outstanding = ['gross_amount' => '111.00', 'net_amount' => '90.00', 'tax_amount' => '21.00', 'line_items' => $lines];
+        // [original, tenders, expected totals, description]
+        $recompute = [
+            [$outstanding, [$card], ['111.00', '90.00', '21.00'], 'an original that carries the tender: unchanged'],
+            [['line_items' => $lines], [$card], ['111.00', '90.00', '21.00'], 'an original with no totals: the tender is still taken off'],
+            [['line_items' => $lines], [], ['121.00', '100.00', '21.00'], 'no tenders: the lines'],
+        ];
+        foreach ($recompute as [$original, $tenders, $expected, $description]) {
+            $out = WC_Twoinc_Helper::recompute_totals_from_lines(['gross_amount' => '0', 'net_amount' => '0', 'tax_amount' => '0', 'line_items' => $lines], $original, $tenders);
+            TinyAssert::same($expected, [$out['gross_amount'], $out['net_amount'], $out['tax_amount']], $description);
+        }
+    }
+
+    /**
+     * Each line is rounded to the shop's price decimals on its own, so a many-line order's lines can sum a little away
+     * from its total: with taxes rounded at subtotal, or prices with no decimals. That is never a refusal; a real gap
+     * still is. 20 lines, each as WooCommerce stores it, and the order totals WooCommerce rounds from them.
+     */
+    private static function testRoundingNeverRefusesAGenuineOrder(): void
+    {
+        // [price decimals, line net, line tax, order total, order tax, expected outcome, description]
+        $cases = [
+            [2, 0.83, 0.17, 20.00, 3.40, 'sent', '2 decimals, tax rounded per line'],
+            [2, 0.83, 0.166, 19.92, 3.32, 'sent', '2 decimals, tax rounded at subtotal: the lines carry 0.08 more'],
+            [2, 0.83, 0.166, 18.92, 3.32, 'refused', '2 decimals, a 1.00 gap is still refused'],
+            [0, 100.4, 20.0, 2408.0, 400.0, 'sent', '0 decimals, tax rounded per line'],
+            [0, 100.4, 20.08, 2410.0, 402.0, 'sent', '0 decimals, tax rounded at subtotal'],
+            [0, 100.4, 20.08, 2390.0, 402.0, 'refused', '0 decimals, a 20 gap is still refused'],
+            // 21 lines each up half a unit and the order's total down half a unit: (21 + 1) / 2 = 11 units at most.
+            [0, 1.0, 0.0, 10.0, 0.0, 'sent', '0 decimals, the worst case: half a unit per line and half for the order', 21],
+            [0, 1.0, 0.0, 9.0, 0.0, 'refused', '0 decimals, one unit past the worst case', 21],
+        ];
+        foreach ($cases as $case) {
+            [$decimals, $net, $tax, $total, $total_tax, $expected, $description] = $case;
+            $count = $case[7] ?? 20;
+            self::reset();
+            $GLOBALS['__twoinc_test_price_decimals'] = $decimals;
+            try {
+                $order = self::exampleOrder();
+                $order->products = [];
+                for ($i = 0; $i < $count; $i++) {
+                    $order->products[] = new StubProductLineItem(['name' => "Item $i", 'line_total' => $net, 'line_subtotal' => $net, 'line_tax' => $tax, 'taxes' => [1 => $tax]]);
+                }
+                $order->total = $total;
+                $order->total_tax = $total_tax;
+                try {
+                    self::recordingGateway()->make_order_request('order_create', 'checkout', '/v1/order', WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []), 'POST', $order);
+                    $outcome = 'sent';
+                } catch (WC_Twoinc_Shop_Match_Exception $e) {
+                    $outcome = 'refused';
+                }
+                TinyAssert::same($expected, $outcome, $description);
+            } finally {
+                unset($GLOBALS['__twoinc_test_price_decimals']);
+            }
+        }
+    }
+
+    /**
+     * At the intent the cart total already has the gift cards off, but the unsaved order built from the cart has no
+     * gift card items yet: they are read from the session the gift card plugins keep them in, as each plugin does
+     * when it adds the items to the order.
+     */
+    private static function testTheIntentSeesTheCartsGiftCards(): void
+    {
+        // [session key, session value, unsaved order, expected order_tenders amounts, warning logged, description]
+        $cases = [
+            [null, null, true, [], true, 'no gift card in the session: the gap is a warning'],
+            ['_wc_gc_giftcards', [['giftcard' => 'card', 'amount' => 6.0], ['giftcard' => 'card', 'amount' => 4.0]], true, ['6.00', '4.00'], false, 'gift cards applied in the cart'],
+            ['pw-gift-card-data', ['gift_cards' => ['SECRET-1' => 10.0]], true, ['10.00'], false, 'the other plugin\'s cart gift cards'],
+            ['pw-gift-card-data', ['gift_cards' => ['SECRET-1' => 0]], true, [], true, 'a card worth nothing in the cart is no tender'],
+            ['_wc_gc_giftcards', [['giftcard' => 'card', 'amount' => 10.0]], false, [], false, 'a placed order reads its items, not the session'],
+        ];
+        foreach ($cases as [$key, $value, $unsaved, $amounts, $warned, $description]) {
+            self::reset();
+            WC()->session = new StubSession();
+            if ($key !== null) {
+                WC()->session->set($key, $value);
+            }
+            $order = self::exampleOrder();
+            $order->total = 140.0;
+            if ($unsaved) {
+                $order->id = 0;
+                unset($order->meta[WC_Twoinc_Brand::prefixed_name('order_id')]);
+            }
+            TinyAssert::same($amounts, array_column(WC_Twoinc_Helper::order_tenders($order), 'amount'), "$description: tenders");
+            if (!$unsaved) {
+                continue;
+            }
+            self::recordingGateway()->make_order_request('order_intent', 'checkout', '/v1/order_intent', WC_Twoinc_Helper::compose_twoinc_intent($order, []), 'POST', $order);
+            $warnings = array_filter($GLOBALS['__twoinc_test_logs'], static function ($log) {
+                return $log['level'] === 'warning' && strpos($log['message'], 'twoinc_order_tenders') !== false;
+            });
+            TinyAssert::same($warned, $warnings !== [], "$description: warning");
+            TinyAssert::same(false, strpos(json_encode($GLOBALS['__twoinc_test_logs']), 'SECRET-1'), "$description: the card number was logged");
+        }
+    }
+
+    /** A label may hold a card number: a dropped entry logs only its type, source and amount, and a zero is quiet. */
+    private static function testADroppedTenderLogsNoLabel(): void
+    {
+        // [entry the filter adds, expected warnings, description]
+        $cases = [
+            [['type' => 'gift_card', 'label' => 'CARD-123', 'amount' => '-5', 'source' => 'test'], ['type gift_card, source test, amount -5'], 'a negative amount is logged without its label'],
+            [['type' => 'gift_card', 'label' => 'CARD-123', 'amount' => 'x', 'source' => 'test'], ['type gift_card, source test, amount x'], 'a non-numeric amount too'],
+            [['type' => 'gift_card', 'label' => 'CARD-123', 'amount' => '0.00', 'source' => 'test'], [], 'a zero amount is skipped quietly'],
+            ['CARD-123', ['type none, source none, amount none'], 'an entry that is not an array'],
+        ];
+        foreach ($cases as [$entry, $expected, $description]) {
+            self::reset();
+            add_filter('twoinc_order_tenders', static function ($tenders) use ($entry) {
+                $tenders[] = $entry;
+                return $tenders;
+            }, 10, 2);
+            TinyAssert::same([], WC_Twoinc_Helper::order_tenders(self::exampleOrder()), "$description: dropped");
+            $warnings = array_values(array_map(static function ($log) {
+                return substr($log['message'], strpos($log['message'], 'dropped: ') + 9);
+            }, array_filter($GLOBALS['__twoinc_test_logs'], static function ($log) {
+                return $log['level'] === 'warning';
+            })));
+            TinyAssert::same($expected, $warnings, $description);
+            TinyAssert::same(false, strpos(json_encode($GLOBALS['__twoinc_test_logs']), 'CARD-123'), "$description: the label was logged");
+        }
+    }
+
+    private static function testTendersAreReadOncePerRequest(): void
+    {
+        // [request type, description]
+        $cases = [
+            ['order_create', 'a create: the build and the hook share one read'],
+            ['order_update', 'an update too'],
+            ['capture', 'a request with no build reads once for the hook'],
+        ];
+        foreach ($cases as [$type, $description]) {
+            self::reset();
+            $reads = 0;
+            add_filter('twoinc_order_tenders', static function ($tenders) use (&$reads) {
+                $reads++;
+                return $tenders;
+            }, 10, 2);
+            $order = self::exampleOrder();
+            $payload = [
+                'order_create' => static function () use ($order) {
+                    return WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
+                },
+                'order_update' => static function () use ($order) {
+                    return WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+                },
+                'capture' => static function () {
+                    return [];
+                },
+            ][$type]();
+            self::recordingGateway()->make_order_request($type, 'test', '/v1/order', $payload, 'POST', $order);
+            TinyAssert::same(1, $reads, $description);
+        }
+    }
+
+    /**
+     * The build's whole-order check and tenders belong to the order just built. A hook that fails leaves the check
+     * pending, and PHP reuses a freed object's id, so a later request on another order must not pick them up.
+     */
+    private static function testABuildsCheckNeverReachesAnotherOrder(): void
+    {
+        $pending = new ReflectionProperty(WC_Twoinc_Helper::class, 'whole_order_check');
+        $pending->setAccessible(true);
+        // [what happens after the build, expected pending check left, expected tender reads, description]
+        $cases = [
+            ['throws', false, 1, 'a subscriber that throws clears the pending check'],
+            ['other_order', true, 2, 'another order at the same object id reads its own tenders'],
+        ];
+        foreach ($cases as [$after, $left, $reads, $description]) {
+            self::reset();
+            $count = 0;
+            add_filter('twoinc_order_tenders', static function ($tenders) use (&$count) {
+                $count++;
+                return $tenders;
+            }, 10, 2);
+            $order = self::exampleOrder();
+            $payload = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
+            if ($after === 'throws') {
+                self::arm('throws');
+                try {
+                    self::recordingGateway()->make_order_request('order_create', 'checkout', '/v1/order', $payload, 'POST', $order);
+                } catch (WC_Twoinc_Order_Postprocessing_Exception $e) {
+                }
+            } else {
+                // The same object standing in for a different order, as a reused id would.
+                $order->id = 77;
+                self::context('capture', $order);
+            }
+            TinyAssert::same($left, $pending->getValue() !== null, "$description: pending check");
+            TinyAssert::same($reads, $count, "$description: tender reads");
+        }
+    }
+
+    private static function testTheWholeOrderCheck(): void
+    {
+        // The order's lines come to 150.00 gross, 21.00 tax. A tender is a payment: the order total drops by it, its tax
+        // does not. [request type, order gross, gift card item, tenders the filter adds, merchant handler, expected
+        // outcome, warning logged, description]
+        $cases = [
+            ['order_create', 150.0, null, [], false, 'sent', false, 'lines that add up are sent'],
+            ['order_create', 140.0, null, [], false, 'refused', false, 'a create whose lines do not add up is refused'],
+            ['order_update', 140.0, null, [], false, 'refused', false, 'so is an update'],
+            ['order_intent', 140.0, null, [], false, 'sent', true, 'the intent only logs it'],
+            ['order_create', 140.0, null, [], true, 'sent', false, 'a merchant handler owns it'],
+            ['order_create', 150.01, null, [], false, 'sent', false, 'within 0.02'],
+            ['order_create', 140.0, ['gift_card', 10.0], [], false, 'sent', false, 'a gift card item explains the gap'],
+            ['order_update', 130.0, ['pw_gift_card', 20.0], [], false, 'sent', false, 'so does the other gift card item type'],
+            ['order_create', 140.0, null, [['type' => 'store_credit', 'label' => 'Credit', 'amount' => '10.00', 'source' => 'test']], false, 'sent', false, 'a tender the filter declares explains the gap'],
+            ['order_create', 135.0, ['gift_card', 10.0], [], false, 'refused', false, 'a gap the tenders leave is refused'],
+            ['order_create', 140.0, null, [['type' => 'store_credit', 'amount' => '-10.00']], false, 'refused', false, 'an entry with no positive amount is not a tender'],
+        ];
+        foreach ($cases as [$type, $gross, $item, $declared, $handler, $expected, $warned, $description]) {
+            self::reset();
+            if ($handler) {
+                self::arm('record');
+            }
+            add_filter('twoinc_order_tenders', static function ($tenders) use ($declared) {
+                return array_merge($tenders, $declared);
+            }, 10, 2);
+            $order = self::exampleOrder();
+            $order->total = $gross;
+            if ($item) {
+                $order->extra_items[$item[0]] = [new StubTenderItem($item[1])];
+            }
+            $build = [
+                'order_create' => static function () use ($order) {
+                    return WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
+                },
+                'order_update' => static function () use ($order) {
+                    return WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+                },
+                'order_intent' => static function () use ($order) {
+                    return WC_Twoinc_Helper::compose_twoinc_intent($order, []);
+                },
+            ][$type];
+            $gateway = self::recordingGateway();
+            try {
+                $gateway->make_order_request($type, 'checkout', '/v1/order', $build(), 'POST', $order);
+                $outcome = $gateway->sent ? 'sent' : 'not sent';
+            } catch (WC_Twoinc_Shop_Match_Exception $e) {
+                $outcome = 'refused';
+                TinyAssert::same('The order lines do not add up to the order total.', $e->getMessage(), $description);
+            }
+            TinyAssert::same($expected, $outcome, $description);
+            $warnings = array_filter($GLOBALS['__twoinc_test_logs'], static function ($log) {
+                return $log['level'] === 'warning' && strpos($log['message'], 'do not add up to the order totals plus tenders of 0.00: gross order 140.00 vs order lines 150.00') !== false;
+            });
+            TinyAssert::same($warned, $warnings !== [], "$description: warning");
+        }
+    }
+}
+
+/** An order item a gift card plugin records a redemption as, named by the card's redeemable code as the plugins do. */
+final class StubTenderItem
+{
+    public const CODE = 'GC-SECRET-4242';
+
+    private $amount;
+
+    public function __construct(float $amount)
+    {
+        $this->amount = $amount;
+    }
+
+    public function get_code()
+    {
+        return self::CODE;
+    }
+
+    public function get_card_number()
+    {
+        return self::CODE;
+    }
+
+    public function get_name()
+    {
+        return self::CODE;
+    }
+
+    public function get_amount()
+    {
+        return $this->amount;
     }
 }

@@ -105,6 +105,7 @@ final class BrandConfigSpec
             'testUninstallCleanupClearsSettingsAndTermCache',
             'testMerchantRecordFetchSharedAcrossConsumersAndOffTheBlob',
             'testMerchantRecordRefetchedOnIdentityChangingSave',
+            'testMerchantRecordResolvesAMissingOrStaleMerchantId',
             'testNightlyMerchantRecordRefreshScheduledAtLocalMidnight',
             'testOnDemandMerchantRecordRefreshReplacesCacheOrKeepsLastKnownGood',
             'testForcedRefreshEntryPointsSpendOneFetchNotTwo',
@@ -4238,6 +4239,71 @@ final class BrandConfigSpec
             );
             TinyAssert::same($expected_display, $gateway->get_merchant_due_in_days(), $description . ' (display)');
         }
+    }
+
+    /**
+     * A shop whose stored merchant id is missing or stale resolves it from the API key and refetches (TWO-26309):
+     * the record no longer 404s until the next key save.
+     */
+    private static function testMerchantRecordResolvesAMissingOrStaleMerchantId(): void
+    {
+        $ok = ['response' => ['code' => 200], 'body' => json_encode(['due_in_days' => 14])];
+        $verify = ['response' => ['code' => 200], 'body' => json_encode(['id' => 'new-mid', 'short_name' => 'acme'])];
+        $missing = ['response' => ['code' => 404], 'body' => '{}'];
+        // [stored id, responses in order, expected endpoints, expected stored id, record fetched, description]
+        $cases = [
+            ['mid', [$ok], ['/v1/merchant/mid'], 'mid', true, 'a good id is fetched once'],
+            ['', [$verify, $ok], ['/v1/merchant/verify_api_key', '/v1/merchant/new-mid'], 'new-mid', true, 'no id: resolved from the key, then fetched'],
+            ['mid', [$missing, $verify, $ok], ['/v1/merchant/mid', '/v1/merchant/verify_api_key', '/v1/merchant/new-mid'], 'new-mid', true, 'a 404: resolved and refetched'],
+            ['', [new WP_Error('http_request_failed', 'down')], ['/v1/merchant/verify_api_key'], '', false, 'no id and verify fails: no record, logged'],
+        ];
+        foreach ($cases as [$stored, $responses, $endpoints, $id, $fetched, $description]) {
+            WC_Twoinc::reset_merchant_record_memo();
+            $gateway = new class ($stored) extends WC_Twoinc {
+                public $options;
+                public $responses = [];
+                public $endpoints = [];
+
+                public function __construct($stored)
+                {
+                    $this->options = ['api_key' => 'key', 'merchant_id' => $stored];
+                }
+
+                public function get_twoinc_checkout_host()
+                {
+                    return 'https://api.example';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+
+                public function update_option($key, $value = '')
+                {
+                    $this->options[$key] = $value;
+                    return true;
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                {
+                    $this->endpoints[] = $endpoint;
+                    return array_shift($this->responses);
+                }
+            };
+            $gateway->responses = $responses;
+            $GLOBALS['__twoinc_test_logs'] = [];
+            $fetch = new ReflectionMethod(WC_Twoinc::class, 'fetch_merchant_record');
+            $fetch->setAccessible(true);
+            $record = $fetch->invoke($gateway);
+            TinyAssert::same($endpoints, $gateway->endpoints, "$description: requests");
+            TinyAssert::same($id, (string) $gateway->options['merchant_id'], "$description: stored id");
+            TinyAssert::same($fetched, is_array($record), "$description: record");
+            if ($stored !== $id || !$fetched) {
+                TinyAssert::true(strpos(json_encode($GLOBALS['__twoinc_test_logs']), 'Merchant record: ') !== false, "$description: logged");
+            }
+        }
+        WC_Twoinc::reset_merchant_record_memo();
     }
 
     private static function testMerchantRecordFetchSharedAcrossConsumersAndOffTheBlob(): void
