@@ -592,7 +592,10 @@ The plugin reads gift card redemptions that gift card plugins record as order
 items of type `gift_card` or `pw_gift_card`, which reduce the order total by
 the item's amount. For the availability check, before those items exist, it
 reads the gift cards those plugins hold in the buyer's session. Any other tender is declared with the `twoinc_order_tenders`
-filter, which receives the list and the order and returns the list:
+filter, which receives the list and the order and returns the list. The list
+it receives already holds the gift cards the plugin read: add only what is not
+in it. A gift card declared again is counted twice, so the lines no longer add
+up and the order is refused.
 
 ```php
 add_filter('twoinc_order_tenders', function (array $tenders, WC_Order $order): array {
