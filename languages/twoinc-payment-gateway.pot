@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-12T08:08:22+00:00\n"
+"POT-Creation-Date: 2026-10-12T12:05:46+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: twoinc-payment-gateway\n"
@@ -384,7 +384,7 @@ msgstr ""
 #: class/WC_Twoinc.php:6096
 #: class/WC_Twoinc.php:6126
 #: class/WC_Twoinc_Blocks_Support.php:85
-#: class/WC_Twoinc_Helper.php:378
+#: class/WC_Twoinc_Helper.php:394
 #, php-format
 msgid "Invoice purchase with %s is not available for this order."
 msgstr ""
@@ -1690,7 +1690,7 @@ msgstr ""
 #: class/WC_Twoinc_Checkout.php:248
 #: class/WC_Twoinc_Checkout.php:271
 #: class/WC_Twoinc_Checkout.php:280
-#: class/WC_Twoinc_Helper.php:433
+#: class/WC_Twoinc_Helper.php:449
 msgid "Company name"
 msgstr ""
 
@@ -1700,7 +1700,7 @@ msgid "Company ID"
 msgstr ""
 
 #: class/WC_Twoinc_Checkout.php:311
-#: class/WC_Twoinc_Helper.php:457
+#: class/WC_Twoinc_Helper.php:473
 msgid "Invoice email address"
 msgstr ""
 
@@ -1783,85 +1783,85 @@ msgstr ""
 msgid "Something went wrong setting up sole trader checkout. Please try again."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:308
+#: class/WC_Twoinc_Helper.php:324
 #, php-format
 msgid "Negative discount amount calculated for %s."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:327
+#: class/WC_Twoinc_Helper.php:343
 #, php-format
 msgid "Empty response from %s."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:331
+#: class/WC_Twoinc_Helper.php:347
 #, php-format
 msgid "Response code from %s: %d"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:401
+#: class/WC_Twoinc_Helper.php:417
 msgid "Buyer and merchant may not be the same company"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:420
+#: class/WC_Twoinc_Helper.php:436
 #, php-format
 msgid "Please enter a valid %s to pay on invoice"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:424
-#: class/WC_Twoinc_Helper.php:427
+#: class/WC_Twoinc_Helper.php:440
+#: class/WC_Twoinc_Helper.php:443
 msgid "Phone number"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:430
+#: class/WC_Twoinc_Helper.php:446
 msgid "Organization number"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:436
+#: class/WC_Twoinc_Helper.php:452
 msgid "First name"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:439
+#: class/WC_Twoinc_Helper.php:455
 msgid "Last name"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:442
+#: class/WC_Twoinc_Helper.php:458
 msgid "Email"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:445
+#: class/WC_Twoinc_Helper.php:461
 msgid "Address"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:448
+#: class/WC_Twoinc_Helper.php:464
 msgid "City"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:451
+#: class/WC_Twoinc_Helper.php:467
 msgid "Country"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:454
+#: class/WC_Twoinc_Helper.php:470
 msgid "Postal code"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:2066
+#: class/WC_Twoinc_Helper.php:2168
 msgid "The order lines do not add up to the order total."
 msgstr ""
 
 #. translators: 1: request type (e.g. order_update). 2: product name (e.g. Two). 3: what went wrong.
-#: class/WC_Twoinc_Helper.php:2232
+#: class/WC_Twoinc_Helper.php:2342
 #, php-format
 msgid "The %1$s request was not sent to %2$s: the twoinc_order_postprocessing filter failed (%3$s)."
 msgstr ""
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:2824
+#: class/WC_Twoinc_Helper.php:2934
 #, php-format
 msgid "Shipping \"%s\" cannot be refunded: the order line it refunds was not found."
 msgstr ""
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:3022
+#: class/WC_Twoinc_Helper.php:3132
 #, php-format
 msgid "The tax charged on \"%s\" does not match the shop's tax rates."
 msgstr ""
