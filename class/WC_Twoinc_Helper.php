@@ -78,7 +78,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         private const MAX_DIFF_STRING = 120;
 
         /** Diff values outside these paths can carry buyer data, so only their path is logged. */
-        private const DIFF_VALUE_PATHS = '#^/(line_items|tax_subtotals)(/|$)|^/(gross_amount|net_amount|tax_amount|discount_amount|discount_rate|amount|currency)$#';
+        private const DIFF_VALUE_PATHS = '#^/(line_items|tax_subtotals)(/|$)|^/(gross_amount|net_amount|tax_amount|discount_amount|discount_rate|amount|invoice_amount|payable_amount|prepaid_amount|currency)$#';
 
         /** The EU VAT area by ISO code, with Monaco, which counts as France for VAT (TWO-24877). */
         private const EU_VAT_COUNTRIES = [

@@ -1333,6 +1333,7 @@ final class OrderPostprocessingSpec
             [['buyer' => ['email' => 'c@d.example']] + $before, 1, [['/buyer/email', 'redacted', 'redacted']], 'a buyer field is redacted'],
             [['order_note' => null] + $before, 1, [['/order_note', 'redacted', null]], 'a removed value is null, not redacted'],
             [['gross_amount' => '151.00'] + $before, 1, [['/gross_amount', '150.00', '151.00']], 'an amount keeps its values'],
+            [['prepaid_amount' => '10.00'] + $before, 1, [['/prepaid_amount', null, '10.00']], 'so does a prepaid field'],
             [array_replace_recursive($before, ['line_items' => [1 => ['name' => $long]]]), 1, [['/line_items/1/name', 'Shipping - Courier', str_repeat('x', 120) . '...']], 'a line keeps its values, cut to 120'],
             [$many, 45, null, 'at most 40 entries, and the change count'],
         ];
