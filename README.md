@@ -574,10 +574,31 @@ points. Its amount is in the order's lines but not in what is left to pay, so
 the order total WooCommerce records is the lines less the tenders. Coupons and
 negative fees are not tenders: they are order lines already.
 
-Two's API is told only what is left to pay: the payload's totals are the order
-total as recorded, after tenders, and tenders are never sent. They are given to
-subscribers, and used by the plugin's own whole-order check, so the gap
-between the lines and the order total is explained rather than refused.
+An order with tenders is sent to Two as an invoice for its full lines, with
+the tenders declared as already paid. Its `order_create` and `order_update`
+bodies carry:
+
+| Field            | Value                                                                   |
+| ---------------- | ----------------------------------------------------------------------- |
+| `net_amount`     | The lines' net: the order total plus the tenders, less the order's tax  |
+| `tax_amount`     | The order's tax, which a tender does not reduce                         |
+| `invoice_amount` | `net_amount` plus `tax_amount`                                          |
+| `prepaid_amount` | The sum of the tenders                                                  |
+| `payable_amount` | `invoice_amount` less `prepaid_amount`: the order total, what Two funds |
+| `gross_amount`   | The order total, equal to `payable_amount`                              |
+
+`tax_subtotals` and the lines are built as for any order. A `refund` body on
+such an order carries `prepaid_amount` too: the part of the refunded lines
+beyond the refund's `amount`, up to the tenders, so `amount` plus
+`prepaid_amount` is the refunded lines. A `capture` fulfils the whole order,
+prepaid part included, and carries no amounts. The `order_intent` body is
+unchanged: its totals are what is left to pay.
+
+An order with no tenders carries none of `invoice_amount`, `payable_amount`
+and `prepaid_amount`, and its bodies are as they always were. The tenders
+themselves are given to subscribers, and used by the plugin's own whole-order
+check, so the gap between the lines and the order total is explained rather
+than refused.
 
 `$context['order_tenders']` lists them, each an array:
 
@@ -609,8 +630,8 @@ add_filter('twoinc_order_tenders', function (array $tenders, WC_Order $order): a
 
 An entry whose `amount` is zero is skipped. One whose `amount` is negative or
 not a number is dropped and logged with its type, source and amount, never its
-label. An unknown `type` is reported as `other`. A tender is a payment, so it reduces the gross
-and net the order has left to pay, not its tax. When the whole-order check
+label. An unknown `type` is reported as `other`. A tender is a payment, so it reduces what the
+order has left to pay, not its tax. When the whole-order check
 finds a gap the tenders do not explain, the log names the gap and this filter.
 
 **What the plugin checks**. The plugin registers its own handler on the hook,
@@ -721,10 +742,13 @@ the opt-in helper
 sets each order total, each per-rate entry in `tax_subtotals` and a refund
 `amount` to the sum over the payload's lines plus the residual `$original`
 carried beyond its lines, such as rounding. Pass `$context['order_tenders']` as
-`$tenders`: the gross and net totals then have the tenders taken off, so they
-stay what is left to pay even when `$original` carries no totals. The tax total
-and a refund's `amount` are not reduced by tenders. It touches only the fields
-the payload already carries. A total the subscriber edited by hand
+`$tenders`: net and tax then stay the full lines, and `invoice_amount`,
+`prepaid_amount` and `payable_amount` are set as in "Tenders" above, with
+`gross_amount` equal to `payable_amount`, even when `$original` carries no
+totals. A refund keeps the `prepaid_amount` it was built with, and its `amount`
+is its lines less that. Apart from those prepaid fields on an order with
+tenders, it touches only the fields the payload already carries. A total the
+subscriber edited by hand
 before calling it is overwritten: the helper's result wins.
 
 **The buyer surcharge is priced before the hook**. The plugin's fee

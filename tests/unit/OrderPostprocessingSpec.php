@@ -66,6 +66,7 @@ final class OrderPostprocessingSpec
             'testADroppedTenderLogsNoLabel',
             'testTendersAreReadOncePerRequest',
             'testABuildsCheckNeverReachesAnotherOrder',
+            'testEveryPayloadMeetsTheOrderAmountRules',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -1538,18 +1539,25 @@ final class OrderPostprocessingSpec
             TinyAssert::same(false, strpos(json_encode([$context['order_tenders'], $GLOBALS['__twoinc_test_logs']]), StubTenderItem::CODE), "$description: the card code leaked");
         }
 
-        // recompute_totals_from_lines() takes the tenders off gross and net, whatever the original carries.
+        // recompute_totals_from_lines() declares the tenders as prepaid: net and tax stay the full lines, whatever the
+        // original carries.
         $lines = [['net_amount' => '100.00', 'tax_amount' => '21.00', 'gross_amount' => '121.00', 'tax_rate' => '0.21']];
-        $outstanding = ['gross_amount' => '111.00', 'net_amount' => '90.00', 'tax_amount' => '21.00', 'line_items' => $lines];
-        // [original, tenders, expected totals, description]
+        $built = ['gross_amount' => '111.00', 'net_amount' => '100.00', 'tax_amount' => '21.00', 'invoice_amount' => '121.00', 'payable_amount' => '111.00', 'prepaid_amount' => '10.00', 'line_items' => $lines];
+        $prepaid = ['111.00', '100.00', '21.00', '121.00', '111.00', '10.00'];
+        // [original, tenders, expected gross, net, tax, invoice, payable, prepaid, description]
         $recompute = [
-            [$outstanding, [$card], ['111.00', '90.00', '21.00'], 'an original that carries the tender: unchanged'],
-            [['line_items' => $lines], [$card], ['111.00', '90.00', '21.00'], 'an original with no totals: the tender is still taken off'],
-            [['line_items' => $lines], [], ['121.00', '100.00', '21.00'], 'no tenders: the lines'],
+            [$built, [$card], $prepaid, 'an original the plugin built with the tender: unchanged'],
+            [['line_items' => $lines], [$card], $prepaid, 'an original with no totals: the tender is still declared'],
+            [$built, [], $prepaid, 'no tenders passed: the payload\'s own prepaid amount is kept'],
+            [['line_items' => $lines], [], ['121.00', '100.00', '21.00', null, null, null], 'no tenders: the lines, and no prepaid fields'],
         ];
+        $fields = ['gross_amount', 'net_amount', 'tax_amount', 'invoice_amount', 'payable_amount', 'prepaid_amount'];
         foreach ($recompute as [$original, $tenders, $expected, $description]) {
-            $out = WC_Twoinc_Helper::recompute_totals_from_lines(['gross_amount' => '0', 'net_amount' => '0', 'tax_amount' => '0', 'line_items' => $lines], $original, $tenders);
-            TinyAssert::same($expected, [$out['gross_amount'], $out['net_amount'], $out['tax_amount']], $description);
+            $payload = ['gross_amount' => '0', 'net_amount' => '0', 'tax_amount' => '0', 'line_items' => $lines] + array_intersect_key($original, ['prepaid_amount' => 1]);
+            $out = WC_Twoinc_Helper::recompute_totals_from_lines($payload, $original, $tenders);
+            TinyAssert::same($expected, array_map(static function ($field) use ($out) {
+                return $out[$field] ?? null;
+            }, $fields), $description);
         }
     }
 
@@ -1791,6 +1799,104 @@ final class OrderPostprocessingSpec
             });
             TinyAssert::same($warned, $warnings !== [], "$description: warning");
         }
+    }
+
+    /**
+     * Every body that carries amounts, run through the rules Two's API applies to them (TWO-26309): the lines' net
+     * within 0.02 of net_amount, their tax within 0.99 of tax_amount, invoice_amount equal to net plus tax and to
+     * payable plus prepaid, gross_amount if sent equal to payable_amount, and a refund's payable and prepaid parts
+     * summing to its lines. The order's lines come to 150.00 gross, 21.00 tax.
+     */
+    private static function testEveryPayloadMeetsTheOrderAmountRules(): void
+    {
+        $create = static function ($order) {
+            return WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
+        };
+        $update = static function ($order) {
+            return WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+        };
+        $refund = static function (float $amount) {
+            return static function ($order) use ($amount) {
+                return WC_Twoinc_Helper::compose_twoinc_refund(self::shippingRefund(), $amount, $order);
+            };
+        };
+        $capture = static function () {
+            return [];
+        };
+        // [build, gift card, expected payable or refund amount, expected prepaid (null: no prepaid fields), description]
+        $cases = [
+            [$create, 0.0, '150.00', null, 'a create with no tender is sent as before, with no prepaid fields'],
+            [$update, 0.0, '150.00', null, 'so is an update'],
+            [$create, 10.0, '140.00', '10.00', 'a create with a gift card declares it as prepaid'],
+            [$update, 10.0, '140.00', '10.00', 'so does an update'],
+            [$create, 150.0, '0.00', '150.00', 'a gift card covering the whole order leaves nothing payable'],
+            [$refund(29.0), 0.0, '29.00', null, 'a refund with no tender is its lines'],
+            [$refund(19.0), 10.0, '19.00', '10.00', 'a refund with a gift card: the lines beyond the refunded amount are prepaid'],
+            [$refund(29.0), 10.0, '29.00', '0.00', 'a refund paid in full through Two has no prepaid part'],
+            [$capture, 10.0, null, null, 'a capture with a gift card fulfils the whole order and carries no amounts'],
+        ];
+        foreach ($cases as [$build, $card, $payable, $prepaid, $description]) {
+            self::reset();
+            $order = self::exampleOrder();
+            $order->total = 150.0 - $card;
+            if ($card > 0) {
+                $order->extra_items['gift_card'] = [new StubTenderItem($card)];
+            }
+            $payload = $build($order);
+            if ($payable === null) {
+                TinyAssert::same([], $payload, $description);
+                continue;
+            }
+            $broken = self::amountRuleFailures($payload, $card);
+            TinyAssert::same([], $broken, "$description: breaks " . implode('; ', $broken));
+            $refund_body = array_key_exists('amount', $payload);
+            TinyAssert::same($payable, $payload[$refund_body ? 'amount' : 'gross_amount'], "$description: payable");
+            TinyAssert::same($prepaid, $payload['prepaid_amount'] ?? null, "$description: prepaid");
+            if (!$refund_body) {
+                TinyAssert::same($prepaid === null ? [] : ['invoice_amount', 'payable_amount', 'prepaid_amount'], array_values(array_intersect(array_keys($payload), ['invoice_amount', 'payable_amount', 'prepaid_amount'])), "$description: fields");
+            }
+        }
+    }
+
+    /**
+     * A port of the amount rules Two's API applies to an order body (create, update, partial fulfilment) or a refund.
+     *
+     * @param float $tendered the order's prepaid amount, the most a refund's prepaid part can be
+     *
+     * @return string[] the rules the body breaks
+     */
+    private static function amountRuleFailures(array $payload, float $tendered): array
+    {
+        $cents = static function ($amount): int {
+            return (int) round((float) $amount * 100);
+        };
+        $sum = static function (string $field) use ($payload, $cents): int {
+            return array_sum(array_map(static function ($line) use ($field, $cents) {
+                return $cents($line[$field] ?? 0);
+            }, $payload['line_items'] ?? []));
+        };
+        $prepaid = $cents($payload['prepaid_amount'] ?? 0);
+        if (array_key_exists('amount', $payload)) {
+            return array_keys(array_filter([
+                'payable plus prepaid is the refunded lines' => abs($cents($payload['amount'])) + abs($prepaid) !== abs($sum('gross_amount')),
+                'prepaid within the order\'s' => abs($prepaid) > $cents($tendered),
+            ]));
+        }
+        // Two's API reads a body with no payable_amount as gross_amount, and one with no invoice_amount as payable plus prepaid.
+        $payable = $cents($payload['payable_amount'] ?? $payload['gross_amount']);
+        $invoice = $cents($payload['invoice_amount'] ?? 0) ?: $payable + $prepaid;
+        $net = $cents($payload['net_amount']);
+        $tax = $cents($payload['tax_amount']);
+        return array_keys(array_filter([
+            'net within 0.02 of the lines' => abs($sum('net_amount') - $net) > 2,
+            'tax within 0.99 of the lines' => abs($sum('tax_amount') - $tax) > 99,
+            'invoice is net plus tax' => $invoice !== $net + $tax,
+            'invoice is payable plus prepaid' => $invoice !== $payable + $prepaid,
+            'gross, when sent, is payable' => isset($payload['gross_amount']) && $cents($payload['gross_amount']) !== $payable,
+            'tax subtotals sum to the tax' => isset($payload['tax_subtotals']) && array_sum(array_map(static function ($subtotal) use ($cents) {
+                return $cents($subtotal['tax_amount']);
+            }, $payload['tax_subtotals'])) !== $tax,
+        ]));
     }
 }
 

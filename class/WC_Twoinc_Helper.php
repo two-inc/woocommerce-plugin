@@ -1439,7 +1439,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $invoice_details['invoice_emails'] = $invoice_emails;
             }
 
-            $req_body = ['currency' => $order->get_currency()] + self::order_totals($order) + [
+            $line_items = self::expect_order_totals($order, 'order_create', true, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates));
+            $req_body = ['currency' => $order->get_currency()] + self::order_totals($order, self::$whole_order_check['tenders']) + [
                 'discount_amount' => WC_Twoinc_Helper::order_discount_amount($order),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
@@ -1461,7 +1462,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
-                'line_items' => self::expect_order_totals($order, 'order_create', true, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates)),
+                'line_items' => $line_items,
                 'recurring' => false,
                 'merchant_additional_info' => '',
                 'merchant_order_id' => strval($order->get_id()),
@@ -1578,14 +1579,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $shipping_address = $billing_address;
             }
 
-            $req_body = ['currency' => $order->get_currency()] + self::order_totals($order) + [
+            $line_items = self::expect_order_totals($order, 'order_update', true, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates));
+            $req_body = ['currency' => $order->get_currency()] + self::order_totals($order, self::$whole_order_check['tenders']) + [
                 'discount_amount' => WC_Twoinc_Helper::order_discount_amount($order),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
-                'line_items' => self::expect_order_totals($order, 'order_update', true, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates)),
+                'line_items' => $line_items,
                 'recurring' => false,
                 'merchant_additional_info' => '',
                 'merchant_reference' => '',
@@ -1645,6 +1647,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $order
                 )
             ];
+
+            // TWO-26309: on an order with tenders, the refunded lines can exceed what WooCommerce refunds, as the
+            // order total it caps refunds at is after tenders. `amount` stays what is refunded through Two and the
+            // rest of the lines, up to the tenders, is declared as the prepaid part being refunded.
+            $tendered = $order ? self::tender_total(self::order_tenders($order)) : 0.0;
+            if ($tendered > 0) {
+                $lines = abs(self::sum_lines($req_body['line_items'])['gross']);
+                $req_body['prepaid_amount'] = strval(WC_Twoinc_Helper::round_amt(min($tendered, max(0.0, $lines - abs((float) $amount)))));
+            }
 
             return $req_body;
         }
@@ -1720,17 +1731,32 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * The order-level amounts every order body declares, copied from the order's own totals.
          *
+         * With tenders (TWO-26309) the invoice covers the full lines and the tenders are declared as already paid:
+         * net and tax are the lines' (the order's total plus its tenders), invoice_amount is net plus tax,
+         * prepaid_amount the tenders and payable_amount what is left to pay, the order total. gross_amount stays the
+         * order total, equal to payable_amount. Without tenders the body is unchanged.
+         *
          * @param WC_Order $order
+         * @param array    $tenders order_tenders() for this order
          *
          * @return array
          */
-        private static function order_totals($order)
+        private static function order_totals($order, array $tenders = [])
         {
-            return [
+            $tendered = self::tender_total($tenders);
+            $totals = [
                 'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),
-                'net_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() - $order->get_total_tax())),
+                'net_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() + $tendered - $order->get_total_tax())),
                 'tax_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_tax())),
             ];
+            if ($tendered > 0) {
+                $totals += [
+                    'invoice_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() + $tendered)),
+                    'payable_amount' => $totals['gross_amount'],
+                    'prepaid_amount' => strval(WC_Twoinc_Helper::round_amt($tendered)),
+                ];
+            }
+            return $totals;
         }
 
         /**
@@ -2312,11 +2338,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * Opt-in for `twoinc_order_postprocessing` subscribers (TWO-26092): sets each order total, each per-rate tax
          * subtotal and a refund's amount to the sum over the payload's own lines plus the residual the original
          * carried beyond its lines (rounding), touching only the fields the payload already carries. `$original` is
-         * the payload as the subscriber received it. `$tenders`, the context's order_tenders (TWO-26309), is taken
-         * off the order's gross and net, so they stay what is left to pay, whatever `$original` carries; tax stays on
-         * the full lines, and a refund's amount is its lines. A total the subscriber edited
-         * by hand before calling this is overwritten: the helper's result wins. Arithmetic only; part of the stable
-         * contract.
+         * the payload as the subscriber received it. `$tenders`, the context's order_tenders (TWO-26309), is declared
+         * as already paid: net and tax stay the full lines, invoice_amount is their sum, prepaid_amount the tenders
+         * and payable_amount, and gross_amount if carried, the invoice less the tenders. Those three fields are set
+         * whenever there are tenders or the payload carries them. A refund's amount is its lines less the prepaid
+         * part the original declared. A total the subscriber edited by hand before calling this is overwritten: the
+         * helper's result wins. Arithmetic only; part of the stable contract.
          *
          * @param array $payload
          * @param array $original the payload before the subscriber's edits
@@ -2327,17 +2354,25 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public static function recompute_totals_from_lines(array $payload, array $original, array $tenders = [])
         {
             $carry = self::residuals($original);
-            // An original that carries a gross or net already holds its tenders in that residual. One that carries
-            // none has no residual to hold them, so the tenders are taken off here.
-            $tendered = self::tender_total($tenders);
-            foreach (['net_amount', 'gross_amount'] as $field) {
-                $carry[$field] = $carry[$field] ?? -$tendered;
-            }
+            $tendered = $tenders !== [] ? self::tender_total($tenders) : (float) ($payload['prepaid_amount'] ?? 0);
             $lines = isset($payload['line_items']) && is_array($payload['line_items']) ? $payload['line_items'] : [];
             $sums = self::sum_lines($lines);
-            if (array_key_exists('gross_amount', $payload)) {
+            $prepaid = !array_key_exists('amount', $payload) && ($tendered > 0 || array_key_exists('invoice_amount', $payload));
+            $gross = array_key_exists('gross_amount', $payload);
+            if ($gross || $prepaid) {
                 foreach (['net_amount' => 'net', 'tax_amount' => 'tax', 'gross_amount' => 'gross'] as $field => $sum) {
                     $payload[$field] = self::format_amount($sums[$sum] + ($carry[$field] ?? 0.0));
+                }
+            }
+            if ($prepaid) {
+                $invoice = round((float) $payload['net_amount'] + (float) $payload['tax_amount'], 2);
+                $payload['invoice_amount'] = self::format_amount($invoice);
+                $payload['payable_amount'] = self::format_amount($invoice - $tendered);
+                $payload['prepaid_amount'] = self::format_amount($tendered);
+                if ($gross) {
+                    $payload['gross_amount'] = $payload['payable_amount'];
+                } else {
+                    unset($payload['gross_amount']);
                 }
             }
             if (array_key_exists('tax_subtotals', $payload)) {
