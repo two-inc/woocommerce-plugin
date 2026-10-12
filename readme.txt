@@ -74,7 +74,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 * Requires WooCommerce 7.6 or later.
 * A line placed at 0% with no tax code is resolved again on each order edit, against your tax code settings at the time; only the codes lines were placed with are kept on the order.
 * If the stored "Tax codes for 0% lines" setting cannot be read, Two is withheld from checkout until it is saved again.
-* Unless a `twoinc_order_postprocessing` handler is registered, an order whose lines do not add up to its total (within 0.02) is refused at checkout and on edit.
+* Unless a `twoinc_order_postprocessing` handler is registered, an order whose lines do not add up to its total (within 0.02, or half a unit of the price decimals per line where that is more) is refused at checkout and on edit.
 * Gift cards and other tenders (anything that has already paid part of the order without being an order line) are read from the order and given to the `twoinc_order_postprocessing` filter as `order_tenders`; developers declare others with the new `twoinc_order_tenders` filter. The check that the order lines add up to the order total counts them, so an order part-paid by a gift card is no longer refused. Two is still sent only what is left to pay.
 * A shop whose stored merchant id is missing or out of date resolves it from the API key the next time the merchant profile is read.
 * Developers can change anything the plugin sends to Two, such as treating untaxed shipping as VAT-inclusive, through the new `twoinc_order_postprocessing` filter. It is documented as a permanent contract in the plugin's README. The older order filters still work but are deprecated.

@@ -61,6 +61,7 @@ final class OrderPostprocessingSpec
             'testARefusedEditRunsTheHookUnsent',
             'testTheWholeOrderCheck',
             'testTheOrderTenders',
+            'testRoundingNeverRefusesAGenuineOrder',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -153,15 +154,18 @@ final class OrderPostprocessingSpec
             {
                 switch ($type) {
                     case 'line_item':
-                        return [new StubProductLineItem(['name' => 'Widget', 'line_total' => 100.0, 'line_subtotal' => 100.0, 'line_tax' => 21.0, 'taxes' => [1 => 21.0]])];
+                        return $this->products ?? [new StubProductLineItem(['name' => 'Widget', 'line_total' => 100.0, 'line_subtotal' => 100.0, 'line_tax' => 21.0, 'taxes' => [1 => 21.0]])];
                     case 'shipping':
-                        return [5 => $this->get_item(5)];
+                        return $this->products === null ? [5 => $this->get_item(5)] : [];
                     default:
                         return $this->extra_items[$type] ?? [];
                 }
             }
 
             public $extra_items = [];
+
+            /** @var array|null product lines standing in for the Widget, with no shipping */
+            public $products = null;
 
             public function get_taxes()
             {
@@ -1531,6 +1535,46 @@ final class OrderPostprocessingSpec
         foreach ($recompute as [$original, $tenders, $expected, $description]) {
             $out = WC_Twoinc_Helper::recompute_totals_from_lines(['gross_amount' => '0', 'net_amount' => '0', 'tax_amount' => '0', 'line_items' => $lines], $original, $tenders);
             TinyAssert::same($expected, [$out['gross_amount'], $out['net_amount'], $out['tax_amount']], $description);
+        }
+    }
+
+    /**
+     * Each line is rounded to the shop's price decimals on its own, so a many-line order's lines can sum a little away
+     * from its total: with taxes rounded at subtotal, or prices with no decimals. That is never a refusal; a real gap
+     * still is. 20 lines, each as WooCommerce stores it, and the order totals WooCommerce rounds from them.
+     */
+    private static function testRoundingNeverRefusesAGenuineOrder(): void
+    {
+        // [price decimals, line net, line tax, order total, order tax, expected outcome, description]
+        $cases = [
+            [2, 0.83, 0.17, 20.00, 3.40, 'sent', '2 decimals, tax rounded per line'],
+            [2, 0.83, 0.166, 19.92, 3.32, 'sent', '2 decimals, tax rounded at subtotal: the lines carry 0.08 more'],
+            [2, 0.83, 0.166, 18.92, 3.32, 'refused', '2 decimals, a 1.00 gap is still refused'],
+            [0, 100.4, 20.0, 2408.0, 400.0, 'sent', '0 decimals, tax rounded per line'],
+            [0, 100.4, 20.08, 2410.0, 402.0, 'sent', '0 decimals, tax rounded at subtotal'],
+            [0, 100.4, 20.08, 2390.0, 402.0, 'refused', '0 decimals, a 20 gap is still refused'],
+        ];
+        foreach ($cases as [$decimals, $net, $tax, $total, $total_tax, $expected, $description]) {
+            self::reset();
+            $GLOBALS['__twoinc_test_price_decimals'] = $decimals;
+            try {
+                $order = self::exampleOrder();
+                $order->products = [];
+                for ($i = 0; $i < 20; $i++) {
+                    $order->products[] = new StubProductLineItem(['name' => "Item $i", 'line_total' => $net, 'line_subtotal' => $net, 'line_tax' => $tax, 'taxes' => [1 => $tax]]);
+                }
+                $order->total = $total;
+                $order->total_tax = $total_tax;
+                try {
+                    self::recordingGateway()->make_order_request('order_create', 'checkout', '/v1/order', WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []), 'POST', $order);
+                    $outcome = 'sent';
+                } catch (WC_Twoinc_Shop_Match_Exception $e) {
+                    $outcome = 'refused';
+                }
+                TinyAssert::same($expected, $outcome, $description);
+            } finally {
+                unset($GLOBALS['__twoinc_test_price_decimals']);
+            }
         }
     }
 
