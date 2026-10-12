@@ -1559,6 +1559,8 @@ final class OrderPostprocessingSpec
                 return $out[$field] ?? null;
             }, $fields), $description);
         }
+        // A request with no body (capture, cancel, confirm) stays without one on a gift card order.
+        TinyAssert::same([], WC_Twoinc_Helper::recompute_totals_from_lines([], [], [$card]), 'an empty body stays empty');
     }
 
     /**

@@ -2357,7 +2357,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $tendered = $tenders !== [] ? self::tender_total($tenders) : (float) ($payload['prepaid_amount'] ?? 0);
             $lines = isset($payload['line_items']) && is_array($payload['line_items']) ? $payload['line_items'] : [];
             $sums = self::sum_lines($lines);
-            $prepaid = !array_key_exists('amount', $payload) && ($tendered > 0 || array_key_exists('invoice_amount', $payload));
+            // Only a body that declares an order's amounts: one with no body (capture, cancel, confirm) stays empty.
+            $amounts = $lines !== [] || array_intersect_key($payload, array_flip(['gross_amount', 'net_amount', 'tax_amount', 'invoice_amount'])) !== [];
+            $prepaid = $amounts && !array_key_exists('amount', $payload) && ($tendered > 0 || array_key_exists('invoice_amount', $payload));
             $gross = array_key_exists('gross_amount', $payload);
             if ($gross || $prepaid) {
                 foreach (['net_amount' => 'net', 'tax_amount' => 'tax', 'gross_amount' => 'gross'] as $field => $sum) {
