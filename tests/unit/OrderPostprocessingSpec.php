@@ -62,6 +62,7 @@ final class OrderPostprocessingSpec
             'testTheWholeOrderCheck',
             'testTheOrderTenders',
             'testRoundingNeverRefusesAGenuineOrder',
+            'testTheIntentSeesTheCartsGiftCards',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -166,6 +167,14 @@ final class OrderPostprocessingSpec
 
             /** @var array|null product lines standing in for the Widget, with no shipping */
             public $products = null;
+
+            /** 0 for the unsaved order the intent builds from the cart */
+            public $id = 42;
+
+            public function get_id()
+            {
+                return $this->id;
+            }
 
             public function get_taxes()
             {
@@ -1575,6 +1584,46 @@ final class OrderPostprocessingSpec
             } finally {
                 unset($GLOBALS['__twoinc_test_price_decimals']);
             }
+        }
+    }
+
+    /**
+     * At the intent the cart total already has the gift cards off, but the unsaved order built from the cart has no
+     * gift card items yet: they are read from the session the gift card plugins keep them in, as each plugin does
+     * when it adds the items to the order.
+     */
+    private static function testTheIntentSeesTheCartsGiftCards(): void
+    {
+        // [session key, session value, unsaved order, expected order_tenders amounts, warning logged, description]
+        $cases = [
+            [null, null, true, [], true, 'no gift card in the session: the gap is a warning'],
+            ['_wc_gc_giftcards', [['giftcard' => 'card', 'amount' => 6.0], ['giftcard' => 'card', 'amount' => 4.0]], true, ['6.00', '4.00'], false, 'gift cards applied in the cart'],
+            ['pw-gift-card-data', ['gift_cards' => ['SECRET-1' => 10.0]], true, ['10.00'], false, 'the other plugin\'s cart gift cards'],
+            ['pw-gift-card-data', ['gift_cards' => ['SECRET-1' => 0]], true, [], true, 'a card worth nothing in the cart is no tender'],
+            ['_wc_gc_giftcards', [['giftcard' => 'card', 'amount' => 10.0]], false, [], false, 'a placed order reads its items, not the session'],
+        ];
+        foreach ($cases as [$key, $value, $unsaved, $amounts, $warned, $description]) {
+            self::reset();
+            WC()->session = new StubSession();
+            if ($key !== null) {
+                WC()->session->set($key, $value);
+            }
+            $order = self::exampleOrder();
+            $order->total = 140.0;
+            if ($unsaved) {
+                $order->id = 0;
+                unset($order->meta[WC_Twoinc_Brand::prefixed_name('order_id')]);
+            }
+            TinyAssert::same($amounts, array_column(WC_Twoinc_Helper::order_tenders($order), 'amount'), "$description: tenders");
+            if (!$unsaved) {
+                continue;
+            }
+            self::recordingGateway()->make_order_request('order_intent', 'checkout', '/v1/order_intent', WC_Twoinc_Helper::compose_twoinc_intent($order, []), 'POST', $order);
+            $warnings = array_filter($GLOBALS['__twoinc_test_logs'], static function ($log) {
+                return $log['level'] === 'warning' && strpos($log['message'], 'twoinc_order_tenders') !== false;
+            });
+            TinyAssert::same($warned, $warnings !== [], "$description: warning");
+            TinyAssert::same(false, strpos(json_encode($GLOBALS['__twoinc_test_logs']), 'SECRET-1'), "$description: the card number was logged");
         }
     }
 

@@ -59,6 +59,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
             'pw_gift_card' => ['type' => 'gift_card', 'currency_filter' => 'pwgc_to_order_currency'],
         ];
 
+        /**
+         * Before the order exists (the intent), the cart total already has the gift cards off but the order built
+         * from the cart has no gift card items: the plugins keep them in the session until they add the items at
+         * checkout. By session key: the order item type the plugin adds, and the list of cards in the session value,
+         * each an amount in the cart's currency (checked against each plugin's source).
+         */
+        private const TENDER_SESSION_KEYS = [
+            '_wc_gc_giftcards' => ['source' => 'gift_card', 'list' => null, 'amount' => 'amount'],
+            'pw-gift-card-data' => ['source' => 'pw_gift_card', 'list' => 'gift_cards', 'amount' => null],
+        ];
+
         /** The whole-order check's tolerance per figure, as the PrestaShop plugin's ORDER_RECONCILIATION_TOLERANCE. */
         private const ORDER_RECONCILIATION_TOLERANCE = 0.02;
 
@@ -1933,6 +1944,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     }
                 }
             }
+            if (is_object($order) && method_exists($order, 'get_id') && !$order->get_id()) {
+                $tenders = array_merge($tenders, self::cart_tenders());
+            }
+            // A card worth nothing paid nothing: skipped here, before the filter, so it is never logged as dropped.
+            $tenders = array_values(array_filter($tenders, static function ($tender) {
+                return round((float) $tender['amount'], 2) > 0;
+            }));
             $declared = apply_filters(self::ORDER_TENDERS_FILTER, $tenders, $order);
             $valid = [];
             foreach (is_array($declared) ? $declared : [] as $tender) {
@@ -1955,6 +1973,28 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 ];
             }
             return $valid;
+        }
+
+        /**
+         * The gift cards applied to the cart (TENDER_SESSION_KEYS), for the unsaved order the intent builds from it.
+         *
+         * @return array
+         */
+        private static function cart_tenders()
+        {
+            $session = function_exists('WC') && WC()->session ? WC()->session : null;
+            $tenders = [];
+            foreach ($session ? self::TENDER_SESSION_KEYS : [] as $key => $reader) {
+                $value = $session->get($key);
+                $cards = null === $reader['list'] ? $value : ($value[$reader['list']] ?? null);
+                foreach (is_array($cards) ? $cards : [] as $card) {
+                    $amount = null === $reader['amount'] ? $card : (is_array($card) ? ($card[$reader['amount']] ?? null) : null);
+                    if (is_numeric($amount)) {
+                        $tenders[] = ['type' => 'gift_card', 'label' => 'Gift card', 'amount' => (float) $amount, 'source' => $reader['source']];
+                    }
+                }
+            }
+            return $tenders;
         }
 
         /**

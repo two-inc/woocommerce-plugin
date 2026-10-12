@@ -590,7 +590,8 @@ between the lines and the order total is explained rather than refused.
 
 The plugin reads gift card redemptions that gift card plugins record as order
 items of type `gift_card` or `pw_gift_card`, which reduce the order total by
-the item's amount. Any other tender is declared with the `twoinc_order_tenders`
+the item's amount. For the availability check, before those items exist, it
+reads the gift cards those plugins hold in the buyer's session. Any other tender is declared with the `twoinc_order_tenders`
 filter, which receives the list and the order and returns the list:
 
 ```php
