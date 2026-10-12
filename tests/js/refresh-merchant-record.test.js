@@ -92,6 +92,15 @@ describe("Diagnostics refresh merchant profile", () => {
     }
   });
 
+  test.each([
+    ["/wp-admin/admin.php?page=wc-settings&twoinc_refreshed=1700000000000&tab=checkout#twoinc-refresh-merchant-record", "/wp-admin/admin.php?page=wc-settings&tab=checkout#twoinc-refresh-merchant-record", "the landing stamp is dropped, so a later save does not confirm again"],
+    ["/wp-admin/admin.php?page=wc-settings&tab=checkout", "/wp-admin/admin.php?page=wc-settings&tab=checkout", "a URL without it is left alone"]
+  ])("%#: %s", async (landing, expected, description) => {
+    window.history.replaceState(null, "", landing);
+    await loadRefreshPage(respondWith(null));
+    expect([window.location.pathname + window.location.search + window.location.hash, description]).toEqual([expected, description]);
+  });
+
   test("the request carries the nonce and the action the PHP handler is registered on", async () => {
     const { $ } = await loadRefreshPage(function () {
       return { done: function () {}, fail: function () {} };

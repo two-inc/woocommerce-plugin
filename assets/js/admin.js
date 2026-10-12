@@ -652,6 +652,15 @@ jQuery(function ($) {
 
   // ── Diagnostics: on-demand merchant-profile refresh ─────────────────────
   (function initRefreshMerchantRecord() {
+    // The reload after a refresh carries a stamp the server confirms once;
+    // drop it, so the settings form does not post back to it and a later
+    // save does not confirm the refresh again.
+    const landed = new URL(window.location.href);
+    if (landed.searchParams.has("twoinc_refreshed")) {
+      landed.searchParams.delete("twoinc_refreshed");
+      window.history.replaceState(window.history.state, "", landed.toString());
+    }
+
     const $button = $("#twoinc-refresh-merchant-record");
     const $status = $("#twoinc-refresh-merchant-record-status");
     if (!$button.length) {
