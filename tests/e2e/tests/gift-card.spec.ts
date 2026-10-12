@@ -71,7 +71,8 @@ test("an order part paid by a gift card is sent with the card as prepaid", async
   const twoOrder = await readTwoOrder(twoOrderId);
   expect(
     [twoOrder.prepaid_amount, twoOrder.payable_amount],
-    `prepaid and payable: ${JSON.stringify(twoOrder)}`
+    // Only the amount fields, so a failure never logs the buyer.
+    `prepaid and payable: ${JSON.stringify([twoOrder.invoice_amount, twoOrder.payable_amount, twoOrder.prepaid_amount])}`
   ).toEqual(["10.00", total]);
   expect(Number(twoOrder.invoice_amount), "the invoice covers the card too").toBeCloseTo(
     Number(total) + 10,
