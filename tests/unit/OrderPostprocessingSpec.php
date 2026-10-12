@@ -64,6 +64,7 @@ final class OrderPostprocessingSpec
             'testRoundingNeverRefusesAGenuineOrder',
             'testTheIntentSeesTheCartsGiftCards',
             'testADroppedTenderLogsNoLabel',
+            'testTendersAreReadOncePerRequest',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -1652,6 +1653,38 @@ final class OrderPostprocessingSpec
             })));
             TinyAssert::same($expected, $warnings, $description);
             TinyAssert::same(false, strpos(json_encode($GLOBALS['__twoinc_test_logs']), 'CARD-123'), "$description: the label was logged");
+        }
+    }
+
+    private static function testTendersAreReadOncePerRequest(): void
+    {
+        // [request type, description]
+        $cases = [
+            ['order_create', 'a create: the build and the hook share one read'],
+            ['order_update', 'an update too'],
+            ['capture', 'a request with no build reads once for the hook'],
+        ];
+        foreach ($cases as [$type, $description]) {
+            self::reset();
+            $reads = 0;
+            add_filter('twoinc_order_tenders', static function ($tenders) use (&$reads) {
+                $reads++;
+                return $tenders;
+            }, 10, 2);
+            $order = self::exampleOrder();
+            $payload = [
+                'order_create' => static function () use ($order) {
+                    return WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
+                },
+                'order_update' => static function () use ($order) {
+                    return WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+                },
+                'capture' => static function () {
+                    return [];
+                },
+            ][$type]();
+            self::recordingGateway()->make_order_request($type, 'test', '/v1/order', $payload, 'POST', $order);
+            TinyAssert::same(1, $reads, $description);
         }
     }
 

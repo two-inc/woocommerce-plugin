@@ -1692,7 +1692,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
         {
             // A tender paid part of the order outside its lines: the lines carry it, the order total does not. It is
             // a payment, so the tax stays on the full lines and only gross and net carry it.
-            $tendered = self::tender_total(self::order_tenders($order));
+            $tenders = self::order_tenders($order);
+            $tendered = self::tender_total($tenders);
             $tax = round((float) $order->get_total_tax(), 2);
             $gross = round((float) $order->get_total() + $tendered, 2);
             $check = [
@@ -1702,6 +1703,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'tax' => $tax,
                 'tendered' => $tendered,
                 'strict' => $strict,
+                // Read once per request: the hook's context reuses them for the order just built.
+                'tenders' => $tenders,
+                'order' => is_object($order) ? spl_object_id($order) : null,
             ];
             $check['refusal'] = self::whole_order_refusal($lines, $check);
             if ($check['refusal'] && !$strict && function_exists('wc_get_logger')) {
@@ -1786,7 +1790,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'contract_version' => self::ORDER_POSTPROCESSING_CONTRACT_VERSION,
                 'order_lines' => self::two_order_list($two_order, 'line_items'),
                 'order_refunds' => null === self::two_order_list($two_order, 'refunds') ? null : self::refunds_with_parent_lines($two_order),
-                'order_tenders' => self::order_tenders($order),
+                'order_tenders' => self::built_order_tenders($order),
             ];
         }
 
@@ -1982,6 +1986,20 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 ];
             }
             return $valid;
+        }
+
+        /**
+         * The tenders the request's build read for this order, else read now, so the filter runs once per request.
+         *
+         * @return array
+         */
+        private static function built_order_tenders($order)
+        {
+            $check = self::$whole_order_check;
+            if ($check && is_object($order) && $check['order'] === spl_object_id($order)) {
+                return $check['tenders'];
+            }
+            return self::order_tenders($order);
         }
 
         /**
