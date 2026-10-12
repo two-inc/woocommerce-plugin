@@ -43,6 +43,22 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         private static $whole_order_check = null;
 
+        /** The filter a merchant or an adapter declares a tender with (TWO-26309): `($tenders, $order)`. */
+        public const ORDER_TENDERS_FILTER = 'twoinc_order_tenders';
+
+        /** The tender types order_tenders() reports; anything else is reported as `other`. */
+        private const TENDER_TYPES = ['gift_card', 'store_credit', 'other'];
+
+        /**
+         * The order item types gift card plugins record a redemption as, outside the order lines, each reducing the
+         * order total by the item's amount (checked against each plugin's source). By item type: the tender type and
+         * the filter, if any, that converts the item's amount into the order's currency.
+         */
+        private const TENDER_ITEM_TYPES = [
+            'gift_card' => ['type' => 'gift_card', 'currency_filter' => null],
+            'pw_gift_card' => ['type' => 'gift_card', 'currency_filter' => 'pwgc_to_order_currency'],
+        ];
+
         /** The whole-order check's tolerance per figure, as the PrestaShop plugin's ORDER_RECONCILIATION_TOLERANCE. */
         private const ORDER_RECONCILIATION_TOLERANCE = 0.02;
 
@@ -1653,7 +1669,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * The whole-order shop-match check for the request being built (TWO-26309): its lines, as the builder made
-         * them, must sum to the order's own totals. Judged here, before the deprecated filters run, as the shipping
+         * them, less the order's tenders, must sum to the order's own totals. Judged here, before the deprecated filters run, as the shipping
          * line check is: a drift is recorded for the default handler to refuse on a create or an update, and only
          * logged on the intent, which the create that follows checks again.
          *
@@ -1663,9 +1679,19 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         private static function expect_order_totals($order, $label, $strict, array $lines)
         {
-            $gross = round((float) $order->get_total(), 2);
+            // A tender paid part of the order outside its lines: the lines carry it, the order total does not. It is
+            // a payment, so the tax stays on the full lines and only gross and net carry it.
+            $tendered = self::tender_total(self::order_tenders($order));
             $tax = round((float) $order->get_total_tax(), 2);
-            $check = ['label' => $label, 'gross' => $gross, 'net' => round($gross - $tax, 2), 'tax' => $tax, 'strict' => $strict];
+            $gross = round((float) $order->get_total() + $tendered, 2);
+            $check = [
+                'label' => $label,
+                'gross' => $gross,
+                'net' => round($gross - $tax, 2),
+                'tax' => $tax,
+                'tendered' => $tendered,
+                'strict' => $strict,
+            ];
             $check['refusal'] = self::whole_order_refusal($lines, $check);
             if ($check['refusal'] && !$strict && function_exists('wc_get_logger')) {
                 wc_get_logger()->warning($check['refusal']['log'] . ' Logged only: the order create checks it again.', ['source' => 'twoinc-payment-gateway']);
@@ -1749,6 +1775,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'contract_version' => self::ORDER_POSTPROCESSING_CONTRACT_VERSION,
                 'order_lines' => self::two_order_list($two_order, 'line_items'),
                 'order_refunds' => null === self::two_order_list($two_order, 'refunds') ? null : self::refunds_with_parent_lines($two_order),
+                'order_tenders' => self::order_tenders($order),
             ];
         }
 
@@ -1879,6 +1906,72 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * The order's tenders (TWO-26309): what has already paid part of the order without being an order line, so its
+         * amount sits outside line_items and the order total is what is left to pay. Read from the order items gift
+         * card plugins record (TENDER_ITEM_TYPES), then passed through `twoinc_order_tenders` so a merchant or an
+         * adapter can declare others. Coupons and negative fees are order lines, never tenders. Each tender is
+         * `{type, label, amount, source}`: type `gift_card`, `store_credit` or `other`, amount a positive 2dp string.
+         * An entry the filter returns that is not a tender is dropped and logged.
+         *
+         * @return array<int, array{type: string, label: string, amount: string, source: string}>
+         */
+        public static function order_tenders($order)
+        {
+            $tenders = [];
+            if (is_object($order) && method_exists($order, 'get_items')) {
+                foreach (self::TENDER_ITEM_TYPES as $item_type => $reader) {
+                    foreach ((array) $order->get_items($item_type) as $item) {
+                        if (!is_object($item) || !method_exists($item, 'get_amount')) {
+                            continue;
+                        }
+                        $amount = (float) $item->get_amount();
+                        if ($reader['currency_filter']) {
+                            $amount = (float) apply_filters($reader['currency_filter'], $amount, $order);
+                        }
+                        // Labelled by kind only: a gift card's name is often its redeemable number.
+                        $tenders[] = ['type' => $reader['type'], 'label' => 'Gift card', 'amount' => $amount, 'source' => $item_type];
+                    }
+                }
+            }
+            $declared = apply_filters(self::ORDER_TENDERS_FILTER, $tenders, $order);
+            $valid = [];
+            foreach (is_array($declared) ? $declared : [] as $tender) {
+                $amount = is_array($tender) && isset($tender['amount']) && is_numeric($tender['amount']) ? round((float) $tender['amount'], 2) : 0.0;
+                if ($amount <= 0) {
+                    if (function_exists('wc_get_logger')) {
+                        wc_get_logger()->warning(
+                            sprintf('%s: an entry that is not a tender with a positive amount was dropped: %s', self::ORDER_TENDERS_FILTER, self::cut_diff_string((string) json_encode($tender))),
+                            ['source' => 'twoinc-payment-gateway']
+                        );
+                    }
+                    continue;
+                }
+                $type = is_string($tender['type'] ?? null) && in_array($tender['type'], self::TENDER_TYPES, true) ? $tender['type'] : 'other';
+                $valid[] = [
+                    'type' => $type,
+                    'label' => is_scalar($tender['label'] ?? null) ? (string) $tender['label'] : '',
+                    'amount' => number_format($amount, 2, '.', ''),
+                    'source' => is_scalar($tender['source'] ?? null) ? (string) $tender['source'] : self::ORDER_TENDERS_FILTER,
+                ];
+            }
+            return $valid;
+        }
+
+        /**
+         * @param array $tenders order_tenders(), or the context's order_tenders
+         *
+         * @return float
+         */
+        private static function tender_total($tenders)
+        {
+            $total = 0.0;
+            foreach (is_array($tenders) ? $tenders : [] as $tender) {
+                $total += is_array($tender) && is_numeric($tender['amount'] ?? null) ? (float) $tender['amount'] : 0.0;
+            }
+            return round($total, 2);
+        }
+
+        /**
          * Whether a merchant handler is on `twoinc_order_postprocessing`: any callback other than the plugin's own.
          *
          * @return bool
@@ -1914,7 +2007,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                  * @param array $payload The complete request body.
                  * @param array $context request_type, trigger, endpoint, order, refund, shipping_tax_rate,
                  *                       fallback_shipping_tax_rate, fallback_shipping_tax_code, contract_version,
-                 *                       order_lines, order_refunds.
+                 *                       order_lines, order_refunds, order_tenders.
                  */
                 $processed = apply_filters(self::ORDER_POSTPROCESSING_HOOK, $payload, $context);
             } catch (WC_Twoinc_Shop_Match_Exception $e) {
@@ -2040,8 +2133,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * The whole-order shop-match check (TWO-26309): lines against the order's own totals, gross, net and tax each
-         * within 0.02, whether or not each line's gross is its net plus tax. As the PrestaShop plugin's.
+         * The whole-order shop-match check (TWO-26309): lines against the order's own totals plus its tenders (gross
+         * and net; tax is not reduced by a payment), each within 0.02, whether or not each line's gross is its net plus tax. As the PrestaShop plugin's.
          *
          * @param array $check from expect_order_totals()
          *
@@ -2061,8 +2154,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if ($drifted === []) {
                 return null;
             }
+            $gap = round($sums['gross'] - $check['gross'], 2);
             return [
-                'log' => sprintf('The %s request\'s order lines do not add up to the order totals: %s.', $check['label'], implode('; ', $drifted)),
+                'log' => sprintf(
+                    'The %s request\'s order lines do not add up to the order totals plus tenders of %s: %s. Unexplained gap %s:'
+                        . ' a payment taken outside the order lines (a gift card, store credit) can be declared with the %s filter.',
+                    $check['label'],
+                    number_format($check['tendered'] ?? 0.0, 2, '.', ''),
+                    implode('; ', $drifted),
+                    number_format($gap, 2, '.', ''),
+                    self::ORDER_TENDERS_FILTER
+                ),
                 'message' => __('The order lines do not add up to the order total.', 'twoinc-payment-gateway'),
             ];
         }
@@ -2126,19 +2228,27 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * Opt-in for `twoinc_order_postprocessing` subscribers (TWO-26092): sets each order total, each per-rate tax
          * subtotal and a refund's amount to the sum over the payload's own lines plus the residual the original
-         * carried beyond its lines (store credit, a gift card, rounding), touching only the fields the payload
-         * already carries. `$original` is the payload as the subscriber received it. A total the subscriber edited
+         * carried beyond its lines (rounding), touching only the fields the payload already carries. `$original` is
+         * the payload as the subscriber received it. `$tenders`, the context's order_tenders (TWO-26309), is taken
+         * off the order's gross and net, so they stay what is left to pay, whatever `$original` carries; tax stays on
+         * the full lines, and a refund's amount is its lines. A total the subscriber edited
          * by hand before calling this is overwritten: the helper's result wins. Arithmetic only; part of the stable
          * contract.
          *
          * @param array $payload
          * @param array $original the payload before the subscriber's edits
+         * @param array $tenders  the context's order_tenders
          *
          * @return array
          */
-        public static function recompute_totals_from_lines(array $payload, array $original)
+        public static function recompute_totals_from_lines(array $payload, array $original, array $tenders = [])
         {
             $carry = self::residuals($original);
+            // The original's gross and net residuals hold its tenders: what is left once they are added back is rounding.
+            $tendered = self::tender_total($tenders);
+            foreach (['net_amount', 'gross_amount'] as $field) {
+                $carry[$field] = (isset($carry[$field]) ? $carry[$field] + $tendered : 0.0) - $tendered;
+            }
             $lines = isset($payload['line_items']) && is_array($payload['line_items']) ? $payload['line_items'] : [];
             $sums = self::sum_lines($lines);
             if (array_key_exists('gross_amount', $payload)) {

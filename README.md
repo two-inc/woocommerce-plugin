@@ -541,6 +541,7 @@ add_filter('twoinc_order_postprocessing', function (array $payload, array $conte
   | `fallback_shipping_tax_code` | string or null            | With the fallback on, the code steps 1 to 3 of "Tax codes for 0% lines" give a 0% shipping line taxed by the shipping tax class at the order's addresses. Else null, and null when the rate there is not 0%, the row is "(none)" or the mapping cannot be read                                         |
   | `contract_version`           | int                       | `1`                                                                                                                                                                                                                                                                                                    |
   | `order_lines`                | array or null             | On `order_update` and `refund` with a merchant handler registered: the order's `line_items` as Two's `GET /v1/order/<id>` returns them, with Two's line ids. Null otherwise, and when the read fails. Read-only                                                                                        |
+  | `order_tenders`              | array                     | The order's tenders, see "Tenders" below. `[]` when there are none                                                                                                                                                                                                                                     |
   | `order_refunds`              | array or null             | From the same read: Two's refunds on the order, each refund line's `prototype_id` naming the order line it credited. Two leaves it empty, so the plugin fills it with the best match on name, description, type, tax code and rate; a line that matches none keeps it empty. Null as for `order_lines` |
 
 **Return**: the full payload. Callbacks chain in priority order; the final
@@ -567,13 +568,54 @@ order, so third-party `woocommerce_checkout_create_order_line_item`,
 with an order whose id is `0`. Code on those actions that writes elsewhere
 should skip an order with id `0`.
 
+**Tenders**. A tender is anything that has already paid part of the order
+without being an order line, such as a gift card, store credit or loyalty
+points. Its amount is in the order's lines but not in what is left to pay, so
+the order total WooCommerce records is the lines less the tenders. Coupons and
+negative fees are not tenders: they are order lines already.
+
+Two's API is told only what is left to pay: the payload's totals are the order
+total as recorded, after tenders, and tenders are never sent. They are given to
+subscribers, and used by the plugin's own whole-order check, so the gap
+between the lines and the order total is explained rather than refused.
+
+`$context['order_tenders']` lists them, each an array:
+
+| Key      | Type   | Meaning                                                                                            |
+| -------- | ------ | -------------------------------------------------------------------------------------------------- |
+| `type`   | string | `gift_card`, `store_credit` or `other`                                                             |
+| `label`  | string | A name for logs and display. A gift card is labelled `Gift card`, never with its redeemable number |
+| `amount` | string | The amount it paid, positive, 2dp, in the order's currency                                         |
+| `source` | string | Where it was read from: an order item type, or the filter                                          |
+
+The plugin reads gift card redemptions that gift card plugins record as order
+items of type `gift_card` or `pw_gift_card`, which reduce the order total by
+the item's amount. Any other tender is declared with the `twoinc_order_tenders`
+filter, which receives the list and the order and returns the list:
+
+```php
+add_filter('twoinc_order_tenders', function (array $tenders, WC_Order $order): array {
+    $credit = (float) $order->get_meta('_my_store_credit_used');
+    if ($credit > 0) {
+        $tenders[] = ['type' => 'store_credit', 'label' => 'Store credit', 'amount' => $credit, 'source' => 'my-store-credit'];
+    }
+    return $tenders;
+}, 10, 2);
+```
+
+An entry without a positive numeric `amount` is dropped and logged; an unknown
+`type` is reported as `other`. A tender is a payment, so it reduces the gross
+and net the order has left to pay, not its tax. When the whole-order check
+finds a gap the tenders do not explain, the log names the gap and this filter.
+
 **What the plugin checks**. The plugin registers its own handler on the hook,
 `WC_Twoinc_Helper::default_order_postprocessing`, at priority `PHP_INT_MAX`.
 It runs the shop-match checks: whether what the request sends matches what
 the shop worked out. On a single line: a shipping line with no rate row, sent
 at the rate the shipping tax control resolves, must carry the tax that rate
 gives, within 0.02 (see "Shipping tax from the shop's rates"). On the whole
-order: the lines must add up to the order's own total, net and tax, each
+order: the lines, less the order's tenders (see "Tenders" below), must add up
+to the order's own total and net, and the lines' tax to the order's tax, each
 within 0.02. A create or an update that fails it is refused with "The order
 lines do not add up to the order total."; the availability check only logs a
 warning, since the create checks it again. Each check is made on the lines as
@@ -668,12 +710,15 @@ leave an order note; a refund returns the error to the refund screen.
 The plugin never recomputes anything after the hook: a subscriber that changes
 a line also updates the totals and subtotals it affects. It can do that with
 the opt-in helper
-`WC_Twoinc_Helper::recompute_totals_from_lines(array $payload, array $original): array`.
+`WC_Twoinc_Helper::recompute_totals_from_lines(array $payload, array $original, array $tenders = []): array`.
 `$original` is required: the payload as the subscriber received it. The helper
 sets each order total, each per-rate entry in `tax_subtotals` and a refund
 `amount` to the sum over the payload's lines plus the residual `$original`
-carried beyond its lines, such as store credit or a gift card. It touches only
-the fields the payload already carries. A total the subscriber edited by hand
+carried beyond its lines, such as rounding. Pass `$context['order_tenders']` as
+`$tenders`: the gross and net totals then have the tenders taken off, so they
+stay what is left to pay even when `$original` carries no totals. The tax total
+and a refund's `amount` are not reduced by tenders. It touches only the fields
+the payload already carries. A total the subscriber edited by hand
 before calling it is overwritten: the helper's result wins.
 
 **The buyer surcharge is priced before the hook**. The plugin's fee

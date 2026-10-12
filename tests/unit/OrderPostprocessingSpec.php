@@ -23,6 +23,7 @@ final class OrderPostprocessingSpec
         'contract_version',
         'order_lines',
         'order_refunds',
+        'order_tenders',
     ];
 
     public static function runAll(): void
@@ -59,6 +60,7 @@ final class OrderPostprocessingSpec
             'testEachShopRateFallbackIsLogged',
             'testARefusedEditRunsTheHookUnsent',
             'testTheWholeOrderCheck',
+            'testTheOrderTenders',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -71,7 +73,7 @@ final class OrderPostprocessingSpec
     /** @param bool $fixture register the fixture subscriber, unarmed: a merchant handler that changes nothing */
     private static function reset(bool $fixture = false): void
     {
-        foreach (['twoinc_order_postprocessing', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'two_order_edit'] as $tag) {
+        foreach (['twoinc_order_postprocessing', 'twoinc_order_tenders', 'pwgc_to_order_currency', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'two_order_edit'] as $tag) {
             remove_all_filters($tag);
         }
         // A fresh PHP request: no shop-match refusal left by an earlier build.
@@ -155,9 +157,11 @@ final class OrderPostprocessingSpec
                     case 'shipping':
                         return [5 => $this->get_item(5)];
                     default:
-                        return [];
+                        return $this->extra_items[$type] ?? [];
                 }
             }
+
+            public $extra_items = [];
 
             public function get_taxes()
             {
@@ -1486,24 +1490,81 @@ final class OrderPostprocessingSpec
         }
     }
 
+    private static function testTheOrderTenders(): void
+    {
+        $card = ['type' => 'gift_card', 'label' => 'Gift card', 'amount' => '10.00', 'source' => 'gift_card'];
+        // [order items by type, tenders the filter adds, expected order_tenders, description]
+        $cases = [
+            [[], [], [], 'no tender'],
+            [['gift_card' => [10.0]], [], [$card], 'a gift card item'],
+            [['pw_gift_card' => [5.0]], [], [array_replace($card, ['source' => 'pw_gift_card', 'amount' => '10.00'])], 'the other item type, converted to the order currency'],
+            [[], [['type' => 'loyalty', 'label' => 7, 'amount' => 3.456]], [['type' => 'other', 'label' => '7', 'amount' => '3.46', 'source' => 'twoinc_order_tenders']], 'a declared tender, normalised'],
+            [[], ['x', ['amount' => '0']], [], 'entries that are not tenders are dropped'],
+        ];
+        foreach ($cases as [$items, $declared, $expected, $description]) {
+            self::reset();
+            // A currency filter that doubles, so the conversion shows.
+            add_filter('pwgc_to_order_currency', static function ($amount) {
+                return $amount * 2;
+            }, 10, 2);
+            add_filter('twoinc_order_tenders', static function ($tenders) use ($declared) {
+                return array_merge($tenders, $declared);
+            }, 10, 2);
+            $order = self::exampleOrder();
+            foreach ($items as $type => $amounts) {
+                $order->extra_items[$type] = array_map(static function ($amount) {
+                    return new StubTenderItem($amount);
+                }, $amounts);
+            }
+            TinyAssert::same($expected, self::context('order_update', $order)['order_tenders'], $description);
+        }
+
+        // recompute_totals_from_lines() takes the tenders off gross and net, whatever the original carries.
+        $lines = [['net_amount' => '100.00', 'tax_amount' => '21.00', 'gross_amount' => '121.00', 'tax_rate' => '0.21']];
+        $outstanding = ['gross_amount' => '111.00', 'net_amount' => '90.00', 'tax_amount' => '21.00', 'line_items' => $lines];
+        // [original, tenders, expected totals, description]
+        $recompute = [
+            [$outstanding, [$card], ['111.00', '90.00', '21.00'], 'an original that carries the tender: unchanged'],
+            [['line_items' => $lines], [$card], ['111.00', '90.00', '21.00'], 'an original with no totals: the tender is still taken off'],
+            [['line_items' => $lines], [], ['121.00', '100.00', '21.00'], 'no tenders: the lines'],
+        ];
+        foreach ($recompute as [$original, $tenders, $expected, $description]) {
+            $out = WC_Twoinc_Helper::recompute_totals_from_lines(['gross_amount' => '0', 'net_amount' => '0', 'tax_amount' => '0', 'line_items' => $lines], $original, $tenders);
+            TinyAssert::same($expected, [$out['gross_amount'], $out['net_amount'], $out['tax_amount']], $description);
+        }
+    }
+
     private static function testTheWholeOrderCheck(): void
     {
-        // [request type, order gross, merchant handler, expected outcome, warning logged, description]
+        // The order's lines come to 150.00 gross, 21.00 tax. A tender is a payment: the order total drops by it, its tax
+        // does not. [request type, order gross, gift card item, tenders the filter adds, merchant handler, expected
+        // outcome, warning logged, description]
         $cases = [
-            ['order_create', 150.0, false, 'sent', false, 'lines that add up are sent'],
-            ['order_create', 140.0, false, 'refused', false, 'a create whose lines do not add up is refused'],
-            ['order_update', 140.0, false, 'refused', false, 'so is an update'],
-            ['order_intent', 140.0, false, 'sent', true, 'the intent only logs it'],
-            ['order_create', 140.0, true, 'sent', false, 'a merchant handler owns it'],
-            ['order_create', 150.01, false, 'sent', false, 'within 0.02'],
+            ['order_create', 150.0, null, [], false, 'sent', false, 'lines that add up are sent'],
+            ['order_create', 140.0, null, [], false, 'refused', false, 'a create whose lines do not add up is refused'],
+            ['order_update', 140.0, null, [], false, 'refused', false, 'so is an update'],
+            ['order_intent', 140.0, null, [], false, 'sent', true, 'the intent only logs it'],
+            ['order_create', 140.0, null, [], true, 'sent', false, 'a merchant handler owns it'],
+            ['order_create', 150.01, null, [], false, 'sent', false, 'within 0.02'],
+            ['order_create', 140.0, ['gift_card', 10.0], [], false, 'sent', false, 'a gift card item explains the gap'],
+            ['order_update', 130.0, ['pw_gift_card', 20.0], [], false, 'sent', false, 'so does the other gift card item type'],
+            ['order_create', 140.0, null, [['type' => 'store_credit', 'label' => 'Credit', 'amount' => '10.00', 'source' => 'test']], false, 'sent', false, 'a tender the filter declares explains the gap'],
+            ['order_create', 135.0, ['gift_card', 10.0], [], false, 'refused', false, 'a gap the tenders leave is refused'],
+            ['order_create', 140.0, null, [['type' => 'store_credit', 'amount' => '-10.00']], false, 'refused', false, 'an entry with no positive amount is not a tender'],
         ];
-        foreach ($cases as [$type, $gross, $handler, $expected, $warned, $description]) {
+        foreach ($cases as [$type, $gross, $item, $declared, $handler, $expected, $warned, $description]) {
             self::reset();
             if ($handler) {
                 self::arm('record');
             }
+            add_filter('twoinc_order_tenders', static function ($tenders) use ($declared) {
+                return array_merge($tenders, $declared);
+            }, 10, 2);
             $order = self::exampleOrder();
             $order->total = $gross;
+            if ($item) {
+                $order->extra_items[$item[0]] = [new StubTenderItem($item[1])];
+            }
             $build = [
                 'order_create' => static function () use ($order) {
                     return WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
@@ -1525,9 +1586,25 @@ final class OrderPostprocessingSpec
             }
             TinyAssert::same($expected, $outcome, $description);
             $warnings = array_filter($GLOBALS['__twoinc_test_logs'], static function ($log) {
-                return $log['level'] === 'warning' && strpos($log['message'], 'do not add up to the order totals: gross order 140.00 vs order lines 150.00') !== false;
+                return $log['level'] === 'warning' && strpos($log['message'], 'do not add up to the order totals plus tenders of 0.00: gross order 140.00 vs order lines 150.00') !== false;
             });
             TinyAssert::same($warned, $warnings !== [], "$description: warning");
         }
+    }
+}
+
+/** An order item a gift card plugin records a redemption as. */
+final class StubTenderItem
+{
+    private $amount;
+
+    public function __construct(float $amount)
+    {
+        $this->amount = $amount;
+    }
+
+    public function get_amount()
+    {
+        return $this->amount;
     }
 }
