@@ -416,8 +416,12 @@ Otherwise the section shows only what needs attention:
 it. Rows posted while the section does not show them change nothing.
 
 If the stored mapping is not one the settings form writes, Two is withheld
-from checkout and an error is logged until it is cleared or saved again; it is
-never read as "nothing mapped".
+from checkout and an error is logged until it is replaced; it is never read as
+"nothing mapped". Saving the table replaces it while the rows show; otherwise
+use "Clear saved tax codes".
+
+If the merchant details or the code list cannot be read when the form is
+saved, edits to the table are not saved and a notice says why.
 
 **Which row a line takes.** For each 0% line the first match wins:
 
