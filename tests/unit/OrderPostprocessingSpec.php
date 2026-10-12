@@ -1568,14 +1568,19 @@ final class OrderPostprocessingSpec
             [0, 100.4, 20.0, 2408.0, 400.0, 'sent', '0 decimals, tax rounded per line'],
             [0, 100.4, 20.08, 2410.0, 402.0, 'sent', '0 decimals, tax rounded at subtotal'],
             [0, 100.4, 20.08, 2390.0, 402.0, 'refused', '0 decimals, a 20 gap is still refused'],
+            // 21 lines each up half a unit and the order's total down half a unit: (21 + 1) / 2 = 11 units at most.
+            [0, 1.0, 0.0, 10.0, 0.0, 'sent', '0 decimals, the worst case: half a unit per line and half for the order', 21],
+            [0, 1.0, 0.0, 9.0, 0.0, 'refused', '0 decimals, one unit past the worst case', 21],
         ];
-        foreach ($cases as [$decimals, $net, $tax, $total, $total_tax, $expected, $description]) {
+        foreach ($cases as $case) {
+            [$decimals, $net, $tax, $total, $total_tax, $expected, $description] = $case;
+            $count = $case[7] ?? 20;
             self::reset();
             $GLOBALS['__twoinc_test_price_decimals'] = $decimals;
             try {
                 $order = self::exampleOrder();
                 $order->products = [];
-                for ($i = 0; $i < 20; $i++) {
+                for ($i = 0; $i < $count; $i++) {
                     $order->products[] = new StubProductLineItem(['name' => "Item $i", 'line_total' => $net, 'line_subtotal' => $net, 'line_tax' => $tax, 'taxes' => [1 => $tax]]);
                 }
                 $order->total = $total;

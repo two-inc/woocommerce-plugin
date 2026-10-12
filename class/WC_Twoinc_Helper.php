@@ -2222,10 +2222,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
         private static function whole_order_refusal(array $lines, array $check)
         {
             $sums = self::sum_lines($lines);
-            // Each line is rounded to the price decimals on its own, by up to half a unit, while the order rounds its
-            // totals once (taxes rounded at subtotal, or no decimals at all). So the lines may drift by up to half a
-            // unit per line; never less than 0.02. Epsilon: neither bound is exactly representable.
-            $tolerance = max(self::WHOLE_ORDER_TOLERANCE, count($lines) * 0.5 / pow(10, max(0, (int) wc_get_price_decimals()))) + 1e-9;
+            // Each line is rounded to the price decimals on its own, by up to half a unit, and the order rounds its
+            // totals once more (taxes rounded at subtotal, or no decimals at all). So the lines may drift by up to half
+            // a unit per line plus half for the order; never less than 0.02. Epsilon: neither bound is exactly
+            // representable.
+            $tolerance = max(self::WHOLE_ORDER_TOLERANCE, (count($lines) + 1) * 0.5 / pow(10, max(0, (int) wc_get_price_decimals()))) + 1e-9;
             $drifted = [];
             foreach (['gross', 'net', 'tax'] as $figure) {
                 $sum = round($sums[$figure], 2);

@@ -621,8 +621,8 @@ at the rate the shipping tax control resolves, must carry the tax that rate
 gives, within 0.02 (see "Shipping tax from the shop's rates"). On the whole
 order: the lines, less the order's tenders (see "Tenders" below), must add up
 to the order's own total and net, and the lines' tax to the order's tax, each
-within 0.02, or half a unit of the shop's price decimals per line if that is
-more (each line is rounded on its own, the order's totals once). A create or an update that fails it is refused with "The order
+within 0.02, or half a unit of the shop's price decimals per line, plus half for the
+order, if that is more (each line is rounded on its own, the order's totals once). A create or an update that fails it is refused with "The order
 lines do not add up to the order total."; the availability check only logs a
 warning, since the create checks it again. Each check is made on the lines as
 the plugin built them, and the default handler refuses the request if any
