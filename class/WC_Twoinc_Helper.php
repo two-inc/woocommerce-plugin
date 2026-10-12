@@ -2314,10 +2314,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public static function recompute_totals_from_lines(array $payload, array $original, array $tenders = [])
         {
             $carry = self::residuals($original);
-            // The original's gross and net residuals hold its tenders: what is left once they are added back is rounding.
+            // An original that carries a gross or net already holds its tenders in that residual. One that carries
+            // none has no residual to hold them, so the tenders are taken off here.
             $tendered = self::tender_total($tenders);
             foreach (['net_amount', 'gross_amount'] as $field) {
-                $carry[$field] = (isset($carry[$field]) ? $carry[$field] + $tendered : 0.0) - $tendered;
+                $carry[$field] = $carry[$field] ?? -$tendered;
             }
             $lines = isset($payload['line_items']) && is_array($payload['line_items']) ? $payload['line_items'] : [];
             $sums = self::sum_lines($lines);
