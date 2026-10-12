@@ -630,8 +630,9 @@ bodies carry:
 `tax_subtotals` and the lines are built as for any order. A `refund` body on
 such an order carries `prepaid_amount` too: the part of the refunded lines
 beyond the refund's `amount`, up to what of the tenders earlier refunds left,
-so `amount` plus `prepaid_amount` is the refunded lines. A gap of a cent or
-two between the lines and the refund is rounding, and goes to `amount`. A `capture` fulfils the whole order,
+so `amount` plus `prepaid_amount` is the refunded lines. `amount` is always
+the refund WooCommerce recorded, so a cent of rounding between the lines and
+the refund is part of `prepaid_amount` too. A `capture` fulfils the whole order,
 prepaid part included, and carries no amounts. The `order_intent` body is
 unchanged: its totals are what is left to pay.
 

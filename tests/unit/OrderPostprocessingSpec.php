@@ -1907,7 +1907,7 @@ final class OrderPostprocessingSpec
         // [amounts refunded through Two before, amount refunded now, expected amount, expected prepaid, description]
         $cases = [
             [[], 19.0, '19.00', '10.00', 'the lines beyond the amount are prepaid'],
-            [[], 28.99, '29.00', '0.00', 'a rounding gap goes to the amount, not to prepaid'],
+            [[], 28.99, '28.99', '0.01', 'the amount is what WooCommerce refunded: a rounding gap is prepaid, within the card'],
             [[23.0], 25.0, '25.00', '4.00', 'an earlier refund took 6.00 of the card: 4.00 is left'],
             [[24.0, 24.0], 29.0, '29.00', '0.00', 'two earlier refunds took the whole card'],
         ];

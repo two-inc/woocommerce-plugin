@@ -1710,20 +1710,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * A refund's split on an order with tenders (TWO-26309): the lines beyond the amount are prepaid, up to the
-         * tenders left; a gap within rounding is no prepaid part, and the amount absorbs what rounding leaves so the
-         * two parts sum to the lines.
+         * A refund's split on an order with tenders (TWO-26309). `amount` is always the refund WooCommerce recorded:
+         * Two takes on only the receivable the merchant defined. Two's API wants the amount and the prepaid part to
+         * sum exactly to the refunded lines, so the lines beyond the amount, rounding included, are the prepaid
+         * part, up to the tenders left. A gap beyond them, or lines below the amount, is sent as is for Two to judge.
          *
          * @return float[] [amount, prepaid]
          */
         private static function refund_split(float $lines, float $amount, float $left)
         {
             $gap = round($lines - $amount, 2);
-            $prepaid = $gap > self::WHOLE_ORDER_TOLERANCE ? min(max($left, 0.0), $gap) : 0.0;
-            if (abs($gap - $prepaid) <= self::WHOLE_ORDER_TOLERANCE + 1e-9) {
-                $amount = $lines - $prepaid;
-            }
-            return [round($amount, 2), round($prepaid, 2)];
+            return [round($amount, 2), round($gap > 0 ? min(max($left, 0.0), $gap) : 0.0, 2)];
         }
 
         /**
