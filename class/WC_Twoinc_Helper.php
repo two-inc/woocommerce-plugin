@@ -754,7 +754,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 ];
             }
 
-            return self::apply_tax_codes($items, $sources, $rate_order, $record_tax_codes && !$is_refund);
+            return self::apply_tax_codes($items, $sources, $rate_order, $record_tax_codes && !$is_refund, $is_refund);
         }
 
         /**
@@ -792,10 +792,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *                       it is taxable and its placement record key
          * @param mixed $order   the order (a refund's parent) whose addresses, taxes and record decide the codes
          * @param bool  $record  whether to record the codes on an order not yet placed with Two
+         * @param bool  $lenient a refund: never refused over the mapping (TWO-26309)
          *
          * @return array
          */
-        private static function apply_tax_codes(array $items, array $sources, $order, $record = false)
+        private static function apply_tax_codes(array $items, array $sources, $order, $record = false, $lenient = false)
         {
             $zero = [];
             foreach ($items as $i => $item) {
@@ -806,9 +807,26 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $placed = self::is_placed_with_two($order);
             $record = $record && !$placed && is_object($order) && method_exists($order, 'update_meta_data');
             $stored = $placed ? self::stored_tax_codes($order) : null;
-            // Read only once a 0% line needs it, so an order with none never depends on the stored mapping. An
-            // unreadable mapping throws (TWO-26309): an order is never built on a mapping nobody chose.
-            $map = $zero ? WC_Twoinc::get_tax_code_map() : [];
+            // Read only once a 0% line the placement record does not cover needs it, so an order with none, or a
+            // re-sent line already placed, never depends on the stored mapping. An unreadable mapping throws
+            // (TWO-26309): an order is never built on a mapping nobody chose. A refund is never refused over it: its
+            // recorded lines are sent as placed and the rest uncoded, the error logged by the read.
+            $unrecorded = array_filter($zero, static function ($i) use ($sources, $stored) {
+                $key = $sources[$i]['record_key'] ?? null;
+                return null === $key || !isset($stored[$key]);
+            });
+            $map = [];
+            $unreadable = false;
+            if ($unrecorded) {
+                try {
+                    $map = WC_Twoinc::get_tax_code_map();
+                } catch (Exception $e) {
+                    if (!$lenient) {
+                        throw $e;
+                    }
+                    $unreadable = true;
+                }
+            }
             // With no row mapped nothing can code the lines, so the order keeps no record (sparing the meta row). A
             // record an earlier attempt left is cleared.
             if (!$zero || (!$map && null === $stored)) {
@@ -856,7 +874,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $recorded[$key] = ['code' => $code, 'step' => self::TAX_CODE_STEP_ROW];
                 }
             }
-            $code = 1 === count($shared) ? (string) key($shared) : null;
+            $code = !$unreadable && 1 === count($shared) ? (string) key($shared) : null;
             if ($placed && null === $stored) {
                 // Placed before the record existed: the one code all the other 0% lines in the request being sent
                 // get, none when they disagree or one has none.

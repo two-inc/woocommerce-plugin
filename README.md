@@ -376,7 +376,10 @@ the shop defines:
 
 If the stored mapping is not one the settings form writes, Two is withheld
 from checkout and an error is logged until it is saved again; it is never read
-as "nothing mapped".
+as "nothing mapped". An order placed before then is sent as placed: an update
+reads the mapping only for a 0% line placed with no code (and is refused if it
+cannot), and a refund is never refused, sending its lines with the codes they
+were placed with and any other 0% line with none.
 
 Each row has a dropdown of the tax codes Two offers for the merchant's country,
 fetched from Two's API and cached for a day, plus "(none)", the default. A code
