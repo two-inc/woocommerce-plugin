@@ -63,6 +63,7 @@ final class OrderPostprocessingSpec
             'testTheOrderTenders',
             'testRoundingNeverRefusesAGenuineOrder',
             'testTheIntentSeesTheCartsGiftCards',
+            'testADroppedTenderLogsNoLabel',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -1624,6 +1625,33 @@ final class OrderPostprocessingSpec
             });
             TinyAssert::same($warned, $warnings !== [], "$description: warning");
             TinyAssert::same(false, strpos(json_encode($GLOBALS['__twoinc_test_logs']), 'SECRET-1'), "$description: the card number was logged");
+        }
+    }
+
+    /** A label may hold a card number: a dropped entry logs only its type, source and amount, and a zero is quiet. */
+    private static function testADroppedTenderLogsNoLabel(): void
+    {
+        // [entry the filter adds, expected warnings, description]
+        $cases = [
+            [['type' => 'gift_card', 'label' => 'CARD-123', 'amount' => '-5', 'source' => 'test'], ['type gift_card, source test, amount -5'], 'a negative amount is logged without its label'],
+            [['type' => 'gift_card', 'label' => 'CARD-123', 'amount' => 'x', 'source' => 'test'], ['type gift_card, source test, amount x'], 'a non-numeric amount too'],
+            [['type' => 'gift_card', 'label' => 'CARD-123', 'amount' => '0.00', 'source' => 'test'], [], 'a zero amount is skipped quietly'],
+            ['CARD-123', ['type none, source none, amount none'], 'an entry that is not an array'],
+        ];
+        foreach ($cases as [$entry, $expected, $description]) {
+            self::reset();
+            add_filter('twoinc_order_tenders', static function ($tenders) use ($entry) {
+                $tenders[] = $entry;
+                return $tenders;
+            }, 10, 2);
+            TinyAssert::same([], WC_Twoinc_Helper::order_tenders(self::exampleOrder()), "$description: dropped");
+            $warnings = array_values(array_map(static function ($log) {
+                return substr($log['message'], strpos($log['message'], 'dropped: ') + 9);
+            }, array_filter($GLOBALS['__twoinc_test_logs'], static function ($log) {
+                return $log['level'] === 'warning';
+            })));
+            TinyAssert::same($expected, $warnings, $description);
+            TinyAssert::same(false, strpos(json_encode($GLOBALS['__twoinc_test_logs']), 'CARD-123'), "$description: the label was logged");
         }
     }
 

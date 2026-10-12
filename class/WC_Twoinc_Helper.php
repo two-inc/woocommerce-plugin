@@ -1954,11 +1954,20 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $declared = apply_filters(self::ORDER_TENDERS_FILTER, $tenders, $order);
             $valid = [];
             foreach (is_array($declared) ? $declared : [] as $tender) {
-                $amount = is_array($tender) && isset($tender['amount']) && is_numeric($tender['amount']) ? round((float) $tender['amount'], 2) : 0.0;
-                if ($amount <= 0) {
+                $raw = is_array($tender) ? ($tender['amount'] ?? null) : null;
+                $amount = is_numeric($raw) ? round((float) $raw, 2) : null;
+                if (0.0 === $amount) {
+                    // Paid nothing: not worth a line on every build.
+                    continue;
+                }
+                if (null === $amount || $amount < 0) {
+                    // Never the label, which may hold a card number.
                     if (function_exists('wc_get_logger')) {
+                        $field = static function ($key) use ($tender) {
+                            return is_array($tender) && is_scalar($tender[$key] ?? null) ? self::cut_diff_string((string) $tender[$key]) : 'none';
+                        };
                         wc_get_logger()->warning(
-                            sprintf('%s: an entry that is not a tender with a positive amount was dropped: %s', self::ORDER_TENDERS_FILTER, self::cut_diff_string((string) json_encode($tender))),
+                            sprintf('%s: an entry that is not a tender with a positive amount was dropped: type %s, source %s, amount %s', self::ORDER_TENDERS_FILTER, $field('type'), $field('source'), $field('amount')),
                             ['source' => 'twoinc-payment-gateway']
                         );
                     }

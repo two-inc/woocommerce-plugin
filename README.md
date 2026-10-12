@@ -604,8 +604,9 @@ add_filter('twoinc_order_tenders', function (array $tenders, WC_Order $order): a
 }, 10, 2);
 ```
 
-An entry without a positive numeric `amount` is dropped and logged; an unknown
-`type` is reported as `other`. A tender is a payment, so it reduces the gross
+An entry whose `amount` is zero is skipped. One whose `amount` is negative or
+not a number is dropped and logged with its type, source and amount, never its
+label. An unknown `type` is reported as `other`. A tender is a payment, so it reduces the gross
 and net the order has left to pay, not its tax. When the whole-order check
 finds a gap the tenders do not explain, the log names the gap and this filter.
 
