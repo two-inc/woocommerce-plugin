@@ -363,28 +363,61 @@ not decide how a line is taxed: it sends the code the merchant chose for the
 case the shop's own tax setup puts the line in, and never picks a code itself
 (TWO-26153).
 
-**Mapping.** Under WooCommerce > Settings > Payments > Two, "Tax codes for 0%
-lines" has a block of rows for the standard tax class and for every tax class
-the shop defines:
+**Mapping.** Under WooCommerce > Settings > Payments > Two, the "Tax" section
+holds "Tax codes for 0% lines" across the full width of the form, and "Status
+mapping" holds the fulfilment trigger statuses. The mapping is a table with one
+row per tax class (the standard class and every class the shop defines) and the
+cases as columns:
 
-- "Buyer in another EU country with a VAT number".
-- One row per 0% tax rate of the class, labelled as WooCommerce's tax rate
-  table shows it: country, state, postcodes, cities, rate and name, for example
-  `ES 35*;38* 0% (IVA 0%)`. Rates above 0% are not listed, because they never
-  give a 0% line.
-- "No rule for the address".
+- "VAT-registered buyer, other EU state".
+- "Your 0% tax rates": one dropdown per 0% tax rate of the class, labelled as
+  WooCommerce's tax rate table shows it: country, state, postcodes, cities, rate
+  and name, for example `ES 35*;38* 0% (IVA 0%)`. Rates above 0% are not listed,
+  because they never give a 0% line. A class with none says so.
+- "Buyer's address does not match a tax rate (no tax charged, e.g. exports)".
 
-If the stored mapping is not one the settings form writes, Two is withheld
-from checkout and an error is logged until it is saved again; it is never read
-as "nothing mapped".
-
-Each row has a dropdown of the tax codes Two offers for the merchant's country,
-fetched from Two's API and cached for a day, plus "(none)", the default. A code
-that needs an exemption reason Two cannot supply itself (one with no default
-reason) is not offered. The
+Each dropdown offers "(none)", the default, and the codes Two lists at rate 0
+for the merchant's country, as `CODE - name`: Two refuses any other code on a
+0% line. A code that needs an exemption reason Two cannot supply itself (one
+with no default reason) is not offered. A saved code that is no longer offered
+stays selected and is marked "not valid on 0% lines" or "no longer listed", so
+nothing saved disappears unseen. A changed row must take an offered code. The
 form sends the whole mapping as one field, so a large rate table cannot be cut
 short by the server's input limits; if the field arrives incomplete, the save
 is refused and the saved codes stay as they were.
+
+**When the table shows.** The section shows its rows only when Two requires a
+code on 0% lines for the merchant's country: the country's code list says
+mandatory codes are enabled and one of the mandatory rates is 0. The settings
+page finds that country itself: it verifies the stored API key, reads the
+merchant's country from Two, and holds the answer for a day per key and
+environment. It never falls back to the shop's base country, and it never
+writes the merchant details checkout uses. The code list is held for a day per
+country, and a country with no code registry is held as an empty list. After a
+failure, each lookup waits at least five minutes before trying again, and the
+last answer is shown meanwhile. "Refresh merchant profile" under Diagnostics
+expires both and reloads the page there.
+
+Otherwise the section shows only what needs attention:
+
+- No API key: nothing.
+- The merchant details or the code list cannot be read: why, with the HTTP
+  status, or that the stored API key was rejected.
+- Saved codes while the rows are hidden: a notice that they still apply at
+  checkout, or that some are not valid on 0% lines for the country, with
+  "Clear saved tax codes".
+- A saved mapping that cannot be read: a notice that Two is hidden at checkout,
+  with "Clear saved tax codes". The payment method row of the health checklist
+  points there too.
+- Checkout holding another merchant id or country than the settings page
+  found: a notice to press "Refresh merchant profile".
+
+"Clear saved tax codes" empties the mapping and ignores any rows posted with
+it. Rows posted while the section does not show them change nothing.
+
+If the stored mapping is not one the settings form writes, Two is withheld
+from checkout and an error is logged until it is cleared or saved again; it is
+never read as "nothing mapped".
 
 **Which row a line takes.** For each 0% line the first match wins:
 
