@@ -70,8 +70,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
             'pw-gift-card-data' => ['source' => 'pw_gift_card', 'list' => 'gift_cards', 'amount' => null],
         ];
 
-        /** The whole-order check's tolerance per figure, as the PrestaShop plugin's ORDER_RECONCILIATION_TOLERANCE. */
-        private const ORDER_RECONCILIATION_TOLERANCE = 0.02;
+        /** The whole-order check's least tolerance per figure (TWO-26309). */
+        private const WHOLE_ORDER_TOLERANCE = 0.02;
 
         /** The diff log (TWO-26309): at most this many entries, and each string cut to MAX_DIFF_STRING bytes. */
         private const MAX_DIFF_ENTRIES = 40;
@@ -1084,7 +1084,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $stored[(string) $key] = ['code' => $entry['code'], 'step' => (string) ($entry['step'] ?? '')];
                 }
             }
-            // No code recorded is no record: the order's lines are resolved again, as the PrestaShop plugin does.
+            // No code recorded is no record: the order's lines are resolved again.
             return $stored === [] ? null : $stored;
         }
 
@@ -1852,7 +1852,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * line is credited by at most one line, so where several order lines match, the refund's matching lines go to
          * distinct order lines, the largest to the one with the most left to refund; only when a refund has more
          * matching lines than there are order lines does one take a second. A best match, not Two's record: a refund
-         * line that matches no order line keeps its empty prototype_id. As the PrestaShop plugin matches them.
+         * line that matches no order line keeps its empty prototype_id.
          *
          * @return array
          */
@@ -2201,7 +2201,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * The whole-order shop-match check (TWO-26309): lines against the order's own totals plus its tenders (gross
-         * and net; tax is not reduced by a payment), each within 0.02, whether or not each line's gross is its net plus tax. As the PrestaShop plugin's.
+         * and net; tax is not reduced by a payment), each within 0.02, whether or not each line's gross is its net plus tax.
          *
          * @param array $check from expect_order_totals()
          *
@@ -2213,7 +2213,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             // Each line is rounded to the price decimals on its own, by up to half a unit, while the order rounds its
             // totals once (taxes rounded at subtotal, or no decimals at all). So the lines may drift by up to half a
             // unit per line; never less than 0.02. Epsilon: neither bound is exactly representable.
-            $tolerance = max(self::ORDER_RECONCILIATION_TOLERANCE, count($lines) * 0.5 / pow(10, max(0, (int) wc_get_price_decimals()))) + 1e-9;
+            $tolerance = max(self::WHOLE_ORDER_TOLERANCE, count($lines) * 0.5 / pow(10, max(0, (int) wc_get_price_decimals()))) + 1e-9;
             $drifted = [];
             foreach (['gross', 'net', 'tax'] as $figure) {
                 $sum = round($sums[$figure], 2);
@@ -2463,7 +2463,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * What the subscribers changed, for the debug log (TWO-26309): the merchant handlers, the number of changes,
          * and at most MAX_DIFF_ENTRIES of them with values outside the amount, line and tax subtotal paths withheld
-         * and long strings cut. As the PrestaShop plugin's compactDiff.
+         * and long strings cut.
          *
          * @return array{subscribers: string[], changes: int, diff: array}
          */

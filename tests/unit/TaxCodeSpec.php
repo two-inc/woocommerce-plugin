@@ -313,7 +313,7 @@ final class TaxCodeSpec
         $options = WC_Twoinc::tax_code_options([
             self::entry('ES_IVA_EXPORT', 'VATEX-EU-G'),
             self::entry('ES_IVA_EXEMPT_OTHER', null),
-            // An empty default is no default, as the PrestaShop plugin reads it (TWO-26309).
+            // An empty default is no default (TWO-26309).
             self::entry('ES_IVA_EXEMPT_EMPTY', ''),
             ['code' => 'ES_IVA_STANDARD', 'rate' => '0.21', 'display_name' => 'IVA general', 'requires_exemption_reason' => false, 'exemption_reason_code' => null],
         ]);

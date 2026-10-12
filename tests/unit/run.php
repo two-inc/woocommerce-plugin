@@ -4242,8 +4242,8 @@ final class BrandConfigSpec
     }
 
     /**
-     * A shop whose stored merchant id is missing or stale resolves it from the API key and refetches (TWO-26309), as
-     * the PrestaShop plugin does: the record no longer 404s until the next key save.
+     * A shop whose stored merchant id is missing or stale resolves it from the API key and refetches (TWO-26309):
+     * the record no longer 404s until the next key save.
      */
     private static function testMerchantRecordResolvesAMissingOrStaleMerchantId(): void
     {

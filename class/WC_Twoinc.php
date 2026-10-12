@@ -317,7 +317,7 @@ if (!class_exists('WC_Twoinc')) {
             }
             $merchant_id = $this->get_merchant_id();
             // Only a verified key save writes the id, so a seeded, cloned or migrated shop, or a save whose verify
-            // failed, can hold none or a stale one (TWO-26309): resolve it from the key, as the PrestaShop plugin does.
+            // failed, can hold none or a stale one (TWO-26309): resolve it from the key.
             if (!$merchant_id) {
                 $merchant_id = $this->resolve_merchant_id('no merchant id is stored');
                 if (!$merchant_id) {
@@ -7502,7 +7502,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * An admin edit Two would refuse is built as the order_update it would have been, so
-         * `twoinc_order_postprocessing` runs on it, and is not sent (TWO-26309), as the PrestaShop plugin does. Only
+         * `twoinc_order_postprocessing` runs on it, and is not sent (TWO-26309). Only
          * an edit that changed what was last sent: an unchanged order would send nothing either. A failure is logged
          * and never stops the save.
          */
