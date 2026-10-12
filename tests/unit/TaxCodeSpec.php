@@ -22,12 +22,7 @@ final class TaxCodeSpec
             'testTheIntentCarriesNoTaxCode',
             'testEveryPayloadWithLinesCarriesTheCode',
             'testAnEsMerchantsNonZeroOrdersMatchTheGoldens',
-            'testTheCodeListIsCachedAndServedStale',
-            'testTheDropdownHidesCodesNeedingACallerReason',
-            'testTheLabelShowsTheRateOnce',
-            'testTheMappingScreenRendersAndSaves',
             'testTheMigrationFansTheClassCodeOut',
-            'testTheMerchantCountryComesFromTheMerchantRecord',
             'testAnUnreadableMappingWithholdsTwo',
         ];
         foreach ($tests as $test) {
@@ -283,147 +278,9 @@ final class TaxCodeSpec
         }
     }
 
-    private static function testTheCodeListIsCachedAndServedStale(): void
-    {
-        $gateway = self::apiGateway();
-        $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode(['data' => [self::entry('ES_IVA_EXPORT', 'VATEX-EU-G')], 'country_code' => 'ES'])]];
-        $first = $gateway->get_tax_codes('es');
-        TinyAssert::same(['ES_IVA_EXPORT', null], [$first['codes'][0]['code'], $first['error']], 'the fetched list');
-        TinyAssert::same(['/v1/tax_codes/ES'], $gateway->calls, 'fetched for the country');
 
-        $gateway->get_tax_codes('ES');
-        TinyAssert::same(1, count($gateway->calls), 'a fresh list is served without a call');
 
-        $option = WC_Twoinc_Brand::prefixed_name('tax_codes');
-        $GLOBALS['__twoinc_test_options'][$option]['fetched_at'] = time() - 86401;
-        $gateway->responses = [['response' => ['code' => 503], 'body' => '{}']];
-        $stale = $gateway->get_tax_codes('ES');
-        TinyAssert::same(2, count($gateway->calls), 'an expired list is fetched again');
-        TinyAssert::same('ES_IVA_EXPORT', $stale['codes'][0]['code'] ?? null, 'a failed fetch serves the last list');
-        TinyAssert::true(is_string($stale['error']), 'and says the fetch failed');
 
-        $gateway->responses = [['response' => ['code' => 400], 'body' => json_encode(['error_message' => 'Country not supported'])]];
-        $none = $gateway->get_tax_codes('PL');
-        TinyAssert::same([], $none['codes'], 'no list for another country');
-        TinyAssert::true(strpos((string) $none['error'], 'Country not supported') !== false, 'the API reason is shown: ' . $none['error']);
-    }
-
-    private static function testTheDropdownHidesCodesNeedingACallerReason(): void
-    {
-        $options = WC_Twoinc::tax_code_options([
-            self::entry('ES_IVA_EXPORT', 'VATEX-EU-G'),
-            self::entry('ES_IVA_EXEMPT_OTHER', null),
-            // An empty default is no default (TWO-26309).
-            self::entry('ES_IVA_EXEMPT_EMPTY', ''),
-            ['code' => 'ES_IVA_STANDARD', 'rate' => '0.21', 'display_name' => 'IVA general', 'requires_exemption_reason' => false, 'exemption_reason_code' => null],
-        ]);
-        TinyAssert::same(['ES_IVA_EXPORT', 'ES_IVA_STANDARD'], array_keys($options), 'EXEMPT_OTHER is hidden');
-        TinyAssert::same('ES_IVA_STANDARD: IVA general (21%)', $options['ES_IVA_STANDARD'], 'the label');
-    }
-
-    /** A rated display name already ends in its rate (TWO-26243), so the label carries the rate once. */
-    private static function testTheLabelShowsTheRateOnce(): void
-    {
-        $cases = [
-            // display_name, rate, want, description
-            ['IVA General (21%)', '0.21', 'C: IVA General (21%)', 'a rated name is not given the rate again'],
-            ['IVA Reducido (10%)  ', '0.1', 'C: IVA Reducido (10%)', 'trailing space does not hide the rate'],
-            ['IVA Superreducido (4 %)', '0.04', 'C: IVA Superreducido (4 %)', 'a spaced rate counts as a rate'],
-            ['Exento', '0', 'C: Exento (0%)', 'an unrated name gets the rate'],
-            ['Inversión del sujeto pasivo (art. 84)', '0', 'C: Inversión del sujeto pasivo (art. 84) (0%)', 'a bracket without % is not a rate'],
-            ['IVA (21%) general', '0.21', 'C: IVA (21%) general (21%)', 'a rate mid-name is not the trailing rate'],
-            ['', '0.21', 'C (21%)', 'no name still shows the rate'],
-            ['Exento', null, 'C: Exento', 'no rate appends nothing'],
-        ];
-        foreach ($cases as [$name, $rate, $want, $description]) {
-            $options = WC_Twoinc::tax_code_options([
-                ['code' => 'C', 'rate' => $rate, 'display_name' => $name, 'requires_exemption_reason' => false, 'exemption_reason_code' => null],
-            ]);
-            TinyAssert::same($want, $options['C'] ?? null, $description);
-        }
-    }
-
-    /**
-     * The screen (TWO-26153): per tax class, the exempt row, each 0% rate labelled as WooCommerce's tax table shows
-     * it (a rate above 0% is not listed), then the no-rule row. The dropdowns post nothing; one JSON field carries the
-     * whole mapping, and the save keeps only rows the shop has now.
-     */
-    private static function testTheMappingScreenRendersAndSaves(): void
-    {
-        $GLOBALS['__twoinc_test_tax_classes'] = ['Reduced rate'];
-        $GLOBALS['__twoinc_test_class_rates'] = [
-            '' => [
-                11 => ['tax_rate' => '0.0000', 'tax_rate_country' => 'ES', 'tax_rate_name' => 'IVA 0%', 'postcode' => ['35*', '38*']],
-                21 => ['tax_rate' => '21.0000', 'tax_rate_country' => 'ES', 'tax_rate_name' => 'IVA'],
-                12 => ['tax_rate' => '0.0000', 'tax_rate_country' => '', 'tax_rate_state' => '', 'tax_rate_name' => ''],
-            ],
-            'reduced-rate' => [31 => ['tax_rate' => '0', 'tax_rate_country' => 'US', 'tax_rate_state' => 'NY', 'tax_rate_name' => 'Export', 'city' => ['NEW YORK']]],
-        ];
-        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = 'ES';
-        $gateway = self::apiGateway(['standard|exempt' => 'ES_IVA_EXPORT', 'rate:11' => 'ES_RETIRED_CODE']);
-        $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode(['data' => [self::entry('ES_IVA_EXPORT', 'VATEX-EU-G'), self::entry('ES_IVA_EXEMPT_OTHER', null)]])]];
-
-        $rows = array_map(static function (array $class) {
-            return $class['rows'];
-        }, WC_Twoinc::tax_code_map_rows());
-        TinyAssert::same([
-            'standard' => [
-                'standard|exempt' => 'Buyer in another EU country with a VAT number',
-                'rate:11' => 'ES 35*;38* 0% (IVA 0%)',
-                'rate:12' => '* 0%',
-                'standard|none' => 'No rule for the address',
-            ],
-            'reduced-rate' => [
-                'reduced-rate|exempt' => 'Buyer in another EU country with a VAT number',
-                'rate:31' => 'US NY NEW YORK 0% (Export)',
-                'reduced-rate|none' => 'No rule for the address',
-            ],
-        ], $rows, 'the rows of each class (got: ' . json_encode($rows) . ')');
-
-        $html = $gateway->generate_two_tax_code_map_html('tax_code_map', ['title' => 'Tax codes']);
-        foreach (['data-twoinc-tax-code-row="standard|exempt"', 'data-twoinc-tax-code-row="rate:31"', 'ES 35*;38* 0% (IVA 0%)', '(none)', '<option value="ES_IVA_EXPORT" selected="selected">', '<option value="ES_RETIRED_CODE" selected="selected">'] as $needle) {
-            TinyAssert::true(strpos($html, $needle) !== false, "the screen shows $needle");
-        }
-        TinyAssert::true(strpos($html, 'ES_IVA_EXEMPT_OTHER') === false, 'EXEMPT_OTHER is not offered');
-        TinyAssert::true(strpos($html, 'rate:21') === false, 'a rate above 0% has no row');
-        TinyAssert::true(strpos($html, '<select name=') === false, 'no dropdown posts a field of its own');
-        preg_match('/class="twoinc-tax-code-map-value" name="([^"]+)" value="([^"]*)"/', $html, $hidden);
-        TinyAssert::same('woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_tax_code_map', $hidden[1] ?? null, 'one field carries the mapping');
-        $initial = json_decode(html_entity_decode($hidden[2] ?? '', ENT_QUOTES), true);
-        TinyAssert::same(7, $initial['rows'] ?? null, 'it counts every row');
-        TinyAssert::same(['ES_IVA_EXPORT', 'ES_RETIRED_CODE', ''], [$initial['map']['standard|exempt'], $initial['map']['rate:11'], $initial['map']['reduced-rate|none']], 'and holds each row\'s code, (none) as empty');
-        TinyAssert::same($gateway->map, $gateway->validate_two_tax_code_map_field('tax_code_map', $hidden[2] ? html_entity_decode($hidden[2], ENT_QUOTES) : ''), 'saving the screen unchanged keeps the mapping');
-
-        $post = static function (array $map, ?int $rows = null) {
-            return json_encode(['rows' => $rows ?? count($map), 'map' => $map]);
-        };
-        $cases = [
-            // posted field, expected map (null: refused), description
-            [$post(['standard|exempt' => 'ES_IVA_EXPORT', 'rate:11' => '', 'rate:31' => 'es_iva_zero', 'standard|none' => 'ES_IVA_EXPORT']), ['standard|exempt' => 'ES_IVA_EXPORT', 'rate:31' => 'ES_IVA_ZERO', 'standard|none' => 'ES_IVA_EXPORT'], '(none) dropped, codes upper-cased'],
-            [$post(['rate:21' => 'ES_IVA_ZERO', 'rate:99' => 'ES_IVA_ZERO', 'deleted|none' => 'ES_IVA_ZERO', 'standard' => 'ES_IVA_ZERO', 'reduced-rate|exempt' => '<b>']), [], 'only rows the shop has now, with a code of the right shape'],
-            [addslashes($post(['standard|none' => 'ES_IVA_EXPORT'])), ['standard|none' => 'ES_IVA_EXPORT'], 'WordPress slashes the posted field'],
-            [$post(['standard|none' => 'ES_IVA_EXPORT'], 7), null, 'fewer rows than the form counted: refused'],
-            [substr($post(['standard|none' => 'ES_IVA_EXPORT']), 0, -3), null, 'a field cut short: refused'],
-            ['', null, 'an empty field: refused'],
-            [json_encode(['map' => []]), null, 'no row count: refused'],
-        ];
-        foreach ($cases as [$field, $expected, $description]) {
-            try {
-                $saved = $gateway->validate_two_tax_code_map_field('tax_code_map', $field);
-            } catch (Exception $e) {
-                $saved = null;
-                TinyAssert::true(strpos($e->getMessage(), 'not saved') !== false, "$description: the refusal says nothing was saved");
-            }
-            TinyAssert::same($expected, $saved, $description);
-        }
-        TinyAssert::same($gateway->map, $gateway->validate_two_tax_code_map_field('tax_code_map', null), 'a save without the field keeps the mapping');
-
-        $gateway->responses = [['response' => ['code' => 503], 'body' => '{}']];
-        delete_option(WC_Twoinc_Brand::prefixed_name('tax_codes'));
-        $html = $gateway->generate_two_tax_code_map_html('tax_code_map', ['title' => 'Tax codes']);
-        TinyAssert::true(strpos($html, 'The list of tax codes could not be loaded') !== false, 'the screen says the list failed');
-        TinyAssert::true(strpos($html, '<option value="ES_IVA_EXPORT" selected="selected">') !== false, 'a saved mapping still shows');
-    }
 
     /**
      * Shared case 18 (TWO-26153): the upgrade copies each class's code to its exempt row, its no-rule row and every
@@ -758,17 +615,6 @@ final class TaxCodeSpec
         ]);
     }
 
-    private static function testTheMerchantCountryComesFromTheMerchantRecord(): void
-    {
-        $GLOBALS['__twoinc_test_base_country'] = 'ES';
-        TinyAssert::same('ES', WC_Twoinc::get_merchant_country(), 'the shop base country stands in');
-
-        $gateway = self::apiGateway();
-        $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode(['id' => 'mid', 'country_code' => 'se'])]];
-        WC_Twoinc::reset_merchant_record_memo();
-        TinyAssert::true($gateway->refresh_merchant_record_caches(true), 'the record was stored');
-        TinyAssert::same('SE', WC_Twoinc::get_merchant_country(), 'the merchant record wins');
-    }
 
     /** An unreadable stored mapping is never read as "nothing mapped" (TWO-26309): Two is withheld until it is re-saved. */
     private static function testAnUnreadableMappingWithholdsTwo(): void

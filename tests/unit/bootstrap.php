@@ -420,6 +420,11 @@ function WC()
                     {
                         return $GLOBALS['__twoinc_test_base_country'] ?? 'NO';
                     }
+
+                    public function get_countries()
+                    {
+                        return $GLOBALS['__twoinc_test_countries'] ?? [];
+                    }
                 };
             }
         };
@@ -2105,6 +2110,7 @@ require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Surcharge_Method_Exception.php'
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Order_Postprocessing_Exception.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Shop_Match_Exception.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Stored_Term.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Tax_Code_Section.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Payment_Terms.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Sole_Trader.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Api_Proxy.php';
