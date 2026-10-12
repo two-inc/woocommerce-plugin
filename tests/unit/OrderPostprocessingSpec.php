@@ -68,6 +68,7 @@ final class OrderPostprocessingSpec
             'testABuildsCheckNeverReachesAnotherOrder',
             'testEveryPayloadMeetsTheOrderAmountRules',
             'testARefundsPrepaidPartIsWhatTheTendersHaveLeft',
+            'testTheExtraLineExampleSeesACostBeyondTheLinesBesideAGiftCard',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -1925,6 +1926,35 @@ final class OrderPostprocessingSpec
         $original = ['amount' => '19.00', 'prepaid_amount' => '10.00', 'line_items' => [['net_amount' => '-29.00', 'tax_amount' => '0.00', 'gross_amount' => '-29.00', 'tax_rate' => '0']]];
         $out = WC_Twoinc_Helper::recompute_totals_from_lines(['line_items' => $lines] + $original, $original, [['type' => 'gift_card', 'label' => 'Gift card', 'amount' => '10.00', 'source' => 'gift_card']]);
         TinyAssert::same(['20.00', '10.00'], [$out['amount'], $out['prepaid_amount']], 'the helper on a refund with a prepaid part');
+    }
+
+
+    /**
+     * The README's extra-line example reads what the order carries beyond its lines from invoice_amount when the
+     * body has one: with a gift card, gross_amount is only what is left to pay. 150.00 of lines, a 10.00 card and a
+     * 10.00 cost outside any line: the order total is 150.00.
+     */
+    private static function testTheExtraLineExampleSeesACostBeyondTheLinesBesideAGiftCard(): void
+    {
+        // [gift card, description]
+        foreach ([[0.0, 'no gift card'], [10.0, 'a gift card']] as [$card, $description]) {
+            self::reset();
+            self::arm('extra_line');
+            $order = self::exampleOrder();
+            $order->total = 160.0 - $card;
+            if ($card > 0) {
+                $order->extra_items['gift_card'] = [new StubTenderItem($card)];
+            }
+            $gateway = self::recordingGateway();
+            $gateway->make_order_request('order_create', 'checkout', '/v1/order', WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []), 'POST', $order);
+            $sent = $gateway->sent[0]['payload'];
+            $handling = array_values(array_filter($sent['line_items'], static function ($line) {
+                return $line['name'] === 'Handling';
+            }));
+            TinyAssert::same('10.00', $handling[0]['gross_amount'] ?? null, "$description: the cost is sent as its own line");
+            $broken = self::amountRuleFailures($sent, $card);
+            TinyAssert::same([], $broken, "$description: breaks " . implode('; ', $broken));
+        }
     }
 
     /**

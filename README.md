@@ -698,7 +698,8 @@ add_filter('twoinc_order_postprocessing', function (array $payload, array $conte
     if (!isset($payload['gross_amount']) || empty($payload['line_items'])) {
         return $payload;
     }
-    $beyond = (float) $payload['gross_amount']
+    // invoice_amount when the order has tenders: gross_amount is then only what is left to pay.
+    $beyond = (float) ($payload['invoice_amount'] ?? $payload['gross_amount'])
         - array_sum(array_map('floatval', array_column($payload['line_items'], 'gross_amount')));
     if (round($beyond, 2) > 0) {
         $net = round($beyond / 1.21, 2);
