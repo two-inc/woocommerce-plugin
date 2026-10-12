@@ -1949,6 +1949,8 @@ final class OrderPostprocessingSpec
             $order->total = 160.0 - $card;
             if ($card > 0) {
                 $order->extra_items['gift_card'] = [new StubTenderItem($card)];
+                // Placed with the card declared as prepaid.
+                $order->meta[WC_Twoinc_Brand::meta_key('prepaid_amount')] = number_format($card, 2, '.', '');
             }
             $gateway = self::recordingGateway();
             $gateway->make_order_request('order_create', 'checkout', '/v1/order', WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []), 'POST', $order);
