@@ -1705,7 +1705,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'strict' => $strict,
                 // Read once per request: the hook's context reuses them for the order just built.
                 'tenders' => $tenders,
+                // The object and its id: PHP reuses a freed object's id for another order.
                 'order' => is_object($order) ? spl_object_id($order) : null,
+                'order_id' => is_object($order) && method_exists($order, 'get_id') ? $order->get_id() : null,
             ];
             $check['refusal'] = self::whole_order_refusal($lines, $check);
             if ($check['refusal'] && !$strict && function_exists('wc_get_logger')) {
@@ -1988,6 +1990,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $valid;
         }
 
+        private static function clear_pending_checks()
+        {
+            self::$shop_match_refusals = [];
+            self::$whole_order_check = null;
+        }
+
         /**
          * The tenders the request's build read for this order, else read now, so the filter runs once per request.
          *
@@ -1996,7 +2004,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
         private static function built_order_tenders($order)
         {
             $check = self::$whole_order_check;
-            if ($check && is_object($order) && $check['order'] === spl_object_id($order)) {
+            if ($check && is_object($order) && $check['order'] === spl_object_id($order)
+                && $check['order_id'] === (method_exists($order, 'get_id') ? $order->get_id() : null)) {
                 return $check['tenders'];
             }
             return self::order_tenders($order);
@@ -2078,8 +2087,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
                  */
                 $processed = apply_filters(self::ORDER_POSTPROCESSING_HOOK, $payload, $context);
             } catch (WC_Twoinc_Shop_Match_Exception $e) {
+                self::clear_pending_checks();
                 throw $e;
             } catch (Throwable $e) {
+                // The default handler never ran to consume this build's checks: a later request must not meet them.
+                self::clear_pending_checks();
                 // Never the subscriber's message, which can carry buyer data: its class and where it was thrown.
                 self::fail_postprocessing($context, 'a subscriber threw ' . get_class($e) . ' at ' . self::throw_site($e), $e);
             }

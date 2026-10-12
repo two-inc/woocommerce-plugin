@@ -65,6 +65,7 @@ final class OrderPostprocessingSpec
             'testTheIntentSeesTheCartsGiftCards',
             'testADroppedTenderLogsNoLabel',
             'testTendersAreReadOncePerRequest',
+            'testABuildsCheckNeverReachesAnotherOrder',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -1688,6 +1689,44 @@ final class OrderPostprocessingSpec
             ][$type]();
             self::recordingGateway()->make_order_request($type, 'test', '/v1/order', $payload, 'POST', $order);
             TinyAssert::same(1, $reads, $description);
+        }
+    }
+
+    /**
+     * The build's whole-order check and tenders belong to the order just built. A hook that fails leaves the check
+     * pending, and PHP reuses a freed object's id, so a later request on another order must not pick them up.
+     */
+    private static function testABuildsCheckNeverReachesAnotherOrder(): void
+    {
+        $pending = new ReflectionProperty(WC_Twoinc_Helper::class, 'whole_order_check');
+        $pending->setAccessible(true);
+        // [what happens after the build, expected pending check left, expected tender reads, description]
+        $cases = [
+            ['throws', false, 1, 'a subscriber that throws clears the pending check'],
+            ['other_order', true, 2, 'another order at the same object id reads its own tenders'],
+        ];
+        foreach ($cases as [$after, $left, $reads, $description]) {
+            self::reset();
+            $count = 0;
+            add_filter('twoinc_order_tenders', static function ($tenders) use (&$count) {
+                $count++;
+                return $tenders;
+            }, 10, 2);
+            $order = self::exampleOrder();
+            $payload = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
+            if ($after === 'throws') {
+                self::arm('throws');
+                try {
+                    self::recordingGateway()->make_order_request('order_create', 'checkout', '/v1/order', $payload, 'POST', $order);
+                } catch (WC_Twoinc_Order_Postprocessing_Exception $e) {
+                }
+            } else {
+                // The same object standing in for a different order, as a reused id would.
+                $order->id = 77;
+                self::context('capture', $order);
+            }
+            TinyAssert::same($left, $pending->getValue() !== null, "$description: pending check");
+            TinyAssert::same($reads, $count, "$description: tender reads");
         }
     }
 
