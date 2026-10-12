@@ -71,7 +71,11 @@ describe("Diagnostics refresh merchant profile", () => {
   // TWO-26153: a refresh reloads the page onto Diagnostics, so the tax code
   // section is rendered afresh; a failed one stays put with its reason.
   test.each([
-    [{ success: true, data: { message: "Merchant profile refreshed." } }, 1, "a success reloads onto Diagnostics"],
+    [
+      { success: true, data: { message: "Merchant profile refreshed." } },
+      1,
+      "a success reloads onto Diagnostics"
+    ],
     [{ success: false, data: { message: "No." } }, 0, "a refused refresh does not reload"],
     [null, 0, "a transport failure does not reload"]
   ])("%#: reload, %s", async (response, reloads, description) => {
@@ -81,10 +85,17 @@ describe("Diagnostics refresh merchant profile", () => {
       const { $ } = await loadRefreshPage(respondWith(response));
       $("#twoinc-refresh-merchant-record").trigger("click");
 
-      expect([window.twoincAdminNavigate.mock.calls.length, description]).toEqual([reloads, description]);
+      expect([window.twoincAdminNavigate.mock.calls.length, description]).toEqual([
+        reloads,
+        description
+      ]);
       if (reloads) {
         const url = new URL(window.twoincAdminNavigate.mock.calls[0][0]);
-        expect([url.searchParams.get("page"), url.searchParams.get("tab"), url.hash]).toEqual(["wc-settings", "checkout", "#twoinc-refresh-merchant-record"]);
+        expect([url.searchParams.get("page"), url.searchParams.get("tab"), url.hash]).toEqual([
+          "wc-settings",
+          "checkout",
+          "#twoinc-refresh-merchant-record"
+        ]);
         expect(url.searchParams.get("twoinc_refreshed")).toMatch(/^\d+$/);
       }
     } finally {
@@ -93,12 +104,23 @@ describe("Diagnostics refresh merchant profile", () => {
   });
 
   test.each([
-    ["/wp-admin/admin.php?page=wc-settings&twoinc_refreshed=1700000000000&tab=checkout#twoinc-refresh-merchant-record", "/wp-admin/admin.php?page=wc-settings&tab=checkout#twoinc-refresh-merchant-record", "the landing stamp is dropped, so a later save does not confirm again"],
-    ["/wp-admin/admin.php?page=wc-settings&tab=checkout", "/wp-admin/admin.php?page=wc-settings&tab=checkout", "a URL without it is left alone"]
+    [
+      "/wp-admin/admin.php?page=wc-settings&twoinc_refreshed=1700000000000&tab=checkout#twoinc-refresh-merchant-record",
+      "/wp-admin/admin.php?page=wc-settings&tab=checkout#twoinc-refresh-merchant-record",
+      "the landing stamp is dropped, so a later save does not confirm again"
+    ],
+    [
+      "/wp-admin/admin.php?page=wc-settings&tab=checkout",
+      "/wp-admin/admin.php?page=wc-settings&tab=checkout",
+      "a URL without it is left alone"
+    ]
   ])("%#: %s", async (landing, expected, description) => {
     window.history.replaceState(null, "", landing);
     await loadRefreshPage(respondWith(null));
-    expect([window.location.pathname + window.location.search + window.location.hash, description]).toEqual([expected, description]);
+    expect([
+      window.location.pathname + window.location.search + window.location.hash,
+      description
+    ]).toEqual([expected, description]);
   });
 
   test("the request carries the nonce and the action the PHP handler is registered on", async () => {
