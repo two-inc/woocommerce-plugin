@@ -669,11 +669,11 @@ if (!class_exists('WC_Twoinc')) {
                 if (!self::$tax_code_map_unreadable_logged && function_exists('wc_get_logger')) {
                     self::$tax_code_map_unreadable_logged = true;
                     wc_get_logger()->error(
-                        'The stored tax code mapping (tax_code_map) is not one the settings form writes; re-save "Tax codes for 0% lines" in the plugin settings.',
+                        'The stored tax code mapping (tax_code_map) is not one the settings form writes; re-save "Tax codes for 0% lines" in the plugin settings, or use "Clear saved tax codes" if the rows are not shown.',
                         ['source' => 'twoinc-payment-gateway']
                     );
                 }
-                throw new Exception('The stored tax code mapping is unreadable; re-save it in the plugin settings');
+                throw new Exception('The stored tax code mapping is unreadable; re-save it in the plugin settings, or clear it');
             }
             return $map;
         }
@@ -4550,7 +4550,7 @@ if (!class_exists('WC_Twoinc')) {
             }
             // An order is never built on a mapping nobody chose (TWO-26309): Two is withheld until it is re-saved.
             if (null === self::read_tax_code_map()) {
-                $this->log_withheld_from_checkout('the stored tax code mapping is unreadable; re-save "Tax codes for 0% lines"');
+                $this->log_withheld_from_checkout('the stored tax code mapping is unreadable; re-save "Tax codes for 0% lines", or use "Clear saved tax codes"');
                 return false;
             }
             return true;
