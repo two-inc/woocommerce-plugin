@@ -1650,14 +1650,56 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             // TWO-26309: on an order with tenders, the refunded lines can exceed what WooCommerce refunds, as the
             // order total it caps refunds at is after tenders. `amount` stays what is refunded through Two and the
-            // rest of the lines, up to the tenders, is declared as the prepaid part being refunded.
+            // rest of the lines, up to the tenders earlier refunds through Two left, is declared as the prepaid part.
             $tendered = $order ? self::tender_total(self::order_tenders($order)) : 0.0;
             if ($tendered > 0) {
-                $lines = abs(self::sum_lines($req_body['line_items'])['gross']);
-                $req_body['prepaid_amount'] = strval(WC_Twoinc_Helper::round_amt(min($tendered, max(0.0, $lines - abs((float) $amount)))));
+                $earlier = array_filter(method_exists($order, 'get_refunds') ? $order->get_refunds() : [], static function ($refund) use ($order_refund) {
+                    return $refund->get_id() !== $order_refund->get_id() && $refund->get_refunded_payment();
+                });
+                usort($earlier, static function ($a, $b) {
+                    return $a->get_id() <=> $b->get_id();
+                });
+                $left = $tendered;
+                foreach ($earlier as $refund) {
+                    $left -= self::refund_split(self::refund_gross($refund), abs((float) $refund->get_amount()), $left)[1];
+                }
+                [$refunded, $prepaid] = self::refund_split(abs(self::sum_lines($req_body['line_items'])['gross']), abs((float) $amount), $left);
+                $req_body['amount'] = strval(WC_Twoinc_Helper::round_amt($refunded));
+                $req_body['prepaid_amount'] = strval(WC_Twoinc_Helper::round_amt($prepaid));
             }
 
             return $req_body;
+        }
+
+        /**
+         * A refund's split on an order with tenders (TWO-26309): the lines beyond the amount are prepaid, up to the
+         * tenders left; a gap within rounding is no prepaid part, and the amount absorbs what rounding leaves so the
+         * two parts sum to the lines.
+         *
+         * @return float[] [amount, prepaid]
+         */
+        private static function refund_split(float $lines, float $amount, float $left)
+        {
+            $gap = round($lines - $amount, 2);
+            $prepaid = $gap > self::WHOLE_ORDER_TOLERANCE ? min(max($left, 0.0), $gap) : 0.0;
+            if (abs($gap - $prepaid) <= self::WHOLE_ORDER_TOLERANCE + 1e-9) {
+                $amount = $lines - $prepaid;
+            }
+            return [round($amount, 2), round($prepaid, 2)];
+        }
+
+        /**
+         * @return float what a WooCommerce refund's lines credit, positive
+         */
+        private static function refund_gross($refund)
+        {
+            $gross = 0.0;
+            foreach (['line_item', 'shipping', 'fee'] as $type) {
+                foreach ($refund->get_items($type) as $item) {
+                    $gross += (float) $item->get_total() + (float) $item->get_total_tax();
+                }
+            }
+            return abs($gross);
         }
 
         /**

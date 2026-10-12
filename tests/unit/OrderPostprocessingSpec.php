@@ -67,6 +67,7 @@ final class OrderPostprocessingSpec
             'testTendersAreReadOncePerRequest',
             'testABuildsCheckNeverReachesAnotherOrder',
             'testEveryPayloadMeetsTheOrderAmountRules',
+            'testARefundsPrepaidPartIsWhatTheTendersHaveLeft',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -1858,6 +1859,72 @@ final class OrderPostprocessingSpec
                 TinyAssert::same($prepaid === null ? [] : ['invoice_amount', 'payable_amount', 'prepaid_amount'], array_values(array_intersect(array_keys($payload), ['invoice_amount', 'payable_amount', 'prepaid_amount'])), "$description: fields");
             }
         }
+    }
+
+
+    /**
+     * A refund's prepaid part is capped at the tenders earlier refunds through Two left, and a rounding gap between
+     * its lines and its amount goes to the amount. The order: 150.00 of lines, a 10.00 gift card; each refund here
+     * credits the 29.00 shipping line.
+     */
+    private static function testARefundsPrepaidPartIsWhatTheTendersHaveLeft(): void
+    {
+        $refund = static function (float $amount, int $id = 99, bool $sent = false) {
+            return new class ($amount, $id, $sent) extends StubRefund {
+                private $amount;
+                private $id;
+                private $sent;
+
+                public function __construct(float $amount, int $id, bool $sent)
+                {
+                    parent::__construct(['shipping' => [new StubShippingItem(-29.0, 0.0, [], ['_refunded_item_id' => 5])]], []);
+                    $this->amount = $amount;
+                    $this->id = $id;
+                    $this->sent = $sent;
+                }
+
+                public function get_id()
+                {
+                    return $this->id;
+                }
+
+                public function get_amount()
+                {
+                    return $this->amount;
+                }
+
+                public function get_refunded_payment()
+                {
+                    return $this->sent;
+                }
+            };
+        };
+        // [amounts refunded through Two before, amount refunded now, expected amount, expected prepaid, description]
+        $cases = [
+            [[], 19.0, '19.00', '10.00', 'the lines beyond the amount are prepaid'],
+            [[], 28.99, '29.00', '0.00', 'a rounding gap goes to the amount, not to prepaid'],
+            [[23.0], 25.0, '25.00', '4.00', 'an earlier refund took 6.00 of the card: 4.00 is left'],
+            [[24.0, 24.0], 29.0, '29.00', '0.00', 'two earlier refunds took the whole card'],
+        ];
+        foreach ($cases as [$earlier, $amount, $expected_amount, $expected_prepaid, $description]) {
+            self::reset();
+            $order = self::exampleOrder();
+            $order->total = 140.0;
+            $order->extra_items['gift_card'] = [new StubTenderItem(10.0)];
+            $current = $refund($amount);
+            $order->refunds = [$current];
+            foreach ($earlier as $i => $earlier_amount) {
+                $order->refunds[] = $refund($earlier_amount, 10 + $i, true);
+            }
+            $body = WC_Twoinc_Helper::compose_twoinc_refund($current, $amount, $order);
+            TinyAssert::same([$expected_amount, $expected_prepaid], [$body['amount'], $body['prepaid_amount']], $description);
+        }
+
+        // The helper on a refund that carries a prepaid part: it keeps the part, and the amount is the lines less it.
+        $lines = [['net_amount' => '-30.00', 'tax_amount' => '0.00', 'gross_amount' => '-30.00', 'tax_rate' => '0']];
+        $original = ['amount' => '19.00', 'prepaid_amount' => '10.00', 'line_items' => [['net_amount' => '-29.00', 'tax_amount' => '0.00', 'gross_amount' => '-29.00', 'tax_rate' => '0']]];
+        $out = WC_Twoinc_Helper::recompute_totals_from_lines(['line_items' => $lines] + $original, $original, [['type' => 'gift_card', 'label' => 'Gift card', 'amount' => '10.00', 'source' => 'gift_card']]);
+        TinyAssert::same(['20.00', '10.00'], [$out['amount'], $out['prepaid_amount']], 'the helper on a refund with a prepaid part');
     }
 
     /**
