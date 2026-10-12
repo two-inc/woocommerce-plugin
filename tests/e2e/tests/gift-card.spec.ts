@@ -18,8 +18,12 @@ test.beforeEach(() => {
 });
 
 test.afterEach(() => {
-  resetCartShapes();
-  wp("plugin", "deactivate", GIFT_CARD_PLUGIN);
+  // Deactivated even when the reset fails, so the plugin never reaches a later spec.
+  try {
+    resetCartShapes();
+  } finally {
+    wp("plugin", "deactivate", GIFT_CARD_PLUGIN);
+  }
 });
 
 function armGiftCard(amount: string) {
