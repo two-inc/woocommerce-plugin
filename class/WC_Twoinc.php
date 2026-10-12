@@ -312,15 +312,29 @@ if (!class_exists('WC_Twoinc')) {
             self::$merchant_record_fetched = true;
             self::$merchant_record = null;
 
-            $merchant_id = $this->get_merchant_id();
-            if (!$merchant_id || !$this->get_option('api_key')) {
+            if (!$this->get_option('api_key')) {
                 return null;
+            }
+            $merchant_id = $this->get_merchant_id();
+            // Only a verified key save writes the id, so a seeded, cloned or migrated shop, or a save whose verify
+            // failed, can hold none or a stale one (TWO-26309): resolve it from the key, as the PrestaShop plugin does.
+            if (!$merchant_id) {
+                $merchant_id = $this->resolve_merchant_id('no merchant id is stored');
+                if (!$merchant_id) {
+                    return null;
+                }
             }
 
             // Reached from render paths (checkout bootstrap, admin field
             // render, constructor via init_form_fields), so cap well under
             // make_request's 30s default.
             $response = $this->make_request("/v1/merchant/{$merchant_id}", [], 'GET', array(), null, 10);
+            if (!is_wp_error($response) && 404 === (int) wp_remote_retrieve_response_code($response)) {
+                $resolved = $this->resolve_merchant_id("merchant {$merchant_id} was not found");
+                if ($resolved && $resolved !== $merchant_id) {
+                    $response = $this->make_request("/v1/merchant/{$resolved}", [], 'GET', array(), null, 10);
+                }
+            }
             if (
                 !is_wp_error($response)
                 && !WC_Twoinc_Helper::get_twoinc_error_msg($response)
@@ -336,6 +350,31 @@ if (!class_exists('WC_Twoinc')) {
                 self::record_merchant_record_error($response);
             }
             return self::$merchant_record;
+        }
+
+        /**
+         * The merchant id the stored API key verifies as, which verify_api_key() stores; '' when it cannot be
+         * resolved. Logged either way, with why it was needed.
+         *
+         * @return string
+         */
+        private function resolve_merchant_id($why)
+        {
+            $result = $this->verify_api_key(null, 10);
+            // A changed id resets the per-request memo; this fetch is still the request's one.
+            self::$merchant_record_fetched = true;
+            $resolved = is_array($result) && 200 === (int) ($result['code'] ?? 0) && isset($result['body']['id']) && is_scalar($result['body']['id'])
+                ? (string) $result['body']['id']
+                : '';
+            if (function_exists('wc_get_logger')) {
+                $logger = wc_get_logger();
+                if ('' !== $resolved) {
+                    $logger->warning(sprintf('Merchant record: %s; the API key resolves to merchant %s, now stored.', $why, $resolved), ['source' => 'twoinc-payment-gateway']);
+                } else {
+                    $logger->error(sprintf('Merchant record: %s, and the API key could not be resolved to a merchant (%s).', $why, is_array($result) ? ($result['error'] ?? 'HTTP ' . ($result['code'] ?? '?')) : 'not configured'), ['source' => 'twoinc-payment-gateway']);
+                }
+            }
+            return $resolved;
         }
 
         /**
@@ -391,7 +430,8 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function refresh_merchant_record_caches(bool $force = false): bool
         {
-            if (!$this->get_merchant_id() || !$this->get_option('api_key')) {
+            // No merchant id is resolved from the key by the fetch (TWO-26309).
+            if (!$this->get_option('api_key')) {
                 return false;
             }
 
@@ -626,8 +666,47 @@ if (!class_exists('WC_Twoinc')) {
          */
         public static function get_tax_code_map()
         {
+            $map = self::read_tax_code_map();
+            if (null === $map) {
+                // Once per request: every order build and checkout render reads it.
+                if (!self::$tax_code_map_unreadable_logged && function_exists('wc_get_logger')) {
+                    self::$tax_code_map_unreadable_logged = true;
+                    wc_get_logger()->error(
+                        'The stored tax code mapping (tax_code_map) is not one the settings form writes; re-save "Tax codes for 0% lines" in the plugin settings.',
+                        ['source' => 'twoinc-payment-gateway']
+                    );
+                }
+                throw new Exception('The stored tax code mapping is unreadable; re-save it in the plugin settings');
+            }
+            return $map;
+        }
+
+        /** @var bool */
+        private static $tax_code_map_unreadable_logged = false;
+
+        /**
+         * The stored mapping, or null when it is not one the settings form writes (TWO-26309): a value that is not a
+         * list of codes by row. Nothing stored is an empty mapping.
+         *
+         * @return array<string, string>|null
+         */
+        public static function read_tax_code_map()
+        {
             $map = self::get_instance()->get_option('tax_code_map');
-            return is_array($map) ? array_filter($map, 'is_string') : [];
+            if (null === $map || false === $map || '' === $map) {
+                return [];
+            }
+            if (!is_array($map)) {
+                return null;
+            }
+            foreach ($map as $code) {
+                if (!is_string($code)) {
+                    return null;
+                }
+            }
+            return array_filter($map, static function ($code) {
+                return '' !== $code;
+            });
         }
 
         /** A tax class's row for a buyer in another EU country with a VAT number (step 1). */
@@ -750,7 +829,8 @@ if (!class_exists('WC_Twoinc')) {
             $options = [];
             foreach ($codes as $entry) {
                 $code = is_string($entry['code'] ?? null) ? $entry['code'] : '';
-                if ('' === $code || (!empty($entry['requires_exemption_reason']) && null === ($entry['exemption_reason_code'] ?? null))) {
+                $default_reason = $entry['exemption_reason_code'] ?? null;
+                if ('' === $code || (!empty($entry['requires_exemption_reason']) && (null === $default_reason || '' === $default_reason))) {
                     continue;
                 }
                 $name = is_string($entry['display_name'] ?? null) ? trim($entry['display_name']) : '';
@@ -813,7 +893,8 @@ if (!class_exists('WC_Twoinc')) {
         {
             $field_key = $this->get_field_key($key);
             $data = wp_parse_args($data, ['title' => '', 'description' => '']);
-            $stored = self::get_tax_code_map();
+            // An unreadable mapping shows as nothing mapped, so a save can replace it.
+            $stored = self::read_tax_code_map() ?? [];
             $list = $this->get_tax_codes(self::get_merchant_country());
             $options = self::tax_code_options($list['codes']);
             $classes = self::tax_code_map_rows();
@@ -4133,6 +4214,11 @@ if (!class_exists('WC_Twoinc')) {
                 ));
                 return false;
             }
+            // An order is never built on a mapping nobody chose (TWO-26309): Two is withheld until it is re-saved.
+            if (null === self::read_tax_code_map()) {
+                $this->log_withheld_from_checkout('the stored tax code mapping is unreadable; re-save "Tax codes for 0% lines"');
+                return false;
+            }
             return true;
         }
 
@@ -7370,6 +7456,7 @@ if (!class_exists('WC_Twoinc')) {
             $state = $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
             if (in_array($state, self::TERMINAL_ORDER_STATES)) {
                 if ($trigger === 'admin_edit') {
+                    $this->run_hook_on_refused_edit($order, $twoinc_meta);
                     $this->mark_refused_edit($order, $twoinc_meta);
                 }
                 return false;
@@ -7411,6 +7498,47 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
             return $updated;
+        }
+
+        /**
+         * An admin edit Two would refuse is built as the order_update it would have been, so
+         * `twoinc_order_postprocessing` runs on it, and is not sent (TWO-26309), as the PrestaShop plugin does. Only
+         * an edit that changed what was last sent: an unchanged order would send nothing either. A failure is logged
+         * and never stops the save.
+         */
+        private function run_hook_on_refused_edit($order, $twoinc_meta)
+        {
+            $twoinc_order_id = $this->get_twoinc_order_id($order);
+            if (!$twoinc_order_id || !is_array($twoinc_meta)) {
+                return;
+            }
+            try {
+                $hash = WC_Twoinc_Helper::hash_order_pair($order, $twoinc_meta)[0];
+                if ($hash === $order->get_meta(WC_Twoinc_Brand::meta_key('req_body_hash'))) {
+                    return;
+                }
+                $this->postprocess_order_payload(
+                    'order_update',
+                    'admin_edit',
+                    "/v1/order/{$twoinc_order_id}",
+                    WC_Twoinc_Helper::compose_twoinc_edit_order(
+                        $order,
+                        $twoinc_meta['department'] ?? '',
+                        $twoinc_meta['project'] ?? '',
+                        $twoinc_meta['purchase_order_number'] ?? '',
+                        $twoinc_meta['vendor_name'] ?? ''
+                    ),
+                    $order
+                );
+            } catch (Exception $e) {
+                // The hook's own failure is already logged with its code; a refusal or a build failure is logged here.
+                if (!$e instanceof WC_Twoinc_Order_Postprocessing_Exception && function_exists('wc_get_logger')) {
+                    wc_get_logger()->warning(
+                        sprintf('Order %s: the order_update for an edit %s would refuse was not built: %s', $order->get_id(), WC_Twoinc_Brand::get('product_name'), $e->getMessage()),
+                        ['source' => 'twoinc-payment-gateway']
+                    );
+                }
+            }
         }
 
         /**
@@ -7734,6 +7862,51 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Runs `twoinc_order_postprocessing` on an order request's payload and returns what it left (TWO-26092). On
+         * an update or a refund with a merchant handler registered, the order is read from Two first, so the
+         * handler's context carries order_lines and order_refunds (TWO-26309); without one, no extra request is made.
+         *
+         * @return array
+         * @throws WC_Twoinc_Order_Postprocessing_Exception when a subscriber failed
+         */
+        private function postprocess_order_payload($request_type, $trigger, $endpoint, array $payload, $order, $refund = null)
+        {
+            $two_order = null;
+            if (in_array($request_type, ['order_update', 'refund'], true) && WC_Twoinc_Helper::has_merchant_order_postprocessing_handler()) {
+                $two_order = $this->get_two_order_for_hook($order);
+            }
+            $context = WC_Twoinc_Helper::order_postprocessing_context($request_type, $trigger, $endpoint, $order, $refund, $two_order);
+            return WC_Twoinc_Helper::postprocess_order_request($payload, $context);
+        }
+
+        /**
+         * The order as Two's GET /v1/order/{id} returns it, or null when it has no Two order id or the read failed
+         * (logged): the hook then runs with order_lines and order_refunds null.
+         *
+         * @return array|null
+         */
+        private function get_two_order_for_hook($order)
+        {
+            $twoinc_order_id = $this->get_twoinc_order_id($order);
+            if (!$twoinc_order_id) {
+                return null;
+            }
+            $response = $this->make_request("/v1/order/{$twoinc_order_id}", [], 'GET', [], null, 10);
+            $status = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
+            $body = $status >= 200 && $status < 300 ? json_decode((string) wp_remote_retrieve_body($response), true) : null;
+            if (!is_array($body)) {
+                if (function_exists('wc_get_logger')) {
+                    wc_get_logger()->warning(
+                        sprintf('Could not read order %s from %s for the order postprocessing hook (HTTP %d); order_lines and order_refunds are null.', $order->get_id(), WC_Twoinc_Brand::get('product_name'), $status),
+                        ['source' => 'twoinc-payment-gateway']
+                    );
+                }
+                return null;
+            }
+            return $body;
+        }
+
+        /**
          * Every order request is sent through here, so `twoinc_order_postprocessing` sees each one (TWO-26092). A
          * request the API refuses has the API's own reason logged; the caller's order note carries it too, through
          * WC_Twoinc_Helper::get_twoinc_error_msg().
@@ -7746,8 +7919,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function make_order_request($request_type, $trigger, $endpoint, array $payload, $method, $order, $refund = null)
         {
-            $context = WC_Twoinc_Helper::order_postprocessing_context($request_type, $trigger, $endpoint, $order, $refund);
-            $response = $this->make_request($endpoint, WC_Twoinc_Helper::postprocess_order_request($payload, $context), $method);
+            $response = $this->make_request($endpoint, $this->postprocess_order_payload($request_type, $trigger, $endpoint, $payload, $order, $refund), $method);
             $status = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
             if ($status >= 400 && function_exists('wc_get_logger')) {
                 // An intent is refused routinely (no order yet, a rate limit), so it is only a warning.
