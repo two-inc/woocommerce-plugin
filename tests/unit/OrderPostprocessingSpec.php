@@ -1531,7 +1531,10 @@ final class OrderPostprocessingSpec
                     return new StubTenderItem($amount);
                 }, $amounts);
             }
-            TinyAssert::same($expected, self::context('order_update', $order)['order_tenders'], $description);
+            $context = self::context('order_update', $order);
+            TinyAssert::same($expected, $context['order_tenders'], $description);
+            // A gift card's code redeems it: never in what subscribers see or in the log.
+            TinyAssert::same(false, strpos(json_encode([$context['order_tenders'], $GLOBALS['__twoinc_test_logs']]), StubTenderItem::CODE), "$description: the card code leaked");
         }
 
         // recompute_totals_from_lines() takes the tenders off gross and net, whatever the original carries.
@@ -1747,14 +1750,31 @@ final class OrderPostprocessingSpec
     }
 }
 
-/** An order item a gift card plugin records a redemption as. */
+/** An order item a gift card plugin records a redemption as, named by the card's redeemable code as the plugins do. */
 final class StubTenderItem
 {
+    public const CODE = 'GC-SECRET-4242';
+
     private $amount;
 
     public function __construct(float $amount)
     {
         $this->amount = $amount;
+    }
+
+    public function get_code()
+    {
+        return self::CODE;
+    }
+
+    public function get_card_number()
+    {
+        return self::CODE;
+    }
+
+    public function get_name()
+    {
+        return self::CODE;
     }
 
     public function get_amount()
