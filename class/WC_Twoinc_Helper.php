@@ -2004,8 +2004,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
         private static function built_order_tenders($order)
         {
             $check = self::$whole_order_check;
-            if ($check && is_object($order) && $check['order'] === spl_object_id($order)
-                && $check['order_id'] === (method_exists($order, 'get_id') ? $order->get_id() : null)) {
+            $order_id = is_object($order) && method_exists($order, 'get_id') ? $order->get_id() : null;
+            if ($check && is_object($order) && $check['order'] === spl_object_id($order) && $check['order_id'] === $order_id) {
                 return $check['tenders'];
             }
             return self::order_tenders($order);
