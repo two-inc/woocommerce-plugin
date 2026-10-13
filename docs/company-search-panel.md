@@ -37,7 +37,7 @@ description: "The vendored company-search-panel.js (two-copy edit rule, parity d
   `assets/js/twoinc.js` hands the registry answer to the panel's
   `setDisabled()`, which hides the query row and the registered-company chip
   with it; the panel still opens, so the sole-trader route stays reachable.
- `companySearchIsOffered()` is the other half: false where neither
+  `companySearchIsOffered()` is the other half: false where neither
   registry search nor sole trader can answer for the country, and false where
   the merchant record's buyer-country allowlist excludes it. Then the control is
   unmounted and `toggleBusinessFields()` puts WooCommerce's own company field on
@@ -60,7 +60,7 @@ description: "The vendored company-search-panel.js (two-copy edit rule, parity d
 - **Wherever the mode leaves no query row, a printable key keeps the caret on the
   company field.** The panel opens onto a chip there and a chip is a `<button>`,
   which swallows text, so the character was lost with nothing on screen to say so.
- Both routes in are covered: a key pressed on the chip itself, and a
+  Both routes in are covered: a key pressed on the chip itself, and a
   key pressed on the field, whose own opener would otherwise park the caret on
   the chip before the character arrives. Space and Enter are excluded, since both
   activate the focused chip. The field's `input` handler then leaves the buyer's
@@ -137,7 +137,7 @@ description: "The vendored company-search-panel.js (two-copy edit rule, parity d
   `get_enable_address_lookup()` reads as `no` regardless of what is stored, so a
   `yes` saved before the switch went off cannot keep autofilling.
   Ticking company search on switches autofill on with it, edge-triggered.
- A legacy `enable_company_name` row is REWRITTEN to the current key
+  A legacy `enable_company_name` row is REWRITTEN to the current key
   at construction, because the current key's own `'default' => 'yes'` is what
   renders the admin checkbox: only one stored value makes the screen and every
   getter agree.

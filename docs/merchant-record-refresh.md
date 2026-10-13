@@ -34,7 +34,7 @@ description: "When the merchant record is fetched and refreshed, what a failed f
   succeeded or the account offers nothing; the read is the same cached list every
   other consumer uses, so it adds no fetch of its own.
 - **An unresolved term set is explained in the admin, and its cause is PERSISTED**.
- A fetch that lands no record writes its own category: unreachable,
+  A fetch that lands no record writes its own category: unreachable,
   rejected key, rate limited, server error, another status, an answer that cannot be
   read — to a dedicated option row that the next success deletes, because the render
   that has to explain the state is rarely the request whose fetch failed. The Payment
@@ -45,7 +45,7 @@ description: "When the merchant record is fetched and refreshed, what a failed f
   in the two states where it is actually implicated — none saved, or one the API
   rejected — never as a guess at an unexplained failure.
 - **Only the gateway's own settings section re-verifies the stored key on load**.
- The hook it rides fires on every wp-admin request, so the screen check
+  The hook it rides fires on every wp-admin request, so the screen check
   is what stops an unreachable API blocking the whole administration area; the
   cached verdict is read before a call is spent, and the call is capped well under
   wp_remote_request()'s own 30-second default.
