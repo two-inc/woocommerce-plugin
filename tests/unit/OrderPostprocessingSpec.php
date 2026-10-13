@@ -34,6 +34,7 @@ final class OrderPostprocessingSpec
             'testASubscriberMayChangeGross',
             'testAHookEditIsSentAsReturned',
             'testASubscriberCodeFaultFailsTheRequest',
+            'testABodylessRequestIsSentEmptyWhateverTheSubscriberDoes',
             'testTheDefaultHandlerOwnsTheShopMatchCheck',
             'testMerchantHandlerDetection',
             'testTheShopMatchCheckAppliesToTheLineItWasMadeFor',
@@ -442,7 +443,6 @@ final class OrderPostprocessingSpec
             ['line_off', 'order_update', self::examplePayload(), 'a line whose net + tax no longer makes its gross'],
             ['lines_string', 'order_create', self::examplePayload(), 'line_items replaced by a string'],
             ['refund_sign', 'refund', $refund, 'a refund amount with its sign flipped'],
-            ['body', 'cancel', [], 'a body added to a request defined with none'],
         ];
         foreach ($cases as [$mode, $type, $payload, $description]) {
             self::reset();
@@ -493,6 +493,36 @@ final class OrderPostprocessingSpec
                 TinyAssert::same(false, strpos($text, 'fixture subscriber failed'), "$description: the subscriber's message leaked: $text");
             }
             TinyAssert::true(strpos($caught->getMessage(), 'TWO_ORDER_POSTPROCESSING_HOOK_FAILED') !== false, "$description: the note does not carry the code");
+        }
+    }
+
+    private static function testABodylessRequestIsSentEmptyWhateverTheSubscriberDoes(): void
+    {
+        // [fixture mode, what the log names, what it must never carry, description]
+        $modes = [
+            ['body', ['TWO_ORDER_POSTPROCESSING_BODY_NOT_ACCEPTED', '"/note"', 'twoinc_order_postprocessing_fixture'], 'added', 'a returned body'],
+            ['throws', ['TWO_ORDER_POSTPROCESSING_HOOK_FAILED', 'RuntimeException at tests/unit/fixtures/orderpostprocessing.php:'], 'fixture subscriber failed', 'a subscriber that throws'],
+            ['non_array', ['TWO_ORDER_POSTPROCESSING_HOOK_FAILED', 'returned NULL, not an array'], 'fixture subscriber failed', 'a subscriber that returns no array'],
+        ];
+        foreach (['order_confirm', 'cancel'] as $type) {
+            foreach ($modes as [$mode, $named, $secret, $what]) {
+                $description = "$type, $what";
+                self::reset();
+                self::arm($mode);
+                $gateway = self::recordingGateway();
+                $gateway->make_order_request($type, 'test', '/v1/order', [], 'POST', self::exampleOrder());
+
+                TinyAssert::same([[]], array_column($gateway->sent, 'payload'), "$description: not sent once with no body");
+                TinyAssert::same([[], $type], [self::fixtureCalls()[0]['payload'] ?? null, self::fixtureCalls()[0]['request_type'] ?? null], "$description: the hook did not see an empty payload");
+                $logs = array_values(array_filter($GLOBALS['__twoinc_test_logs'], static function ($log) {
+                    return $log['level'] !== 'info';
+                }));
+                TinyAssert::same(['error'], array_column($logs, 'level'), "$description: not logged once at error level");
+                foreach (array_merge($named, ['twoinc_order_postprocessing', $type, '(test)', 'sent with no body']) as $needle) {
+                    TinyAssert::true(strpos($logs[0]['message'], $needle) !== false, "$description: the log does not name $needle: {$logs[0]['message']}");
+                }
+                TinyAssert::same(false, strpos($logs[0]['message'], $secret), "$description: the log carries a value or message: {$logs[0]['message']}");
+            }
         }
     }
 
@@ -1009,7 +1039,9 @@ final class OrderPostprocessingSpec
             self::reset();
             self::arm('throws');
             $sent = $run($drive);
-            TinyAssert::same(false, in_array($endpoint, array_column($sent, 'endpoint'), true), "$description: sent although its subscriber threw");
+            // A request with no body is sent whatever its subscriber does (TWO-26340).
+            $bodyless = in_array($type, ['order_confirm', 'cancel'], true);
+            TinyAssert::same($bodyless, in_array($endpoint, array_column($sent, 'endpoint'), true), "$description: sent or held back wrongly when its subscriber threw");
         }
     }
 

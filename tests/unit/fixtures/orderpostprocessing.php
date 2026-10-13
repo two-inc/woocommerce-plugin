@@ -80,6 +80,7 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
             'request_type' => $context['request_type'],
             'trigger' => $context['trigger'],
             'endpoint' => $context['endpoint'],
+            'payload' => $payload,
             'context_keys' => array_keys($context),
         ];
 
