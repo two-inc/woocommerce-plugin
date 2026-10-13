@@ -17,7 +17,7 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
         /**
          * Asked of the live gateway rather than read from the settings row, so
          * the Blocks tile obeys the same availability gates as the classic one
-         * (API-key verdict, brand minimum order) — ABN-554.
+         * (API-key verdict, brand minimum order).
          */
         public function is_active()
         {
@@ -39,7 +39,7 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
                     'wp-data',
                     'wc-blocks-checkout',
                     // The classic controller this file is a skin over, so its
-                    // globals exist before the mount runs (ABN-554).
+                    // globals exist before the mount runs.
                     'twoinc-payment-gateway-js',
                 ],
                 twoinc_get_asset_version($asset),
@@ -73,11 +73,11 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
                 // The gateway's own payment-box description, whole — every
                 // slot the controller this file skins fills. Without the about
                 // block, which the tile's label renders instead, the same
-                // split the classic template makes (ABN-554).
+                // split the classic template makes.
                 'description' => $gateway ? $gateway->description : '',
                 'about' => $gateway ? $gateway->get_about_block_html() : '',
                 // Its own field, not part of the description: the classic
-                // checkout emits the same block from its own hook (ABN-554).
+                // checkout emits the same block from its own hook.
                 'terms' => $gateway ? $gateway->get_terms_consent_html() : '',
                 'iconUrl' => $gateway ? $gateway->icon : '',
                 // Refuses the submit after a declined or failed availability check (TWO-26292).

@@ -1,4 +1,4 @@
-/** ABN-554. The browser replays only the company the server rendered the page with, and keeps no copy of its own. */
+/** The browser replays only the company the server rendered the page with, and keeps no copy of its own. */
 
 "use strict";
 

@@ -1,5 +1,5 @@
 /**
- * ABN-554. The terms consent is ONE implementation: `twoincTermsConsent` in
+ * The terms consent is ONE implementation: `twoincTermsConsent` in
  * twoinc.js owns the state, the copy and the error paint, and both checkouts
  * call it — the classic form through `checkout_place_order` (asserted here)
  * and the Blocks tile through `onPaymentSetup` (asserted in
@@ -186,7 +186,7 @@ describe("the classic checkout gate", () => {
 });
 
 /**
- * ABN-554. jsdom lays nothing out, so this reads the shipped stylesheet rather
+ * jsdom lays nothing out, so this reads the shipped stylesheet rather
  * than a computed value, the same way the tile row-spacing test does.
  */
 describe("the consent's sizing", () => {

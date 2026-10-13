@@ -1,5 +1,5 @@
 /**
- * ABN-540. The inline per-term fee display beside the Payment Terms
+ * The inline per-term fee display beside the Payment Terms
  * checkboxes drew a term the answer did not price as an EMPTY span, which
  * reads as "this term carries no fee" — a wrong figure rather than a missing
  * one. It also dropped the fixed component silently when the answer carried no

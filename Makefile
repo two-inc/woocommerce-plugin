@@ -40,7 +40,7 @@ help:
 # Docker Desktop resolves a WSL bind source when the container is CREATED, and
 # a restart in between can leave that mapping stale: the plugin mounts as an
 # EMPTY directory, the shop comes up healthy serving no plugin, and nothing
-# reports it. `up -d` cannot repair it - nothing is recreated (ABN-554).
+# reports it. `up -d` cannot repair it - nothing is recreated.
 check-plugin-mount:
 	@docker compose exec -T wordpress \
 		test -f /var/www/html/wp-content/plugins/tillit-payment-gateway/tillit-payment-gateway.php \

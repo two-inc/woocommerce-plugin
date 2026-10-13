@@ -37,7 +37,7 @@ const PANEL_PATH = "assets/js/company-search-panel.js";
 
 const STYLESHEET_PATH = "assets/css/twoinc.css";
 
-/** The endpoint `WC_Twoinc_Checkout::ajax_remember_company()` answers (ABN-554). */
+/** The endpoint `WC_Twoinc_Checkout::ajax_remember_company()` answers. */
 const REMEMBER_COMPANY_URL = "https://shop.example.test/?wc-ajax=two_remember_company";
 
 /**
