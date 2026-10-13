@@ -350,6 +350,7 @@ final class BrandConfigSpec
             'testPaymentSubtitleFallsBackToBrandTaglineWhenBlank',
             'testBrandTaglineIsEscapedAndAnEmptyResultEmitsNoElement',
             'testTaxSubtotalsRequiredWhenMerchantOptsIn',
+            'testRefundTaxSubtotalsFollowTheValidateTaxSubtotalsSetting',
             'testTaxSubtotalsSettingIsOnByDefaultForNewInstalls',
             'testSeTaxSubtotalsBackfill',
             'testSeTaxSubtotalsBackfillDoesNotUndoAMerchantOptOut',
@@ -9036,6 +9037,39 @@ final class BrandConfigSpec
             );
         }
 
+        $prop->setValue(null, null);
+    }
+
+    /**
+     * TWO-26340: a refund sends tax_subtotals exactly when "Validate tax subtotals" is on, as order create and
+     * update do: its lines summed per rate, leaving out a rate that refunds nothing.
+     */
+    private static function testRefundTaxSubtotalsFollowTheValidateTaxSubtotalsSetting(): void
+    {
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
+        $parent = new StubTaxOrder(self::stubTaxRows([[1, 25.0, false], [2, 12.0, false]]));
+        $line = static function (float $net, float $tax, int $rate_id) {
+            return new StubProductLineItem(['line_total' => $net, 'line_subtotal' => $net, 'line_tax' => $tax, 'taxes' => [$rate_id => $tax]]);
+        };
+        $at25 = ['tax_amount' => '-25.00', 'tax_rate' => '0.250000', 'taxable_amount' => '-100.00'];
+        $at12 = ['tax_amount' => '-1.20', 'tax_rate' => '0.120000', 'taxable_amount' => '-10.00'];
+        // [stored setting, refunded lines, expected tax_subtotals (null: not sent), description]
+        $cases = [
+            ['yes', [$line(-100.0, -25.0, 1)], [$at25], 'on: one rate'],
+            ['yes', [$line(-100.0, -25.0, 1), $line(-10.0, -1.2, 2)], [$at25, $at12], 'on: one subtotal per rate'],
+            ['yes', [$line(-100.0, -25.0, 1), $line(0.0, 0.0, 2)], [$at25], 'on: a rate refunding nothing is left out'],
+            ['no', [$line(-100.0, -25.0, 1)], null, 'off: not sent'],
+        ];
+        foreach ($cases as [$stored, $lines, $expected, $description]) {
+            $prop->setValue(null, self::fulfilmentTriggerGateway(['enable_tax_subtotals' => $stored]));
+            $gross = 0.0;
+            foreach ($lines as $item) {
+                $gross += $item['line_total'] + $item['line_tax'];
+            }
+            $body = WC_Twoinc_Helper::compose_twoinc_refund(new StubRefund(['line_item' => $lines], []), abs($gross), $parent);
+            TinyAssert::same($expected, $body['tax_subtotals'] ?? null, $description);
+        }
         $prop->setValue(null, null);
     }
 

@@ -8,6 +8,7 @@
  *   php tests/unit/fixtures/capture-builder-goldens.php /tmp/before > tests/unit/fixtures/builder-goldens.json
  *
  * TWO-26117 re-pinned mistaxed_shipping only: a shipping rate the shop provided is now sent as declared, unchecked.
+ * TWO-26340 re-pinned the refunds: with tax subtotals on, a refund sends them, its lines summed per rate.
  */
 
 if (!class_exists('TwoincBuilderFixtureOrder')) {

@@ -1708,7 +1708,34 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['prepaid_amount'] = strval(WC_Twoinc_Helper::round_amt($prepaid));
             }
 
+            if (WC_Twoinc_Helper::is_tax_subtotals_required_by_twoinc()) {
+                $req_body['tax_subtotals'] = self::refund_tax_subtotals($req_body['line_items']);
+            }
+
             return $req_body;
+        }
+
+        /**
+         * A refund's tax_subtotals: its lines summed per rate, so each rate's subtotal is exactly what its lines
+         * refund. A rate refunding nothing has no line, and Two matches the lines' rates against the subtotals', so
+         * it is left out.
+         *
+         * @return array
+         */
+        private static function refund_tax_subtotals(array $lines)
+        {
+            $tax_subtotals = [];
+            foreach (self::sum_lines_by_rate($lines) as $rate => $bucket) {
+                if (round($bucket['net'] + $bucket['tax'], 2) == 0.0) {
+                    continue;
+                }
+                $tax_subtotals[] = [
+                    'tax_amount' => self::format_amount($bucket['tax']),
+                    'tax_rate' => (string) $rate,
+                    'taxable_amount' => self::format_amount($bucket['net']),
+                ];
+            }
+            return $tax_subtotals;
         }
 
         /**

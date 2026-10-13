@@ -224,6 +224,13 @@
                     "product_page_url": "",
                     "type": "SHIPPING_FEE"
                 }
+            ],
+            "tax_subtotals": [
+                {
+                    "tax_amount": "0.00",
+                    "tax_rate": "0.000000",
+                    "taxable_amount": "-29.00"
+                }
             ]
         }
     },
@@ -473,6 +480,13 @@
                     "image_url": "",
                     "product_page_url": "",
                     "type": "SHIPPING_FEE"
+                }
+            ],
+            "tax_subtotals": [
+                {
+                    "tax_amount": "-2.00",
+                    "tax_rate": "0.200000",
+                    "taxable_amount": "-10.00"
                 }
             ]
         }

@@ -347,6 +347,13 @@ line arrives at the hook with.
 If an upgrade removes a non-empty "Default shipping tax class" value, the plugin
 logs a notice naming the old class (source `twoinc-payment-gateway`).
 
+## Tax subtotals
+
+"Validate tax subtotals" (Order management > Tax, on by default) decides
+whether `tax_subtotals` is sent. On, order create, order edit and refund bodies
+carry it; off, none of them do. A refund's `tax_subtotals` are its lines summed
+per rate, leaving out a rate that refunds nothing.
+
 ## Tax codes for 0% lines
 
 Two's API accepts a `tax_code` on each order line. For a Spanish merchant a line
