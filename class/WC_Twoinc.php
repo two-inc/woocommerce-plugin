@@ -5625,12 +5625,8 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
-            try {
-                $response = $this->make_order_request('cancel', 'status_change', "/v1/order/{$twoinc_order_id}/cancel", [], 'POST', $order);
-            } catch (WC_Twoinc_Order_Postprocessing_Exception $e) {
-                $order->add_order_note($e->getMessage());
-                return false;
-            }
+            // Sent with no body whatever the postprocessing hook does, so it never refuses (TWO-26340).
+            $response = $this->make_order_request('cancel', 'status_change', "/v1/order/{$twoinc_order_id}/cancel", [], 'POST', $order);
 
             if (is_wp_error($response)) {
                 $error_message = __('Could not update status to "Cancelled".', 'twoinc-payment-gateway');
@@ -6775,12 +6771,8 @@ if (!class_exists('WC_Twoinc')) {
                 wp_die($error_message);
             }
 
-            try {
-                $response = $this->make_order_request('order_confirm', 'confirmation_redirect', "/v1/order/{$twoinc_order_id}/confirm", [], 'POST', $order);
-            } catch (WC_Twoinc_Order_Postprocessing_Exception $e) {
-                $order->add_order_note($e->getMessage());
-                return wp_specialchars_decode($order->get_cancel_order_url());
-            }
+            // Sent with no body whatever the postprocessing hook does, so it never refuses (TWO-26340).
+            $response = $this->make_order_request('order_confirm', 'confirmation_redirect', "/v1/order/{$twoinc_order_id}/confirm", [], 'POST', $order);
 
             // Stop if request error or $response['response']['code'] < 400
             if (is_wp_error($response)) {

@@ -781,16 +781,17 @@ add_filter('twoinc_order_postprocessing', function (array $payload, array $conte
 }, 10, 2);
 ```
 
-On any other request, a subscriber that throws, or returns something other
-than an array or something that cannot be encoded as JSON, is a code fault
-rather than a declaration: the request is not sent, and the failure is logged at error level
-with the stable code `TWO_ORDER_POSTPROCESSING_HOOK_FAILED`, naming
+On any other request, a subscriber that throws, or returns something other than
+an array or something that cannot be encoded as JSON, is a code fault rather
+than a declaration: the request is not sent, and the failure is logged at error
+level with the stable code `TWO_ORDER_POSTPROCESSING_HOOK_FAILED`, naming
 `twoinc_order_postprocessing`, the request type and its trigger. The log, the
 order note and the refund error name the exception's class and where it was
-thrown, never the subscriber's own message, which can carry buyer data. Checkout then shows
-the buyer the usual "not available" message; a failed intent check is answered
-as an error rather than a decline, so the next check asks again; admin actions
-leave an order note; a refund returns the error to the refund screen.
+thrown, never the subscriber's own message, which can carry buyer data.
+Checkout then shows the buyer the usual "not available" message; a failed
+intent check is answered as an error rather than a decline, so the next check
+asks again; admin actions leave an order note; a refund returns the error to
+the refund screen.
 
 The plugin never recomputes anything after the hook: a subscriber that changes
 a line also updates the totals and subtotals it affects. It can do that with
