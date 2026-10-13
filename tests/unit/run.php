@@ -9051,17 +9051,19 @@ final class BrandConfigSpec
     {
         $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
         $prop->setAccessible(true);
-        $parent = new StubTaxOrder(self::stubTaxRows([[1, 25.0, false], [2, 12.0, false]]));
-        $line = static function (float $net, float $tax, int $rate_id) {
-            return new StubProductLineItem(['line_total' => $net, 'line_subtotal' => $net, 'line_tax' => $tax, 'taxes' => [$rate_id => $tax]]);
+        $line = static function (float $net, float $tax, int $rate_id, array $meta = []) {
+            return new StubProductLineItem(['line_total' => $net, 'line_subtotal' => $net, 'line_tax' => $tax, 'taxes' => [$rate_id => $tax], 'meta' => $meta]);
         };
+        // A quantity-only refund line has no tax of its own: it takes its rate from the order line it refunds, item 7.
+        $parent = new StubTaxOrder(self::stubTaxRows([[1, 25.0, false], [2, 12.0, false]]), [], [], 1, [7 => $line(10.0, 1.2, 2)]);
         $at25 = ['tax_amount' => '-25.00', 'tax_rate' => '0.250000', 'taxable_amount' => '-100.00'];
         $at12 = ['tax_amount' => '-1.20', 'tax_rate' => '0.120000', 'taxable_amount' => '-10.00'];
+        $zeroAt12 = ['tax_amount' => '0.00', 'tax_rate' => '0.120000', 'taxable_amount' => '0.00'];
         // [stored setting, refunded lines, expected tax_subtotals (null: not sent), description]
         $cases = [
             ['yes', [$line(-100.0, -25.0, 1)], [$at25], 'on: one rate'],
             ['yes', [$line(-100.0, -25.0, 1), $line(-10.0, -1.2, 2)], [$at25, $at12], 'on: one subtotal per rate'],
-            ['yes', [$line(-100.0, -25.0, 1), $line(0.0, 0.0, 2)], [$at25], 'on: a rate refunding nothing is left out'],
+            ['yes', [$line(-100.0, -25.0, 1), $line(0.0, 0.0, 2, ['_refunded_item_id' => 7])], [$at25, $zeroAt12], 'on: a rate whose lines refund nothing (quantity only) keeps a zero subtotal'],
             ['no', [$line(-100.0, -25.0, 1)], null, 'off: not sent'],
         ];
         foreach ($cases as [$stored, $lines, $expected, $description]) {
@@ -9072,6 +9074,7 @@ final class BrandConfigSpec
             }
             $body = WC_Twoinc_Helper::compose_twoinc_refund(new StubRefund(['line_item' => $lines], []), abs($gross), $parent);
             TinyAssert::same($expected, $body['tax_subtotals'] ?? null, $description);
+            TinyAssert::same($body, WC_Twoinc_Helper::recompute_totals_from_lines($body, $body), "$description: recomputing from the lines changes nothing");
         }
         $prop->setValue(null, null);
     }

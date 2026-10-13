@@ -1717,8 +1717,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * A refund's tax_subtotals: its lines summed per rate, so each rate's subtotal is exactly what its lines
-         * refund. A rate refunding nothing has no line, and Two matches the lines' rates against the subtotals', so
-         * it is left out.
+         * refund. Two matches the lines' rates against the subtotals', so a rate whose lines refund nothing (a
+         * quantity-only refund) keeps its subtotal, at zero, as recompute_totals_from_lines() does.
          *
          * @return array
          */
@@ -1726,9 +1726,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
         {
             $tax_subtotals = [];
             foreach (self::sum_lines_by_rate($lines) as $rate => $bucket) {
-                if (round($bucket['net'] + $bucket['tax'], 2) == 0.0) {
-                    continue;
-                }
                 $tax_subtotals[] = [
                     'tax_amount' => self::format_amount($bucket['tax']),
                     'tax_rate' => (string) $rate,

@@ -352,7 +352,7 @@ logs a notice naming the old class (source `twoinc-payment-gateway`).
 "Validate tax subtotals" (Order management > Tax, on by default) decides
 whether `tax_subtotals` is sent. On, order create, order edit and refund bodies
 carry it; off, none of them do. A refund's `tax_subtotals` are its lines summed
-per rate, leaving out a rate that refunds nothing.
+per rate, including a rate whose lines refund nothing, at zero.
 
 ## Tax codes for 0% lines
 
