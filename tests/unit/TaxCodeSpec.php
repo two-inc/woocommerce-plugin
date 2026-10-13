@@ -759,6 +759,14 @@ final class TaxCodeSpec
         });
         TinyAssert::same(1, count($errors), 'the unreadable mapping is logged once');
 
+        // TWO-26340: a refunded line's recorded step 1 to 3 code is still shared with a new shipping line.
+        $order->addShipping(7);
+        $refund = new StubRefund([
+            'line_item' => [new StubProductLineItem(['name' => 'Goods', 'line_subtotal' => -100.0, 'line_total' => -100.0, 'line_tax' => 0.0, 'taxes' => [], 'data' => new TaxCodeSpecProduct(false), 'meta' => ['_refunded_item_id' => 1]])],
+            'shipping' => [new StubShippingItem(-10.0, 0.0, [], ['_refunded_item_id' => 7])],
+        ], []);
+        TinyAssert::same([$intra, $intra], $codes(WC_Twoinc_Helper::compose_twoinc_refund($refund, 110.0, $order)), 'a refund: a new keyless line shares the recorded code of a line it refunds');
+
         $order->addLine(3, 'goods');
         try {
             WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');

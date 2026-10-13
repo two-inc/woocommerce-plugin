@@ -813,13 +813,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
             // Read only once a 0% line the placement record does not cover needs it, so an order with none, or a
             // re-sent line already placed, never depends on the stored mapping. An unreadable mapping throws
             // (TWO-26309): an order is never built on a mapping nobody chose. A refund is never refused over it: its
-            // recorded lines are sent as placed and the rest uncoded, the error logged by the read.
+            // recorded lines are sent as placed, a line with no tax class takes the one step 1 to 3 code they share
+            // (TWO-26340), and the rest go uncoded, the error logged by the read.
             $unrecorded = array_filter($zero, static function ($i) use ($sources, $stored) {
                 $key = $sources[$i]['record_key'] ?? null;
                 return null === $key || !isset($stored[$key]);
             });
             $map = [];
-            $unreadable = false;
             if ($unrecorded) {
                 try {
                     $map = WC_Twoinc::get_tax_code_map();
@@ -827,7 +827,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     if (!$lenient) {
                         throw $e;
                     }
-                    $unreadable = true;
                 }
             }
             // With no row mapped nothing can code the lines, so the order keeps no record (sparing the meta row). A
@@ -876,7 +875,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $recorded[$key] = ['code' => $code, 'step' => self::TAX_CODE_STEP_ROW];
                 }
             }
-            $code = !$unreadable && 1 === count($shared) ? (string) key($shared) : null;
+            $code = 1 === count($shared) ? (string) key($shared) : null;
             if ($placed && null === $stored) {
                 // Placed before the record existed: the one code all the other 0% lines in the request being sent
                 // get, none when they disagree or one has none.
