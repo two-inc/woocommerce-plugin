@@ -138,6 +138,8 @@ function load_twoinc_classes()
     // (enabled + chosen-payment-method + selected-term), so registering it on
     // every request is safe.
     add_action('woocommerce_cart_calculate_fees', ['WC_Twoinc_Payment_Terms', 'apply_cart_fee']);
+    // Marks the order item made from that fee, so it is sent as BUYER_FEE (TWO-26340).
+    add_action('woocommerce_checkout_create_order_fee_item', ['WC_Twoinc_Payment_Terms', 'mark_buyer_fee_item'], 10, 3);
 
     // FX rate cache (TWO-25104): a recurring 6h Action Scheduler refresh
     // keeps the spot table warm so checkout conversions (min-order gates,

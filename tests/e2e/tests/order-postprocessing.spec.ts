@@ -37,7 +37,7 @@ const carts: [string, string[], (lines: Line[]) => boolean, string][] = [
   [
     "taxes,fee",
     ["Product 1"],
-    (lines) => ofType(lines, "BUYER_FEE")[0]?.tax_amount === "1.00",
+    (lines) => ofType(lines, "SERVICE")[0]?.tax_amount === "1.00",
     "a taxed fee"
   ],
   [

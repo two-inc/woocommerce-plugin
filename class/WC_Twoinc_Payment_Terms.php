@@ -26,6 +26,18 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
     {
         public const SESSION_KEY = 'two_selected_term';
 
+        /**
+         * Order fee item meta marking the plugin's own payment terms fee (TWO-26340), sent as BUYER_FEE.
+         */
+        public const BUYER_FEE_META = 'buyer_fee';
+
+        /**
+         * The cart fee id apply_cart_fee() added in this request, else null.
+         *
+         * @var string|null
+         */
+        private static $buyer_fee_id = null;
+
         /** Preferred default term, in days (ABN-548). */
         public const PREFERRED_DEFAULT_TERM = 30;
 
@@ -1001,6 +1013,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         public static function apply_cart_fee($cart): void
         {
+            self::$buyer_fee_id = null;
             $gateway = WC_Twoinc::get_instance();
             if (!$gateway) {
                 return;
@@ -1079,6 +1092,30 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                     // 'standard' — pre-feature behaviour, byte-for-byte.
                     $cart->add_fee($label, $amount, true);
             }
+            // WC_Cart_Fees names a fee added by name with sanitize_title() of it, and refuses a second fee by that id.
+            self::$buyer_fee_id = sanitize_title($label);
+        }
+
+        /**
+         * woocommerce_checkout_create_order_fee_item: marks the order fee item made from the fee apply_cart_fee() added.
+         *
+         * @param WC_Order_Item_Fee $item
+         * @param string            $fee_key
+         * @param object            $fee the cart fee
+         */
+        public static function mark_buyer_fee_item($item, $fee_key, $fee): void
+        {
+            if (self::$buyer_fee_id !== null && isset($fee->id) && $fee->id === self::$buyer_fee_id) {
+                $item->add_meta_data(WC_Twoinc_Brand::meta_key(self::BUYER_FEE_META), 'yes', true);
+            }
+        }
+
+        /**
+         * Whether an order fee item is the plugin's own payment terms fee. A fee placed before TWO-26340 is not marked.
+         */
+        public static function is_buyer_fee_item($item): bool
+        {
+            return method_exists($item, 'get_meta') && 'yes' === $item->get_meta(WC_Twoinc_Brand::meta_key(self::BUYER_FEE_META));
         }
 
         /**

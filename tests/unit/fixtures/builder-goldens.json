@@ -319,7 +319,7 @@
                     "quantity_unit": "fee",
                     "image_url": "",
                     "product_page_url": "",
-                    "type": "BUYER_FEE"
+                    "type": "SERVICE"
                 }
             ],
             "recurring": false,
@@ -428,7 +428,7 @@
                     "quantity_unit": "fee",
                     "image_url": "",
                     "product_page_url": "",
-                    "type": "BUYER_FEE"
+                    "type": "SERVICE"
                 }
             ],
             "recurring": false,

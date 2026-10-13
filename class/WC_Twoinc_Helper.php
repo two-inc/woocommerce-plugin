@@ -729,8 +729,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 );
                 $fee_line = [
                     // Already the resolved, translated, brand-correct label;
-                    // no hardcoded prefix: 'type' => 'BUYER_FEE' below carries
-                    // the semantic instead.
+                    // no hardcoded prefix: 'type' below carries the semantic
+                    // instead, BUYER_FEE for the plugin's own payment terms fee.
                     'name' => $fee->get_name(),
                     'description' => '',
                     'gross_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total() + $fee->get_total_tax())),
@@ -744,7 +744,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'quantity_unit' => 'fee',
                     'image_url' => '',
                     'product_page_url' => '',
-                    'type' => 'BUYER_FEE'
+                    'type' => WC_Twoinc_Payment_Terms::is_buyer_fee_item(self::get_rate_line($fee, $rate_order, $is_refund)) ? 'BUYER_FEE' : 'SERVICE'
                 ];
 
                 $items[] = $fee_line;

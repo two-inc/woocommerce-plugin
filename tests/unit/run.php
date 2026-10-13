@@ -352,6 +352,7 @@ final class BrandConfigSpec
             'testTaxSubtotalsRequiredWhenMerchantOptsIn',
             'testRefundTaxSubtotalsFollowTheValidateTaxSubtotalsSetting',
             'testTaxSubtotalsSettingMatchesTheOtherPlugins',
+            'testOnlyThePaymentTermsFeeIsSentAsBuyerFee',
             'testTaxSubtotalsSettingIsOnByDefaultForNewInstalls',
             'testSeTaxSubtotalsBackfill',
             'testSeTaxSubtotalsBackfillDoesNotUndoAMerchantOptOut',
@@ -1757,7 +1758,7 @@ final class BrandConfigSpec
 
         TinyAssert::same(1, count($items));
         TinyAssert::same('Servicekosten', $items[0]['name']);
-        TinyAssert::same('BUYER_FEE', $items[0]['type']);
+        TinyAssert::same('SERVICE', $items[0]['type']);
         TinyAssert::true(
             strpos($items[0]['name'], 'Fee - ') === false,
             'Fee line-item name must not carry a hardcoded prefix'
@@ -9092,6 +9093,47 @@ final class BrandConfigSpec
             strpos($field['description'], 'Sweden') === false,
             "description must not claim Sweden is unconditional, got: {$field['description']}"
         );
+    }
+
+    /**
+     * TWO-26340: the fee apply_cart_fee() adds is marked on its order item at checkout and sent as BUYER_FEE, and so is
+     * a refund of it. Any other fee, and a fee placed before the marker existed, is still sent as SERVICE.
+     */
+    private static function testOnlyThePaymentTermsFeeIsSentAsBuyerFee(): void
+    {
+        $label = self::runApplyCartFee([])->fees[0]['name'];
+        $item = static function () {
+            return new class () {
+                public $meta = [];
+
+                public function add_meta_data($key, $value, $unique = false)
+                {
+                    $this->meta[$key] = $value;
+                }
+            };
+        };
+        $ours = $item();
+        WC_Twoinc_Payment_Terms::mark_buyer_fee_item($ours, sanitize_title($label), (object) ['id' => sanitize_title($label), 'name' => $label]);
+        $theirs = $item();
+        WC_Twoinc_Payment_Terms::mark_buyer_fee_item($theirs, 'handling', (object) ['id' => 'handling', 'name' => 'Handling']);
+        TinyAssert::same(1, count($ours->meta), 'the payment terms fee item is marked');
+        TinyAssert::same([], $theirs->meta, 'a third-party fee item is not marked');
+
+        $order = new StubTaxOrder(self::stubTaxRows([[1, 25.0, false]]), [], [], 1, [5 => new StubShippingItem(10.0, 2.5, [1 => 2.5], $ours->meta)]);
+        $fee = static function (array $meta, float $sign = 1.0) {
+            return new StubShippingItem($sign * 10.0, $sign * 2.5, [1 => $sign * 2.5], $meta);
+        };
+        // [fee line, refund?, expected type, description]
+        $cases = [
+            [$fee($ours->meta), false, 'BUYER_FEE', 'the payment terms fee'],
+            [$fee($theirs->meta), false, 'SERVICE', 'a third-party fee'],
+            [$fee([]), false, 'SERVICE', 'a fee placed before the marker existed'],
+            [$fee(['_refunded_item_id' => 5], -1.0), true, 'BUYER_FEE', 'a refund of the payment terms fee'],
+        ];
+        foreach ($cases as [$line, $refund, $expected, $description]) {
+            $items = WC_Twoinc_Helper::get_line_items([], [], [$line], $order, $refund, $order);
+            TinyAssert::same($expected, $items[0]['type'], $description);
+        }
     }
 
     /**
