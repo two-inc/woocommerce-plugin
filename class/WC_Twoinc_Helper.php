@@ -785,10 +785,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * (TWO-26309). Once placed, a recorded line is sent with its recorded code, so a changed address, mapping or
          * tax rate never moves a coded line. A line the record does not cover (a line placed with no code, or added
          * by an edit) is resolved as at placement against the mapping then, step 4 sharing only the codes steps 1
-         * to 3 gave the lines in this request: those the record holds for them and those resolved now (TWO-26340). An order with no code recorded (placed with none, with no row mapped, or before
-         * the record existed) has its lines resolved again, and a line with no tax class takes the one code all the
-         * other 0% lines in the request being sent get, none when they disagree or one has none. A non-zero line is never touched. Runs inside the builder, so
-         * every hook after it sees the code.
+         * to 3 gave the lines in this request: those the record holds for them and those resolved now (TWO-26340).
+         * An order with no code recorded (placed with none, with no row mapped, or before the record existed) has its
+         * lines resolved again, and a line with no tax class takes the one code all the other 0% lines in the request
+         * being sent get, none when they disagree or one has none. A non-zero line is never touched. Runs inside the
+         * builder, so every hook after it sees the code.
          *
          * @param array $items   the built lines
          * @param array $sources per line: its tax class key ('shipping' for a shipping line), its tax rate ids, whether

@@ -476,12 +476,11 @@ Edits and refunds send a recorded code, so a changed address, mapping or tax
 rate never moves a coded line. A line the record does not cover (a line placed
 with no code, or added by an edit) is resolved again against the mapping at the
 time, and step 4 shares only the step 1 to 3 codes of the lines being sent,
-recorded or resolved now. An order
-with no code recorded (placed with none, placed while no row was mapped, or
-placed before the record existed) has all its lines resolved again on each edit
-or refund, and shipping with no tax
-class takes the one code all the other 0% lines in the request being sent get,
-and none when they disagree or one has none.
+recorded or resolved now. An order with no code recorded (placed with none,
+placed while no row was mapped, or placed before the record existed) has all its
+lines resolved again on each edit or refund, and shipping with no tax class
+takes the one code all the other 0% lines in the request being sent get, and
+none when they disagree or one has none.
 
 **Upgrading.** A mapping saved per tax class by an earlier build is moved once
 to the rows: each class's code is copied to its exempt row, its no-rule row and
