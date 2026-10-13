@@ -7135,9 +7135,9 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => ''
                 ],
                 // ── E. Order management: status mapping, then tax ───────
-                'section_status_mapping' => [
+                'section_order_management' => [
                     'type'  => 'title',
-                    'title' => __('Status mapping', 'twoinc-payment-gateway'),
+                    'title' => __('Order management', 'twoinc-payment-gateway'),
                 ],
                 'fulfilment_trigger_statuses' => [
                     'title'       => __('Fulfilment trigger statuses', 'twoinc-payment-gateway'),
@@ -7162,11 +7162,7 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Validate tax subtotals', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
-                    'description' => sprintf(
-                        /* translators: %s is the brand product name (e.g. "Two") */
-                        __('When enabled, a breakdown of tax subtotals is included in the order payload sent to %s.', 'twoinc-payment-gateway'),
-                        WC_Twoinc_Brand::get('product_name')
-                    ),
+                    'description' => __('When checked, a per-tax-rate tax_subtotals breakdown is sent with orders, order updates and refunds, for validation against the order lines. When unchecked, tax_subtotals is omitted from all of them.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'default'     => 'yes'
                 ],

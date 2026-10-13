@@ -350,6 +350,9 @@ final class BrandConfigSpec
             'testPaymentSubtitleFallsBackToBrandTaglineWhenBlank',
             'testBrandTaglineIsEscapedAndAnEmptyResultEmitsNoElement',
             'testTaxSubtotalsRequiredWhenMerchantOptsIn',
+            'testRefundTaxSubtotalsFollowTheValidateTaxSubtotalsSetting',
+            'testTaxSubtotalsSettingMatchesTheOtherPlugins',
+            'testOnlyThePaymentTermsFeeIsSentAsBuyerFee',
             'testTaxSubtotalsSettingIsOnByDefaultForNewInstalls',
             'testSeTaxSubtotalsBackfill',
             'testSeTaxSubtotalsBackfillDoesNotUndoAMerchantOptOut',
@@ -6164,21 +6167,22 @@ final class BrandConfigSpec
      * add_fee call. $options rides on top of a minimal enabled-surcharge
      * configuration.
      */
-    private static function runApplyCartFee(array $options): StubFeeCart
+    private static function runApplyCartFee(array $options, ?StubFeeCart $cart = null): StubFeeCart
     {
         $gateway = self::surchargeFeeGateway(array_merge([
             'surcharge_type' => 'percentage',
             'payment_terms_days' => [30],
             'surcharge_grid' => [30 => ['percentage' => 2.0]],
         ], $options));
-        return self::withGatewayInstance($gateway, static function () use ($gateway) {
+        return self::withGatewayInstance($gateway, static function () use ($gateway, $cart) {
             WC_Twoinc_Payment_Terms::reset_fee_cache();
             WC()->session = new StubSession();
             WC()->session->set('chosen_payment_method', $gateway->id);
             WC()->customer = new StubCustomer('US');
-            $cart = new StubFeeCart();
+            $cart = $cart ?? new StubFeeCart();
+            $before = count($cart->fees);
             WC_Twoinc_Payment_Terms::apply_cart_fee($cart);
-            TinyAssert::same(1, count($cart->fees), 'expected exactly one surcharge fee line');
+            TinyAssert::same($before + 1, count($cart->fees), 'expected exactly one surcharge fee line');
             return $cart;
         });
     }
@@ -7935,7 +7939,8 @@ final class BrandConfigSpec
         };
         $gateway->init_form_fields();
 
-        foreach (['vendor_name', 'fulfilment_trigger_statuses', 'enable_tax_subtotals'] as $key) {
+        // enable_tax_subtotals names no brand since TWO-26340: its help text is the other plugins'.
+        foreach (['vendor_name', 'fulfilment_trigger_statuses'] as $key) {
             $description = $gateway->form_fields[$key]['description'] ?? '';
             TinyAssert::true(
                 strpos($description, 'Testbrand') !== false,
@@ -9039,6 +9044,42 @@ final class BrandConfigSpec
         $prop->setValue(null, null);
     }
 
+    /**
+     * TWO-26340: a refund sends tax_subtotals exactly when "Validate tax subtotals" is on, as order create and
+     * update do: its lines summed per rate, leaving out a rate that refunds nothing.
+     */
+    private static function testRefundTaxSubtotalsFollowTheValidateTaxSubtotalsSetting(): void
+    {
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
+        $line = static function (float $net, float $tax, int $rate_id, array $meta = []) {
+            return new StubProductLineItem(['line_total' => $net, 'line_subtotal' => $net, 'line_tax' => $tax, 'taxes' => [$rate_id => $tax], 'meta' => $meta]);
+        };
+        // A quantity-only refund line has no tax of its own: it takes its rate from the order line it refunds, item 7.
+        $parent = new StubTaxOrder(self::stubTaxRows([[1, 25.0, false], [2, 12.0, false]]), [], [], 1, [7 => $line(10.0, 1.2, 2)]);
+        $at25 = ['tax_amount' => '-25.00', 'tax_rate' => '0.250000', 'taxable_amount' => '-100.00'];
+        $at12 = ['tax_amount' => '-1.20', 'tax_rate' => '0.120000', 'taxable_amount' => '-10.00'];
+        $zeroAt12 = ['tax_amount' => '0.00', 'tax_rate' => '0.120000', 'taxable_amount' => '0.00'];
+        // [stored setting, refunded lines, expected tax_subtotals (null: not sent), description]
+        $cases = [
+            ['yes', [$line(-100.0, -25.0, 1)], [$at25], 'on: one rate'],
+            ['yes', [$line(-100.0, -25.0, 1), $line(-10.0, -1.2, 2)], [$at25, $at12], 'on: one subtotal per rate'],
+            ['yes', [$line(-100.0, -25.0, 1), $line(0.0, 0.0, 2, ['_refunded_item_id' => 7])], [$at25, $zeroAt12], 'on: a rate whose lines refund nothing (quantity only) keeps a zero subtotal'],
+            ['no', [$line(-100.0, -25.0, 1)], null, 'off: not sent'],
+        ];
+        foreach ($cases as [$stored, $lines, $expected, $description]) {
+            $prop->setValue(null, self::fulfilmentTriggerGateway(['enable_tax_subtotals' => $stored]));
+            $gross = 0.0;
+            foreach ($lines as $item) {
+                $gross += $item['line_total'] + $item['line_tax'];
+            }
+            $body = WC_Twoinc_Helper::compose_twoinc_refund(new StubRefund(['line_item' => $lines], []), abs($gross), $parent);
+            TinyAssert::same($expected, $body['tax_subtotals'] ?? null, $description);
+            TinyAssert::same($body, WC_Twoinc_Helper::recompute_totals_from_lines($body, $body), "$description: recomputing from the lines changes nothing");
+        }
+        $prop->setValue(null, null);
+    }
+
     private static function testTaxSubtotalsSettingIsOnByDefaultForNewInstalls(): void
     {
         $gateway = new class () extends WC_Twoinc {
@@ -9055,6 +9096,95 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos($field['description'], 'Sweden') === false,
             "description must not claim Sweden is unconditional, got: {$field['description']}"
+        );
+    }
+
+    /**
+     * TWO-26340: the fee apply_cart_fee() adds is marked on its order item at checkout and sent as BUYER_FEE, and so is
+     * a refund of it. Any other fee, and a fee placed before the marker existed, is still sent as SERVICE.
+     */
+    private static function testOnlyThePaymentTermsFeeIsSentAsBuyerFee(): void
+    {
+        $label = self::runApplyCartFee([])->fees[0]['name'];
+        $item = static function () {
+            return new class () {
+                public $meta = [];
+
+                public function add_meta_data($key, $value, $unique = false)
+                {
+                    $this->meta[$key] = $value;
+                }
+            };
+        };
+        $ours = $item();
+        WC_Twoinc_Payment_Terms::mark_buyer_fee_item($ours, sanitize_title($label), (object) ['id' => sanitize_title($label), 'name' => $label]);
+        $theirs = $item();
+        WC_Twoinc_Payment_Terms::mark_buyer_fee_item($theirs, 'handling', (object) ['id' => 'handling', 'name' => 'Handling']);
+        TinyAssert::same(1, count($ours->meta), 'the payment terms fee item is marked');
+        TinyAssert::same([], $theirs->meta, 'a third-party fee item is not marked');
+
+        // A fee by the same label added first takes the id, so WooCommerce refuses this one: the one by that id is not ours.
+        $cart = new StubFeeCart();
+        $cart->add_fee($label, 3.0);
+        self::runApplyCartFee([], $cart);
+        $first = $item();
+        WC_Twoinc_Payment_Terms::mark_buyer_fee_item($first, sanitize_title($label), (object) ['id' => sanitize_title($label), 'name' => $label]);
+        TinyAssert::same([], $first->meta, 'a fee that took the label first is not marked');
+
+        $order = new StubTaxOrder(self::stubTaxRows([[1, 25.0, false]]), [], [], 1, [5 => new StubShippingItem(10.0, 2.5, [1 => 2.5], $ours->meta)]);
+        $fee = static function (array $meta, float $sign = 1.0) {
+            return new StubShippingItem($sign * 10.0, $sign * 2.5, [1 => $sign * 2.5], $meta);
+        };
+        // [fee line, refund?, expected type, description]
+        $cases = [
+            [$fee($ours->meta), false, 'BUYER_FEE', 'the payment terms fee'],
+            [$fee($theirs->meta), false, 'SERVICE', 'a third-party fee'],
+            [$fee([]), false, 'SERVICE', 'a fee placed before the marker existed'],
+            [$fee(['_refunded_item_id' => 5], -1.0), true, 'BUYER_FEE', 'a refund of the payment terms fee'],
+        ];
+        foreach ($cases as [$line, $refund, $expected, $description]) {
+            $items = WC_Twoinc_Helper::get_line_items([], [], [$line], $order, $refund, $order);
+            TinyAssert::same($expected, $items[0]['type'], $description);
+        }
+
+        $source = (string) file_get_contents(dirname(__DIR__, 2) . '/tillit-payment-gateway.php');
+        TinyAssert::true(
+            strpos($source, "add_action('woocommerce_checkout_create_order_fee_item', ['WC_Twoinc_Payment_Terms', 'mark_buyer_fee_item'], 10, 3);") !== false,
+            'the fee item marker is registered, with the fee among its arguments'
+        );
+    }
+
+    /**
+     * TWO-26340: the control is PrestaShop's: the same label, help text and default, under a "Tax" heading that
+     * follows an "Order management" one.
+     */
+    private static function testTaxSubtotalsSettingMatchesTheOtherPlugins(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+        $headings = [];
+        foreach ($gateway->form_fields as $name => $field) {
+            if ($name === 'enable_tax_subtotals') {
+                break;
+            }
+            if (($field['type'] ?? '') === 'title') {
+                $headings[] = $field['title'];
+            }
+        }
+        $field = $gateway->form_fields['enable_tax_subtotals'];
+
+        TinyAssert::same(['Order management', 'Tax'], array_slice($headings, -2), 'the headings above the control');
+        TinyAssert::same('Validate tax subtotals', $field['title'], 'label');
+        TinyAssert::same('yes', $field['default'], 'default');
+        TinyAssert::same(
+            'When checked, a per-tax-rate tax_subtotals breakdown is sent with orders, order updates and refunds, for validation against the order lines. When unchecked, tax_subtotals is omitted from all of them.',
+            $field['description'],
+            'help text'
         );
     }
 

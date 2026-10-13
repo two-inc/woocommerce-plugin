@@ -729,8 +729,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 );
                 $fee_line = [
                     // Already the resolved, translated, brand-correct label;
-                    // no hardcoded prefix — 'type' => 'SERVICE' below carries
-                    // the semantic instead.
+                    // no hardcoded prefix: 'type' below carries the semantic
+                    // instead, BUYER_FEE for the plugin's own payment terms fee.
                     'name' => $fee->get_name(),
                     'description' => '',
                     'gross_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total() + $fee->get_total_tax())),
@@ -744,7 +744,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'quantity_unit' => 'fee',
                     'image_url' => '',
                     'product_page_url' => '',
-                    'type' => 'SERVICE'
+                    'type' => WC_Twoinc_Payment_Terms::is_buyer_fee_item(self::get_rate_line($fee, $rate_order, $is_refund)) ? 'BUYER_FEE' : 'SERVICE'
                 ];
 
                 $items[] = $fee_line;
@@ -1708,7 +1708,31 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['prepaid_amount'] = strval(WC_Twoinc_Helper::round_amt($prepaid));
             }
 
+            if (WC_Twoinc_Helper::is_tax_subtotals_required_by_twoinc()) {
+                $req_body['tax_subtotals'] = self::refund_tax_subtotals($req_body['line_items']);
+            }
+
             return $req_body;
+        }
+
+        /**
+         * A refund's tax_subtotals: its lines summed per rate, so each rate's subtotal is exactly what its lines
+         * refund. Two matches the lines' rates against the subtotals', so a rate whose lines refund nothing (a
+         * quantity-only refund) keeps its subtotal, at zero, as recompute_totals_from_lines() does.
+         *
+         * @return array
+         */
+        private static function refund_tax_subtotals(array $lines)
+        {
+            $tax_subtotals = [];
+            foreach (self::sum_lines_by_rate($lines) as $rate => $bucket) {
+                $tax_subtotals[] = [
+                    'tax_amount' => self::format_amount($bucket['tax']),
+                    'tax_rate' => (string) $rate,
+                    'taxable_amount' => self::format_amount($bucket['net']),
+                ];
+            }
+            return $tax_subtotals;
         }
 
         /**
