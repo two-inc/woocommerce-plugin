@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: woocommerce-plugin\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/app\n"
-"POT-Creation-Date: 2026-10-12T14:05:24+00:00\n"
+"POT-Creation-Date: 2026-10-13T11:08:30+00:00\n"
 "PO-Revision-Date: 2026-09-03 00:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: Spanish\n"
@@ -434,7 +434,7 @@ msgstr "Es probable que tu factura con %1$s sea aceptada, sujeta a comprobacione
 
 #: class/WC_Twoinc.php:2527 class/WC_Twoinc.php:6332 class/WC_Twoinc.php:6342
 #: class/WC_Twoinc.php:6432 class/WC_Twoinc.php:6462
-#: class/WC_Twoinc_Blocks_Support.php:85 class/WC_Twoinc_Helper.php:405
+#: class/WC_Twoinc_Blocks_Support.php:85 class/WC_Twoinc_Helper.php:408
 #, php-format
 msgid "Invoice purchase with %s is not available for this order."
 msgstr "La compra con factura mediante %s no está disponible para este pedido."
@@ -661,7 +661,7 @@ msgstr "Ajuste heredado. Ofrece un plazo personalizado de %s días tras el fin d
 msgid "Legacy setting. This offers a custom term of %s days from fulfilment. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
 msgstr "Ajuste heredado. Ofrece un plazo personalizado de %s días desde el cumplimiento. Ya no es compatible y no se puede editar. Elige Eliminar para retirarlo, o usa los plazos de pago de arriba para cambiar lo que ofreces."
 
-#: class/WC_Twoinc.php:3715 class/WC_Twoinc.php:5029 class/WC_Twoinc.php:7390
+#: class/WC_Twoinc.php:3715 class/WC_Twoinc.php:5029 class/WC_Twoinc.php:7386
 msgid "Remove"
 msgstr "Eliminar"
 
@@ -758,7 +758,7 @@ msgstr "No tienes permiso para descargar esta factura."
 msgid "Could not refresh the merchant profile; the values read previously are still in use."
 msgstr "No se ha podido actualizar el perfil del comerciante; se siguen usando los valores leídos anteriormente."
 
-#: class/WC_Twoinc.php:4945 class/WC_Twoinc.php:7602
+#: class/WC_Twoinc.php:4945 class/WC_Twoinc.php:7598
 msgid "Merchant profile refreshed."
 msgstr "Perfil del comercio actualizado."
 
@@ -840,7 +840,7 @@ msgid "Could not update status to \"Fulfilled\" with %s."
 msgstr "No se ha podido actualizar el estado a \"Cumplido\" con %s."
 
 #: class/WC_Twoinc.php:5516 class/WC_Twoinc.php:5616 class/WC_Twoinc.php:6551
-#: class/WC_Twoinc.php:7942
+#: class/WC_Twoinc.php:7938
 #, php-format
 msgid "Reason: Could not find %s order ID."
 msgstr "Motivo: no se ha podido encontrar el ID de pedido de %s."
@@ -857,13 +857,13 @@ msgstr "No se ha podido actualizar el estado del pedido a \"Cumplido\" con %s."
 
 #: class/WC_Twoinc.php:5565 class/WC_Twoinc.php:5577 class/WC_Twoinc.php:5637
 #: class/WC_Twoinc.php:5645 class/WC_Twoinc.php:6616 class/WC_Twoinc.php:6629
-#: class/WC_Twoinc.php:7746 class/WC_Twoinc.php:7981
+#: class/WC_Twoinc.php:7742 class/WC_Twoinc.php:7977
 #, php-format
 msgid "Please contact %s support with order ID: %s"
 msgstr "Ponte en contacto con el soporte de %s con el ID de pedido: %s"
 
 #: class/WC_Twoinc.php:5578 class/WC_Twoinc.php:5646 class/WC_Twoinc.php:6453
-#: class/WC_Twoinc.php:6617 class/WC_Twoinc.php:7982
+#: class/WC_Twoinc.php:6617 class/WC_Twoinc.php:7978
 #, php-format
 msgid "Response: %s"
 msgstr "Respuesta: %s"
@@ -1057,7 +1057,7 @@ msgstr "Activar/desactivar"
 msgid "Enable %s payments"
 msgstr "Activar los pagos con %s"
 
-#: class/WC_Twoinc.php:6832 class/WC_Twoinc.php:7642
+#: class/WC_Twoinc.php:6832 class/WC_Twoinc.php:7638
 msgid "Environment"
 msgstr "Entorno"
 
@@ -1208,7 +1208,7 @@ msgstr "Autocompletar la dirección de la empresa"
 msgid "Enables automatically filling in the registered address from the national registry."
 msgstr "Permite rellenar automáticamente la dirección registrada a partir del registro nacional."
 
-#: class/WC_Twoinc.php:7008 class/WC_Twoinc.php:7022 class/WC_Twoinc.php:7657
+#: class/WC_Twoinc.php:7008 class/WC_Twoinc.php:7022 class/WC_Twoinc.php:7653
 msgid "Payment terms"
 msgstr "Plazos de pago"
 
@@ -1342,8 +1342,8 @@ msgid "Increment the surcharge is rounded to (e.g. 1 = whole units, 0.50 = neare
 msgstr "Incremento al que se redondea el recargo (p. ej. 1 = unidades enteras, 0,50 = medio más cercano). Solo se aplica cuando se selecciona una dirección de redondeo."
 
 #: class/WC_Twoinc.php:7140
-msgid "Status mapping"
-msgstr "Asignación de estados"
+msgid "Order management"
+msgstr "Gestión de pedidos"
 
 #: class/WC_Twoinc.php:7143
 msgid "Fulfilment trigger statuses"
@@ -1363,340 +1363,338 @@ msgstr "Impuestos"
 msgid "Validate tax subtotals"
 msgstr "Validar subtotales de impuestos"
 
-#. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:7167
-#, php-format
-msgid "When enabled, a breakdown of tax subtotals is included in the order payload sent to %s."
-msgstr "Cuando está activado, se incluye un desglose de los subtotales de impuestos en los datos del pedido enviados a %s."
+#: class/WC_Twoinc.php:7165
+msgid "If you choose YES, a per-tax-rate tax_subtotals breakdown is sent in /v1/order and /v1/order_intent payloads for validation against the order lines. If you choose NO, tax_subtotals is omitted from those payloads."
+msgstr "Si seleccionas SÍ, se enviará un desglose de tax_subtotals por tipo de impuesto en las cargas útiles de /v1/order y /v1/order_intent, para su validación frente a las líneas del pedido. Si seleccionas NO, tax_subtotals se omitirá en esas cargas útiles."
 
-#: class/WC_Twoinc.php:7174
+#: class/WC_Twoinc.php:7170
 msgid "Tax codes for 0% lines"
 msgstr "Códigos de impuesto para líneas al 0%"
 
-#: class/WC_Twoinc.php:7181
+#: class/WC_Twoinc.php:7177
 msgid "Diagnostics"
 msgstr "Diagnóstico"
 
-#: class/WC_Twoinc.php:7184
+#: class/WC_Twoinc.php:7180
 msgid "Disable checkout rate limiting"
 msgstr "Desactivar la limitación de solicitudes en el checkout"
 
-#: class/WC_Twoinc.php:7185
+#: class/WC_Twoinc.php:7181
 msgid "Serve the checkout AJAX endpoints unmetered"
 msgstr "Servir los endpoints AJAX del proceso de pago sin límite"
 
-#: class/WC_Twoinc.php:7187
+#: class/WC_Twoinc.php:7183
 msgid "The checkout AJAX endpoints spend your API key, so each client address is allowed a fixed number of requests per minute. Turn this on only if legitimate buyers are being refused — that happens when the store sits behind a reverse proxy or CDN and every buyer reaches PHP as the same address, which collapses the per-buyer allowance into a store-wide one. The lasting fix is to list the proxy below."
 msgstr "Los endpoints AJAX del proceso de pago consumen tu clave API, por lo que cada dirección de cliente tiene permitido un número fijo de peticiones por minuto. Actívalo solo si se está rechazando a compradores legítimos — eso ocurre cuando la tienda está detrás de un proxy inverso o una CDN y todos los compradores llegan a PHP como la misma dirección, lo que reduce el límite por comprador a uno para toda la tienda. La solución duradera es indicar el proxy más abajo."
 
-#: class/WC_Twoinc.php:7191
+#: class/WC_Twoinc.php:7187
 msgid "Trusted proxy addresses"
 msgstr "Direcciones de proxy de confianza"
 
-#: class/WC_Twoinc.php:7193
+#: class/WC_Twoinc.php:7189
 msgid "Addresses of your own reverse proxies, load balancers or CDN egress, as IPs or CIDR ranges, separated by commas or new lines. These IP addresses will be exempt from rate limiting."
 msgstr "Direcciones de sus propios proxies inversos, balanceadores de carga o salida de CDN, como IPs o rangos CIDR, separados por comas o saltos de línea. Estas direcciones IP quedarán exentas de la limitación de solicitudes."
 
-#: class/WC_Twoinc.php:7198
+#: class/WC_Twoinc.php:7194
 msgid "Custom request headers"
 msgstr "Cabeceras de solicitud personalizadas"
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:7202
+#: class/WC_Twoinc.php:7198
 #, php-format
 msgid "If your IT administrator asks you to add headers to the calls your store makes to the %s API (for example a firewall token), add them here. Every header listed is sent on all calls your store makes from your server."
 msgstr "Si tu administrador de TI te pide que añadas cabeceras a las llamadas que tu tienda hace a la API de %s (por ejemplo, un token de cortafuegos), añádelas aquí. Todas las cabeceras indicadas se envían en todas las llamadas que tu tienda hace desde tu servidor."
 
-#: class/WC_Twoinc.php:7207
+#: class/WC_Twoinc.php:7203
 msgid "Disable SSL verification"
 msgstr "Desactivar la verificación SSL"
 
-#: class/WC_Twoinc.php:7208
+#: class/WC_Twoinc.php:7204
 msgid "Skip SSL certificate verification on outbound API requests"
 msgstr "Omitir la verificación del certificado SSL en las solicitudes API salientes"
 
-#: class/WC_Twoinc.php:7210
+#: class/WC_Twoinc.php:7206
 msgid "WARNING: this is unsafe for production and only intended for local/dev debugging behind a corporate proxy with custom SSL certificates. Applies in every environment, including Production, while enabled."
 msgstr "Advertencia: esto no es seguro para producción y solo está pensado para depuración local/de desarrollo detrás de un proxy corporativo con certificados SSL personalizados. Se aplica en todos los entornos, incluido Producción, mientras esté activado."
 
-#: class/WC_Twoinc.php:7214
+#: class/WC_Twoinc.php:7210
 msgid "Enable debug logging"
 msgstr "Activar el registro de depuración"
 
-#: class/WC_Twoinc.php:7215
+#: class/WC_Twoinc.php:7211
 msgid "Log API requests/responses and other diagnostic detail"
 msgstr "Registrar solicitudes/respuestas de la API y otros detalles de diagnóstico"
 
-#: class/WC_Twoinc.php:7218
+#: class/WC_Twoinc.php:7214
 #, php-format
 msgid "If enabled, API interactions and other diagnostic detail (e.g. surcharge/FX rounding) are logged. This can be useful for debugging. You can view the logs <a href=\"%s\">here</a>."
 msgstr "Si se activa, se registran las interacciones con la API y otros detalles de diagnóstico (p. ej. redondeo de recargo/divisa). Esto puede ser útil para depurar. Puedes ver los registros <a href=\"%s\">aquí</a>."
 
-#: class/WC_Twoinc.php:7224
+#: class/WC_Twoinc.php:7220
 msgid "Error log"
 msgstr "Registro de errores"
 
-#: class/WC_Twoinc.php:7228
+#: class/WC_Twoinc.php:7224
 msgid "Skip user validation at order confirmation"
 msgstr "Omitir la validación del usuario en la confirmación del pedido"
 
-#: class/WC_Twoinc.php:7229
+#: class/WC_Twoinc.php:7225
 msgid "Accept the confirmation callback without a valid WordPress security token"
 msgstr "Aceptar la devolución de llamada de confirmación sin un token de seguridad de WordPress válido"
 
-#: class/WC_Twoinc.php:7231
+#: class/WC_Twoinc.php:7227
 msgid "The confirmation callback always checks the order's unique 64-character order reference; this option skips only the additional WordPress security token, which typically expires 12 to 24 hours after the order was placed — and, for a signed-in customer, when their session changes — so a buyer who comes back to a legitimately authorised order can be rejected. The order reference must still match, so the callback is not left open, but the security token's protection against a cross-site request is gone; leave this off unless you are seeing those false rejections."
 msgstr "La devolución de llamada de confirmación siempre comprueba la referencia de pedido única de 64 caracteres; esta opción omite únicamente el token de seguridad adicional de WordPress, que normalmente caduca entre 12 y 24 horas después de realizar el pedido — y, para un cliente con la sesión iniciada, cuando cambia su sesión — de modo que un comprador que vuelve a un pedido autorizado legítimamente puede ser rechazado. La referencia del pedido debe seguir coincidiendo, por lo que la devolución de llamada no queda abierta, pero se pierde la protección del token de seguridad frente a una petición entre sitios; déjalo desactivado salvo que estés viendo esos rechazos falsos."
 
-#: class/WC_Twoinc.php:7235
+#: class/WC_Twoinc.php:7231
 msgid "Clear settings on uninstall of plug-in"
 msgstr "Borrar los ajustes al desinstalar el plug-in"
 
-#: class/WC_Twoinc.php:7241
+#: class/WC_Twoinc.php:7237
 msgid "Plugin version"
 msgstr "Versión del plugin"
 
-#: class/WC_Twoinc.php:7245
+#: class/WC_Twoinc.php:7241
 msgid "Install health checklist"
 msgstr "Lista de comprobación del estado de la instalación"
 
-#: class/WC_Twoinc.php:7249
+#: class/WC_Twoinc.php:7245
 msgid "Merchant profile"
 msgstr "Perfil del comercio"
 
-#: class/WC_Twoinc.php:7308
+#: class/WC_Twoinc.php:7304
 msgid "Merchant ID:"
 msgstr "ID de comerciante:"
 
-#: class/WC_Twoinc.php:7312
+#: class/WC_Twoinc.php:7308
 #, php-format
 msgid "Don't have an API key? Get one by signing up <a href='%s'>here</a>."
 msgstr "¿No tienes una clave API? Consigue una registrándote <a href='%s'>aquí</a>."
 
-#: class/WC_Twoinc.php:7360
+#: class/WC_Twoinc.php:7356
 msgid "Header name"
 msgstr "Nombre de la cabecera"
 
-#: class/WC_Twoinc.php:7361
+#: class/WC_Twoinc.php:7357
 msgid "Value"
 msgstr "Valor"
 
-#: class/WC_Twoinc.php:7362
+#: class/WC_Twoinc.php:7358
 msgid "Also send from browser"
 msgstr "Enviar también desde el navegador"
 
-#: class/WC_Twoinc.php:7377 class/WC_Twoinc.php:7383
+#: class/WC_Twoinc.php:7373 class/WC_Twoinc.php:7379
 msgid "This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again."
 msgstr "Esta entrada contiene caracteres que este campo no admite, por lo que no se muestra ni se envía. Introdúcela de nuevo."
 
-#: class/WC_Twoinc.php:7386
+#: class/WC_Twoinc.php:7382
 msgid "This row is not being sent, and the settings cannot be saved until it is corrected or removed."
 msgstr "Esta fila no se está enviando, y los ajustes no se pueden guardar hasta que se corrija o se elimine."
 
-#: class/WC_Twoinc.php:7395
+#: class/WC_Twoinc.php:7391
 msgid "Add header"
 msgstr "Añadir cabecera"
 
-#: class/WC_Twoinc.php:7397
+#: class/WC_Twoinc.php:7393
 msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
 msgstr "Marca \"Enviar también desde el navegador\" solo si tu administrador de TI requiere el encabezado en las llamadas desde el navegador del comprador además de las que parten de tu servidor. Su valor se publicará en el navegador del comprador y cualquiera podrá leerlo."
 
-#: class/WC_Twoinc.php:7427
+#: class/WC_Twoinc.php:7423
 msgid "Every custom request header needs a name."
 msgstr "Cada cabecera de solicitud personalizada necesita un nombre."
 
 #. translators: %s: the rejected header name
-#: class/WC_Twoinc.php:7432
+#: class/WC_Twoinc.php:7428
 #, php-format
 msgid "\"%s\" is not a valid HTTP header name. Use letters, digits and hyphens."
 msgstr "\"%s\" no es un nombre de encabezado HTTP válido. Usa letras, dígitos y guiones."
 
 #. translators: %s: the rejected header name
-#: class/WC_Twoinc.php:7440
+#: class/WC_Twoinc.php:7436
 #, php-format
 msgid "The header \"%s\" is reserved and cannot be set from this table."
 msgstr "El encabezado \"%s\" está reservado y no se puede definir desde esta tabla."
 
 #. translators: %s: the header name whose value was rejected
-#: class/WC_Twoinc.php:7447
+#: class/WC_Twoinc.php:7443
 #, php-format
 msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
 msgstr "El valor de \"%s\" debe ser texto ASCII imprimible y no puede estar vacío."
 
 #. translators: %s: the duplicated header name
-#: class/WC_Twoinc.php:7454
+#: class/WC_Twoinc.php:7450
 #, php-format
 msgid "The header \"%s\" is listed more than once."
 msgstr "El encabezado \"%s\" aparece más de una vez."
 
-#: class/WC_Twoinc.php:7532
+#: class/WC_Twoinc.php:7528
 msgid "Select image"
 msgstr "Seleccionar imagen"
 
-#: class/WC_Twoinc.php:7555
+#: class/WC_Twoinc.php:7551
 msgid "View error log"
 msgstr "Ver registro de errores"
 
-#: class/WC_Twoinc.php:7558
+#: class/WC_Twoinc.php:7554
 msgid "Opens the WooCommerce log viewer filtered to this plugin's log entries."
 msgstr "Abre el visor de registros de WooCommerce filtrado por las entradas de registro de este plugin."
 
-#: class/WC_Twoinc.php:7593
+#: class/WC_Twoinc.php:7589
 msgid "Refresh merchant profile"
 msgstr "Actualizar el perfil del comercio"
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:7608
+#: class/WC_Twoinc.php:7604
 #, php-format
 msgid "Your offerable payment terms, buyer-surcharge cap, minimum order value and default term are read from %s and cached. They are refreshed every night and whenever the API key or environment is saved; use this to pull a change through now. The nightly refresh runs on WP-Cron. With WP-Cron disabled, the next request more than 24 hours after the last refresh re-reads it, and while a re-read keeps failing one request a minute retries it."
 msgstr "Tus plazos de pago ofrecibles, el límite de recargo al comprador, el valor mínimo de pedido y el plazo predeterminado se leen de %s y se almacenan en caché. Se actualizan cada noche y cada vez que se guarda la clave API o el entorno; usa esto para aplicar un cambio ahora. La actualización nocturna se ejecuta en WP-Cron. Con WP-Cron desactivado, la siguiente petición transcurridas más de 24 horas desde la última actualización vuelve a leerlos, y mientras una relectura siga fallando se reintenta una petición por minuto."
 
-#: class/WC_Twoinc.php:7637
+#: class/WC_Twoinc.php:7633
 msgid "API key"
 msgstr "Clave API"
 
-#: class/WC_Twoinc.php:7638
+#: class/WC_Twoinc.php:7634
 msgid "Configured"
 msgstr "Configurado"
 
-#: class/WC_Twoinc.php:7638
+#: class/WC_Twoinc.php:7634
 msgid "Not configured"
 msgstr "No configurado"
 
-#: class/WC_Twoinc.php:7647
+#: class/WC_Twoinc.php:7643
 msgid "SSL verification"
 msgstr "Verificación SSL"
 
-#: class/WC_Twoinc.php:7648
+#: class/WC_Twoinc.php:7644
 msgid "Disabled"
 msgstr "Desactivado"
 
-#: class/WC_Twoinc.php:7648
+#: class/WC_Twoinc.php:7644
 msgid "Enabled"
 msgstr "Activado"
 
-#: class/WC_Twoinc.php:7652
+#: class/WC_Twoinc.php:7648
 msgid "PHP curl extension"
 msgstr "Extensión curl de PHP"
 
-#: class/WC_Twoinc.php:7653
+#: class/WC_Twoinc.php:7649
 msgid "Present"
 msgstr "Presente"
 
-#: class/WC_Twoinc.php:7653
+#: class/WC_Twoinc.php:7649
 msgid "Missing"
 msgstr "Falta"
 
-#: class/WC_Twoinc.php:7662
+#: class/WC_Twoinc.php:7658
 msgid "Merchant profile last read"
 msgstr "Última lectura del perfil de comerciante"
 
-#: class/WC_Twoinc.php:7686
+#: class/WC_Twoinc.php:7682
 msgid "SSL verification is disabled while the environment is not production-hardened; re-check the \"Disable SSL verification\" setting."
 msgstr "La verificación SSL está desactivada mientras el entorno no está reforzado para producción; vuelve a comprobar el ajuste \"Desactivar la verificación SSL\"."
 
-#: class/WC_Twoinc.php:7703 class/WC_Twoinc.php:7733
+#: class/WC_Twoinc.php:7699 class/WC_Twoinc.php:7729
 msgid "Unable to retrieve the order information."
 msgstr "No se ha podido recuperar la información del pedido."
 
-#: class/WC_Twoinc.php:7739
+#: class/WC_Twoinc.php:7735
 msgid "Unable to retrieve the order payment information"
 msgstr "No se ha podido recuperar la información de pago del pedido"
 
-#: class/WC_Twoinc.php:7745
+#: class/WC_Twoinc.php:7741
 msgid "Missing company ID."
 msgstr "Falta el ID de empresa."
 
-#: class/WC_Twoinc.php:7832
+#: class/WC_Twoinc.php:7828
 #, php-format
 msgid "Could not update the order with %s. Reason: %s"
 msgstr "No se ha podido actualizar el pedido con %s. Motivo: %s"
 
-#: class/WC_Twoinc.php:7921
+#: class/WC_Twoinc.php:7917
 #, php-format
 msgid "This change was saved in WooCommerce but was not sent to %1$s, which no longer accepts edits to this order. The %1$s invoice does not include it."
 msgstr "Este cambio se guardó en WooCommerce, pero no se envió a %1$s, que ya no acepta modificaciones de este pedido. La factura de %1$s no lo incluye."
 
-#: class/WC_Twoinc.php:7941 class/WC_Twoinc.php:7973 class/WC_Twoinc.php:7980
+#: class/WC_Twoinc.php:7937 class/WC_Twoinc.php:7969 class/WC_Twoinc.php:7976
 #, php-format
 msgid "Could not edit the order with %s."
 msgstr "No se ha podido editar el pedido con %s."
 
-#: class/WC_Twoinc.php:7995
+#: class/WC_Twoinc.php:7991
 #, php-format
 msgid "The order edit request has been accepted by %s."
 msgstr "%s ha aceptado la solicitud de edición del pedido."
 
-#: class/WC_Twoinc.php:7997
+#: class/WC_Twoinc.php:7993
 #, php-format
 msgid "Order value is now %s."
 msgstr "El valor del pedido es ahora %s."
 
-#: class/WC_Twoinc.php:8386
+#: class/WC_Twoinc.php:8382
 #, php-format
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
 msgstr "¡Haz crecer tus ventas B2B con Buy Now, Pay Later usando %s!"
 
-#: class/WC_Twoinc.php:8387
+#: class/WC_Twoinc.php:8383
 #, php-format
 msgid "%s credit approves 90%% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It is quick, easy and gives you immediate access to the %s Merchant Portal."
 msgstr "El crédito de %s aprueba al 90%% de los compradores empresariales, te paga por adelantado y minimiza tu riesgo. Para ofrecer %s en tu proceso de pago, debes registrarte. Es rápido, sencillo y te da acceso inmediato al Portal de Comerciantes de %s."
 
-#: class/WC_Twoinc.php:8388
+#: class/WC_Twoinc.php:8384
 msgid "Set up my account"
 msgstr "Configurar mi cuenta"
 
 #. translators: 1: base plugin provenance, e.g. "2.23.9 (eb7bf92cec07, deployed 2026-07-08 11:35 UTC)"
-#: class/WC_Twoinc.php:8474
+#: class/WC_Twoinc.php:8470
 #, php-format
 msgid "Plugin: %s"
 msgstr "Plugin: %s"
 
 #. translators: 1: overlay plugin slug, 2: overlay provenance
-#: class/WC_Twoinc.php:8482
+#: class/WC_Twoinc.php:8478
 #, php-format
 msgid "Brand overlay: %1$s %2$s"
 msgstr "Superposición de marca: %1$s %2$s"
 
 #. translators: 1: plugin (and overlay) provenance fragments, 2: WooCommerce version, 3: WordPress version
-#: class/WC_Twoinc.php:8489
+#: class/WC_Twoinc.php:8485
 #, php-format
 msgid "%1$s | WooCommerce: %2$s | WordPress: %3$s"
 msgstr "%1$s | WooCommerce: %2$s | WordPress: %3$s"
 
 #. translators: %s: UTC timestamp the code was deployed
-#: class/WC_Twoinc.php:8521
+#: class/WC_Twoinc.php:8517
 #, php-format
 msgid "deployed %s UTC"
 msgstr "desplegado %s UTC"
 
-#: class/WC_Twoinc.php:8656
+#: class/WC_Twoinc.php:8652
 #, php-format
 msgid "%s API key verified."
 msgstr "Clave API de %s verificada."
 
-#: class/WC_Twoinc.php:8659
+#: class/WC_Twoinc.php:8655
 #, php-format
 msgid "%s rejected that API key, so the previously saved key was kept."
 msgstr "%s ha rechazado esa clave API, por lo que se ha conservado la clave guardada anteriormente."
 
-#: class/WC_Twoinc.php:8662
+#: class/WC_Twoinc.php:8658
 #, php-format
 msgid "API key saved, but %s could not be reached to verify it."
 msgstr "Clave API guardada, pero no se ha podido contactar con %s para verificarla."
 
-#: class/WC_Twoinc.php:8664
+#: class/WC_Twoinc.php:8660
 msgid "API key saved, but it could not be verified because no environment is configured."
 msgstr "Clave API guardada, pero no se ha podido verificar porque no hay ningún entorno configurado."
 
-#: class/WC_Twoinc.php:8666
+#: class/WC_Twoinc.php:8662
 #, php-format
 msgid "API key saved, but %s returned an error while verifying it."
 msgstr "Clave API guardada, pero %s ha devuelto un error al verificarla."
 
 #: class/WC_Twoinc_Checkout.php:220 class/WC_Twoinc_Checkout.php:234
 #: class/WC_Twoinc_Checkout.php:248 class/WC_Twoinc_Checkout.php:271
-#: class/WC_Twoinc_Checkout.php:280 class/WC_Twoinc_Helper.php:460
+#: class/WC_Twoinc_Checkout.php:280 class/WC_Twoinc_Helper.php:463
 msgid "Company name"
 msgstr "Nombre de la empresa"
 
@@ -1704,7 +1702,7 @@ msgstr "Nombre de la empresa"
 msgid "Company ID"
 msgstr "ID de empresa"
 
-#: class/WC_Twoinc_Checkout.php:311 class/WC_Twoinc_Helper.php:484
+#: class/WC_Twoinc_Checkout.php:311 class/WC_Twoinc_Helper.php:487
 msgid "Invoice email address"
 msgstr "Dirección de correo electrónico de facturación"
 
@@ -1787,84 +1785,84 @@ msgstr "Seleccionar otro autónomo"
 msgid "Something went wrong setting up sole trader checkout. Please try again."
 msgstr "Se produjo un error al configurar el pago como autónomo. Inténtelo de nuevo."
 
-#: class/WC_Twoinc_Helper.php:335
+#: class/WC_Twoinc_Helper.php:338
 #, php-format
 msgid "Negative discount amount calculated for %s."
 msgstr "Se ha calculado un importe de descuento negativo para %s."
 
-#: class/WC_Twoinc_Helper.php:354
+#: class/WC_Twoinc_Helper.php:357
 #, php-format
 msgid "Empty response from %s."
 msgstr "Respuesta vacía de %s."
 
-#: class/WC_Twoinc_Helper.php:358
+#: class/WC_Twoinc_Helper.php:361
 #, php-format
 msgid "Response code from %s: %d"
 msgstr "Código de respuesta de %s: %d"
 
-#: class/WC_Twoinc_Helper.php:428
+#: class/WC_Twoinc_Helper.php:431
 msgid "Buyer and merchant may not be the same company"
 msgstr "El comprador y el comerciante no pueden ser la misma empresa"
 
-#: class/WC_Twoinc_Helper.php:447
+#: class/WC_Twoinc_Helper.php:450
 #, php-format
 msgid "Please enter a valid %s to pay on invoice"
 msgstr "Introduce un %s válido para pagar con factura"
 
-#: class/WC_Twoinc_Helper.php:451 class/WC_Twoinc_Helper.php:454
+#: class/WC_Twoinc_Helper.php:454 class/WC_Twoinc_Helper.php:457
 msgid "Phone number"
 msgstr "Número de teléfono"
 
-#: class/WC_Twoinc_Helper.php:457
+#: class/WC_Twoinc_Helper.php:460
 msgid "Organization number"
 msgstr "Número de organización"
 
-#: class/WC_Twoinc_Helper.php:463
+#: class/WC_Twoinc_Helper.php:466
 msgid "First name"
 msgstr "Nombre"
 
-#: class/WC_Twoinc_Helper.php:466
+#: class/WC_Twoinc_Helper.php:469
 msgid "Last name"
 msgstr "Apellidos"
 
-#: class/WC_Twoinc_Helper.php:469
+#: class/WC_Twoinc_Helper.php:472
 msgid "Email"
 msgstr "Correo electrónico"
 
-#: class/WC_Twoinc_Helper.php:472
+#: class/WC_Twoinc_Helper.php:475
 msgid "Address"
 msgstr "Dirección"
 
-#: class/WC_Twoinc_Helper.php:475
+#: class/WC_Twoinc_Helper.php:478
 msgid "City"
 msgstr "Ciudad"
 
-#: class/WC_Twoinc_Helper.php:478
+#: class/WC_Twoinc_Helper.php:481
 msgid "Country"
 msgstr "País"
 
-#: class/WC_Twoinc_Helper.php:481
+#: class/WC_Twoinc_Helper.php:484
 msgid "Postal code"
 msgstr "Código postal"
 
-#: class/WC_Twoinc_Helper.php:2251
+#: class/WC_Twoinc_Helper.php:2383
 msgid "The order lines do not add up to the order total."
 msgstr "Las líneas del pedido no suman el total del pedido."
 
 #. translators: 1: request type (e.g. order_update). 2: product name (e.g. Two). 3: what went wrong.
-#: class/WC_Twoinc_Helper.php:2426
+#: class/WC_Twoinc_Helper.php:2569
 #, php-format
 msgid "The %1$s request was not sent to %2$s: the twoinc_order_postprocessing filter failed (%3$s)."
 msgstr ""
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:3018
+#: class/WC_Twoinc_Helper.php:3161
 #, php-format
 msgid "Shipping \"%s\" cannot be refunded: the order line it refunds was not found."
 msgstr "No se puede reembolsar el envío «%s»: no se encontró la línea del pedido que reembolsa."
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:3216
+#: class/WC_Twoinc_Helper.php:3359
 #, php-format
 msgid "The tax charged on \"%s\" does not match the shop's tax rates."
 msgstr "El impuesto cobrado en «%s» no coincide con los tipos impositivos de la tienda."

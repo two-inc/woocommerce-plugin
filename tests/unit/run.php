@@ -351,6 +351,7 @@ final class BrandConfigSpec
             'testBrandTaglineIsEscapedAndAnEmptyResultEmitsNoElement',
             'testTaxSubtotalsRequiredWhenMerchantOptsIn',
             'testRefundTaxSubtotalsFollowTheValidateTaxSubtotalsSetting',
+            'testTaxSubtotalsSettingMatchesTheOtherPlugins',
             'testTaxSubtotalsSettingIsOnByDefaultForNewInstalls',
             'testSeTaxSubtotalsBackfill',
             'testSeTaxSubtotalsBackfillDoesNotUndoAMerchantOptOut',
@@ -7936,7 +7937,8 @@ final class BrandConfigSpec
         };
         $gateway->init_form_fields();
 
-        foreach (['vendor_name', 'fulfilment_trigger_statuses', 'enable_tax_subtotals'] as $key) {
+        // enable_tax_subtotals names no brand since TWO-26340: its help text is the other plugins'.
+        foreach (['vendor_name', 'fulfilment_trigger_statuses'] as $key) {
             $description = $gateway->form_fields[$key]['description'] ?? '';
             TinyAssert::true(
                 strpos($description, 'Testbrand') !== false,
@@ -9089,6 +9091,40 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos($field['description'], 'Sweden') === false,
             "description must not claim Sweden is unconditional, got: {$field['description']}"
+        );
+    }
+
+    /**
+     * TWO-26340: the control is PrestaShop's: the same label, help text and default, under a "Tax" heading that
+     * follows an "Order management" one.
+     */
+    private static function testTaxSubtotalsSettingMatchesTheOtherPlugins(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+        $headings = [];
+        foreach ($gateway->form_fields as $name => $field) {
+            if ($name === 'enable_tax_subtotals') {
+                break;
+            }
+            if (($field['type'] ?? '') === 'title') {
+                $headings[] = $field['title'];
+            }
+        }
+        $field = $gateway->form_fields['enable_tax_subtotals'];
+
+        TinyAssert::same(['Order management', 'Tax'], array_slice($headings, -2), 'the headings above the control');
+        TinyAssert::same('Validate tax subtotals', $field['title'], 'label');
+        TinyAssert::same('yes', $field['default'], 'default');
+        TinyAssert::same(
+            'If you choose YES, a per-tax-rate tax_subtotals breakdown is sent in /v1/order and /v1/order_intent payloads for validation against the order lines. If you choose NO, tax_subtotals is omitted from those payloads.',
+            $field['description'],
+            'help text'
         );
     }
 
