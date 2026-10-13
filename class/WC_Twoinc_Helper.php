@@ -774,8 +774,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * 3. No rate: the tax class's no-rule row, also for a line whose tax status is not taxable. A taxable line
          *    left untaxed by a VAT-exempt order is looked up in the shop's rates at the tax address, as WooCommerce
          *    would have applied them.
-         * 4. A line with no tax class (shipping that follows the items and finds none) takes the one code the
-         *    order's lines coded by steps 1 to 3 share; none if they disagree.
+         * 4. A line with no tax class (shipping that follows the items and finds none) takes the one code the 0%
+         *    lines in the request being sent that steps 1 to 3 coded share; none if they disagree.
          * 5. Otherwise no code. The plugin never refuses an order over a missing code: Two's API validates it.
          *
          * A matched row left on (none) gives no code; it never falls through to a later step. The plugin never picks a
@@ -784,8 +784,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * An order not yet placed with Two records each 0% line's code in TAX_CODES_META, only where it has one
          * (TWO-26309). Once placed, a recorded line is sent with its recorded code, so a changed address, mapping or
          * tax rate never moves a coded line. A line the record does not cover (a line placed with no code, or added
-         * by an edit) is resolved as at placement against the mapping then, step 4 sharing the codes the record
-         * holds from steps 1 to 3. An order with no code recorded (placed with none, with no row mapped, or before
+         * by an edit) is resolved as at placement against the mapping then, step 4 sharing only the codes steps 1
+         * to 3 gave the lines in this request: those the record holds for them and those resolved now (TWO-26340). An order with no code recorded (placed with none, with no row mapped, or before
          * the record existed) has its lines resolved again, and a line with no tax class takes the one code all the
          * other 0% lines in the request being sent get, none when they disagree or one has none. A non-zero line is never touched. Runs inside the builder, so
          * every hook after it sees the code.
@@ -845,13 +845,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'exempt' => $map && self::is_exempt_buyer($order),
                 'vat_exempt_order' => $map && self::is_vat_exempt_order($order),
             ];
-            // Step 4's pool: the codes steps 1 to 3 gave, including those the record holds.
+            // Step 4's pool: the codes steps 1 to 3 gave the 0% lines in this request, those the record holds for them
+            // and those resolved now (TWO-26340). A recorded line the request does not carry shares nothing.
             $shared = [];
-            foreach ($stored ?? [] as $entry) {
-                if (self::TAX_CODE_STEP_ROW === $entry['step'] && null !== $entry['code']) {
-                    $shared[$entry['code']] = true;
-                }
-            }
             $recorded = [];
             $keyless = [];
             $others = [];
@@ -860,6 +856,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $key = $source['record_key'] ?? null;
                 if (null !== $key && isset($stored[$key])) {
                     $items[$i] = self::with_tax_code($items[$i], $stored[$key]['code']);
+                    if (self::TAX_CODE_STEP_ROW === $stored[$key]['step']) {
+                        $shared[$stored[$key]['code']] = true;
+                    }
                     continue;
                 }
                 $tax_class = 'shipping' === $source['tax_class'] ? self::get_shipping_tax_class_key($order) : $source['tax_class'];

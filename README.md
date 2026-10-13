@@ -456,8 +456,10 @@ saved, edits to the table are not saved and a notice says why.
    address, as WooCommerce would have applied them, and takes step 2 or 3 from
    that. With taxes switched off shop-wide, a line gets no code.
 4. **No tax class.** Shipping whose tax class follows the cart items and finds
-   none takes the one code the order's lines coded by steps 1 to 3 share. If
-   they carry different codes, or none, it gets no code.
+   none takes the one code shared by the 0% lines in the request being sent
+   that steps 1 to 3 coded. If they carry different codes, or none, it gets no
+   code. On an edit or refund only the lines that request carries count: a line
+   an edit removed, or one a refund leaves out, shares nothing.
 
 A row left on "(none)" gives no code: it never falls through to a later row. A
 product or fee line belongs to its own tax class, and a shipping line to the
@@ -473,7 +475,8 @@ the code each 0% line was sent with on the order, only where the line got one
 Edits and refunds send a recorded code, so a changed address, mapping or tax
 rate never moves a coded line. A line the record does not cover (a line placed
 with no code, or added by an edit) is resolved again against the mapping at the
-time, and step 4 shares only codes the record holds from steps 1 to 3. An order
+time, and step 4 shares only the step 1 to 3 codes of the lines being sent,
+recorded or resolved now. An order
 with no code recorded (placed with none, placed while no row was mapped, or
 placed before the record existed) has all its lines resolved again on each edit
 or refund, and shipping with no tax
