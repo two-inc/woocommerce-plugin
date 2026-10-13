@@ -10,7 +10,7 @@
  * Term availability: `get_available_terms()` is the single seam — the
  * merchant's ticked presets intersected with the backend's offered set
  * (TWO-24812) plus an optional custom term, which that same set must also
- * offer (ABN-521). An empty result means "offer nothing": no term is sent and
+ * offer. An empty result means "offer nothing": no term is sent and
  * the backend applies the account default. The merchant cannot save into that
  * empty state once terms are configured (see
  * WC_Twoinc::validate_two_payment_terms_field). Do not read term lists
@@ -38,7 +38,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         private static $buyer_fee_id = null;
 
-        /** Preferred default term, in days (ABN-548). */
+        /** Preferred default term, in days. */
         public const PREFERRED_DEFAULT_TERM = 30;
 
         /**
@@ -56,7 +56,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         /**
          * Ceiling (seconds) for every buyer surcharge quote: a gate giving up
          * sooner than the path that charges withholds a method the charge
-         * would have priced (ABN-546).
+         * would have priced.
          */
         public const SURCHARGE_PRICING_TIMEOUT = 30;
 
@@ -91,7 +91,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         private static $fx_failure_logged = false;
 
-        /** Terms whose quote failed this request, keyed by term (ABN-539). */
+        /** Terms whose quote failed this request, keyed by term. */
         private static $unquoted_terms = [];
 
         /** @var array<string,bool> Keyed by value, so a second distinct bad method still speaks. */
@@ -148,7 +148,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         /**
          * The pre-selected term: the admin's configured default, the merchant's
          * own default term, 30, then the shortest available term — each only
-         * while it is available, and an empty set has none at all (ABN-548).
+         * while it is available, and an empty set has none at all.
          */
         public static function get_default_term($gateway): ?int
         {
@@ -626,7 +626,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
         /**
          * Record and report a configured surcharge that could not be
-         * quoted (ABN-539).
+         * quoted.
          * Error level for log_surcharge_fx_failure()'s reason: the merchant
          * loses that revenue and nothing else on any surface says so.
          *
@@ -659,7 +659,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * the availability gate and the order payload all resolve it here, or
          * the buyer is charged one term's fee and booked on another — the
          * hidden field follows a chip immediately while the session follows it
-         * a round trip later (ABN-554).
+         * a round trip later.
          */
         public static function resolve_charged_term($gateway): ?int
         {
@@ -671,7 +671,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         /**
          * Whether the merchant configured anything for this term that a
          * quote could actually charge. A term that prices to nothing must
-         * not put the payment method behind a pricing call (ABN-546): on a
+         * not put the payment method behind a pricing call: on a
          * single-term shop that is the whole storefront, over a fee of zero.
          *
          * A cap alone charges nothing — it bounds a percentage that is not
@@ -698,7 +698,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
         /**
          * Whether the term this checkout would be charged for cannot be
-         * priced (ABN-546) — the fail-CLOSED condition the availability gate
+         * priced: the fail-CLOSED condition the availability gate
          * withholds the payment method on, alongside a surcharge currency
          * no rate can express.
          *
@@ -758,7 +758,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * Whether the merchant offers end-of-month terms, which fall due that
          * many days after the end of the month rather than from the invoice.
          * The buyer-facing chip text depends on it as much as the booked order
-         * does (ABN-554).
+         * does.
          */
         public static function is_end_of_month($gateway): bool
         {
@@ -790,7 +790,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * Quote the buyer's fee share for one term via the pricing endpoint.
          * A failed or malformed HTTP quote is fail-soft — returns null, the
          * chip renders without a fee label — but never silent: the failure is
-         * logged once per term per request naming the cause (ABN-539). An
+         * logged once per term per request naming the cause. An
          * unquotable
          * currency pair is a fail-CLOSED condition handled upstream by the
          * availability gate (TWO-25269), which withholds the payment method
@@ -873,7 +873,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             // Refused BEFORE the cache write: a quote in another currency
             // cannot be charged, and caching it as a success left the
             // failure re-reported and the method withheld for the whole
-            // TTL after the pricing service recovered (ABN-546).
+            // TTL after the pricing service recovered.
             $answer_currency = strtoupper(trim(strval($body['currency'] ?? '')));
             if ($answer_currency !== '' && $answer_currency !== strtoupper($request['currency'])) {
                 self::record_unquoted_surcharge(
@@ -977,8 +977,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
             // Nothing priced, and a fee set with no currency, are both
             // unrenderable: a screen drawing either says "this term carries no
-            // fee", which is a wrong figure rather than a missing one
-            // (ABN-540).
+            // fee", which is a wrong figure rather than a missing one.
             $currency = strval($body['currency'] ?? '');
             if ($fees === [] || $currency === '') {
                 return ['success' => false];
@@ -1126,7 +1125,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * surcharge_line_description wins (with %s replaced by the selected
          * term days, as on every platform); otherwise the brand label, else the
          * translated cross-platform default wording, whose days are spelled as
-         * running from the end of the month under end-of-month terms (ABN-554).
+         * running from the end of the month under end-of-month terms.
          */
         public static function get_fee_label(): string
         {

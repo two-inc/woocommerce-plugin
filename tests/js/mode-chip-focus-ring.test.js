@@ -1,5 +1,5 @@
 /**
- * ABN-554 — the popover's capture-mode chips are a keyboard destination, so the
+ * The popover's capture-mode chips are a keyboard destination, so the
  * focused one has to be identifiable. They carry the ring the payment-term
  * chips already carry; the theme resets the UA outline away, so without a rule
  * of the plugin's own the focused chip is indistinguishable.

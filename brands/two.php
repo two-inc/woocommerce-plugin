@@ -28,7 +28,7 @@ return [
     // Buyer-facing terms page behind the checkout consent. A path is resolved
     // against the brand's checkout host, so it follows checkout_env the way
     // every other service URL does; an absolute URL is used verbatim. Absent
-    // or empty renders no consent at all (ABN-554).
+    // or empty renders no consent at all.
     'payment_terms_link' => '/terms',
     // Consent sentence override: a sprintf template taking %1$s the terms
     // anchor and %2$s the provider's legal full name. null uses the base's

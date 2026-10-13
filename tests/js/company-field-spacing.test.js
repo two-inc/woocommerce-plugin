@@ -1,5 +1,5 @@
 /**
- * ABN-554. The vertical spacing around the billing company-name rows.
+ * The vertical spacing around the billing company-name rows.
  *
  * Three rules, and they are one design: the rows carry no bottom padding of
  * the plugin's own, the number label below them carries no negative top margin

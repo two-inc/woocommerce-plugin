@@ -30,12 +30,12 @@ The standard for EVERY gateway setting, not only the surcharge method.
 Degrading a junk value to a working default is the failure this replaces: it
 prices an order under a configuration nobody chose, and nobody is told.
 
-- A quote that never resolved is reported (ABN-539). A configured surcharge the
+- A quote that never resolved is reported. A configured surcharge the
   pricing service could not price — unreachable, a non-2xx status, an answer that
   cannot be read, or one quoted in a currency the basket is not in — is logged at
   error level naming the term and the cause. A quote that resolved to nothing to
   charge is not a failure and is not reported.
-- A quote that never resolved withholds the method at checkout (ABN-546). The
+- A quote that never resolved withholds the method at checkout. The
   availability-gate filter quotes the term the basket would be charged for and
   drops the Two gateway when that quote fails, alongside the unmet-minimum and
   no-FX-rate withholds. Only the charged term counts, and only when that term
@@ -53,11 +53,11 @@ prices an order under a configuration nobody chose, and nobody is told.
   preview reads the merchant rates rather than a basket quote. Off the checkout page
   the withhold still fires on a failure the cart-fee hook recorded in the same
   request.
-- A quote answering in another currency is refused, not cached (ABN-546). The
+- A quote answering in another currency is refused, not cached. The
   answer is checked against the currency it was asked in before the quote is
   stored, so a mismatched answer is reported as a failure once and cannot be
   served again for the rest of the cache window.
-- A fee answer that cannot be drawn is refused, not drawn (ABN-540). The rates
+- A fee answer that cannot be drawn is refused, not drawn. The rates
   read refuses a set with nothing priced, and one carrying no currency for the
   amounts it does hold, rather than reporting success. On the screens, a term the
   answer did not price is labelled as carrying no figure — never an empty gap in

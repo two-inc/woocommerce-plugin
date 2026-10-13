@@ -1,5 +1,5 @@
 /**
- * ABN-554 — the about icon is a keyboard destination, so its tooltip has to
+ * The about icon is a keyboard destination, so its tooltip has to
  * open on focus as well as on hover. jsdom has no hover and no real focus
  * ring, so this reads the shipped stylesheet rather than a computed value.
  */

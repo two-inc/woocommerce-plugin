@@ -145,7 +145,7 @@ export async function placeOrder(page: Page): Promise<string> {
 /**
  * The terms consent gating order placement. Scoped to the payment box on
  * purpose: that is what makes it appear and disappear with the method
- * selection, and a consent that escaped the tile would still tick (ABN-554).
+ * selection, and a consent that escaped the tile would still tick.
  */
 export async function acceptTerms(page: Page) {
   const checkbox = page.locator(

@@ -1,5 +1,5 @@
 /**
- * ABN-589 — every state of the two chip controls, read as computed style off
+ * Every state of the two chip controls, read as computed style off
  * chips the shipped code rendered.
  *
  * jsdom has no pointer, so `:hover` never matches. The stylesheet is injected

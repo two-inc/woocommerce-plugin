@@ -12,7 +12,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
     {
         private $wc_twoinc;
 
-        /** WC session key holding the company captured in the current cart (ABN-554). */
+        /** WC session key holding the company captured in the current cart. */
         const CAPTURED_COMPANY_SESSION_KEY = 'twoinc_captured_company';
         const CAPTURED_FIELD_MAX_LENGTH = 100;
 
@@ -50,8 +50,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_action('woocommerce_after_checkout_shipping_form', [$this, 'render_shipping_sole_trader_note_slot']);
 
             // A Blocks checkout fires none of the classic hooks above, so the
-            // same bootstrap reaches it from the one hook it does fire
-            // (ABN-554). DOM-ready is what reads it, and that is after the
+            // same bootstrap reaches it from the one hook it does fire.
+            // DOM-ready is what reads it, and that is after the
             // footer.
             add_action('wp_footer', [$this, 'inject_blocks_cart_details']);
 
@@ -216,7 +216,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 $fields['billing']['billing_company'] = [
                     // The payment tile's own guidance is the only signal that
                     // a company is needed — no required flag, and no asterisk
-                    // either (ABN-554).
+                    // either.
                     'label' => __('Company name', 'twoinc-payment-gateway'),
                     'autocomplete' => 'organization',
                     'class' => array('form-row-wide'),
@@ -408,7 +408,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             }
 
             // wp_footer fires whether or not core's pay template accepted the
-            // request, so this bootstrap judges ownership for itself (ABN-554).
+            // request, so this bootstrap judges ownership for itself.
             $key = isset($_GET['key']) ? sanitize_text_field(wp_unslash((string) $_GET['key'])) : '';
             if (!hash_equals((string) $order->get_order_key(), $key)) {
                 return null;
@@ -424,8 +424,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         /**
          * The clearing hooks run on requests that construct no payment
          * gateway (the Store API's own cart routes), so they are registered
-         * by loading this class rather than by instantiating anything
-         * (ABN-554).
+         * by loading this class rather than by instantiating anything.
          *
          * @return void
          */
@@ -513,7 +512,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             }
 
             // A capture belongs to a cart; written without one it would be
-            // read back by whatever cart the buyer opens next (ABN-554).
+            // read back by whatever cart the buyer opens next.
             if (!self::cart_has_contents()) {
                 return;
             }
@@ -544,8 +543,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
         /**
          * The company this page may replay: the one captured in the live
-         * cart, or on the pay-for-order page the one the order carries
-         * (ABN-554).
+         * cart, or on the pay-for-order page the one the order carries.
          *
          * Each carries the country it was captured under, blank where none was
          * recorded (TWO-26286).
@@ -615,7 +613,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
         /**
          * Bounded because whatever this accepts is held in the session row and
-         * echoed into every later checkout render (ABN-554).
+         * echoed into every later checkout render.
          */
         private static function posted_capture_field(string $key): string
         {
@@ -677,12 +675,12 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // the same translated strings too.
                     'enter_manually' => __('Enter manually', 'twoinc-payment-gateway'),
                     'search_company' => __('Search for company', 'twoinc-payment-gateway'),
-                    // The panel announces this once a search answers (ABN-554).
+                    // The panel announces this once a search answers.
                     /* translators: %d: number of companies the search returned, interpolated in JS. */
                     'search_results_plural' => __('%d results are available, use up and down arrow keys to navigate.', 'twoinc-payment-gateway'),
                     'search_results_one' => __('1 result is available, use up and down arrow keys to navigate.', 'twoinc-payment-gateway'),
                     // Same sentence process_payment() refuses with, so the
-                    // client gate and the server gate never disagree (ABN-554).
+                    // client gate and the server gate never disagree.
                     'terms_not_accepted' => WC_Twoinc::get_terms_not_accepted_message(),
                 ],
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),
@@ -726,7 +724,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'remember_company_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_remember_company') : '',
                 // A Blocks store serves the pay-for-order endpoint from the
                 // checkout page itself, so the capture controls mount there
-                // too and must not post into the cart's memory (ABN-554).
+                // too and must not post into the cart's memory.
                 'order_pay' => self::get_order_being_paid() !== null,
                 // Chip selector bootstrap (TWO-24751). JS renders only; the
                 // live data (fees, selection) comes from the wc-ajax
@@ -739,7 +737,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'heading' => __('Selected payment terms', 'twoinc-payment-gateway'),
                     // An end-of-month term falls due that many days after the end
                     // of the month, so the bare day count states the wrong due date
-                    // for it (ABN-554). Both placeholders in the explainer are the
+                    // for it. Both placeholders in the explainer are the
                     // same day count; the chip renderer substitutes every one.
                     'eom' => WC_Twoinc_Payment_Terms::is_end_of_month($this->wc_twoinc),
                     'days_label_eom' => __('EOM+%s', 'twoinc-payment-gateway'),

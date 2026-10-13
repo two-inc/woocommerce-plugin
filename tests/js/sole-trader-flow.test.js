@@ -415,7 +415,7 @@ describe("TWO-40 — sole-trader flow", () => {
     );
 
     /**
-     * Symptom (ABN-526): the link took focus but opened nothing. The popup
+     * Symptom: the link took focus but opened nothing. The popup
      * that would answer the activation was already on screen, and a refusal
      * that does nothing at all leaves a buyer who cannot see it with a dead
      * control.
@@ -448,7 +448,7 @@ describe("TWO-40 — sole-trader flow", () => {
       jest.useFakeTimers();
       soleTrader.setMode("sole_trader");
       // The state the link is on screen in, and the one it was reported dead
-      // from (ABN-526).
+      // from.
       soleTrader.soleTraderAdopted = true;
       soleTrader.syncDifferentSoleTraderLink();
       soleTrader.launchSignup();
@@ -2426,7 +2426,7 @@ describe("TWO-40 — sole-trader flow", () => {
       }
 
       // Puts the flow in the state its re-signup launcher renders in: adopted,
-      // without a signup round trip (ABN-526).
+      // without a signup round trip.
       function adoptForResignup() {
         soleTrader.soleTraderAdopted = true;
         soleTrader.syncDifferentSoleTraderLink();
@@ -2485,7 +2485,7 @@ describe("TWO-40 — sole-trader flow", () => {
         openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         // A re-signup is reachable only from the adopted state — the same
-        // state its own launcher is on screen in (ABN-526).
+        // state its own launcher is on screen in.
         if (options && options.autoselect === false) adoptForResignup();
         if (arrange) arrange();
         const win = fakePopup();
@@ -2643,7 +2643,7 @@ describe("TWO-40 — sole-trader flow", () => {
         },
         {
           target: companyField,
-          // The launch parks focus on the company field, so a row whose target is it fires no focusin (ABN-554).
+          // The launch parks focus on the company field, so a row whose target is it fires no focusin.
           beforeGesture: () => document.activeElement.blur(),
           popoverOpen: false,
           popupOpen: true,
@@ -2686,7 +2686,7 @@ describe("TWO-40 — sole-trader flow", () => {
           // The field held focus through a pointer chip click (mousedown prevented); the click back into it is a move, not a return.
           arrange: () => ctx.helper.panel.close({ returnFocus: true }),
           target: companyField,
-          // Off the field the launch parked focus on, so focusing it back is an arrival (ABN-554).
+          // Off the field the launch parked focus on, so focusing it back is an arrival.
           beforeGesture: () => document.activeElement.blur(),
           popoverOpen: false,
           popupOpen: true,
@@ -2803,7 +2803,7 @@ describe("TWO-40 — sole-trader flow", () => {
       /**
        * The popover stays on screen for the whole flight, and the launch blurs
        * whatever held focus, so without a park it surrounds a document focusing
-       * nothing and no keystroke reaches any control (ABN-554).
+       * nothing and no keystroke reaches any control.
        */
       test.each([
         {

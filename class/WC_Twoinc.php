@@ -49,7 +49,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         public const NEVER_TAXED_SURCHARGE_TREATMENT = 'always_zero';
 
-        /** Consent carrier, posted by the classic form and by the Blocks payment data alike (ABN-554). */
+        /** Consent carrier, posted by the classic form and by the Blocks payment data alike. */
         public const TERMS_CONSENT_FIELD = 'twoinc_terms_accepted';
 
         // Order states in which the Two API refuses order edits. Shared by
@@ -296,7 +296,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Autofill is withdrawn from the admin screen when company search in
          * the address entry is off, so a `yes` stored before that switch was
-         * turned off must not keep autofilling (ABN-554).
+         * turned off must not keep autofilling.
          *
          * @return string
          */
@@ -392,7 +392,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Persist why the last fetch produced no record. The render that has to
          * explain an unresolved term set is rarely the request whose fetch
-         * failed, so the cause cannot live in a memo (ABN-513).
+         * failed, so the cause cannot live in a memo.
          *
          * @param array|WP_Error|null $response make_request()'s return value.
          */
@@ -517,7 +517,7 @@ if (!class_exists('WC_Twoinc')) {
         private static function store_merchant_due_in_days(array $record): void
         {
             // 0 when the record carries none, so the term resolver can tell
-            // "unset" from a real day count (ABN-548).
+            // "unset" from a real day count.
             $due_in_days = !empty($record['due_in_days']) ? (int) $record['due_in_days'] : 0;
             update_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'), $due_in_days, false);
         }
@@ -1605,7 +1605,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * The merchant's offerable payment terms (net days, ascending) from the merchant record's
          * `available_terms`, the authoritative set the admin narrows from (TWO-24812). Empty is
-         * offered as empty (ABN-544): the method stays available, no term is sent, and the
+         * offered as empty: the method stays available, no term is sent, and the
          * merchant account's own default applies. A cache read, except on a cold or >24h clock,
          * where one request pays one 10s-capped fetch; a failed fetch leaves that clock unmoved,
          * so one request every 60s pays it again until one succeeds.
@@ -1637,7 +1637,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Why the offerable term set is what it is, for the admin surfaces that
-         * have to explain it (ABN-513). `state` is
+         * have to explain it. `state` is
          * one of 'resolved', 'fetch_failed' (`reason`/`code` name the failure),
          * 'none_offered' (a successful read of an account offering nothing),
          * 'not_reported' (a successful read carrying no term list at all),
@@ -1645,7 +1645,7 @@ if (!class_exists('WC_Twoinc')) {
          *
          * `reason`/`code` carry the recorded failure whatever the state, so a
          * set served from cache while refreshes keep failing can say why it is
-         * stale rather than reading as current (ABN-538). `stale` is true when
+         * stale rather than reading as current. `stale` is true when
          * a failure is on record, or the figures are older than the refresh
          * window they should have been replaced within.
          *
@@ -1738,7 +1738,7 @@ if (!class_exists('WC_Twoinc')) {
                     )
                     : __('Payment terms have never been read successfully on this site.', 'twoinc-payment-gateway'),
             ];
-            // ABN-515: a cause with no time and no field to check leaves the
+            // A cause with no time and no field to check leaves the
             // merchant with nothing to do next.
             if ($state['attempted_on'] > 0) {
                 $sentences[] = sprintf(
@@ -1809,8 +1809,8 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * When the figures were read, and why they cannot be trusted as current
-         * (ABN-538). A recorded failure is reported as the failure it is even
+         * When the figures were read, and why they cannot be trusted as current.
+         * A recorded failure is reported as the failure it is even
          * when the read itself is minutes old — the figures are not out of
          * date in that case, the attempt to replace them simply did not land.
          *
@@ -1849,7 +1849,7 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Why the payment method is absent from the payment list (ABN-518).
+         * Why the payment method is absent from the payment list.
          * Only reasons decidable without a basket are judged; a
          * basket-dependent one is named as a constraint instead.
          *
@@ -2181,7 +2181,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Carry a legacy `enable_company_name` row over to
-         * `enable_company_search` (ABN-554). Self-limiting: it writes only
+         * `enable_company_search`. Self-limiting: it writes only
          * while the legacy key is present and the current one absent. The row is
          * rewritten rather than read through a fallback because the current
          * key's own `'default' => 'yes'` is what renders the admin checkbox,
@@ -2250,7 +2250,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Retire the `merchant_due_in_days` row written under the rule that
-         * stored 14 for a merchant with no default term (ABN-548) — it is
+         * stored 14 for a merchant with no default term, it is
          * indistinguishable from a real 14, and a shop whose record cannot
          * resolve never overwrites it. Its absence reads as no default term
          * until the next refresh restores it, which the resolver handles;
@@ -2284,7 +2284,7 @@ if (!class_exists('WC_Twoinc')) {
                 $product_name = WC_Twoinc_Brand::get('product_name');
                 $tooltip_id = 'abt-twoinc-text-' . $this->id;
                 // aria-hidden, yet still announced: aria-describedby resolves
-                // a directly referenced node even when hidden (ABN-554).
+                // a directly referenced node even when hidden.
                 // noopener without noreferrer: the Referer is how the brand's
                 // own about page attributes the visit.
                 $icon = sprintf(
@@ -2608,7 +2608,7 @@ if (!class_exists('WC_Twoinc')) {
             // notice carry role="status": none of them deselects anything.
             // The chip heading is a `span`, not a `label`: it names the chip
             // radiogroup through aria-labelledby, and a `label` names a single
-            // form control (ABN-554).
+            // form control.
             return sprintf(
                 '<div>
                     %s
@@ -2632,7 +2632,7 @@ if (!class_exists('WC_Twoinc')) {
                 __('We could not complete that just now. Please wait a moment and try again.', 'twoinc-payment-gateway'),
                 sprintf(
                     // Placement-neutral on purpose: the search sits in the billing
-                    // form on some shops and inside this tile on others (ABN-554).
+                    // form on some shops and inside this tile on others.
                     __('To pay with %s, search for your company name and select it from the results.', 'twoinc-payment-gateway'),
                     WC_Twoinc_Brand::get('product_name')
                 )
@@ -2667,7 +2667,7 @@ if (!class_exists('WC_Twoinc')) {
         private function get_offered_payment_term_options(): array
         {
             // First, so an admin can leave the term to the checkout's own
-            // resolver rather than pin one (ABN-548).
+            // resolver rather than pin one.
             $options = ['' => __('Automatic', 'twoinc-payment-gateway')];
             if (class_exists('WC_Twoinc_Payment_Terms')) {
                 foreach (WC_Twoinc_Payment_Terms::get_available_terms($this) as $days) {
@@ -3619,14 +3619,14 @@ if (!class_exists('WC_Twoinc')) {
             $posted_custom = WC_Twoinc_Stored_Term::days($_POST[$custom_key] ?? null); // phpcs:ignore WordPress.Security.NonceVerification.Missing
 
             // The deprecated sibling holds a term the merchant record offers as a standard one; it
-            // belongs on that term's checkbox instead (ABN-522).
+            // belongs on that term's checkbox instead.
             if ($this->custom_term_folds_in($posted_custom) && !in_array($posted_custom, $clean, true)) {
                 $clean[] = $posted_custom;
                 sort($clean);
             }
 
             // Counted only where checkout would offer it, else a save with no ticks at all leaves
-            // the shop offering no term and withholding the method, with nothing said (ABN-522).
+            // the shop offering no term and withholding the method, with nothing said.
             $reaches_checkout = WC_Twoinc_Stored_Term::reaches_checkout(
                 $posted_custom,
                 $this->get_merchant_available_terms()
@@ -3640,7 +3640,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * True where the stored term is one the merchant record offers as a standard term, so the
          * save folds it onto that term's checkbox. An unresolvable offered set matches nothing
-         * rather than everything, so an API outage cannot delete a migration value (ABN-493).
+         * rather than everything, so an API outage cannot delete a migration value.
          *
          * @param int|null $days
          */
@@ -3654,7 +3654,7 @@ if (!class_exists('WC_Twoinc')) {
             return count($offered) > 0 && in_array($days, $offered, true);
         }
 
-        /** Names End-of-Month semantics in the legacy help text only where that type is stored (ABN-495). */
+        /** Names End-of-Month semantics in the legacy help text only where that type is stored. */
         private function legacy_custom_term_description(string $days): string
         {
             if ($this->get_option('payment_terms_type') === 'end_of_month') {
@@ -3674,7 +3674,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Render the deprecated "Custom payment terms (days)" field as keep-or-remove, so the only
-         * edit the merchant is offered is the only one the save accepts (ABN-522). The row is
+         * edit the merchant is offered is the only one the save accepts. The row is
          * hidden where nothing is stored and where the value folds into an offered term's
          * checkbox — hidden but still posted, which is what lets that fold-in happen.
          */
@@ -3726,7 +3726,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * The deprecated custom term may be removed but never replaced, whatever writes the
          * settings row: the admin form is one of several routes to it, and the REST settings
-         * endpoint runs none of the field validators (ABN-522).
+         * endpoint runs none of the field validators.
          *
          * @param mixed $value
          * @param mixed $option
@@ -3762,7 +3762,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * The persisted custom term. Read off the settings row, not $this->settings: the save
-         * compares against what is stored, whatever the in-memory copy holds. ABN-522.
+         * compares against what is stored, whatever the in-memory copy holds.
          */
         private function stored_custom_payment_term(): string
         {
@@ -3774,7 +3774,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Why the posted custom term cannot be saved, or null where it can. Removal is the only
          * edit accepted, and a stored value that is not a number of days blocks the save while it
-         * stands: hiding or silently dropping it would leave nothing to correct (ABN-522).
+         * stands: hiding or silently dropping it would leave nothing to correct.
          *
          * @param mixed $posted
          */
@@ -3798,7 +3798,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * The deprecated custom term may be removed but never replaced, and clears itself once the
          * merchant record offers the same term as a standard one — announced, since the merchant
-         * did not ask for it and the checkbox above is where it lands (ABN-522).
+         * did not ask for it and the checkbox above is where it lands.
          */
         public function validate_payment_terms_custom_days_field($key, $value)
         {
@@ -3833,7 +3833,7 @@ if (!class_exists('WC_Twoinc')) {
          * the same request, so the stored options are stale here), mirroring
          * the offered set the admin JS rebuilds the dropdown from. A posted
          * default that is not offered — including the empty Automatic option —
-         * is stored empty, leaving the choice to get_default_term() (ABN-548).
+         * is stored empty, leaving the choice to get_default_term().
          */
         public function validate_default_payment_term_field($key, $value)
         {
@@ -3892,7 +3892,7 @@ if (!class_exists('WC_Twoinc')) {
             }
             // Automatic: get_default_term() owns the choice, so a stored day
             // count never outranks the merchant's own default term or the
-            // 30-day preference (ABN-548).
+            // 30-day preference.
             return '';
         }
 
@@ -3917,7 +3917,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * The brand's terms page, or '' when the brand declares none — which
-         * is the consent's only off switch (ABN-554). A declared path is
+         * is the consent's only off switch. A declared path is
          * resolved against the brand's checkout host, so it follows
          * checkout_env; an absolute URL is taken verbatim.
          */
@@ -3939,7 +3939,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Whether this plugin renders the consent itself. An overlay still
          * rendering its own returns false here, so the two never both appear
-         * during a staged rollout (ABN-554).
+         * during a staged rollout.
          */
         public function renders_terms_consent()
         {
@@ -3964,7 +3964,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * The consent block, built once and emitted by both checkouts — the
          * classic one from `append_terms_consent_to_description()`, the Blocks
-         * tile from the payment-method data it is handed (ABN-554).
+         * tile from the payment-method data it is handed.
          *
          * Never fold this into build_payment_description(): WooCommerce runs
          * that string through wp_kses_post(), which drops the checkbox and
@@ -4026,7 +4026,7 @@ if (!class_exists('WC_Twoinc')) {
          * description string because core runs that string through
          * wp_kses_post(), which drops the checkbox, then runs this filter on
          * the result — so the consent reaches `.payment_box` intact and rides
-         * core's show/hide of the selected method (ABN-554).
+         * core's show/hide of the selected method.
          *
          * @param string $description
          * @param string $gateway_id
@@ -4116,7 +4116,7 @@ if (!class_exists('WC_Twoinc')) {
          * Serve this plugin's copy of checkout/payment-method.php, which
          * renders the about control between the method's </label> and its
          * .payment_box — core offers no other seam beside the title that is
-         * outside the label (ABN-554).
+         * outside the label.
          *
          * A theme's own override wins: $template still points inside
          * WooCommerce only when nothing earlier in wc_locate_template's
@@ -4144,7 +4144,7 @@ if (!class_exists('WC_Twoinc')) {
          * Whether checkout will load this plugin's copy of
          * checkout/payment-method.php — asked rather than remembered, because
          * WooCommerce instantiates its own gateway object for the methods
-         * list and caches the located path (ABN-554).
+         * list and caches the located path.
          */
         private static function payment_method_template_is_ours()
         {
@@ -4160,7 +4160,7 @@ if (!class_exists('WC_Twoinc')) {
          * The about control for a checkout whose payment-method template is a
          * theme's rather than this plugin's. Such a theme never renders the
          * control at all, and the premium themes this repo ships checkout CSS
-         * for are exactly the ones that override that template (ABN-554).
+         * for are exactly the ones that override that template.
          *
          * The description renders inside .payment_box, which core hides until
          * the method is chosen, so on those themes the control is an icon at
@@ -4189,7 +4189,7 @@ if (!class_exists('WC_Twoinc')) {
          * </label> and its .payment_box by this plugin's copy of core's
          * checkout/payment-method.php. Public because that template calls it
          * on the gateway it was handed, and its absence on every other
-         * gateway is what scopes the override to this one (ABN-554).
+         * gateway is what scopes the override to this one.
          *
          * The twoinc_about_html filter seam is untouched and still applies
          * inside get_abt_twoinc_html; an empty result renders no wrapper, so
@@ -4206,7 +4206,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * The configured Title verbatim - no term suffix, no placeholder
-         * substitution - or the brand product name when it is blank (ABN-529).
+         * substitution - or the brand product name when it is blank.
          */
         public function get_pay_title()
         {
@@ -4220,7 +4220,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Re-verify the stored key on the gateway's own settings screen. The
          * hook fires on every wp-admin request, so without the screen check an
-         * unreachable API blocked the whole administration area (ABN-537).
+         * unreachable API blocked the whole administration area.
          *
          * @param string $hook_suffix current admin page, from the hook.
          */
@@ -4238,7 +4238,7 @@ if (!class_exists('WC_Twoinc')) {
             // A cached verdict spares the call, EXCEPT a cached 'ok' with no
             // merchant identity: the Validate button caches an 'ok' for a
             // TYPED key, and only a live check of the STORED key persists
-            // merchant_id (ABN-537).
+            // merchant_id.
             $cached = get_transient(self::verification_cache_key($api_key));
             if (is_array($cached) && isset($cached['status'])) {
                 if ($cached['status'] !== 'ok' || (string) $this->get_merchant_id() !== '') {
@@ -4373,7 +4373,7 @@ if (!class_exists('WC_Twoinc')) {
                 // A captive portal or maintenance page answers 200 too; with no merchant record there is no identity to offer the method under.
                 // An empty id is no record either: reported as 'ok' it left the
                 // settings screen re-verifying on every load, never resolving
-                // an identity (ABN-537).
+                // an identity.
                 if (!isset($result['body']['id']) || !is_scalar($result['body']['id']) || (string) $result['body']['id'] === '') {
                     return ['status' => 'error', 'code' => $code];
                 }
@@ -4391,7 +4391,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Whether a category is a DEFINITIVE rejection of the stored key — Two
          * said no, or there is no key to say no to. The ONE definition of that
-         * set; nothing else re-lists the categories (ABN-533).
+         * set; nothing else re-lists the categories.
          *
          * @param string $status one of categorize_verification_result()'s categories.
          *
@@ -4426,7 +4426,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         const API_KEY_VERIFICATION_TIMEOUT = 5;
 
-        /** Bounded because it runs inline in a page render (ABN-537). */
+        /** Bounded because it runs inline in a page render. */
         const ADMIN_API_KEY_VERIFICATION_TIMEOUT = 10;
 
         /**
@@ -4521,7 +4521,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * The api-key verdict is the only upstream failure that may withhold
          * the Two payment method, and only when it is a definitive rejection
-         * (TWO-25326 follow-up, ABN-533). An unresolvable offerable-term set
+         * (TWO-25326 follow-up). An unresolvable offerable-term set
          * does not withhold: the tile is offered with no term chips, no term
          * is sent on the order and the account default applies.
          *
@@ -4571,7 +4571,7 @@ if (!class_exists('WC_Twoinc')) {
          * vanishing (mirrors apply_brand_availability_gate()'s own pattern).
          *
          * Keyed per reason, not once per request: a store hitting two of these
-         * needs both named, and the reason set is finite (ABN-518).
+         * needs both named, and the reason set is finite.
          *
          * @param string|null $key groups reasons whose text varies per basket.
          */
@@ -5030,7 +5030,7 @@ if (!class_exists('WC_Twoinc')) {
                 'i18n_refreshing' => __('Refreshing…', 'twoinc-payment-gateway'),
                 'i18n_refresh_failed' => __('Could not refresh the merchant profile.', 'twoinc-payment-gateway'),
                 // Beside a term the fee answer did not price; an empty gap
-                // there reads as "this term carries no fee" (ABN-540).
+                // there reads as "this term carries no fee".
                 'i18n_no_fee_figure' => __('no figure', 'twoinc-payment-gateway'),
             ]);
         }
@@ -5726,7 +5726,7 @@ if (!class_exists('WC_Twoinc')) {
 
             // Keyed on presence, not value: this nonce covers the whole
             // profile form, and a form that omits these fields is not an
-            // instruction to empty them (ABN-554).
+            // instruction to empty them.
             $posted = [
                 'company_id' => 'twoinc_company_id',
                 'billing_company' => 'twoinc_billing_company',
@@ -5752,8 +5752,7 @@ if (!class_exists('WC_Twoinc')) {
          * config), the merchant's buyer-country allowlist (TWO-40), the
          * merchant's own minimum is unmet, the configured surcharge
          * cannot be quoted in the checkout currency at all (TWO-25269), or
-         * the pricing service could not price the term being charged
-         * (ABN-546).
+         * the pricing service could not price the term being charged.
          * The two country gates are independent and ANDed: neither reads
          * the other.
          * The surcharge-currency judgement applies in admin too; the
@@ -5800,7 +5799,7 @@ if (!class_exists('WC_Twoinc')) {
 
             // Withheld outright on the pay-for-order page: a placed order
             // leaves the buyer nothing left to decide, and a refusal is a
-            // credit or fraud verdict a retry must not reopen (ABN-554).
+            // credit or fraud verdict a retry must not reopen.
             if (function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-pay')) {
                 unset($available_gateways[$this->id]);
                 return $available_gateways;
@@ -5808,7 +5807,7 @@ if (!class_exists('WC_Twoinc')) {
 
             // A surcharge the pricing service could not price fails CLOSED
             // like one no rate can express, but at CHECKOUT ONLY — never
-            // against the merchant's own admin (ABN-546). The quote's own
+            // against the merchant's own admin. The quote's own
             // error log already names the term and the cause.
             if (WC_Twoinc_Payment_Terms::surcharge_quote_failed($this)) {
                 unset($available_gateways[$this->id]);
@@ -5998,7 +5997,7 @@ if (!class_exists('WC_Twoinc')) {
          *
          * The tile emits it through WC_Twoinc_Helper::escape_anchor_only_html,
          * so anything that escaper drops used to disappear with no merchant
-         * feedback (ABN-554).
+         * feedback.
          *
          * @param string $key
          * @param string $value
@@ -6155,7 +6154,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Record whether this gateway is the buyer's current choice, from the
-         * Blocks tile (ABN-554). The surcharge cart fee is conditional on it,
+         * Blocks tile. The surcharge cart fee is conditional on it,
          * and a Blocks checkout otherwise names its payment method only at
          * submit — after the order summary the buyer reads.
          *
@@ -6179,7 +6178,7 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * WooCommerce's documented failure result (ABN-554).
+         * WooCommerce's documented failure result.
          *
          * @param string|string[] $message
          *
@@ -6224,7 +6223,7 @@ if (!class_exists('WC_Twoinc')) {
                 return self::payment_failure($brand_validation_error);
             }
 
-            // A client-side tick is not a consent record (ABN-554). Gated on
+            // A client-side tick is not a consent record. Gated on
             // the same predicate as the render, so a brand with no terms page
             // is never asked for a consent it never offered.
             if ($this->renders_terms_consent() && !self::terms_consent_given()) {
@@ -6393,7 +6392,7 @@ if (!class_exists('WC_Twoinc')) {
 
             // The company the buyer captured is deliberately NOT written here:
             // this meta is the merchant's own prefill, and a capture reaching
-            // it prefills every later cart (ABN-554).
+            // it prefills every later cart.
             $user_id = wp_get_current_user()->ID;
             if ($user_id) {
                 if (!get_the_author_meta(WC_Twoinc_Brand::prefixed_name('department'), $user_id)) {
@@ -6511,7 +6510,7 @@ if (!class_exists('WC_Twoinc')) {
 
             // The cart is done; the order carries the company from here, and
             // the buyer never reaches the thankyou page on the redirect legs
-            // below (ABN-554).
+            // below.
             WC_Twoinc_Checkout::forget_captured_company();
 
             if ($body['state'] == 'VERIFIED' && isset($body['merchant_urls']) && isset($body['merchant_urls']['merchant_confirmation_url'])) {
@@ -7018,7 +7017,7 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'payment_terms_custom_days' => [
                     'title'   => __('Custom payment terms (days)', 'twoinc-payment-gateway'),
-                    // Deprecated: rendered keep-or-remove, and hidden unless a value is stored. ABN-522.
+                    // Deprecated: rendered keep-or-remove, and hidden unless a value is stored.
                     'type'    => 'two_custom_payment_days',
                     'default' => ''
                 ],
@@ -7299,7 +7298,7 @@ if (!class_exists('WC_Twoinc')) {
                         <div id="twoinc-signup-prompt" style="margin-top: 8px; color: #666; font-size: 13px;<?php echo $merchant_id ? ' display: none;' : ''; ?>">
                             <strong><?php printf(__('Don\'t have an API key? Get one by signing up <a href=\'%s\'>here</a>.', 'twoinc-payment-gateway'), esc_url(WC_Twoinc_Helper::get_merchant_portal_signup_url($this))); ?></strong>
                         </div>
-                        <?php // Hidden by default; populated + shown by admin.js when the live re-verification on page load (or on typing a new key) cannot confirm the key. Text is set dynamically per failure category — invalid key vs Two service error vs unreachable — so an admin isn't stuck guessing "is my key wrong or is Two down" (TWO-25326 follow-up). The colour lives in admin.css so an inconclusive verdict can be toned down rather than reddened (ABN-536). ?>
+                        <?php // Hidden by default; populated + shown by admin.js when the live re-verification on page load (or on typing a new key) cannot confirm the key. Text is set dynamically per failure category (invalid key vs Two service error vs unreachable), so an admin isn't stuck guessing "is my key wrong or is Two down" (TWO-25326 follow-up). The colour lives in admin.css so an inconclusive verdict can be toned down rather than reddened. ?>
                         <div id="twoinc-merchant-invalid-notice" class="twoinc-merchant-notice" style="margin-top: 8px; font-size: 13px; display: none;"></div>
                         <?php echo $this->get_description_html($data); // WPCS: XSS ok.
                         ?>
@@ -7607,7 +7606,7 @@ if (!class_exists('WC_Twoinc')) {
          * Read-only install health summary (TWO-25386, cross-platform parity):
          * API key status, environment, SSL verification state, the PHP curl
          * extension WooCommerce's own HTTP API needs, and the merchant profile
-         * the offerable term set comes from (ABN-513). A row reporting "OK"
+         * the offerable term set comes from. A row reporting "OK"
          * when it isn't is worse than no row, so these read the same live
          * state the rest of the gateway acts on rather than a cached snapshot.
          */
@@ -8646,7 +8645,7 @@ if (!class_exists('WC_Twoinc')) {
                     $post_data[$api_key_field] = $this->get_option('api_key');
                     WC_Admin_Settings::add_error(sprintf(__('%s rejected that API key, so the previously saved key was kept.', 'twoinc-payment-gateway'), $product_name));
                 } elseif ($verification['status'] === 'unreachable') {
-                    // ABN-495: a fresh install's stored key is empty, so reverting an unverifiable key locks the merchant out of saving the one that would work.
+                    // A fresh install's stored key is empty, so reverting an unverifiable key locks the merchant out of saving the one that would work.
                     WC_Admin_Settings::add_message(sprintf(__('API key saved, but %s could not be reached to verify it.', 'twoinc-payment-gateway'), $product_name));
                 } elseif ($verification['status'] === 'not_configured') {
                     WC_Admin_Settings::add_message(__('API key saved, but it could not be verified because no environment is configured.', 'twoinc-payment-gateway'));

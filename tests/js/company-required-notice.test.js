@@ -1,5 +1,5 @@
 /**
- * ABN-554. Manual entry captures a company NAME and deliberately no number,
+ * Manual entry captures a company NAME and deliberately no number,
  * so a buyer could fill the whole checkout in and only learn at submit that
  * `process_payment` refuses an order with no company number.
  *

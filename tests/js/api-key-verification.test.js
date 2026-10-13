@@ -19,7 +19,7 @@ const { loadAdmin, GATEWAY_ID } = require("./admin-harness");
 
 // Mirrors twoinc_ajax_verify_api_key()'s error envelope, `definitive` included:
 // that flag is computed server-side by WC_Twoinc::is_definitive_key_failure(),
-// the one place the categories are listed (ABN-533).
+// the one place the categories are listed.
 const DEFINITIVE_STATUSES = ["invalid_key", "not_configured"];
 
 function stubAjaxError(status, code) {
@@ -230,7 +230,7 @@ describe("API key verification — categorized failure display", () => {
   });
 
   /**
-   * ABN-536. Every non-ok category took the reject branch, so an unreachable
+   * Every non-ok category took the reject branch, so an unreachable
    * API blanked the Merchant ID and reddened a perfectly valid key. Only a
    * verdict that judged the key may do that.
    *

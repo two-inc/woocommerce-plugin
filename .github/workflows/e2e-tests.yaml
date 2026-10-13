@@ -67,7 +67,7 @@ jobs:
             exit 1
           fi
           # The announced release is not a pullable tag until Docker Hub
-          # publishes it (ABN-614). Annotations come back on stderr to keep
+          # publishes it. Annotations come back on stderr to keep
           # them out of the captured version, so re-emit them here.
           annotations=$(mktemp)
           if ! newest=$(.github/scripts/resolve-wordpress-image-tag.sh "$current" "$suffix" 2>"$annotations"); then

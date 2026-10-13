@@ -83,8 +83,8 @@ jQuery(function ($) {
   });
 
   // Autofill off and withdrawn while company search is off; unticked so the next
-  // save stores it off (ABN-554). The ON is edge-triggered only — driving it from
-  // the level showed a stored off as on and saved that back (ABN-562).
+  // save stores it off. The ON is edge-triggered only: driving it from
+  // the level showed a stored off as on and saved that back.
   const $companySearchToggle = $(
     "#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search"
   );
@@ -273,7 +273,7 @@ jQuery(function ($) {
         }
         // Whether the verdict judged the KEY is decided server-side, where the
         // categories are defined once; anything else judged nothing about it
-        // and must leave the Merchant ID and key status alone (ABN-536).
+        // and must leave the Merchant ID and key status alone.
         const data = response.data || {};
         if (!data.definitive) {
           showVerificationStatus(indicatorForUnjudgedKey(apiKey));
@@ -346,7 +346,7 @@ jQuery(function ($) {
         });
     }
 
-    // An unresolved offered set is unknown, so it narrows nothing (ABN-521).
+    // An unresolved offered set is unknown, so it narrows nothing.
     function merchantOffers(n) {
       const merchant = (twoinc_admin.merchant_available_terms || []).map(Number);
       return merchant.length === 0 || merchant.indexOf(n) !== -1;
@@ -371,7 +371,7 @@ jQuery(function ($) {
       const current = parseInt($defaultTerm.val(), 10) || 0;
       $defaultTerm.empty();
       // First, so a selection that is no longer offered lands here rather than
-      // on a day count nobody chose (ABN-548).
+      // on a day count nobody chose.
       $defaultTerm.append($("<option></option>").attr("value", "").text(automaticLabel));
       $.each(terms, function (_, days) {
         $defaultTerm.append(
@@ -393,7 +393,7 @@ jQuery(function ($) {
     }
 
     // An empty span reads as "no fee for this term", so a term the answer did
-    // not price says so instead (ABN-540).
+    // not price says so instead.
     function noFigureLabel() {
       return " (" + (twoinc_admin.i18n_no_fee_figure || "no figure") + ")";
     }

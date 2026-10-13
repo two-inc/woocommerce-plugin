@@ -1,5 +1,5 @@
 /**
- * ABN-554 — host themes space `.form-row` inside the payment box, and the tile
+ * Host themes space `.form-row` inside the payment box, and the tile
  * company row is a `.form-row` this plugin builds there. jsdom lays nothing
  * out, so this reads the shipped stylesheet rather than a computed value.
  */

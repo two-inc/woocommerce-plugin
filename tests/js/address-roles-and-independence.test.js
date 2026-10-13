@@ -182,7 +182,7 @@ describe("the two address forms are independent", () => {
   });
 
   /**
-   * ABN-551. Replacing a captured company must not leave any component of the
+   * Replacing a captured company must not leave any component of the
    * outgoing one behind. Line 2 was the live case: a sole trader adopted by
    * autofill writes it, and the registry record for the company chosen next
    * carries no premises, so setAddress had nothing to say about line 2 and the
@@ -240,7 +240,7 @@ describe("the two address forms are independent", () => {
   });
 
   /**
-   * ABN-551 again, for the component `clearAddress` used to skip: `setRegion`
+   * The same bug again, for the component `clearAddress` used to skip: `setRegion`
    * writes a registry region onto the state control, so a record that carries
    * none left the outgoing company's county on the form.
    */
