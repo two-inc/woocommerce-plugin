@@ -18,6 +18,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         public const ORDER_POSTPROCESSING_HOOK = 'twoinc_order_postprocessing';
 
+        /** The requests the API defines with no body (TWO-26340): sent empty whatever a subscriber returns. */
+        private const BODYLESS_REQUEST_TYPES = ['order_confirm', 'cancel'];
+
+        /** Logged when a subscriber returns a body for a request with none. */
+        public const BODY_NOT_ACCEPTED_CODE = 'TWO_ORDER_POSTPROCESSING_BODY_NOT_ACCEPTED';
+
         /** check_shop_match() scopes (TWO-26275): every shop-match check, or only those made for single lines. */
         public const SHOP_MATCH_ALL = 'all';
         public const SHOP_MATCH_PER_LINE = 'per_line';
@@ -2193,7 +2199,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * than an array, or returns something that cannot be encoded as JSON fails the request, as a code bug.
          * The plugin's own handler on the hook, default_order_postprocessing(), runs the shop-match checks when no
          * merchant handler is registered (TWO-26275); its refusal, or one a merchant handler opts back in to,
-         * passes through unwrapped.
+         * passes through unwrapped. A request the API defines with no body is handled by
+         * postprocess_bodyless_request() instead.
          *
          * @param array $payload the body exactly as it would be sent; [] for a request with no body
          * @param array $context from order_postprocessing_context()
@@ -2205,6 +2212,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function postprocess_order_request(array $payload, array $context, $record = true)
         {
+            if (in_array($context['request_type'] ?? '', self::BODYLESS_REQUEST_TYPES, true)) {
+                return self::postprocess_bodyless_request($context);
+            }
             try {
                 /**
                  * Stable extension contract, see README "Stable extension contract: order postprocessing".
@@ -2248,6 +2258,58 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             return $processed;
+        }
+
+        /**
+         * A request the API defines with no body (TWO-26340): the hook runs with an empty payload and the usual
+         * context, and the request is sent empty whatever it does. The shop has already confirmed or cancelled the
+         * order, so a subscriber cannot hold the request back: a body it returns is dropped and logged by its paths
+         * only, and a subscriber that throws is logged by its class and throw site, never its message.
+         *
+         * @param array $context from order_postprocessing_context()
+         *
+         * @return array always []
+         */
+        private static function postprocess_bodyless_request(array $context)
+        {
+            try {
+                $processed = apply_filters(self::ORDER_POSTPROCESSING_HOOK, [], $context);
+            } catch (Throwable $e) {
+                // The default handler never ran to consume this build's checks: a later request must not meet them.
+                self::clear_pending_checks();
+                self::log_ignored_postprocessing($context, WC_Twoinc_Order_Postprocessing_Exception::CODE, 'a subscriber threw ' . get_class($e) . ' at ' . self::throw_site($e));
+                return [];
+            }
+            if (!is_array($processed)) {
+                self::log_ignored_postprocessing($context, WC_Twoinc_Order_Postprocessing_Exception::CODE, 'a subscriber returned ' . gettype($processed) . ', not an array');
+            } elseif ($processed !== []) {
+                $diff = self::payload_diff([], $processed);
+                $paths = array_map(static function ($entry) {
+                    return self::cut_diff_string($entry['path']);
+                }, array_slice($diff, 0, self::MAX_DIFF_ENTRIES));
+                self::log_ignored_postprocessing($context, self::BODY_NOT_ACCEPTED_CODE, sprintf(
+                    'a subscriber returned a body, which was dropped (%d changes, by %s): %s',
+                    count($diff),
+                    implode(', ', self::merchant_order_postprocessing_handlers()),
+                    (string) json_encode($paths, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                ));
+            }
+            return [];
+        }
+
+        /**
+         * Logs what a subscriber did to a request with no body, which is sent empty regardless.
+         *
+         * @param string $detail never a subscriber's exception message or a value it returned
+         */
+        private static function log_ignored_postprocessing(array $context, $code, $detail)
+        {
+            if (function_exists('wc_get_logger')) {
+                wc_get_logger()->error(
+                    sprintf('%s - twoinc_order_postprocessing on the %s request (%s) was ignored and the request sent with no body: %s', $code, $context['request_type'], $context['trigger'] ?? '', $detail),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
         }
 
         /**

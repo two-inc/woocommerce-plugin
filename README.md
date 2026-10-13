@@ -573,7 +573,8 @@ add_filter('twoinc_order_postprocessing', function (array $payload, array $conte
 **Parameters**
 
 - `$payload` (array): the request body exactly as it would be sent, amounts as
-  2dp decimal strings. `[]` for a request the API defines with no body.
+  2dp decimal strings. `[]` for `order_confirm` and `cancel`, which the API
+  defines with no body (see "Requests with no body" below).
 - `$context` (array):
 
   | Key                          | Type                      | Meaning                                                                                                                                                                                                                                                                                                |
@@ -593,6 +594,17 @@ add_filter('twoinc_order_postprocessing', function (array $payload, array $conte
 
 **Return**: the full payload. Callbacks chain in priority order; the final
 payload is sent.
+
+**Requests with no body**. `order_confirm` and `cancel` take no request body,
+and the shop has already confirmed or cancelled the order when they are sent.
+The hook still runs for them, with `$payload` `[]` and the usual context, but
+the request is always sent with no body. A body a subscriber returns is
+dropped and logged at error level with the code
+`TWO_ORDER_POSTPROCESSING_BODY_NOT_ACCEPTED`, naming the paths it added and
+never their values. A subscriber that throws, or returns something other than
+an array, does not hold the request back: it is logged with the code
+`TWO_ORDER_POSTPROCESSING_HOOK_FAILED`, naming the exception's class and where
+it was thrown, and the request is sent.
 
 **When it fires**: once for every request the plugin sends to an order endpoint:
 
@@ -776,16 +788,17 @@ add_filter('twoinc_order_postprocessing', function (array $payload, array $conte
 }, 10, 2);
 ```
 
-A subscriber that throws, or returns something other than an array or
-something that cannot be encoded as JSON, is a code fault rather than a
-declaration: the request is not sent, and the failure is logged at error level
-with the stable code `TWO_ORDER_POSTPROCESSING_HOOK_FAILED`, naming
+On any other request, a subscriber that throws, or returns something other than
+an array or something that cannot be encoded as JSON, is a code fault rather
+than a declaration: the request is not sent, and the failure is logged at error
+level with the stable code `TWO_ORDER_POSTPROCESSING_HOOK_FAILED`, naming
 `twoinc_order_postprocessing`, the request type and its trigger. The log, the
 order note and the refund error name the exception's class and where it was
-thrown, never the subscriber's own message, which can carry buyer data. Checkout then shows
-the buyer the usual "not available" message; a failed intent check is answered
-as an error rather than a decline, so the next check asks again; admin actions
-leave an order note; a refund returns the error to the refund screen.
+thrown, never the subscriber's own message, which can carry buyer data.
+Checkout then shows the buyer the usual "not available" message; a failed
+intent check is answered as an error rather than a decline, so the next check
+asks again; admin actions leave an order note; a refund returns the error to
+the refund screen.
 
 The plugin never recomputes anything after the hook: a subscriber that changes
 a line also updates the totals and subtotals it affects. It can do that with
