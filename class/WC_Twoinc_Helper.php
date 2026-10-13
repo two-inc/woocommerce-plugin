@@ -729,7 +729,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 );
                 $fee_line = [
                     // Already the resolved, translated, brand-correct label;
-                    // no hardcoded prefix — 'type' => 'SERVICE' below carries
+                    // no hardcoded prefix: 'type' => 'BUYER_FEE' below carries
                     // the semantic instead.
                     'name' => $fee->get_name(),
                     'description' => '',
@@ -744,7 +744,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'quantity_unit' => 'fee',
                     'image_url' => '',
                     'product_page_url' => '',
-                    'type' => 'SERVICE'
+                    'type' => 'BUYER_FEE'
                 ];
 
                 $items[] = $fee_line;

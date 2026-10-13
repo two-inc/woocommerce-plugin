@@ -1757,7 +1757,7 @@ final class BrandConfigSpec
 
         TinyAssert::same(1, count($items));
         TinyAssert::same('Servicekosten', $items[0]['name']);
-        TinyAssert::same('SERVICE', $items[0]['type']);
+        TinyAssert::same('BUYER_FEE', $items[0]['type']);
         TinyAssert::true(
             strpos($items[0]['name'], 'Fee - ') === false,
             'Fee line-item name must not carry a hardcoded prefix'
