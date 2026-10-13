@@ -28,6 +28,8 @@ wp user get "$WORDPRESS_ADMIN_USER" $SAFE >/dev/null 2>&1 ||
 
 wp theme is-installed storefront $SAFE || wp theme install storefront $SAFE
 wp plugin is-installed loco-translate $SAFE || wp plugin install loco-translate $SAFE
+# Installed, not activated: the gift card e2e activates it for its own tests (TWO-26309).
+wp plugin is-installed pw-woocommerce-gift-cards $SAFE || wp plugin install pw-woocommerce-gift-cards --version=2.52 $SAFE
 
 # Reinstall WooCommerce only when it is missing, at another version, or an
 # interrupted install left files missing or altered.

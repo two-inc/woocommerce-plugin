@@ -78,7 +78,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         private const MAX_DIFF_STRING = 120;
 
         /** Diff values outside these paths can carry buyer data, so only their path is logged. */
-        private const DIFF_VALUE_PATHS = '#^/(line_items|tax_subtotals)(/|$)|^/(gross_amount|net_amount|tax_amount|discount_amount|discount_rate|amount|currency)$#';
+        private const DIFF_VALUE_PATHS = '#^/(line_items|tax_subtotals)(/|$)|^/(gross_amount|net_amount|tax_amount|discount_amount|discount_rate|amount|invoice_amount|payable_amount|prepaid_amount|currency)$#';
 
         /** The EU VAT area by ISO code, with Monaco, which counts as France for VAT (TWO-24877). */
         private const EU_VAT_COUNTRIES = [
@@ -96,6 +96,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * with Two; edits and refunds send the recorded code rather than resolving again.
          */
         private const TAX_CODES_META = 'tax_codes';
+
+        /** The prepaid amount an order was placed with Two with (TWO-26309), absent on one placed before it was sent. */
+        private const PREPAID_META = 'prepaid_amount';
 
         /** How a recorded code was reached: steps 1 to 3 (the merchant's rows) or step 4. */
         private const TAX_CODE_STEP_ROW = 'row';
@@ -754,7 +757,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 ];
             }
 
-            return self::apply_tax_codes($items, $sources, $rate_order, $record_tax_codes && !$is_refund);
+            return self::apply_tax_codes($items, $sources, $rate_order, $record_tax_codes && !$is_refund, $is_refund);
         }
 
         /**
@@ -792,10 +795,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *                       it is taxable and its placement record key
          * @param mixed $order   the order (a refund's parent) whose addresses, taxes and record decide the codes
          * @param bool  $record  whether to record the codes on an order not yet placed with Two
+         * @param bool  $lenient a refund: never refused over the mapping (TWO-26309)
          *
          * @return array
          */
-        private static function apply_tax_codes(array $items, array $sources, $order, $record = false)
+        private static function apply_tax_codes(array $items, array $sources, $order, $record = false, $lenient = false)
         {
             $zero = [];
             foreach ($items as $i => $item) {
@@ -806,9 +810,26 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $placed = self::is_placed_with_two($order);
             $record = $record && !$placed && is_object($order) && method_exists($order, 'update_meta_data');
             $stored = $placed ? self::stored_tax_codes($order) : null;
-            // Read only once a 0% line needs it, so an order with none never depends on the stored mapping. An
-            // unreadable mapping throws (TWO-26309): an order is never built on a mapping nobody chose.
-            $map = $zero ? WC_Twoinc::get_tax_code_map() : [];
+            // Read only once a 0% line the placement record does not cover needs it, so an order with none, or a
+            // re-sent line already placed, never depends on the stored mapping. An unreadable mapping throws
+            // (TWO-26309): an order is never built on a mapping nobody chose. A refund is never refused over it: its
+            // recorded lines are sent as placed and the rest uncoded, the error logged by the read.
+            $unrecorded = array_filter($zero, static function ($i) use ($sources, $stored) {
+                $key = $sources[$i]['record_key'] ?? null;
+                return null === $key || !isset($stored[$key]);
+            });
+            $map = [];
+            $unreadable = false;
+            if ($unrecorded) {
+                try {
+                    $map = WC_Twoinc::get_tax_code_map();
+                } catch (Exception $e) {
+                    if (!$lenient) {
+                        throw $e;
+                    }
+                    $unreadable = true;
+                }
+            }
             // With no row mapped nothing can code the lines, so the order keeps no record (sparing the meta row). A
             // record an earlier attempt left is cleared.
             if (!$zero || (!$map && null === $stored)) {
@@ -856,7 +877,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $recorded[$key] = ['code' => $code, 'step' => self::TAX_CODE_STEP_ROW];
                 }
             }
-            $code = 1 === count($shared) ? (string) key($shared) : null;
+            $code = !$unreadable && 1 === count($shared) ? (string) key($shared) : null;
             if ($placed && null === $stored) {
                 // Placed before the record existed: the one code all the other 0% lines in the request being sent
                 // get, none when they disagree or one has none.
@@ -1053,6 +1074,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $id = $id ?: (is_int($list_key) ? $list_key : 0);
             }
             return $id > 0 ? (string) $id : null;
+        }
+
+        /**
+         * Whether the order was placed with Two before its tenders were declared as prepaid (TWO-26309): Two holds no
+         * prepaid amount for it, so its update and refund are sent with none, as they were then.
+         *
+         * @return bool
+         */
+        private static function placed_without_prepaid($order)
+        {
+            return self::is_placed_with_two($order) && '' === (string) $order->get_meta(WC_Twoinc_Brand::meta_key(self::PREPAID_META));
         }
 
         /**
@@ -1439,7 +1471,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $invoice_details['invoice_emails'] = $invoice_emails;
             }
 
-            $req_body = ['currency' => $order->get_currency()] + self::order_totals($order) + [
+            $line_items = self::expect_order_totals($order, 'order_create', true, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates));
+            // An order placed before tenders were declared is recomposed as it was placed, so the change hash sees no
+            // change it never had (TWO-26309).
+            $totals = self::order_totals($order, self::placed_without_prepaid($order) ? [] : self::$whole_order_check['tenders']);
+            // What the order is placed with, so its later requests know Two holds it (TWO-26309).
+            if (!self::is_placed_with_two($order) && is_object($order) && method_exists($order, 'update_meta_data')) {
+                $order->update_meta_data(WC_Twoinc_Brand::meta_key(self::PREPAID_META), $totals['prepaid_amount'] ?? '0.00');
+            }
+            $req_body = ['currency' => $order->get_currency()] + $totals + [
                 'discount_amount' => WC_Twoinc_Helper::order_discount_amount($order),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
@@ -1461,7 +1501,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
-                'line_items' => self::expect_order_totals($order, 'order_create', true, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates)),
+                'line_items' => $line_items,
                 'recurring' => false,
                 'merchant_additional_info' => '',
                 'merchant_order_id' => strval($order->get_id()),
@@ -1578,14 +1618,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $shipping_address = $billing_address;
             }
 
-            $req_body = ['currency' => $order->get_currency()] + self::order_totals($order) + [
+            $line_items = self::expect_order_totals($order, 'order_update', true, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates));
+            $req_body = ['currency' => $order->get_currency()] + self::order_totals($order, self::placed_without_prepaid($order) ? [] : self::$whole_order_check['tenders']) + [
                 'discount_amount' => WC_Twoinc_Helper::order_discount_amount($order),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
-                'line_items' => self::expect_order_totals($order, 'order_update', true, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates)),
+                'line_items' => $line_items,
                 'recurring' => false,
                 'merchant_additional_info' => '',
                 'merchant_reference' => '',
@@ -1646,7 +1687,56 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 )
             ];
 
+            // TWO-26309: on an order with tenders, the refunded lines can exceed what WooCommerce refunds, as the
+            // order total it caps refunds at is after tenders. `amount` stays what is refunded through Two and the
+            // rest of the lines, up to the tenders earlier refunds through Two left, is declared as the prepaid part.
+            // An order placed before tenders were declared holds no prepaid amount at Two: refunded as it was then.
+            $tendered = $order && !self::placed_without_prepaid($order) ? self::tender_total(self::order_tenders($order)) : 0.0;
+            if ($tendered > 0) {
+                $earlier = array_filter(method_exists($order, 'get_refunds') ? $order->get_refunds() : [], static function ($refund) use ($order_refund) {
+                    return $refund->get_id() !== $order_refund->get_id() && $refund->get_refunded_payment();
+                });
+                usort($earlier, static function ($a, $b) {
+                    return $a->get_id() <=> $b->get_id();
+                });
+                $left = $tendered;
+                foreach ($earlier as $refund) {
+                    $left -= self::refund_split(self::refund_gross($refund), abs((float) $refund->get_amount()), $left)[1];
+                }
+                [$refunded, $prepaid] = self::refund_split(abs(self::sum_lines($req_body['line_items'])['gross']), abs((float) $amount), $left);
+                $req_body['amount'] = strval(WC_Twoinc_Helper::round_amt($refunded));
+                $req_body['prepaid_amount'] = strval(WC_Twoinc_Helper::round_amt($prepaid));
+            }
+
             return $req_body;
+        }
+
+        /**
+         * A refund's split on an order with tenders (TWO-26309). `amount` is always the refund WooCommerce recorded:
+         * Two takes on only the receivable the merchant defined. Two's API wants the amount and the prepaid part to
+         * sum exactly to the refunded lines, so the lines beyond the amount, rounding included, are the prepaid
+         * part, up to the tenders left. A gap beyond them, or lines below the amount, is sent as is for Two to judge.
+         *
+         * @return float[] [amount, prepaid]
+         */
+        private static function refund_split(float $lines, float $amount, float $left)
+        {
+            $gap = round($lines - $amount, 2);
+            return [round($amount, 2), round($gap > 0 ? min(max($left, 0.0), $gap) : 0.0, 2)];
+        }
+
+        /**
+         * @return float what a WooCommerce refund's lines credit, positive
+         */
+        private static function refund_gross($refund)
+        {
+            $gross = 0.0;
+            foreach (['line_item', 'shipping', 'fee'] as $type) {
+                foreach ($refund->get_items($type) as $item) {
+                    $gross += (float) $item->get_total() + (float) $item->get_total_tax();
+                }
+            }
+            return abs($gross);
         }
 
         /**
@@ -1720,17 +1810,32 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * The order-level amounts every order body declares, copied from the order's own totals.
          *
+         * With tenders (TWO-26309) the invoice covers the full lines and the tenders are declared as already paid:
+         * net and tax are the lines' (the order's total plus its tenders), invoice_amount is net plus tax,
+         * prepaid_amount the tenders and payable_amount what is left to pay, the order total. gross_amount stays the
+         * order total, equal to payable_amount. Without tenders the body is unchanged.
+         *
          * @param WC_Order $order
+         * @param array    $tenders order_tenders() for this order
          *
          * @return array
          */
-        private static function order_totals($order)
+        private static function order_totals($order, array $tenders = [])
         {
-            return [
+            $tendered = self::tender_total($tenders);
+            $totals = [
                 'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),
-                'net_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() - $order->get_total_tax())),
+                'net_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() + $tendered - $order->get_total_tax())),
                 'tax_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_tax())),
             ];
+            if ($tendered > 0) {
+                $totals += [
+                    'invoice_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() + $tendered)),
+                    'payable_amount' => $totals['gross_amount'],
+                    'prepaid_amount' => strval(WC_Twoinc_Helper::round_amt($tendered)),
+                ];
+            }
+            return $totals;
         }
 
         /**
@@ -2312,11 +2417,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * Opt-in for `twoinc_order_postprocessing` subscribers (TWO-26092): sets each order total, each per-rate tax
          * subtotal and a refund's amount to the sum over the payload's own lines plus the residual the original
          * carried beyond its lines (rounding), touching only the fields the payload already carries. `$original` is
-         * the payload as the subscriber received it. `$tenders`, the context's order_tenders (TWO-26309), is taken
-         * off the order's gross and net, so they stay what is left to pay, whatever `$original` carries; tax stays on
-         * the full lines, and a refund's amount is its lines. A total the subscriber edited
-         * by hand before calling this is overwritten: the helper's result wins. Arithmetic only; part of the stable
-         * contract.
+         * the payload as the subscriber received it. `$tenders`, the context's order_tenders (TWO-26309), is declared
+         * as already paid: net and tax stay the full lines, invoice_amount is their sum, prepaid_amount the tenders
+         * and payable_amount, and gross_amount if carried, the invoice less the tenders. Those three fields are set
+         * whenever there are tenders or the payload carries them. A refund's amount is its lines less the prepaid
+         * part the original declared. A total the subscriber edited by hand before calling this is overwritten: the
+         * helper's result wins. Arithmetic only; part of the stable contract.
          *
          * @param array $payload
          * @param array $original the payload before the subscriber's edits
@@ -2327,17 +2433,27 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public static function recompute_totals_from_lines(array $payload, array $original, array $tenders = [])
         {
             $carry = self::residuals($original);
-            // An original that carries a gross or net already holds its tenders in that residual. One that carries
-            // none has no residual to hold them, so the tenders are taken off here.
-            $tendered = self::tender_total($tenders);
-            foreach (['net_amount', 'gross_amount'] as $field) {
-                $carry[$field] = $carry[$field] ?? -$tendered;
-            }
+            $tendered = $tenders !== [] ? self::tender_total($tenders) : (float) ($payload['prepaid_amount'] ?? 0);
             $lines = isset($payload['line_items']) && is_array($payload['line_items']) ? $payload['line_items'] : [];
             $sums = self::sum_lines($lines);
-            if (array_key_exists('gross_amount', $payload)) {
+            // Only a body that declares an order's amounts: one with no body (capture, cancel, confirm) stays empty.
+            $amounts = $lines !== [] || array_intersect_key($payload, array_flip(['gross_amount', 'net_amount', 'tax_amount', 'invoice_amount'])) !== [];
+            $prepaid = $amounts && !array_key_exists('amount', $payload) && ($tendered > 0 || array_key_exists('invoice_amount', $payload));
+            $gross = array_key_exists('gross_amount', $payload);
+            if ($gross || $prepaid) {
                 foreach (['net_amount' => 'net', 'tax_amount' => 'tax', 'gross_amount' => 'gross'] as $field => $sum) {
                     $payload[$field] = self::format_amount($sums[$sum] + ($carry[$field] ?? 0.0));
+                }
+            }
+            if ($prepaid) {
+                $invoice = round((float) $payload['net_amount'] + (float) $payload['tax_amount'], 2);
+                $payload['invoice_amount'] = self::format_amount($invoice);
+                $payload['payable_amount'] = self::format_amount($invoice - $tendered);
+                $payload['prepaid_amount'] = self::format_amount($tendered);
+                if ($gross) {
+                    $payload['gross_amount'] = $payload['payable_amount'];
+                } else {
+                    unset($payload['gross_amount']);
                 }
             }
             if (array_key_exists('tax_subtotals', $payload)) {

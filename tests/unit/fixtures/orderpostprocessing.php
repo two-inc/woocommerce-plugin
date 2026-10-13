@@ -42,7 +42,8 @@ if (!function_exists('twoinc_order_postprocessing_fixture')) {
         if (!isset($payload['gross_amount']) || empty($payload['line_items'])) {
             return $payload;
         }
-        $extra = (float) $payload['gross_amount'] - array_sum(array_map('floatval', array_column($payload['line_items'], 'gross_amount')));
+        // With tenders, gross_amount is what is left to pay and invoice_amount the order's full value (TWO-26309).
+        $extra = (float) ($payload['invoice_amount'] ?? $payload['gross_amount']) - array_sum(array_map('floatval', array_column($payload['line_items'], 'gross_amount')));
         if (round($extra, 2) <= 0) {
             return WC_Twoinc_Helper::check_shop_match($payload, WC_Twoinc_Helper::SHOP_MATCH_PER_LINE);
         }

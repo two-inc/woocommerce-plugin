@@ -418,7 +418,10 @@ it. Rows posted while the section does not show them change nothing.
 If the stored mapping is not one the settings form writes, Two is withheld
 from checkout and an error is logged until it is replaced; it is never read as
 "nothing mapped". Saving the table replaces it while the rows show; otherwise
-use "Clear saved tax codes".
+use "Clear saved tax codes". An order placed before then is sent as placed: an
+update reads the mapping only for a 0% line placed with no code (and is refused
+if it cannot), and a refund is never refused, sending its lines with the codes
+they were placed with and any other 0% line with none.
 
 If the merchant details or the code list cannot be read when the form is
 saved, edits to the table are not saved and a notice says why.
@@ -611,10 +614,36 @@ points. Its amount is in the order's lines but not in what is left to pay, so
 the order total WooCommerce records is the lines less the tenders. Coupons and
 negative fees are not tenders: they are order lines already.
 
-Two's API is told only what is left to pay: the payload's totals are the order
-total as recorded, after tenders, and tenders are never sent. They are given to
-subscribers, and used by the plugin's own whole-order check, so the gap
-between the lines and the order total is explained rather than refused.
+An order with tenders is sent to Two as an invoice for its full lines, with
+the tenders declared as already paid. Its `order_create` and `order_update`
+bodies carry:
+
+| Field            | Value                                                                   |
+| ---------------- | ----------------------------------------------------------------------- |
+| `net_amount`     | The lines' net: the order total plus the tenders, less the order's tax  |
+| `tax_amount`     | The order's tax, which a tender does not reduce                         |
+| `invoice_amount` | `net_amount` plus `tax_amount`                                          |
+| `prepaid_amount` | The sum of the tenders                                                  |
+| `payable_amount` | `invoice_amount` less `prepaid_amount`: the order total, what Two funds |
+| `gross_amount`   | The order total, equal to `payable_amount`                              |
+
+`tax_subtotals` and the lines are built as for any order. A `refund` body on
+such an order carries `prepaid_amount` too: the part of the refunded lines
+beyond the refund's `amount`, up to what of the tenders earlier refunds left,
+so `amount` plus `prepaid_amount` is the refunded lines. `amount` is always
+the refund WooCommerce recorded, so a cent of rounding between the lines and
+the refund is part of `prepaid_amount` too. A `capture` fulfils the whole order,
+prepaid part included, and carries no amounts. The `order_intent` body is
+unchanged: its totals are what is left to pay.
+
+An order with no tenders carries none of `invoice_amount`, `payable_amount`
+and `prepaid_amount`, and its bodies are as they always were. So does every
+update and refund of an order placed with Two before its tenders were sent as
+prepaid: Two holds no prepaid amount for it. The plugin tells them apart by the
+prepaid amount it records on the order when it creates it. The tenders
+themselves are given to subscribers, and used by the plugin's own whole-order
+check, so the gap between the lines and the order total is explained rather
+than refused.
 
 `$context['order_tenders']` lists them, each an array:
 
@@ -646,8 +675,8 @@ add_filter('twoinc_order_tenders', function (array $tenders, WC_Order $order): a
 
 An entry whose `amount` is zero is skipped. One whose `amount` is negative or
 not a number is dropped and logged with its type, source and amount, never its
-label. An unknown `type` is reported as `other`. A tender is a payment, so it reduces the gross
-and net the order has left to pay, not its tax. When the whole-order check
+label. An unknown `type` is reported as `other`. A tender is a payment, so it reduces what the
+order has left to pay, not its tax. When the whole-order check
 finds a gap the tenders do not explain, the log names the gap and this filter.
 
 **What the plugin checks**. The plugin registers its own handler on the hook,
@@ -713,7 +742,8 @@ add_filter('twoinc_order_postprocessing', function (array $payload, array $conte
     if (!isset($payload['gross_amount']) || empty($payload['line_items'])) {
         return $payload;
     }
-    $beyond = (float) $payload['gross_amount']
+    // invoice_amount when the order has tenders: gross_amount is then only what is left to pay.
+    $beyond = (float) ($payload['invoice_amount'] ?? $payload['gross_amount'])
         - array_sum(array_map('floatval', array_column($payload['line_items'], 'gross_amount')));
     if (round($beyond, 2) > 0) {
         $net = round($beyond / 1.21, 2);
@@ -758,10 +788,13 @@ the opt-in helper
 sets each order total, each per-rate entry in `tax_subtotals` and a refund
 `amount` to the sum over the payload's lines plus the residual `$original`
 carried beyond its lines, such as rounding. Pass `$context['order_tenders']` as
-`$tenders`: the gross and net totals then have the tenders taken off, so they
-stay what is left to pay even when `$original` carries no totals. The tax total
-and a refund's `amount` are not reduced by tenders. It touches only the fields
-the payload already carries. A total the subscriber edited by hand
+`$tenders`: net and tax then stay the full lines, and `invoice_amount`,
+`prepaid_amount` and `payable_amount` are set as in "Tenders" above, with
+`gross_amount` equal to `payable_amount`, even when `$original` carries no
+totals. A refund keeps the `prepaid_amount` it was built with, and its `amount`
+is its lines less that. Apart from those prepaid fields on an order with
+tenders, it touches only the fields the payload already carries. A total the
+subscriber edited by hand
 before calling it is overwritten: the helper's result wins.
 
 **The buyer surcharge is priced before the hook**. The plugin's fee

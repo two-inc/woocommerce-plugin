@@ -24,6 +24,7 @@ final class TaxCodeSpec
             'testAnEsMerchantsNonZeroOrdersMatchTheGoldens',
             'testTheMigrationFansTheClassCodeOut',
             'testAnUnreadableMappingWithholdsTwo',
+            'testAnUnreadableMappingNeverBlocksWhatTheRecordCovers',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -659,6 +660,57 @@ final class TaxCodeSpec
         } finally {
             $instance->setValue(null, $previous);
         }
+    }
+
+
+    /**
+     * An unreadable mapping (TWO-26309) is read only by a 0% line the placement record does not cover. An update
+     * whose lines are all recorded is sent as placed; one with a new 0% line is refused. A refund is never refused:
+     * recorded lines keep their codes, the rest go uncoded, and the error is logged once.
+     */
+    private static function testAnUnreadableMappingNeverBlocksWhatTheRecordCovers(): void
+    {
+        $GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'] = 'inherit';
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = 'ES';
+        $intra = 'ES_IVA_INTRA_COMMUNITY';
+        $codes = static function (array $payload) {
+            return array_map(static function ($line) {
+                return $line['tax_code'] ?? null;
+            }, $payload['line_items']);
+        };
+        $order = self::caseOrder(['goods', 'keyless'], 'ES 28001', 'ES 28001', []);
+        $order->meta = [
+            WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order',
+            WC_Twoinc_Brand::meta_key('tax_codes') => ['1' => ['code' => $intra, 'step' => 'row'], '6' => ['code' => $intra, 'step' => 'keyless']],
+        ];
+        self::useGateway(['standard|none' => ['X']]);
+
+        TinyAssert::same([$intra, $intra], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '')), 'an update of recorded lines is sent as placed');
+
+        $refund = new StubRefund([
+            'line_item' => [new StubProductLineItem(['name' => 'Goods', 'line_subtotal' => -100.0, 'line_total' => -100.0, 'line_tax' => 0.0, 'taxes' => [], 'data' => new TaxCodeSpecProduct(false)])],
+            'shipping' => [new StubShippingItem(-10.0, 0.0, [], ['_refunded_item_id' => 6])],
+        ], []);
+        $GLOBALS['__twoinc_test_logs'] = [];
+        // Logged once per request: a new request starts unlogged.
+        $logged = new ReflectionProperty(WC_Twoinc::class, 'tax_code_map_unreadable_logged');
+        $logged->setAccessible(true);
+        $logged->setValue(null, false);
+        TinyAssert::same([null, $intra], $codes(WC_Twoinc_Helper::compose_twoinc_refund($refund, 110.0, $order)), 'a refund: the recorded line as placed, the other uncoded');
+        WC_Twoinc_Helper::compose_twoinc_refund($refund, 110.0, $order);
+        $errors = array_filter($GLOBALS['__twoinc_test_logs'], static function ($log) {
+            return $log['level'] === 'error' && strpos($log['message'], 'tax_code_map') !== false;
+        });
+        TinyAssert::same(1, count($errors), 'the unreadable mapping is logged once');
+
+        $order->addLine(3, 'goods');
+        try {
+            WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+            $refused = false;
+        } catch (Exception $e) {
+            $refused = true;
+        }
+        TinyAssert::same(true, $refused, 'an update with a 0% line the record does not cover still needs the mapping');
     }
 
     private static function entry(string $code, ?string $reason): array
