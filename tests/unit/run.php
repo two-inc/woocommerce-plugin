@@ -9146,6 +9146,12 @@ final class BrandConfigSpec
             $items = WC_Twoinc_Helper::get_line_items([], [], [$line], $order, $refund, $order);
             TinyAssert::same($expected, $items[0]['type'], $description);
         }
+
+        $source = (string) file_get_contents(dirname(__DIR__, 2) . '/tillit-payment-gateway.php');
+        TinyAssert::true(
+            strpos($source, "add_action('woocommerce_checkout_create_order_fee_item', ['WC_Twoinc_Payment_Terms', 'mark_buyer_fee_item'], 10, 3);") !== false,
+            'the fee item marker is registered, with the fee among its arguments'
+        );
     }
 
     /**
