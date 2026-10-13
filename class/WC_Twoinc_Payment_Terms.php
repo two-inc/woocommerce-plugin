@@ -1066,6 +1066,10 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
             $label = self::get_fee_label();
             $amount = (float) $fee['buyer_fee_share'];
+            // WC_Cart_Fees ids a fee added by name with sanitize_title() of it, and refuses a fee whose id is taken:
+            // then the fee by that id is another's, not this one.
+            $fee_id = sanitize_title($label);
+            $taken = array_key_exists($fee_id, $cart->get_fees());
             switch ($settings['tax_treatment']) {
                 case 'always_zero':
                     // Unconditionally non-taxable via add_fee's $taxable
@@ -1092,8 +1096,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                     // 'standard' — pre-feature behaviour, byte-for-byte.
                     $cart->add_fee($label, $amount, true);
             }
-            // WC_Cart_Fees names a fee added by name with sanitize_title() of it, and refuses a second fee by that id.
-            self::$buyer_fee_id = sanitize_title($label);
+            self::$buyer_fee_id = $taken ? null : $fee_id;
         }
 
         /**

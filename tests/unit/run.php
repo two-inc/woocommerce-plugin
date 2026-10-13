@@ -6167,21 +6167,22 @@ final class BrandConfigSpec
      * add_fee call. $options rides on top of a minimal enabled-surcharge
      * configuration.
      */
-    private static function runApplyCartFee(array $options): StubFeeCart
+    private static function runApplyCartFee(array $options, ?StubFeeCart $cart = null): StubFeeCart
     {
         $gateway = self::surchargeFeeGateway(array_merge([
             'surcharge_type' => 'percentage',
             'payment_terms_days' => [30],
             'surcharge_grid' => [30 => ['percentage' => 2.0]],
         ], $options));
-        return self::withGatewayInstance($gateway, static function () use ($gateway) {
+        return self::withGatewayInstance($gateway, static function () use ($gateway, $cart) {
             WC_Twoinc_Payment_Terms::reset_fee_cache();
             WC()->session = new StubSession();
             WC()->session->set('chosen_payment_method', $gateway->id);
             WC()->customer = new StubCustomer('US');
-            $cart = new StubFeeCart();
+            $cart = $cart ?? new StubFeeCart();
+            $before = count($cart->fees);
             WC_Twoinc_Payment_Terms::apply_cart_fee($cart);
-            TinyAssert::same(1, count($cart->fees), 'expected exactly one surcharge fee line');
+            TinyAssert::same($before + 1, count($cart->fees), 'expected exactly one surcharge fee line');
             return $cart;
         });
     }
@@ -9121,6 +9122,14 @@ final class BrandConfigSpec
         WC_Twoinc_Payment_Terms::mark_buyer_fee_item($theirs, 'handling', (object) ['id' => 'handling', 'name' => 'Handling']);
         TinyAssert::same(1, count($ours->meta), 'the payment terms fee item is marked');
         TinyAssert::same([], $theirs->meta, 'a third-party fee item is not marked');
+
+        // A fee by the same label added first takes the id, so WooCommerce refuses this one: the one by that id is not ours.
+        $cart = new StubFeeCart();
+        $cart->add_fee($label, 3.0);
+        self::runApplyCartFee([], $cart);
+        $first = $item();
+        WC_Twoinc_Payment_Terms::mark_buyer_fee_item($first, sanitize_title($label), (object) ['id' => sanitize_title($label), 'name' => $label]);
+        TinyAssert::same([], $first->meta, 'a fee that took the label first is not marked');
 
         $order = new StubTaxOrder(self::stubTaxRows([[1, 25.0, false]]), [], [], 1, [5 => new StubShippingItem(10.0, 2.5, [1 => 2.5], $ours->meta)]);
         $fee = static function (array $meta, float $sign = 1.0) {

@@ -606,6 +606,16 @@ class StubFeeCart
     public $fees = [];
     public $empty = false;
 
+    /** WC_Cart::get_fees(): keyed by fee id, which add_fee() makes sanitize_title() of the name. */
+    public function get_fees()
+    {
+        $fees = [];
+        foreach ($this->fees as $fee) {
+            $fees[sanitize_title($fee['name'])] = (object) ['id' => sanitize_title($fee['name']), 'name' => $fee['name']];
+        }
+        return $fees;
+    }
+
     public function is_empty()
     {
         return $this->empty;
