@@ -13,6 +13,7 @@ final class TaxCodeSpec
         $tests = [
             'testTheSharedCaseTable',
             'testThePlacementRecordKeepsTheCodes',
+            'testStep4SharesOnlyThisRequestsCodes',
             'testAnUnconfiguredShopLooksNothingUp',
             'testARetryReplacesTheRecord',
             'testZeroRateLinesCarryTheResolvedCode',
@@ -472,6 +473,61 @@ final class TaxCodeSpec
     }
 
     /**
+     * Step 4's pool on a later request (TWO-26340): only the codes steps 1 to 3 gave the 0% lines in the request
+     * being sent, those the record holds for them and those resolved now. A recorded line the request does not carry
+     * shares nothing. `lines` and `taxes` (the first product's) are caseOrder()'s, `added` the ids of extra 0%
+     * shipping lines with no tax class, and `record` the placement record by item id (null: none). A refund refunds
+     * every shipping line. US addresses, the standard class's no-rule row mapped to ES_IVA_EXPORT.
+     */
+    private static function testStep4SharesOnlyThisRequestsCodes(): void
+    {
+        $GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'] = 'inherit';
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_country')] = 'ES';
+        [$z, $y, $export] = ['ES_IVA_INTRA_COMMUNITY', 'ES_IVA_EXEMPT_ART20', 'ES_IVA_EXPORT'];
+        $row = static function (string $code) {
+            return ['code' => $code, 'step' => 'row'];
+        };
+        $cases = [
+            // request, lines, taxes, added, record, want, description
+            ['edit', ['goods', 'keyless'], [21 => 21.0], [7], ['3' => $row($z), '6' => ['code' => $z, 'step' => 'keyless']], [null, $z, null], 'the 0% line removed: a new keyless line takes no code, the one step 4 coded keeps its own'],
+            ['edit', ['goods', 'keyless'], [], [], ['1' => $row($z), '2' => $row($y)], [$z, $z], 'a remaining line shares its code, the removed one disagreeing'],
+            ['edit', ['goods', 'service', 'keyless'], [], [], ['1' => $row($z), '2' => $row($y)], [$z, $y, null], 'remaining lines that disagree give no code'],
+            ['edit', ['goods', 'keyless'], [], [], null, [$export, $export], 'no record: the one code the other lines get'],
+            ['create', ['goods', 'keyless'], [], [], null, [$export, $export], 'placement shares the code steps 1 to 3 gave'],
+            ['refund', ['goods', 'keyless'], [], [7], ['1' => $row($z), '6' => ['code' => $z, 'step' => 'keyless']], [$z, null], 'a refund of the shipping lines alone shares nothing'],
+        ];
+        $codes = static function (array $payload) {
+            return array_map(static function ($line) {
+                return $line['tax_code'] ?? null;
+            }, $payload['line_items']);
+        };
+        self::useGateway(['standard|none' => $export]);
+        foreach ($cases as [$request, $lines, $taxes, $added, $record, $want, $description]) {
+            $order = self::caseOrder($lines, 'US 10001', 'US 10001', $taxes);
+            foreach ($added as $id) {
+                $order->addShipping($id);
+            }
+            if ($request === 'create') {
+                $payload = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true);
+            } else {
+                $order->meta = [WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order'];
+                if (null !== $record) {
+                    $order->meta[WC_Twoinc_Brand::meta_key('tax_codes')] = $record;
+                }
+                if ($request === 'edit') {
+                    $payload = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+                } else {
+                    $refunded = array_map(static function ($id) {
+                        return new StubShippingItem(-10.0, 0.0, [], ['_refunded_item_id' => $id]);
+                    }, array_merge([6], $added));
+                    $payload = WC_Twoinc_Helper::compose_twoinc_refund(new StubRefund(['shipping' => $refunded], []), 10.0 * count($refunded), $order);
+                }
+            }
+            TinyAssert::same($want, $codes($payload), "$request: $description");
+        }
+    }
+
+    /**
      * An order placed before the placement record existed has none (TWO-26153): its lines are resolved again on each
      * edit, and a line with no tax class takes the one code all the other 0% lines in the request being sent get,
      * none when they disagree or one has none. Never a derived code. `rows` are the rows mapped (NR the standard class's no-rule row,
@@ -703,6 +759,14 @@ final class TaxCodeSpec
         });
         TinyAssert::same(1, count($errors), 'the unreadable mapping is logged once');
 
+        // TWO-26340: a refunded line's recorded step 1 to 3 code is still shared with a new shipping line.
+        $order->addShipping(7);
+        $refund = new StubRefund([
+            'line_item' => [new StubProductLineItem(['name' => 'Goods', 'line_subtotal' => -100.0, 'line_total' => -100.0, 'line_tax' => 0.0, 'taxes' => [], 'data' => new TaxCodeSpecProduct(false), 'meta' => ['_refunded_item_id' => 1]])],
+            'shipping' => [new StubShippingItem(-10.0, 0.0, [], ['_refunded_item_id' => 7])],
+        ], []);
+        TinyAssert::same([$intra, $intra], $codes(WC_Twoinc_Helper::compose_twoinc_refund($refund, 110.0, $order)), 'a refund: a new keyless line shares the recorded code of a line it refunds');
+
         $order->addLine(3, 'goods');
         try {
             WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
@@ -921,6 +985,13 @@ final class TaxCodeSpecOrder extends StubOrder
     {
         $this->items[$id] = TaxCodeSpec::caseLine($kind, []);
         $this->total += 100.0;
+    }
+
+    /** A 0% shipping line of 10 that carries no rate. */
+    public function addShipping(int $id): void
+    {
+        $this->shipping[$id] = new StubShippingItem(10.0, 0.0, []);
+        $this->total += 10.0;
     }
 
     public function get_total()
