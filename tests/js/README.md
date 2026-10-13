@@ -42,7 +42,7 @@ So `wc-harness.js` assembles the real environment rather than mocking it:
 **No production code was refactored to make this testable.** The script loads as-is.
 
 `company-search-panel.js` is vendored byte-identical from the Magento plugin and is never
-edited here — see `AGENTS.md`. Installing it rather than a stand-in is what lets a
+edited here — see `docs/company-search-panel.md`. Installing it rather than a stand-in is what lets a
 structural assertion mean anything: the DOM the tests read is the DOM the panel builds.
 
 WooCommerce core's own `#billing_country` select2 is untouched by the plugin and is real in
