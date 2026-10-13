@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: woocommerce-plugin\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/app\n"
-"POT-Creation-Date: 2026-10-13T11:08:30+00:00\n"
+"POT-Creation-Date: 2026-10-13T11:32:10+00:00\n"
 "PO-Revision-Date: 2026-09-03 00:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: Spanish\n"
@@ -1364,8 +1364,8 @@ msgid "Validate tax subtotals"
 msgstr "Validar subtotales de impuestos"
 
 #: class/WC_Twoinc.php:7165
-msgid "If you choose YES, a per-tax-rate tax_subtotals breakdown is sent in /v1/order and /v1/order_intent payloads for validation against the order lines. If you choose NO, tax_subtotals is omitted from those payloads."
-msgstr "Si seleccionas SÍ, se enviará un desglose de tax_subtotals por tipo de impuesto en las cargas útiles de /v1/order y /v1/order_intent, para su validación frente a las líneas del pedido. Si seleccionas NO, tax_subtotals se omitirá en esas cargas útiles."
+msgid "When checked, a per-tax-rate tax_subtotals breakdown is sent with orders, order updates and refunds, for validation against the order lines. When unchecked, tax_subtotals is omitted from all of them."
+msgstr "Si está marcada, se envía un desglose de tax_subtotals por tipo de impuesto con los pedidos, las actualizaciones de pedidos y los reembolsos, para su validación frente a las líneas del pedido. Si no está marcada, tax_subtotals se omite en todos ellos."
 
 #: class/WC_Twoinc.php:7170
 msgid "Tax codes for 0% lines"
@@ -1867,16 +1867,16 @@ msgstr "No se puede reembolsar el envío «%s»: no se encontró la línea del p
 msgid "The tax charged on \"%s\" does not match the shop's tax rates."
 msgstr "El impuesto cobrado en «%s» no coincide con los tipos impositivos de la tienda."
 
-#: class/WC_Twoinc_Payment_Terms.php:1104
+#: class/WC_Twoinc_Payment_Terms.php:1141
 msgid "Payment terms fee"
 msgstr "Comisión por condiciones de pago"
 
-#: class/WC_Twoinc_Payment_Terms.php:1107
+#: class/WC_Twoinc_Payment_Terms.php:1144
 #, php-format
 msgid "Payment terms fee - %s days from end of month"
 msgstr "Comisión por condiciones de pago - %s días desde el final del mes"
 
-#: class/WC_Twoinc_Payment_Terms.php:1108
+#: class/WC_Twoinc_Payment_Terms.php:1145
 #, php-format
 msgid "Payment terms fee - %s days"
 msgstr "Comisión por condiciones de pago - %s días"
@@ -1948,6 +1948,6 @@ msgstr[1] "%d días"
 msgid "Days you'll have to pay your invoice"
 msgstr "Días de plazo para pagar su factura"
 
-#: tillit-payment-gateway.php:303
+#: tillit-payment-gateway.php:305
 msgid "Settings"
 msgstr "Ajustes"

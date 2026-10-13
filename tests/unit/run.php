@@ -9164,7 +9164,7 @@ final class BrandConfigSpec
         TinyAssert::same('Validate tax subtotals', $field['title'], 'label');
         TinyAssert::same('yes', $field['default'], 'default');
         TinyAssert::same(
-            'If you choose YES, a per-tax-rate tax_subtotals breakdown is sent in /v1/order and /v1/order_intent payloads for validation against the order lines. If you choose NO, tax_subtotals is omitted from those payloads.',
+            'When checked, a per-tax-rate tax_subtotals breakdown is sent with orders, order updates and refunds, for validation against the order lines. When unchecked, tax_subtotals is omitted from all of them.',
             $field['description'],
             'help text'
         );

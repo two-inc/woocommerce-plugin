@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/app\n"
-"POT-Creation-Date: 2026-10-13T11:08:30+00:00\n"
+"POT-Creation-Date: 2026-10-13T11:32:10+00:00\n"
 "PO-Revision-Date: 2025-07-01 10:29+0000\n"
 "Last-Translator: \n"
 "Language-Team: Swedish\n"
@@ -1365,8 +1365,8 @@ msgid "Validate tax subtotals"
 msgstr "Validera delsummor för skatt"
 
 #: class/WC_Twoinc.php:7165
-msgid "If you choose YES, a per-tax-rate tax_subtotals breakdown is sent in /v1/order and /v1/order_intent payloads for validation against the order lines. If you choose NO, tax_subtotals is omitted from those payloads."
-msgstr "Om du väljer JA skickas en tax_subtotals-uppdelning per momssats i nyttolasten för /v1/order och /v1/order_intent, för validering mot orderraderna. Om du väljer NEJ utesluts tax_subtotals från dessa nyttolaster."
+msgid "When checked, a per-tax-rate tax_subtotals breakdown is sent with orders, order updates and refunds, for validation against the order lines. When unchecked, tax_subtotals is omitted from all of them."
+msgstr "När rutan är markerad skickas en tax_subtotals-uppdelning per momssats med ordrar, orderuppdateringar och återbetalningar, för validering mot orderraderna. När den inte är markerad utesluts tax_subtotals från alla dessa."
 
 #: class/WC_Twoinc.php:7170
 msgid "Tax codes for 0% lines"
@@ -1868,16 +1868,16 @@ msgstr "Frakten ”%s” kan inte återbetalas: orderraden den återbetalar hitt
 msgid "The tax charged on \"%s\" does not match the shop's tax rates."
 msgstr "Skatten som debiterats på ”%s” stämmer inte med butikens skattesatser."
 
-#: class/WC_Twoinc_Payment_Terms.php:1104
+#: class/WC_Twoinc_Payment_Terms.php:1141
 msgid "Payment terms fee"
 msgstr "Avgift för betalningsvillkor"
 
-#: class/WC_Twoinc_Payment_Terms.php:1107
+#: class/WC_Twoinc_Payment_Terms.php:1144
 #, php-format
 msgid "Payment terms fee - %s days from end of month"
 msgstr "Avgift för betalningsvillkor - %s dagar från månadens slut"
 
-#: class/WC_Twoinc_Payment_Terms.php:1108
+#: class/WC_Twoinc_Payment_Terms.php:1145
 #, php-format
 msgid "Payment terms fee - %s days"
 msgstr "Avgift för betalningsvillkor - %s dagar"
@@ -1949,6 +1949,6 @@ msgstr[1] "%d dagar"
 msgid "Days you'll have to pay your invoice"
 msgstr "Dagar du kommer ha att betala din faktura"
 
-#: tillit-payment-gateway.php:303
+#: tillit-payment-gateway.php:305
 msgid "Settings"
 msgstr "Inställningar"

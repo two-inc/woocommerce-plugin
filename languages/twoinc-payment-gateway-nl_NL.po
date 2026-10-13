@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: woocommerce-plugin\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/app\n"
-"POT-Creation-Date: 2026-10-13T11:08:30+00:00\n"
+"POT-Creation-Date: 2026-10-13T11:32:10+00:00\n"
 "PO-Revision-Date: 2025-07-01 10:28+0000\n"
 "Last-Translator: \n"
 "Language-Team: Dutch\n"
@@ -1364,8 +1364,8 @@ msgid "Validate tax subtotals"
 msgstr "BTW-subtotalen valideren"
 
 #: class/WC_Twoinc.php:7165
-msgid "If you choose YES, a per-tax-rate tax_subtotals breakdown is sent in /v1/order and /v1/order_intent payloads for validation against the order lines. If you choose NO, tax_subtotals is omitted from those payloads."
-msgstr "Als je JA kiest, wordt een tax_subtotals-uitsplitsing per btw-tarief meegestuurd in de payloads van /v1/order en /v1/order_intent, ter validatie tegen de orderregels. Als je NEE kiest, worden tax_subtotals uit die payloads weggelaten."
+msgid "When checked, a per-tax-rate tax_subtotals breakdown is sent with orders, order updates and refunds, for validation against the order lines. When unchecked, tax_subtotals is omitted from all of them."
+msgstr "Indien aangevinkt, wordt een tax_subtotals-uitsplitsing per btw-tarief meegestuurd met orders, orderwijzigingen en terugbetalingen, ter validatie tegen de orderregels. Indien niet aangevinkt, worden tax_subtotals uit al deze verzoeken weggelaten."
 
 #: class/WC_Twoinc.php:7170
 msgid "Tax codes for 0% lines"
@@ -1867,16 +1867,16 @@ msgstr "Verzending \"%s\" kan niet worden terugbetaald: de orderregel die wordt 
 msgid "The tax charged on \"%s\" does not match the shop's tax rates."
 msgstr "De btw berekend op \"%s\" komt niet overeen met de btw-tarieven van de winkel."
 
-#: class/WC_Twoinc_Payment_Terms.php:1104
+#: class/WC_Twoinc_Payment_Terms.php:1141
 msgid "Payment terms fee"
 msgstr "Betaaltermijn toeslag"
 
-#: class/WC_Twoinc_Payment_Terms.php:1107
+#: class/WC_Twoinc_Payment_Terms.php:1144
 #, php-format
 msgid "Payment terms fee - %s days from end of month"
 msgstr "Betaaltermijn toeslag - %s dagen vanaf het einde van de maand"
 
-#: class/WC_Twoinc_Payment_Terms.php:1108
+#: class/WC_Twoinc_Payment_Terms.php:1145
 #, php-format
 msgid "Payment terms fee - %s days"
 msgstr "Betaaltermijn toeslag - %s dagen"
@@ -1948,6 +1948,6 @@ msgstr[1] "%d dagen"
 msgid "Days you'll have to pay your invoice"
 msgstr "Aantal dagen om uw factuur te betalen"
 
-#: tillit-payment-gateway.php:303
+#: tillit-payment-gateway.php:305
 msgid "Settings"
 msgstr "Instellingen"

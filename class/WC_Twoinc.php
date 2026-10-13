@@ -7162,7 +7162,7 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Validate tax subtotals', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
-                    'description' => __('If you choose YES, a per-tax-rate tax_subtotals breakdown is sent in /v1/order and /v1/order_intent payloads for validation against the order lines. If you choose NO, tax_subtotals is omitted from those payloads.', 'twoinc-payment-gateway'),
+                    'description' => __('When checked, a per-tax-rate tax_subtotals breakdown is sent with orders, order updates and refunds, for validation against the order lines. When unchecked, tax_subtotals is omitted from all of them.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'default'     => 'yes'
                 ],
