@@ -430,7 +430,7 @@ final class BrandConfigSpec
 
 
     /**
-     * ABN-518. Every branch that withholds the method writes a line naming
+     * Every branch that withholds the method writes a line naming
      * the reason: the merchant has no other way to tell a switched-off
      * gateway from a rejected key.
      */
@@ -543,7 +543,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-518. Four conditions shared one log line that dumped the basket
+     * Four conditions shared one log line that dumped the basket
      * without saying which of them refused.
      */
     private static function testTheGateLogNamesWhichConditionRefused(): void
@@ -621,7 +621,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-518. The settings page answers "why is it not in my checkout?"
+     * The settings page answers "why is it not in my checkout?"
      * without a log file.
      */
     private static function testTheHealthChecklistNamesWhyTheMethodIsAbsent(): void
@@ -681,7 +681,7 @@ final class BrandConfigSpec
                         'checked_on' => 0,
                         'attempted_on' => 0,
                         'count' => $this->terms_state === 'resolved' ? 1 : 0,
-                        // ABN-537's keys: the display reads both.
+                        // Both freshness keys: the display reads both.
                         'stale' => $this->terms_state !== 'resolved',
                         'refresh_failed' => $this->terms_state === 'fetch_failed',
                     ];
@@ -802,7 +802,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-518. A brand overlay that restricts billing countries withholds the
+     * A brand overlay that restricts billing countries withholds the
      * method for every other buyer, and no local setting says so.
      */
     private static function testTheHealthChecklistNamesTheBrandBillingCountryGate(): void
@@ -865,7 +865,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-518: a malformed buyer-country payload is a contract break, not a
+     * A malformed buyer-country payload is a contract break, not a
      * deliberate empty allowlist, and an unfetched profile has an unknown
      * floor rather than none.
      */
@@ -947,7 +947,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-515 review: an install upgraded before the attempt stamp existed has
+     * An install upgraded before the attempt stamp existed has
      * a successful read to report, so "no attempt" would contradict it, and a
      * shop with no key saved has nothing to retry.
      */
@@ -998,7 +998,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-515. An unresolved term set left the merchant with a cause but no
+     * An unresolved term set left the merchant with a cause but no
      * time and no field to act on.
      */
     private static function testTheTermsNoticeCarriesTheLastAttemptAndTheFieldsToCheck(): void
@@ -1177,7 +1177,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-529. The payment method title is the merchant's configured Title
+     * The payment method title is the merchant's configured Title
      * verbatim: no term length appended and no placeholder substitution, which
      * is what the Magento, Magento Hyva and PrestaShop tiles do.
      */
@@ -2747,7 +2747,7 @@ final class BrandConfigSpec
     /**
      * Given the address-area company search mounts on WooCommerce's own
      * company row; When a store keeps that row hidden; Then it is revealed for
-     * the Blocks checkout alone (ABN-554).
+     * the Blocks checkout alone.
      */
     private static function testBlocksCompanyRowRevealedOnlyWhereTheSearchNeedsIt(): void
     {
@@ -2793,7 +2793,7 @@ final class BrandConfigSpec
     /**
      * Given the surcharge cart fee only applies to the chosen payment method;
      * When a Blocks tile reports its own selection; Then the session follows
-     * it, and never another gateway's (ABN-554).
+     * it, and never another gateway's.
      */
     private static function testBlocksTileChoiceDrivesTheSurchargeGate(): void
     {
@@ -2825,7 +2825,7 @@ final class BrandConfigSpec
      * Given a guard in process_payment refuses the order; When the Store API
      * ran it; Then the return must be WooCommerce's failure array.
      *
-     * ABN-554: the Store API array_merge()s this return into its payment
+     * The Store API array_merge()s this return into its payment
      * details, so a null is a fatal TypeError and the buyer sees a critical
      * error instead of the reason.
      */
@@ -2912,8 +2912,7 @@ final class BrandConfigSpec
      * Given a company captured on either address role; When the order is
      * created; Then the invoice role wins and the delivery role is only the
      * fallback (TWO-40) — the resolution a Blocks checkout relies on entirely,
-     * handing over both roles' carriers and resolving none of them itself
-     * (ABN-554).
+     * handing over both roles' carriers and resolving none of them itself.
      */
     private static function testOrderCreationResolvesTheCompanyAcrossBothAddressRoles(): void
     {
@@ -3208,7 +3207,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-554. A placed order leaves the buyer nothing left to decide, and a
+     * A placed order leaves the buyer nothing left to decide, and a
      * refusal is a credit or fraud verdict a retry must not reopen — so the
      * method is not offered on the pay-for-order page at all. Never in the
      * merchant's own admin, where an order is being composed rather than paid.
@@ -3689,7 +3688,7 @@ final class BrandConfigSpec
     /**
      * Given no last-known-good term list, when a fetch cannot resolve one, then the
      * state names the real cause and the copy blames the API key only where the API
-     * rejected it (ABN-513).
+     * rejected it.
      */
     /**
      * Gateway with a resolved term list already cached, so the state under test
@@ -3748,7 +3747,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-538. The state resolved before the recorded failure was ever read, so
+     * The state resolved before the recorded failure was ever read, so
      * figures served from cache while refreshes kept failing were indistinguishable
      * from figures read a moment ago.
      */
@@ -3792,7 +3791,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-538. `reason` is nulled once no API key is stored, to leave the
+     * `reason` is nulled once no API key is stored, to leave the
      * withhold log line's shape alone — so a display branching on it would
      * claim recent figures are out of date when the real cause is a failed
      * refresh.
@@ -3844,7 +3843,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-538. The install health summary marked the figures green on any check
+     * The install health summary marked the figures green on any check
      * timestamp above zero, so a merchant looking at values fetched days earlier
      * during an outage that was still going on saw them as current and healthy.
      */
@@ -3971,7 +3970,7 @@ final class BrandConfigSpec
                 strpos($notice, 'rejected the saved API key') !== false,
                 $description . ': a rejection is claimed only where the API rejected it'
             );
-            // ABN-515: a read that failed names the fields to check; a
+            // A read that failed names the fields to check; a
             // successful read of an account offering nothing does not.
             TinyAssert::same(
                 in_array($expected_state, ['fetch_failed', 'never_fetched', 'not_configured'], true),
@@ -4004,7 +4003,7 @@ final class BrandConfigSpec
         TinyAssert::true($gateway->get_merchant_terms_state()['checked_on'] > 0, 'a resolved set still reports when it was read');
         TinyAssert::same(null, $GLOBALS['__twoinc_test_options'][$error_option] ?? null, 'a success clears the recorded cause');
 
-        // Last-known-good outranks a failed refresh (ABN-538).
+        // Last-known-good outranks a failed refresh.
         unset($GLOBALS['__twoinc_test_options'][$stamp], $GLOBALS['__twoinc_test_options'][$attempted]);
         WC_Twoinc::reset_merchant_record_memo();
         $gateway->responses = [new WP_Error('http_request_failed', 'down')];
@@ -4999,7 +4998,7 @@ final class BrandConfigSpec
         );
 
         // The reference is the resolved default, so an offered 30 is the basis
-        // even against a shorter offered term (ABN-548).
+        // even against a shorter offered term.
         $gateway = self::termsGateway([
             'payment_terms_days' => ['14', '30'],
             'surcharge_type' => 'percentage',
@@ -5267,7 +5266,7 @@ final class BrandConfigSpec
      *    gateway before the settings page renders — so that bucket belongs to
      *    an object that no longer exists, and a gateway calling
      *    display_errors() on itself prints nothing. A merchant who typed a
-     *    cap of 0 saw the grid edit revert under a success notice (ABN-552).
+     *    cap of 0 saw the grid edit revert under a success notice.
      *
      * 2. The save was PARTIAL. Core skips only the field that threw, so
      *    refusing the grid still saved surcharge_type: switching a shop with
@@ -5348,7 +5347,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-552. An invalid surcharge figure was refused correctly and reported
+     * An invalid surcharge figure was refused correctly and reported
      * nowhere: the save recorded the reason with WC_Settings_API::add_error,
      * and WooCommerce then re-instantiated every gateway before rendering the
      * settings page, so the bucket holding it belonged to an object that no
@@ -5422,7 +5421,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-553. Unticking every payment term reported success, put the previous
+     * Unticking every payment term reported success, put the previous
      * selection back, and changed the stored default term to Automatic —
      * because WooCommerce skips only the field that threw, so the refused term
      * list was preserved while default_payment_term was recomputed from the
@@ -6322,8 +6321,7 @@ final class BrandConfigSpec
 
     /**
      * The default fee-line wording spells the term the way the chip does, so
-     * an end-of-month order's summary cannot understate when it falls due
-     * (ABN-554).
+     * an end-of-month order's summary cannot understate when it falls due.
      */
     private static function testSurchargeFeeLabelDefaultWordingPerTermsBasis(): void
     {
@@ -6808,7 +6806,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-522. The one normalisation of a stored custom term: every consumer reads through it, so
+     * The one normalisation of a stored custom term: every consumer reads through it, so
      * a hand-edited row cannot be blank to one reading and a term to another.
      */
     private static function testStoredCustomTermNormalisation(): void
@@ -6836,7 +6834,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-522. The deprecated field renders as keep-or-remove — the only edit offered is the only
+     * The deprecated field renders as keep-or-remove: the only edit offered is the only
      * one the save accepts — and is hidden where nothing is stored or where the value folds into
      * an offered term's checkbox. Hidden, not dropped: the row still posts, which is what lets
      * that fold-in happen.
@@ -6898,7 +6896,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-522. Drives the real save loop. The stored value may be removed but never replaced;
+     * Drives the real save loop. The stored value may be removed but never replaced;
      * something that is not a number of days blocks the whole section save while it stands; and a
      * value the merchant record offers as a standard term is folded onto that term's checkbox
      * and announced, never cleared silently.
@@ -7014,7 +7012,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-522. The deprecated field's copy, in every catalogue that carries the admin locale —
+     * The deprecated field's copy, in every catalogue that carries the admin locale:
      * source copy edited without the catalogues following renders English however good the
      * msgstr is, and nothing else in the suite would report it.
      */
@@ -7098,7 +7096,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-554. The chip strip's buyer-facing copy, in EVERY catalogue the plugin ships.
+     * The chip strip's buyer-facing copy, in EVERY catalogue the plugin ships.
      * es_ES is thinner than the other three, so a string added to the checkout reaches it
      * only if somebody puts it there — and a Spanish shop then reads English beside a
      * Spanish PrestaShop shop, with nothing else in the suite reporting it.
@@ -7187,7 +7185,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-522. Every write to the settings row is held to remove-or-keep, not just the admin
+     * Every write to the settings row is held to remove-or-keep, not just the admin
      * form's: the REST settings endpoint runs none of the gateway's own field validators.
      */
     private static function testDeprecatedCustomTermWriteGuardHoldsEverySettingsWrite(): void
@@ -7252,7 +7250,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-522/ABN-493. An unresolvable offered set matches nothing rather than everything, so an
+     * An unresolvable offered set matches nothing rather than everything, so an
      * API outage cannot delete a value carried in by an upgrade.
      */
     private static function testDeprecatedCustomTermFoldsInOnlyAgainstAResolvedOfferedSet(): void
@@ -7308,7 +7306,7 @@ final class BrandConfigSpec
     /**
      * The empty option is what lets an admin leave the term to the checkout's
      * resolver; without it the select can only name a day count and posts one
-     * on every save (ABN-548).
+     * on every save.
      */
     private static function testDefaultTermOptionsLeadWithAutomatic(): void
     {
@@ -7366,7 +7364,7 @@ final class BrandConfigSpec
 
     /**
      * The fee the basket carries and the term the order is booked on must be
-     * the same term (ABN-554). The hidden checkout field follows a chip the
+     * the same term. The hidden checkout field follows a chip the
      * moment the buyer moves to it, while the session follows it a round trip
      * later, so a fee resolved from the session alone charges the term the
      * buyer left.
@@ -7424,8 +7422,7 @@ final class BrandConfigSpec
      * The chip copy the browser renders has to name the term type. An
      * end-of-month term falls due that many days after the end of the month,
      * so the bare day count states the wrong due date for it, and the
-     * accessible name has to contain the visible token WCAG 2.5.3 requires
-     * (ABN-554).
+     * accessible name has to contain the visible token WCAG 2.5.3 requires.
      */
     private static function testChipCopyStatesTheTermType(): void
     {
@@ -7481,7 +7478,7 @@ final class BrandConfigSpec
 
             TinyAssert::same($eom, $copy['eom'] ?? null, $case . ' publishes whether the term is end of month');
             // A lone chip reads exactly as one of several does, so there is no
-            // second template for it to diverge through (ABN-554).
+            // second template for it to diverge through.
             foreach (['single_label', 'single_label_eom'] as $key) {
                 TinyAssert::true(
                     !array_key_exists($key, $copy),
@@ -9213,7 +9210,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-548: the legacy row goes once, and the record's freshness stamp
+     * The legacy row goes once, and the record's freshness stamp
      * stays, because the admin's terms-state notice reads that.
      */
     private static function testFabricatedDueInDaysRowIsDroppedOnce(): void
@@ -10606,7 +10603,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-539. A pricing quote that failed left the order with no surcharge
+     * A pricing quote that failed left the order with no surcharge
      * on it, no notice and no log line, so the lost revenue was discoverable
      * only by reconciling orders against expected fees afterwards.
      */
@@ -10634,7 +10631,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-539's line must not fire where nothing failed: a quote that resolved
+     * The failure line must not fire where nothing failed: a quote that resolved
      * to nothing to charge, and a term the merchant configured no surcharge
      * for, are both correct outcomes.
      */
@@ -10657,7 +10654,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-539. The cart-fee hook drops a quote echoing a currency the basket
+     * The cart-fee hook drops a quote echoing a currency the basket
      * is not in — correctly, rather than mischarging — but that drop was as
      * silent as a failed quote.
      */
@@ -10707,7 +10704,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-546. Gate and charge quote on the same ceiling, and neither leaves
+     * Gate and charge quote on the same ceiling, and neither leaves
      * the timeout to the request helper's own default.
      */
     private static function testSurchargePricingCeilingIsSharedByEveryPath(): void
@@ -10844,7 +10841,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-540. A rates answer with nothing priced, or with no currency for the
+     * A rates answer with nothing priced, or with no currency for the
      * amounts it does carry, was reported as a success, and the admin drew it
      * as a figure. Neither is renderable.
      */
@@ -10872,7 +10869,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-546: the term the basket would be charged for decides whether the
+     * The term the basket would be charged for decides whether the
      * payment method is offered. The gate quotes that term itself, so the
      * decision does not depend on another call site having quoted first.
      */
@@ -10961,7 +10958,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-540. The chip payload carried a formatted zero for the buyer script
+     * The chip payload carried a formatted zero for the buyer script
      * to show on any term whose quote did not resolve, which is a wrong figure
      * rather than a missing one.
      */
@@ -11450,7 +11447,7 @@ final class BrandConfigSpec
     /**
      * The chip radiogroup takes its accessible name from the heading above it,
      * and that heading is not a `label`: a `label` names exactly one form
-     * control, and this one names a group (ABN-554).
+     * control, and this one names a group.
      */
     private static function testTermChipGroupIsNamedByANonLabelHeading(): void
     {
@@ -11473,7 +11470,7 @@ final class BrandConfigSpec
 
     /**
      * Given the consent block both checkouts emit; When it is built; Then it
-     * carries the checkbox, the brand's terms link and the refusal (ABN-554).
+     * carries the checkbox, the brand's terms link and the refusal.
      *
      * Deliberately NOT asserted against the gateway description: WooCommerce
      * runs that through wp_kses_post(), which drops the checkbox.
@@ -11507,7 +11504,7 @@ final class BrandConfigSpec
 
     /**
      * The brand descriptor is the whole configuration surface: it holds the
-     * link and the copy, and its absence is the off switch (ABN-554).
+     * link and the copy, and its absence is the off switch.
      */
     private static function testTermsConsentIsDrivenByTheBrandDescriptor(): void
     {
@@ -11550,7 +11547,7 @@ final class BrandConfigSpec
      *
      * The consent must never be built into the description string itself:
      * wp_kses_post() drops `<input>`, leaving a sentence the buyer cannot tick
-     * while process_payment() refuses every order (ABN-554). The unit harness
+     * while process_payment() refuses every order. The unit harness
      * stubs wp_kses_post() as a passthrough, so this models core's strip.
      */
     private static function testTermsConsentReachesTheTileAfterTheDescriptionIsSanitized(): void
@@ -11587,7 +11584,7 @@ final class BrandConfigSpec
 
     /**
      * An overlay still rendering its own consent suppresses the base one, so a
-     * staged rollout never shows two checkboxes (ABN-554).
+     * staged rollout never shows two checkboxes.
      */
     private static function testOverlayCanSuppressTheBaseTermsConsent(): void
     {
@@ -11712,7 +11709,7 @@ final class BrandConfigSpec
      * WooCommerce core prints get_icon() inside the method's <label for>,
      * where an interactive control is invalid markup and joins the radio's
      * accessible name. The override renders the control between </label>
-     * and the .payment_box instead - in neither (ABN-554).
+     * and the .payment_box instead - in neither.
      */
     private static function testAboutControlRendersBetweenTheLabelAndThePaymentBox(): void
     {
@@ -11737,7 +11734,7 @@ final class BrandConfigSpec
     /**
      * The override replaces one shared template, so it has to leave every
      * other gateway's markup exactly as core emits it, and leave a theme's
-     * own copy alone (ABN-554).
+     * own copy alone.
      */
     private static function testPaymentMethodTemplateOverrideIsScopedToThisGateway(): void
     {
@@ -11792,7 +11789,7 @@ final class BrandConfigSpec
 
     /**
      * Markup contract of the icon: it IS the link, so the tooltip it
-     * describes holds no anchor of its own (ABN-554).
+     * describes holds no anchor of its own.
      */
     private static function testAboutIconIsAnAnchorWrappedIcon(): void
     {
@@ -11824,7 +11821,7 @@ final class BrandConfigSpec
     /**
      * A brand with no about page, a brand whose about page is not http(s),
      * and a merchant who turned the control off all render nothing at all -
-     * never a bare icon, never an empty href (ABN-554).
+     * never a bare icon, never an empty href.
      */
     private static function testAboutControlIsWithheldWholeOrNotAtAll(): void
     {
@@ -11849,7 +11846,7 @@ final class BrandConfigSpec
 
     /**
      * The brand product name reaches the tooltip body as text, the same way
-     * it already reaches the icon's aria-label (ABN-554).
+     * it already reaches the icon's aria-label.
      */
     private static function testAboutTooltipEscapesTheBrandProductName(): void
     {
@@ -11875,7 +11872,7 @@ final class BrandConfigSpec
      * race and renders no about control at all, so the gateway description
      * carries it instead. The description renders inside .payment_box, which
      * core hides until the method is chosen, so on those themes the control
-     * degrades to an icon at the foot of a collapsed box (ABN-554).
+     * degrades to an icon at the foot of a collapsed box.
      */
     private static function testAboutControlFallsBackIntoTheHiddenPaymentBoxWhenATemplateOverrideWins(): void
     {
@@ -11909,7 +11906,7 @@ final class BrandConfigSpec
      * The core release it was taken from and the md5 of everything outside
      * the TWOINC markers are pinned here instead; the support-matrix legs set
      * WC_CORE_TEMPLATE_PATH and diff against the real installed core, which
-     * is what catches an upgrade that moves the template (ABN-554).
+     * is what catches an upgrade that moves the template.
      */
     private static function testPaymentMethodTemplateIsStillCoreVerbatim(): void
     {
@@ -12121,7 +12118,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-554: the admin screen withdraws and unticks "Autofill company
+     * The admin screen withdraws and unticks "Autofill company
      * address" while "Enable company search in address entry" is off, so the
      * effective getter has to agree — a `yes` saved before company search was
      * switched off must not keep autofilling until the merchant next saves.
@@ -13050,7 +13047,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-495. The settings save reverted the submitted API key to the
+     * The settings save reverted the submitted API key to the
      * stored one on EVERY non-200, a network failure included. On a fresh
      * install the stored key is empty, so a merchant could not configure
      * the plugin at all while Two was unreachable — and the key they were
@@ -13092,7 +13089,7 @@ final class BrandConfigSpec
                 $gateway->get_field_key('api_key') => 'new-key',
                 $gateway->get_field_key('title') => 'edited title',
                 // The settings form always posts the term checkboxes; an absent group is the
-                // merchant unticking every term, which is refused (ABN-553).
+                // merchant unticking every term, which is refused.
                 $gateway->get_field_key('payment_terms_days') => ['30'],
             ];
             $gateway->process_admin_options();
@@ -13201,8 +13198,8 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-533. Only a definitive rejection of the stored key — Two said no,
-     * or there is no key — takes the gateway off checkout. Every other
+     * Only a definitive rejection of the stored key (Two said no,
+     * or there is no key) takes the gateway off checkout. Every other
      * category is about the service, and an outage must leave a correctly
      * configured shop selling. Drives the real gate off the wire response
      * rather than a primed verdict.
@@ -13324,7 +13321,7 @@ final class BrandConfigSpec
     /**
      * A 200 from something that is not Two — a captive portal, a proxy, a
      * maintenance page — carries no merchant record, so it is categorised
-     * `error` and not `ok` (ABN-495). ABN-533: that is a statement about
+     * `error` and not `ok`. that is a statement about
      * what answered, not a rejection of the key, so it no longer withholds.
      * Drives the real gate off the wire response, with a full-record control
      * so the table cannot pass by offering everything.
@@ -13385,7 +13382,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-533. A valid key with an unresolvable offerable term set offers
+     * A valid key with an unresolvable offerable term set offers
      * the tile with an EMPTY term set — the Magento behaviour every platform
      * now aligns on. No term chip renders, no term is sent on the order and
      * the account default applies; an invented term set never reaches the
@@ -13480,7 +13477,7 @@ final class BrandConfigSpec
      * top-level `if (window.twoinc)` guard in twoinc.js) — so withholding
      * it on a REJECTED key is what stops company search from
      * rendering/enabling itself on an integration that cannot work
-     * (TWO-25326 follow-up, ABN-533).
+     * (TWO-25326 follow-up).
      */
     private static function testCheckoutWindowTwoincSuppressedOnVerificationFailure(): void
     {
@@ -13519,7 +13516,7 @@ final class BrandConfigSpec
             };
         };
 
-        // [verify response, bootstrap printed, why]. ABN-533: an outage keeps
+        // [verify response, bootstrap printed, why]. an outage keeps
         // company search alive; a rejected key still stands it down.
         $cases = [
             [['response' => ['code' => 401], 'body' => json_encode(['message' => 'invalid'])], false,
@@ -13647,7 +13644,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-537. admin_enqueue_scripts fires on EVERY wp-admin request, so an
+     * admin_enqueue_scripts fires on EVERY wp-admin request, so an
      * unscoped verification blocked the whole of wp-admin for the duration of
      * one wire call while the API was unreachable. Only the gateway's own
      * settings section may spend a call.
@@ -13708,7 +13705,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-537. The cached verdict is written after the call, so it never
+     * The cached verdict is written after the call, so it never
      * spared a later page load: every reload of the settings page during an
      * outage paid its own wire call.
      */
@@ -13737,7 +13734,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-537. Only a live check of the STORED key persists merchant_id, so a
+     * Only a live check of the STORED key persists merchant_id, so a
      * cache read that honoured the Validate button's 'ok' for a TYPED key left
      * the identity unresolved on the one screen that can heal it.
      */
@@ -13769,7 +13766,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-537. An empty id passes isset(), so a 200 carrying one read as 'ok'
+     * An empty id passes isset(), so a 200 carrying one read as 'ok'
      * with nothing to resolve — and the settings screen, which re-verifies
      * precisely while the identity is unresolved, then called on every load
      * with nothing to converge on.
@@ -13818,7 +13815,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-537. wp_remote_request()'s 30s default stalled the settings page for
+     * wp_remote_request()'s 30s default stalled the settings page for
      * half a minute against an unreachable API.
      */
     private static function testSettingsScreenVerificationTimeoutIsBoundedForAPageRender(): void
@@ -13925,7 +13922,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-536 on ABN-533's rule that the definitive-rejection categories live in
+     * Pins the rule that the definitive-rejection categories live in
      * exactly one place. admin.js decides whether to degrade the admin from a
      * flag the verdict carries, so the flag has to come from that predicate —
      * a JS-side list of categories would be the second listing the rule forbids.
@@ -13966,7 +13963,7 @@ final class BrandConfigSpec
         }
     }
 
-    /** ABN-536. The class is the only thing carrying the notice's colour now. */
+    /** The class is the only thing carrying the notice's colour now. */
     private static function testApiKeyNoticeElementCarriesTheClassItsColourComesFrom(): void
     {
         $gateway = self::gateway();
@@ -15635,7 +15632,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-585: the buyer moves country without a page load, so the company
+     * The buyer moves country without a page load, so the company
      * search control's own gate reads the merchant's allowlist in the browser.
      * Absent has to arrive as null, which restricts nothing — never as an
      * empty list, which restricts everything.
@@ -16773,7 +16770,7 @@ final class AnchorOnlyHtmlSpec
     }
 
     /**
-     * The admin save gate (ABN-554). A value is rejected exactly when escaping
+     * The admin save gate. A value is rejected exactly when escaping
      * would change what the buyer sees - entity-encoding plain text is not a
      * change, so apostrophes and ampersands are not markup.
      */
@@ -16836,7 +16833,7 @@ final class AnchorOnlyHtmlSpec
 /**
  * The subtitle is emitted through the anchor-only escaper, so copy that escaper
  * drops used to vanish at checkout with no merchant feedback. The save refuses
- * it instead (ABN-554).
+ * it instead.
  */
 final class SubtitleSaveValidationSpec
 {
@@ -16966,7 +16963,7 @@ final class SubtitleSaveValidationSpec
 }
 
 /**
- * ABN-554. A captured company is replayed for the cart it was captured in and
+ * A captured company is replayed for the cart it was captured in and
  * the order it was captured on, and for nothing else.
  */
 final class CaptureMemorySpec

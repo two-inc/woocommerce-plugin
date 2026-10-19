@@ -11,11 +11,11 @@
  *      is rendered, and is what names the radiogroup;
  *   3. the fee label shows the currency SYMBOL (the server-formatted
  *      buyer_fee_share_display), never the currency code;
- *   4. whether an amount shows is decided over the whole offered set
- *      (ABN-528), so chips never disagree about carrying a fee.
+ *   4. whether an amount shows is decided over the whole offered set,
+ *      so chips never disagree about carrying a fee.
  *
- * The second is the radio-group keyboard contract the chips' roles advertise
- * (ABN-554): one tab stop, arrow traversal with wrapping, the checked and
+ * The second is the radio-group keyboard contract the chips' roles advertise:
+ * one tab stop, arrow traversal with wrapping, the checked and
  * visual states moving as one, focus surviving a re-render, and one commit per
  * sweep. Tab order itself is not observable in jsdom, so the tab-stop count and
  * the focus ring are verified in a real browser instead.
@@ -417,7 +417,7 @@ describe("payment terms chips", () => {
 
   // Every re-render replaces every chip, so a chip the buyer is on is
   // destroyed. Without a handover focus falls to the body and the keyboard
-  // loses its place in the group (ABN-554).
+  // loses its place in the group.
   describe("a re-render under the buyer's focus", () => {
     /** @returns {string|null} the day-count of the focused chip, if any */
     function focusedDays() {
@@ -473,7 +473,7 @@ describe("payment terms chips", () => {
 
   // The chips advertise themselves as a radio group, so they owe that role's
   // keyboard contract: the group is ONE tab stop and the arrow keys move the
-  // checked term and the focus together (ABN-554, W3C APG radio pattern).
+  // checked term and the focus together (W3C APG radio pattern).
   // Tab order itself is not observable in jsdom and is verified in a browser;
   // what is observable here is the roving tabindex the browser reads, and the
   // focus the handler moves itself.
@@ -754,7 +754,7 @@ describe("payment terms chips", () => {
   });
 
   /**
-   * ABN-554. An aria-label replaces the whole accessible name, so the "+€n,nn"
+   * An aria-label replaces the whole accessible name, so the "+€n,nn"
    * rendered inside an end-of-month chip is announced nowhere unless the name
    * states it too.
    */

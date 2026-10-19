@@ -1,5 +1,5 @@
 /**
- * ABN-554 — changing capture mode inside the popover, and pressing on the
+ * Changing capture mode inside the popover, and pressing on the
  * popover's own dead space, both leave the buyer somewhere.
  *
  * The two modes that end on the company-name field are covered where they are

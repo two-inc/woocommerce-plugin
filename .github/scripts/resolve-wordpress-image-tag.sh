@@ -8,7 +8,7 @@
 #   e.g. resolve-wordpress-image-tag.sh 7.1.1 -php8.2-apache  ->  7.1
 #
 # wordpress.org announces a release the moment it ships and Docker Hub
-# publishes the image for it hours later (ABN-614), so the announced version
+# publishes the image for it hours later, so the announced version
 # is not yet a pullable tag. A leg that cannot pull its image is noise rather
 # than coverage, so lagging by a point release is the trade — made visible by
 # the warning below rather than absorbed silently.

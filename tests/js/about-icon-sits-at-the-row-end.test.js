@@ -1,5 +1,5 @@
 /**
- * ABN-554 — the about icon belongs at the right-hand end of the payment
+ * The about icon belongs at the right-hand end of the payment
  * method row. jsdom does no layout, so this reads the shipped stylesheet,
  * the same way the tooltip-open test does.
  */

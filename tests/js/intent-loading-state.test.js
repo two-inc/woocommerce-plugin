@@ -308,7 +308,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       //
       // Incomplete here means a missing NAME, not a missing number: a missing
       // organisation number is a state Two can never be paid in, and
-      // `getApproval()` answers that one with its own notice (ABN-554).
+      // `getApproval()` answers that one with its own notice.
       showStaleDecline();
       instance.customerCompany.company_name = "";
 

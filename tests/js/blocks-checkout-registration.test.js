@@ -752,7 +752,7 @@ describe("blocks-checkout.js hands the controller the whole page", () => {
       holdsTheField: false,
       // toggleBusinessFields() hides the native row while the search is the
       // active surface, and on a Blocks checkout that row must therefore
-      // never be the buyer's only company field (ABN-554).
+      // never be the buyer's only company field.
       description: "the native row the controller hides carries no company field"
     }
   ])("$description", ({ id, holdsTheField }) => {
@@ -1146,7 +1146,7 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
   test("the storage host stays off screen under the plugin stylesheet", () => {
     // `.custom-checkout` is on the host only so the snapshot recognises it; an
     // author `display` keyed on that class alone beats the UA's `[hidden]` and
-    // paints every one of these inputs onto the Blocks checkout (ABN-554).
+    // paints every one of these inputs onto the Blocks checkout.
     const base = baseGlobals("address_area");
     const { env } = globals({});
     env.wp.data = base.data;

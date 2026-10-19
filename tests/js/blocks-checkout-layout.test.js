@@ -1,5 +1,5 @@
 /**
- * ABN-554 — the Blocks-only stylesheet. jsdom lays nothing out, so this reads
+ * The Blocks-only stylesheet. jsdom lays nothing out, so this reads
  * the shipped file, the same way the tile row-spacing test does.
  */
 

@@ -6,9 +6,9 @@
  * merchant record's buyer-country allowlist says where this merchant sells at
  * all. While the panel still holds a mode the buyer can use, only the SEARCH
  * is withdrawn — the query row and the registered-company chip — and the panel
- * stays openable for the rest (ABN-525). Where it holds none, the control goes
+ * stays openable for the rest. Where it holds none, the control goes
  * and WooCommerce's own company field takes its place, with the capture mode
- * left on "search" (ABN-585).
+ * left on "search".
  */
 
 "use strict";
@@ -320,7 +320,7 @@ describe("company search country gate", () => {
   /**
    * A country the registry search does not cover but the sole-trader registry
    * does: the panel is the buyer's only route to that flow, so the search is
-   * withdrawn from inside it and the control itself stays (ABN-525).
+   * withdrawn from inside it and the control itself stays.
    */
   describe("while the panel still holds a mode the buyer can use", () => {
     beforeEach(() => {
@@ -378,7 +378,7 @@ describe("company search country gate", () => {
     }
 
     // A chip is a `<button>`, which swallows typing, so a caret parked on one
-    // loses every character the buyer types (ABN-554).
+    // loses every character the buyer types.
     test.each([
       {
         key: "f",
@@ -457,7 +457,7 @@ describe("company search country gate", () => {
  * Sole-trader availability is fetched per country and answers after the
  * registry gate does, so "no answer yet" must read as offered — tearing the
  * control down on the way to an answer that restores it is a teardown and a
- * rebuild the buyer watches happen, one round trip apart (ABN-525).
+ * rebuild the buyer watches happen, one round trip apart.
  */
 describe("company search country gate, sole-trader availability still in flight", () => {
   const SOLE_TRADER = {

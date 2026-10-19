@@ -1,5 +1,5 @@
 /**
- * ABN-554. What the company-search panel says to a screen reader.
+ * What the company-search panel says to a screen reader.
  *
  * The panel painted rows and messages into a listbox nothing was watching, so
  * a buyer who cannot see the panel got silence for every outcome a search has.

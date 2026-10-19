@@ -1,6 +1,6 @@
 /**
  * Blocks checkout: a skin over the classic checkout's own controller, never a
- * second implementation of it (ABN-554). `assets/js/twoinc.js` already loads on
+ * second implementation of it. `assets/js/twoinc.js` already loads on
  * every front-end page, so `TwoCompanySearch`, `twoincCompanyCapture`,
  * `twoincAddressRoles` and the shared popover are already on this page. This
  * file owns only what a Blocks checkout shapes differently:
@@ -76,7 +76,7 @@
   /** What an address key's own id can be carried by; anything else under it is decoration. */
   var CONTROL_TAGS = ["input", "select", "textarea"];
 
-  /** Both roles: Blocks renders delivery first, so mirroring one strands the other's control (ABN-554). */
+  /** Both roles: Blocks renders delivery first, so mirroring one strands the other's control. */
   function addressRoles() {
     return [
       { role: twoincAddressRoles.invoice(), store: "billingAddress", setter: "setBillingAddress" },
@@ -163,7 +163,7 @@
     host.id = SHADOW_ID;
     host.hidden = true;
     // The container `saveCheckoutInputs()`/`loadStorageInputs()` look for;
-    // without one they recognise, nothing persists the capture (ABN-554).
+    // without one they recognise, nothing persists the capture.
     host.className = "checkout woocommerce-checkout custom-checkout";
     var add = function (id, announce) {
       var input = document.createElement("input");
@@ -419,7 +419,7 @@
    * control's own visible surface — not the native one. The distinction is
    * load-bearing: `toggleBusinessFields()` hides the native row whenever the
    * search is the active surface, which on a Blocks checkout is the buyer's
-   * only company field (ABN-554).
+   * only company field.
    */
   function anchorRow(search) {
     var field = document.querySelector(search.addressFieldSelector);
@@ -509,7 +509,7 @@
    * Every role's capture carriers, unresolved and under the ids the classic
    * checkout posts them as — `process_payment()` owns the invoice-first,
    * delivery-fallback precedence, and Blocks serialises no hidden input of its
-   * own for it to read (ABN-554).
+   * own for it to read.
    */
   function captured() {
     var payload = twoincTermsConsent.payload();

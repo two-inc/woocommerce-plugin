@@ -177,11 +177,11 @@ function load_twoinc_classes()
     add_action('wc_ajax_two_payment_terms', ['WC_Twoinc_Api_Proxy', 'ajax_payment_terms']);
     add_action('wc_ajax_two_supported_countries', ['WC_Twoinc_Api_Proxy', 'ajax_supported_countries']);
 
-    // Records the company the buyer captured against the cart this session holds (ABN-554).
+    // Records the company the buyer captured against the cart this session holds.
     add_action('wc_ajax_two_remember_company', ['WC_Twoinc_Checkout', 'ajax_remember_company']);
 
     // A Blocks checkout builds its payment list from its own registry and
-    // never reads woocommerce_payment_gateways (ABN-554).
+    // never reads woocommerce_payment_gateways.
     add_action('woocommerce_blocks_payment_method_type_registration', static function ($registry) {
         require_once __DIR__ . '/class/WC_Twoinc_Blocks_Support.php';
         if (class_exists('WC_Twoinc_Blocks_Support')) {
@@ -453,8 +453,8 @@ function twoinc_ajax_verify_api_key()
             'status' => $category['status'],
             'code' => $category['code'],
             // Travels with the verdict rather than being re-listed in JS: the
-            // categories live in exactly one place (ABN-533), and the admin
-            // degrades nothing on a verdict that judged no key (ABN-536).
+            // categories live in exactly one place, and the admin
+            // degrades nothing on a verdict that judged no key.
             'definitive' => WC_Twoinc::is_definitive_key_failure($category['status']),
         ]);
     }

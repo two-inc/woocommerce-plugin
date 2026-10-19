@@ -13,11 +13,11 @@ description: "What jsdom can and cannot verify about keyboard and focus, the JS-
   browser derives tab order FROM — `tabindex` on the field, `hidden` on the panel,
   document order of the control's parts. The traversal itself is covered by no
   automated test in this repo — the e2e suite has no keyboard case — so it is
-  hand-verification only until ABN-499 adds one. A passing jsdom Tab test is never
+  hand-verification only until one is added. A passing jsdom Tab test is never
   evidence that a trap is absent, so no case here may dispatch `Tab` and assert on
   what did not happen:
   an event left undefaulted is what a trap implemented by moving focus looks like
-  too (ABN-499).
+  too.
 - Focus a handler moves ITSELF, with `element.focus()`, is the exception: jsdom
   performs that, so arrow-key traversal inside a composite control is directly
   observable where tab order is not. What a suite can pin for tab order is the
@@ -63,7 +63,7 @@ classified once — whether a popup is up or not — and these are the three rul
 Launchers are not exempt from rule two — a launch blurs whatever holds focus first.
 A popover left on screen for the flight around a document focusing nothing reaches
 no keystroke at all, so the launch parks that focus on the company field one tick
-later, through the panel, which holds off the field's own opener (ABN-554). That one
+later, through the panel, which holds off the field's own opener. That one
 control is exempt from the rules above for the whole flight: the window losing focus
 to the popup blurs the field, and a buyer clicking back into the checkout would
 otherwise end their own enrolment. The settle drops the park before it decides where
@@ -99,4 +99,4 @@ One consistent target — always the company name field — would read better th
 a target that depends on which control the buyer launched from. It is not done:
 the field's opener would have to be revised to guarantee the popover opens when
 that is wanted and stays closed when it is not, and getting that right is hard
-enough that the inconsistency is the safer state to be in (ABN-561).
+enough that the inconsistency is the safer state to be in.

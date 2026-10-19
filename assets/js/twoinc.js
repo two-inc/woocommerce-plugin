@@ -659,14 +659,14 @@ let twoincCompanyCapture = {
 
   /**
    * Hand the captured company to the WC session, which is what replays it —
-   * the browser keeps no copy, so no later cart can find one (ABN-554).
+   * the browser keeps no copy, so no later cart can find one.
    *
    * @param {string} companyName
    * @param {string} companyId
    * @returns {void}
    */
   rememberOnServer: function (companyName, companyId, country) {
-    // The cart's memory, and the order-pay page is not a cart (ABN-554).
+    // The cart's memory, and the order-pay page is not a cart.
     if (window.twoinc && window.twoinc.order_pay) return;
     const url = twoincUtilHelper.blankToEmpty(window.twoinc && window.twoinc.remember_company_url);
     if (url === "") return;
@@ -975,7 +975,7 @@ class TwoCompanySearch {
    */
   lastObservedCountry = null;
 
-  /** What the panel announces once a search answers (ABN-554). */
+  /** What the panel announces once a search answers. */
   searchResultsText(plural) {
     const text = window.twoinc && window.twoinc.text;
     if (plural) {
@@ -1299,7 +1299,7 @@ class TwoCompanySearch {
     if (!panel) return null;
 
     // Binding would leave a combobox, every mode inside it withdrawn, over the
-    // only field the buyer can name their company in (ABN-585).
+    // only field the buyer can name their company in.
     if (!this.companySearchIsOffered()) {
       panel.unmount();
       this.syncCompanySearchAvailability();
@@ -1309,7 +1309,7 @@ class TwoCompanySearch {
     panel.bind();
     // The gate is answered page-wide and can already be resolved before this
     // control has a panel to carry it, and nothing re-asks without a country
-    // change (ABN-525).
+    // change.
     this.syncCompanySearchAvailability();
     this.syncFieldWrapMetrics();
     this.bindFieldWrapRefresh();
@@ -1433,8 +1433,8 @@ class TwoCompanySearch {
   }
 
   /**
-   * Whether the search control is offered for this role's country at all
-   * (ABN-585). No means no panel rather than a narrower one: the buyer gets
+   * Whether the search control is offered for this role's country at all.
+   * No means no panel rather than a narrower one: the buyer gets
    * the plain company field, which is the one that posts.
    */
   companySearchIsOffered() {
@@ -1458,7 +1458,7 @@ class TwoCompanySearch {
    * Withdraw the registry search once the country falls outside the registry's
    * coverage, and restore it once the country is back inside. The field never
    * carries the native `disabled` flag — a buyer must always be able to type a
-   * company name (ABN-525).
+   * company name.
    */
   syncCompanySearchAvailability() {
     const available = this.registeredSearchIsAvailable();
@@ -1879,7 +1879,7 @@ class TwoCompanySearch {
     $slot.toggleClass("hidden", !show);
 
     // Called even when the row is withdrawn — that is what unmounts a panel
-    // the tile was carrying before the country moved (ABN-585).
+    // the tile was carrying before the country moved.
     this.rebindUnlessManual();
   }
 
@@ -2242,7 +2242,7 @@ let twoincCompanySearchControls = [twoincSelectWooHelper, twoincSelectWooHelperS
 
 /**
  * The buyer countries the merchant record allows, mirroring
- * `WC_Twoinc::is_buyer_country_supported()` (ABN-585). Absent is no allowlist
+ * `WC_Twoinc::is_buyer_country_supported()`. Absent is no allowlist
  * and restricts nothing; an empty list is a restriction nothing satisfies.
  */
 let twoincSupportedBuyerCountries = {
@@ -2308,7 +2308,7 @@ let twoincSupportedSearchCountries = {
 // rather than the fetch trying to know who asked.
 //
 // Rooted on `document`: this file is enqueued into the HEAD, where
-// `document.body` is still null and a binding on it reaches nothing (ABN-554).
+// `document.body` is still null and a binding on it reaches nothing.
 // Namespaced and unbound first so a second evaluation of this script replaces
 // the handler rather than stacking a second one bound to the first
 // evaluation's controls.
@@ -2476,7 +2476,7 @@ let twoincDomHelper = {
     // WHERE the control renders is `company_search_location`'s business,
     // below, never whether it's active.
     //
-    // The country takes it away only where no mode is left for it (ABN-585) —
+    // The country takes it away only where no mode is left for it:
     // the name-only layout, capture mode still "search". A country the lookup
     // merely returns nothing for still reports that through the dropdown.
     const showCompanySearch =
@@ -2573,7 +2573,7 @@ let twoincDomHelper = {
     });
   },
   /**
-   * Runs after every show/hide of either affordance link (ABN-554). Marked per
+   * Runs after every show/hide of either affordance link. Marked per
    * row, not from "is either link visible": in payment-tile placement the
    * sole-trader link hangs in the tile row, and marking the address rows from
    * that closes the visible one's bottom margin under nothing.
@@ -2704,7 +2704,7 @@ let twoincDomHelper = {
     // verdict classes, so a brand overlay or later ticket adding a fourth
     // verdict box is still covered. The company-required notice is excluded
     // too: it states what the form holds, not how some past request was
-    // answered, so nothing about a new request retires it (ABN-554).
+    // answered, so nothing about a new request retires it.
     jQuery(".twoinc-pay-box").not(".twoinc-loader, .twoinc-err-no-company").addClass("hidden");
     twoincDomHelper.setPaymentMethodSelectable(true);
   },
@@ -2746,7 +2746,7 @@ let twoincDomHelper = {
     // NEW company-required state re-announces (see the `no-company` branch).
     const noCompanyWasShown = !jQuery(".twoinc-pay-box.twoinc-err-no-company").hasClass("hidden");
     jQuery(".twoinc-pay-box").addClass("hidden");
-    // A term the buyer cannot be quoted on is not an offer (ABN-554).
+    // A term the buyer cannot be quoted on is not an offer.
     twoincDomHelper.setTermChipsWithheld(action === "no-company");
     // TWO-25657: `.twoinc-busy-retry` is the shop's own limiter, not a verdict.
     twoincDomHelper.setPaymentMethodSelectable(
@@ -2979,7 +2979,7 @@ let twoincDomHelper = {
       }
     }
     // The company is the one field this snapshot may not carry: it outlives
-    // the cart the capture was made in, and the WC session holds it instead (ABN-554).
+    // the cart the capture was made in, and the WC session holds it instead.
     const captured = twoincCompanyCapture.capturedFieldIds();
     sessionStorage.setItem(
       "checkoutInputs",
@@ -3017,7 +3017,7 @@ let twoincDomHelper = {
     const captured = twoincCompanyCapture.capturedFieldIds();
     for (let inp of checkoutInputs) {
       // A snapshot written by the release before this one still carries a
-      // company, and that browser session survives the upgrade (ABN-554).
+      // company, and that browser session survives the upgrade.
       if (captured.indexOf(inp.id) >= 0) continue;
       // Load all other fields
       if (inp.htmlTag === "INPUT") {
@@ -3073,7 +3073,7 @@ let twoincDomHelper = {
   },
   /**
    * The company the page was rendered with: this cart's capture, this order's,
-   * or the merchant's own (ABN-554).
+   * or the merchant's own.
    *
    * Withheld, name and number alike, unless it was remembered under the
    * country the billing address holds now (TWO-26286): replayed under another
@@ -3332,7 +3332,7 @@ let twoincTermChips = {
    * that term. buyer_fee_share_display carries the currency SYMBOL in the
    * store's position; amount plus currency CODE is the degraded fallback for a
    * response that predates that field. A formatted zero for an unpriced term
-   * is a wrong figure rather than a missing one (ABN-540).
+   * is a wrong figure rather than a missing one.
    */
   feeLabel: function (days) {
     const fee = twoincTermChips.fees[days];
@@ -3380,7 +3380,7 @@ let twoincTermChips = {
     });
 
     // Shown whenever any chip is: a chip's text states only the term, so this
-    // is what names the radiogroup, one term or several (ABN-554).
+    // is what names the radiogroup, one term or several.
     const $heading = jQuery(".twoinc-term-chips-heading");
     if (terms.length === 0) {
       $heading.addClass("hidden").text("");
@@ -3401,7 +3401,7 @@ let twoincTermChips = {
         role: "radio",
         "aria-checked": isSelected ? "true" : "false",
         // The group is a single tab stop: only the chip the keyboard would
-        // arrive on is tabbable (ABN-554).
+        // arrive on is tabbable.
         tabindex: days === focusableTerm ? 0 : -1,
         "data-days": days,
         disabled: single
@@ -3450,7 +3450,7 @@ let twoincTermChips = {
 
     // Put focus back on the rebuilt chip carrying the same term. Focus outside
     // the group is left alone, and a term the rebuild no longer offers has no
-    // equivalent chip to return to (ABN-554).
+    // equivalent chip to return to.
     if (focusedDays !== undefined) {
       const $again = $container.find('.twoinc-term-chip[data-days="' + focusedDays + '"]');
       if ($again.length > 0) $again[0].focus();
@@ -3469,7 +3469,7 @@ let twoincTermChips = {
   /**
    * The chip's visible-text template, the same one term or several. An
    * end-of-month term falls due that many days after the end of the month, so
-   * the bare day count states the wrong due date for it (ABN-554).
+   * the bare day count states the wrong due date for it.
    *
    * Both templates come from PHP, already translated. The fallbacks degrade to
    * the SHORTER localised form rather than to an English sentence: an English
@@ -3516,7 +3516,7 @@ let twoincTermChips = {
   /**
    * The term the group's single tab stop sits on. The focused chip wins over
    * the checked one: leaving the tab stop elsewhere would send a Shift-Tab back
-   * into the group to a different chip than the one outlined (ABN-554). A
+   * into the group to a different chip than the one outlined. A
    * selection matching no offered term falls back to the first, so the group
    * cannot leave the tab order altogether.
    *
@@ -3533,7 +3533,7 @@ let twoincTermChips = {
   },
 
   /**
-   * The radio-group keyboard contract the chips' roles advertise (ABN-554):
+   * The radio-group keyboard contract the chips' roles advertise:
    * the arrow keys move the checked term and the focus together, Home and End
    * jump to the ends, and both ends wrap. Modified arrow keys are left to the
    * browser, or the group swallows shortcuts such as Alt+Left for "back".
@@ -3647,7 +3647,7 @@ let twoincTermChips = {
 
 /**
  * Two's own terms consent: the one gate both checkouts call — classic through
- * `checkout_place_order`, Blocks through `onPaymentSetup` (ABN-554).
+ * `checkout_place_order`, Blocks through `onPaymentSetup`.
  */
 let twoincTermsConsent = {
   FIELD: "twoinc_terms_accepted",
@@ -3661,7 +3661,7 @@ let twoincTermsConsent = {
   /**
    * The tick, held off the DOM: WooCommerce replaces the whole payment box on
    * every checkout update, which would otherwise silently drop the buyer's
-   * consent between ticking it and placing the order (ABN-554).
+   * consent between ticking it and placing the order.
    */
   accepted: false,
   remember: function () {
@@ -3939,7 +3939,7 @@ function createSoleTraderController(companySearch) {
       }
       // The mode chip lives inside the company-search panel, not here —
       // re-sync so an availability change while it's open adds/removes live,
-      // and so a country left with no mode at all drops the control (ABN-585).
+      // and so a country left with no mode at all drops the control.
       companySearch.syncModeChips();
       companySearch.syncCompanySearchOffered();
     },
@@ -4213,7 +4213,7 @@ function createSoleTraderController(companySearch) {
     },
 
     /**
-     * Only once there is a sole trader to replace (ABN-526), read off the
+     * Only once there is a sole trader to replace, read off the
      * adoption latch — never `#company_id`, which can still hold an earlier
      * capture's identifier.
      */
@@ -4598,7 +4598,7 @@ function createSoleTraderController(companySearch) {
     restoreLaunchFocus: function (outcomeOwned) {
       if (controller.activePopupWatchers.length) return;
       // The flight's own park is not a place the buyer chose, so it is dropped here and the
-      // rules below read the unplaced focus the launch actually left them (ABN-554).
+      // rules below read the unplaced focus the launch actually left them.
       if (controller.parkedFocus && document.activeElement === controller.parkedFocus) {
         controller.parkedFocus.blur();
       }
@@ -4642,7 +4642,7 @@ function createSoleTraderController(companySearch) {
     },
 
     /**
-     * Put the focus the launch just dropped on the company field (ABN-554).
+     * Put the focus the launch just dropped on the company field.
      *
      * The popover stays up until the flight settles, and around a document
      * focusing nothing it reaches no keystroke at all. Deferred a tick so the
@@ -5855,7 +5855,7 @@ class Twoinc {
     // `process_payment` applies), so a checkout holding none can never pay with
     // Two. Say so here rather than letting the buyer find out at submit —
     // manual entry captures a name and no number, so it reaches submit looking
-    // complete (ABN-554).
+    // complete.
     // The sole-trader flow mints the number itself, so a checkout mid-flow is
     // not one with no company — it is one a beat away from having one.
     const soleTraderPending =
@@ -6545,7 +6545,7 @@ class Twoinc {
    *
    * The state/county control is cleared too: `setRegion()` writes a registry
    * region onto it, so a replacement whose record omits one would otherwise
-   * keep the outgoing company's county (ABN-551).
+   * keep the outgoing company's county.
    *
    * @param {string} [role] address role to clear
    * @returns {void}

@@ -341,7 +341,7 @@ describe("billing country switch", () => {
         }
       ]);
       // The company reaches the page in the bootstrap; only the snapshot's own
-      // fields come back from sessionStorage (ABN-554).
+      // fields come back from sessionStorage.
       window.twoinc.billing_company = "Ejemplo SL";
       window.twoinc.company_id = "B12345678";
       window.twoinc.company_country = "ES";

@@ -183,7 +183,7 @@ jobs:
       # replaced through woocommerce_locate_template - an override WooCommerce's
       # own "outdated templates" report cannot see, because it scans the active
       # theme only. These legs are the one place a real WooCommerce release is
-      # on disk to diff the copy against (ABN-554).
+      # on disk to diff the copy against.
       - name: Core template drift (WooCommerce ${{ matrix.woocommerce }})
         run: |
           set -o pipefail

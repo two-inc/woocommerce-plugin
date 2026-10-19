@@ -246,7 +246,7 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   position: relative;
 }
 
-/* Class-driven because the links are shown with inline `display`, which no selector can read (ABN-554). */
+/* Class-driven because the links are shown with inline `display`, which no selector can read. */
 #billing_company_display_field.twoinc-affordance-shown,
 #billing_company_field.twoinc-affordance-shown {
   margin-bottom: 0;
@@ -403,7 +403,7 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
 .twoinc-term-chips.hidden {
   display: none;
 }
-/* Two classes, same idiom as `.twoinc-term-chips.hidden` above (ABN-554). */
+/* Two classes, same idiom as `.twoinc-term-chips.hidden` above. */
 .twoinc-term-chips.twoinc-withheld,
 .twoinc-term-chips-heading.twoinc-withheld {
   display: none;
@@ -437,7 +437,7 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
  * padding absorbs the thinner border so the chip does not resize, and the sole
  * chip is disabled, where the affordance would promise a click that does nothing.
  * The label colour is restated because a host theme rule at 0-1-1, such as a
- * bare `button:hover`, out-specifies the base class rule (ABN-597).
+ * bare `button:hover`, out-specifies the base class rule.
  */
 .twoinc-term-chip:not(.twoinc-term-chip--selected):not(:disabled):hover,
 .twoinc-term-chip:not(.twoinc-term-chip--selected):not(:disabled):focus {
@@ -590,7 +590,7 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   display: none;
 }
 
-/* ABN-554: host themes space `.form-row` inside the payment box, so the tile row cancels it. */
+/* Host themes space `.form-row` inside the payment box, so the tile row cancels it. */
 .twoinc-company-search-tile-slot
   #twoinc_tile_company_row.twoinc-inp-container.form-row.form-row-wide {
   padding-bottom: 0;
@@ -800,7 +800,7 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
 /* The chosen chip is excluded so neither pointer nor keyboard disturbs it; the
    padding absorbs the thinner border so the chip does not resize. The label
    colour is restated because a host theme rule at 0-1-1, such as a bare
-   `button:hover`, out-specifies the base class rule (ABN-597). */
+   `button:hover`, out-specifies the base class rule. */
 .two-company-mode-chip:not(.two-company-mode-chip--selected):hover,
 .two-company-mode-chip:not(.two-company-mode-chip--selected):focus {
   padding: 6px 13px;
@@ -809,7 +809,7 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   color: #091030;
 }
 /* Offset outside so the ring stays visible against the selected chip's own
-   fill (ABN-554). */
+   fill. */
 .two-company-mode-chip:focus-visible {
   outline: 2px solid #091030;
   outline-offset: 2px;

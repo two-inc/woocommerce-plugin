@@ -8,7 +8,7 @@ description: "Keyboard, naming and commit behaviour of the payment-term chip rad
   `role="radiogroup"` container, and they implement that role's whole keyboard
   contract: the group is a SINGLE tab stop, carried by the checked chip, and the
   arrow keys move the checked term and the focus together, Home and End jump to the
-  ends, and both ends wrap (ABN-554). Both halves or neither — roles without the
+  ends, and both ends wrap. Both halves or neither: roles without the
   keyboard behaviour advertise something the control does not do, which is its own
   defect.
 - **The group is named by the heading above it**, through `aria-labelledby`. That

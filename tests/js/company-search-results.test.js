@@ -207,7 +207,7 @@ describe("company search results", () => {
       expect(row.textContent).toBe("Example Trading Co (11111111)");
     });
 
-    // ABN-554. `highlight` is registry-sourced and reaches the row as markup,
+    // `highlight` is registry-sourced and reaches the row as markup,
     // so the row rebuilds it: the API's own `<mark><b>` pair becomes elements
     // and every other shape stays text.
     test.each([
@@ -435,7 +435,7 @@ describe("company search hints", () => {
     });
   });
 
-  /** The snapshot carries no company at all — the WC session holds that (ABN-554). */
+  /** The snapshot carries no company at all; the WC session holds that. */
   describe("the untouched company field and the saved-input snapshot", () => {
     afterEach(() => {
       sessionStorage.clear();
