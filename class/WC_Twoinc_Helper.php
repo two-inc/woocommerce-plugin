@@ -628,7 +628,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $categories = wp_get_post_terms($product_simple->get_id(), 'product_cat');
                 }
                 if ($is_refund) {
-                    self::refuse_tax_only_refund_line($name, $line_item['line_total'], $line_item['line_tax'], $rate_order);
+                    // The order line's name, as the shop admin sees it on the refund, not the catalogue name.
+                    self::refuse_tax_only_refund_line(
+                        'product',
+                        method_exists($line_item, 'get_name') ? $line_item->get_name() : $name,
+                        $line_item['line_total'],
+                        $line_item['line_tax'],
+                        $rate_order
+                    );
                 }
 
                 // Guard rounds once at the payload boundary and fails loud on
@@ -697,7 +704,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     continue;
                 }
                 if ($is_refund) {
-                    self::refuse_tax_only_refund_line($shipping->get_name(), $shipping->get_total(), $shipping->get_total_tax(), $rate_order);
+                    self::refuse_tax_only_refund_line('shipping', $shipping->get_name(), $shipping->get_total(), $shipping->get_total_tax(), $rate_order);
                 }
                 $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $rate_order, $is_refund, $refusal);
                 $shipping_rates[$key] = $tax_rate;
@@ -736,7 +743,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     continue;
                 }
                 if ($is_refund) {
-                    self::refuse_tax_only_refund_line($fee->get_name(), $fee->get_total(), $fee->get_total_tax(), $rate_order);
+                    self::refuse_tax_only_refund_line('fee', $fee->get_name(), $fee->get_total(), $fee->get_total_tax(), $rate_order);
                 }
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate(
                     self::get_rate_line($fee, $rate_order, $is_refund),
@@ -3248,22 +3255,23 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * TWO-26541. Refuses a refund line that returns tax with no net amount (each rounded to the cent), so the
-         * refund is not sent. Two's refund validation requires a line's tax to match its net at the line's rate,
+         * TWO-26541. Refuses a refund line that returns tax with no net amount (each rounded as the payload rounds
+         * it, to the shop's price decimals), so the refund is not sent. Two's refund validation requires a line's tax to match its net at the line's rate,
          * which a zero-net line with tax cannot. A wrong tax rate is corrected by refunding the whole order and
          * rebooking it with the correct rates.
          *
          * @return void
          * @throws Exception naming the line
          */
-        private static function refuse_tax_only_refund_line($name, $net, $tax, $order)
+        private static function refuse_tax_only_refund_line($type, $name, $net, $tax, $order)
         {
-            if (round((float) $net, 2) || !round((float) $tax, 2)) {
+            if ((float) self::round_amt($net) || !(float) self::round_amt($tax)) {
                 return;
             }
             self::refuse(
                 sprintf(
-                    'Refund of "%s" on order %s returns tax %s with no net amount: refused, not sent (TWO-26541).',
+                    'Refund of %s "%s" on order %s returns tax %s with no net amount: refused, not sent.',
+                    $type,
                     $name,
                     $order->get_id(),
                     $tax
