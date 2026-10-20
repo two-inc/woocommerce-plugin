@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/app\n"
-"POT-Creation-Date: 2026-10-13T11:32:10+00:00\n"
+"POT-Creation-Date: 2026-10-20T22:39:43+00:00\n"
 "PO-Revision-Date: 2025-07-01 10:29+0000\n"
 "Last-Translator: \n"
 "Language-Team: Swedish\n"
@@ -52,7 +52,7 @@ msgstr "Produktion"
 msgid "Sandbox"
 msgstr "Sandbox"
 
-#: class/WC_Twoinc.php:1013 class/WC_Twoinc.php:7125
+#: class/WC_Twoinc.php:1013 class/WC_Twoinc.php:7116
 msgid "Standard"
 msgstr "Standard"
 
@@ -433,9 +433,9 @@ msgstr "Denna order från %2$s kommer sannolikt att godkännas av %1$s"
 msgid "Your invoice with %1$s is likely to be accepted, subject to additional checks."
 msgstr "Din faktura med %1$s kommer sannolikt att accepteras, under förutsättning av ytterligare kontroller."
 
-#: class/WC_Twoinc.php:2527 class/WC_Twoinc.php:6332 class/WC_Twoinc.php:6342
-#: class/WC_Twoinc.php:6432 class/WC_Twoinc.php:6462
-#: class/WC_Twoinc_Blocks_Support.php:85 class/WC_Twoinc_Helper.php:408
+#: class/WC_Twoinc.php:2527 class/WC_Twoinc.php:6327 class/WC_Twoinc.php:6337
+#: class/WC_Twoinc.php:6427 class/WC_Twoinc.php:6457
+#: class/WC_Twoinc_Blocks_Support.php:85 class/WC_Twoinc_Helper.php:414
 #, php-format
 msgid "Invoice purchase with %s is not available for this order."
 msgstr "Fakturaköp med %s är inte tillgängligt för denna beställning."
@@ -460,7 +460,7 @@ msgid "To pay with %s, search for your company name and select it from the resul
 msgstr "För att betala med %s, sök upp ditt företagsnamn och välj det bland resultaten."
 
 #: class/WC_Twoinc.php:2654 class/WC_Twoinc.php:2674 class/WC_Twoinc.php:3700
-#: class/WC_Twoinc.php:5012 class/WC_Twoinc_Checkout.php:735
+#: class/WC_Twoinc.php:5012 class/WC_Twoinc_Checkout.php:733
 #, php-format
 msgid "%s days"
 msgstr "%s dagar"
@@ -662,7 +662,7 @@ msgstr "Äldre inställning. Detta erbjuder ett anpassat villkor på %s dagar ef
 msgid "Legacy setting. This offers a custom term of %s days from fulfilment. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
 msgstr "Äldre inställning. Detta erbjuder ett anpassat villkor på %s dagar från leverans. Det stöds inte längre och kan inte redigeras. Välj Ta bort för att dra tillbaka det, eller använd betalningsvillkoren ovan för att ändra vad du erbjuder."
 
-#: class/WC_Twoinc.php:3715 class/WC_Twoinc.php:5029 class/WC_Twoinc.php:7386
+#: class/WC_Twoinc.php:3715 class/WC_Twoinc.php:5029 class/WC_Twoinc.php:7377
 msgid "Remove"
 msgstr "Ta bort"
 
@@ -759,7 +759,7 @@ msgstr "Du har inte behörighet att ladda ner denna faktura."
 msgid "Could not refresh the merchant profile; the values read previously are still in use."
 msgstr "Kunde inte uppdatera säljarprofilen; värdena som lästes tidigare används fortfarande."
 
-#: class/WC_Twoinc.php:4945 class/WC_Twoinc.php:7598
+#: class/WC_Twoinc.php:4945 class/WC_Twoinc.php:7589
 msgid "Merchant profile refreshed."
 msgstr "Säljarprofilen har uppdaterats."
 
@@ -840,8 +840,8 @@ msgstr "%s har misslyckats med att avbryta beställning %s ."
 msgid "Could not update status to \"Fulfilled\" with %s."
 msgstr "Kunde inte uppdatera status till \"Uppfylld\" med %s ."
 
-#: class/WC_Twoinc.php:5516 class/WC_Twoinc.php:5616 class/WC_Twoinc.php:6551
-#: class/WC_Twoinc.php:7938
+#: class/WC_Twoinc.php:5516 class/WC_Twoinc.php:5616 class/WC_Twoinc.php:6546
+#: class/WC_Twoinc.php:7929
 #, php-format
 msgid "Reason: Could not find %s order ID."
 msgstr "Orsak: Kunde inte hitta %s order-ID."
@@ -856,15 +856,15 @@ msgstr "Spårningsnummret kunde inte kopplas till %s-ordern. Fakturan skickas ut
 msgid "Could not update order status to \"Fulfilled\" with %s."
 msgstr "Kunde inte uppdatera orderstatus till \"Uppfylld\" med %s ."
 
-#: class/WC_Twoinc.php:5565 class/WC_Twoinc.php:5577 class/WC_Twoinc.php:5637
-#: class/WC_Twoinc.php:5645 class/WC_Twoinc.php:6616 class/WC_Twoinc.php:6629
-#: class/WC_Twoinc.php:7742 class/WC_Twoinc.php:7977
+#: class/WC_Twoinc.php:5565 class/WC_Twoinc.php:5577 class/WC_Twoinc.php:5633
+#: class/WC_Twoinc.php:5641 class/WC_Twoinc.php:6611 class/WC_Twoinc.php:6624
+#: class/WC_Twoinc.php:7733 class/WC_Twoinc.php:7968
 #, php-format
 msgid "Please contact %s support with order ID: %s"
 msgstr "Vänligen kontakta %s support med order-ID: %s"
 
-#: class/WC_Twoinc.php:5578 class/WC_Twoinc.php:5646 class/WC_Twoinc.php:6453
-#: class/WC_Twoinc.php:6617 class/WC_Twoinc.php:7978
+#: class/WC_Twoinc.php:5578 class/WC_Twoinc.php:5642 class/WC_Twoinc.php:6448
+#: class/WC_Twoinc.php:6612 class/WC_Twoinc.php:7969
 #, php-format
 msgid "Response: %s"
 msgstr "Svar: %s"
@@ -874,7 +874,7 @@ msgstr "Svar: %s"
 msgid "%s has acknowledged the request to fulfil the order. An invoice will be sent to the buyer when the fulfilment is complete."
 msgstr "%s har bekräftat begäran om att fullgöra beställningen. En faktura skickas till köparen när fullgörandet är klart."
 
-#: class/WC_Twoinc.php:5615 class/WC_Twoinc.php:5636 class/WC_Twoinc.php:5644
+#: class/WC_Twoinc.php:5615 class/WC_Twoinc.php:5632 class/WC_Twoinc.php:5640
 msgid "Could not update status to \"Cancelled\"."
 msgstr "Kunde inte uppdatera status till \"Avbruten\"."
 
@@ -883,819 +883,819 @@ msgstr "Kunde inte uppdatera status till \"Avbruten\"."
 msgid "Order is already cancelled with %s."
 msgstr "Beställningen är redan annullerad med %s ."
 
-#: class/WC_Twoinc.php:5682
+#: class/WC_Twoinc.php:5678
 #, php-format
 msgid "%s pre-filled fields"
 msgstr "%s förifyllda fält"
 
-#: class/WC_Twoinc.php:5686
+#: class/WC_Twoinc.php:5682
 msgid "Billing company name"
 msgstr "Företagsnamn"
 
-#: class/WC_Twoinc.php:5692
+#: class/WC_Twoinc.php:5688
 msgid "Billing company ID"
 msgstr "Organisationsnummer"
 
-#: class/WC_Twoinc.php:5698 class/WC_Twoinc_Checkout.php:331
+#: class/WC_Twoinc.php:5694 class/WC_Twoinc_Checkout.php:331
 msgid "Project"
 msgstr "Projekt"
 
-#: class/WC_Twoinc.php:5702
+#: class/WC_Twoinc.php:5698
 msgid "The project displayed on the invoices"
 msgstr "Projektet som visas på fakturorna"
 
-#: class/WC_Twoinc.php:5706 class/WC_Twoinc_Checkout.php:340
+#: class/WC_Twoinc.php:5702 class/WC_Twoinc_Checkout.php:340
 msgid "Department"
 msgstr "Avdelning"
 
-#: class/WC_Twoinc.php:5710
+#: class/WC_Twoinc.php:5706
 msgid "The department displayed on the invoices"
 msgstr "Avdelningen som visas på fakturorna"
 
-#: class/WC_Twoinc.php:5939 class/WC_Twoinc.php:6063 class/WC_Twoinc.php:6481
+#: class/WC_Twoinc.php:5934 class/WC_Twoinc.php:6058 class/WC_Twoinc.php:6476
 msgid "including"
 msgstr "inklusive"
 
-#: class/WC_Twoinc.php:5940 class/WC_Twoinc.php:6063 class/WC_Twoinc.php:6481
+#: class/WC_Twoinc.php:5935 class/WC_Twoinc.php:6058 class/WC_Twoinc.php:6476
 msgid "excluding"
 msgstr "exklusive"
 
-#: class/WC_Twoinc.php:5943
+#: class/WC_Twoinc.php:5938
 #, php-format
 msgid "Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below and must exceed it."
 msgstr "Plattformsminimum %1$s, %2$s skatt. Ett värde här tolkas i butiksvalutan på det skatteunderlag som valts nedan och måste överstiga det."
 
 #. translators: 1: platform minimum in its native currency, e.g. "EUR 250.00", 2: the same minimum converted into the store currency at the current FX rate, e.g. "NOK 2,941.18", 3: tax basis label, "including" or "excluding"
-#: class/WC_Twoinc.php:5957
+#: class/WC_Twoinc.php:5952
 #, php-format
 msgid "Platform minimum %1$s (approximately %2$s at the current exchange rate), %3$s tax. A value here is interpreted in the store currency on the tax basis selected below — both minimums are enforced independently."
 msgstr "Plattformsminimum %1$s (ungefär %2$s till aktuell växelkurs), %3$s skatt. Ett värde här tolkas i butiksvalutan på det skatteunderlag som valts nedan — båda minimigränserna tillämpas oberoende av varandra."
 
-#: class/WC_Twoinc.php:5964
+#: class/WC_Twoinc.php:5959
 #, php-format
 msgid "Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below; it cannot be checked against the platform minimum (different currency) — both minimums are enforced independently."
 msgstr "Plattformsminimum %1$s, %2$s skatt. Ett värde här tolkas i butiksvalutan på det skatteunderlag som valts nedan; det kan inte kontrolleras mot plattformsminimumet (annan valuta) — båda minimigränserna tillämpas oberoende av varandra."
 
-#: class/WC_Twoinc.php:5969
+#: class/WC_Twoinc.php:5964
 msgid "Hide the payment method below this order value (store currency, on the tax basis selected below). Leave empty for no minimum."
 msgstr "Dölj betalningsmetoden under detta ordervärde (butiksvaluta, på det skatteunderlag som valts nedan). Lämna tomt för inget minimum."
 
 #. translators: 1: the subtitle as typed, 2: what the checkout tile would render
-#: class/WC_Twoinc.php:6019
+#: class/WC_Twoinc.php:6014
 #, php-format
 msgid "Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\"."
 msgstr "Underrubriken accepterar endast oformaterad text och en länk; \"%1$s\" visas som \"%2$s\"."
 
-#: class/WC_Twoinc.php:6052
+#: class/WC_Twoinc.php:6047
 msgid "Minimum order value must be a non-negative number."
 msgstr "Minsta beställningsvärde måste vara ett icke-negativt tal."
 
-#: class/WC_Twoinc.php:6061
+#: class/WC_Twoinc.php:6056
 #, php-format
 msgid "Minimum order value must exceed the platform minimum of %1$s, %2$s tax."
 msgstr "Minsta ordervärde måste överstiga plattformsminimumet på %1$s, %2$s skatt."
 
 #. translators: %s is a comma-separated list of the rejected entries
-#: class/WC_Twoinc.php:6093
+#: class/WC_Twoinc.php:6088
 #, php-format
 msgid "Trusted proxy addresses: %s is not a valid IP address or CIDR block, and is ignored. Requests from it are not treated as coming from a trusted proxy."
 msgstr "Betrodda proxyadresser: %s är inte en giltig IP-adress eller CIDR-block och ignoreras. Förfrågningar därifrån behandlas inte som om de kommer från en betrodd proxy."
 
-#: class/WC_Twoinc.php:6220
+#: class/WC_Twoinc.php:6215
 #, php-format
 msgid "This order cannot be paid with %s."
 msgstr "Denna order kan inte betalas med %s."
 
-#: class/WC_Twoinc.php:6255
+#: class/WC_Twoinc.php:6250
 msgid "The selected payment term is no longer available. Please review the payment options and place the order again."
 msgstr "Det valda betalningsvillkoret är inte längre tillgängligt. Gå igenom betalningsalternativen och lägg ordern igen."
 
-#: class/WC_Twoinc.php:6317
+#: class/WC_Twoinc.php:6312
 #, php-format
 msgid "Please select your company before paying with %s."
 msgstr "Välj ditt företag innan du betalar med %s."
 
-#: class/WC_Twoinc.php:6438 class/WC_Twoinc.php:6452
+#: class/WC_Twoinc.php:6433 class/WC_Twoinc.php:6447
 #, php-format
 msgid "Failed to request order creation with %s."
 msgstr "Det gick inte att begära att beställningen skapades med %s ."
 
-#: class/WC_Twoinc.php:6444
+#: class/WC_Twoinc.php:6439
 #, php-format
 msgid "Failed to process payment with %s"
 msgstr "Det gick inte att behandla betalningen med %s"
 
-#: class/WC_Twoinc.php:6478
+#: class/WC_Twoinc.php:6473
 #, php-format
 msgid "Minimum order value is %1$s%2$s %3$s tax."
 msgstr "Minsta ordervärde är %1$s%2$s %3$s moms."
 
-#: class/WC_Twoinc.php:6550 class/WC_Twoinc.php:6608 class/WC_Twoinc.php:6615
-#: class/WC_Twoinc.php:6628
+#: class/WC_Twoinc.php:6545 class/WC_Twoinc.php:6603 class/WC_Twoinc.php:6610
+#: class/WC_Twoinc.php:6623
 #, php-format
 msgid "Failed to request order refund with %s."
 msgstr "Det gick inte att begära återbetalning av beställningen med %s ."
 
-#: class/WC_Twoinc.php:6555
+#: class/WC_Twoinc.php:6550
 #, php-format
 msgid "Could not find %s order ID"
 msgstr "Kunde inte hitta %s order-ID"
 
-#: class/WC_Twoinc.php:6563
+#: class/WC_Twoinc.php:6558
 #, php-format
 msgid "Order has already been fully refunded with %s."
 msgstr "Beställningen har redan återbetalats i sin helhet med %s ."
 
-#: class/WC_Twoinc.php:6588
+#: class/WC_Twoinc.php:6583
 #, php-format
 msgid "Could not initiate refund with %s"
 msgstr "Kunde inte initiera återbetalning med %s"
 
-#: class/WC_Twoinc.php:6621 class/WC_Twoinc.php:6633
+#: class/WC_Twoinc.php:6616 class/WC_Twoinc.php:6628
 #, php-format
 msgid "Could not initiate refund with %s."
 msgstr "Kunde inte initiera återbetalning med %s ."
 
-#: class/WC_Twoinc.php:6640
+#: class/WC_Twoinc.php:6635
 #, php-format
 msgid "Invoice has been refunded and credit note has been sent by %s."
 msgstr "Faktura har återbetalats och kreditnota har skickats av %s ."
 
-#: class/WC_Twoinc.php:6643
+#: class/WC_Twoinc.php:6638
 #, php-format
 msgid "Invoice has been partially refunded and credit note has been sent by %s."
 msgstr "Fakturan har delvis återbetalats och kreditnota har skickats av %s ."
 
-#: class/WC_Twoinc.php:6760 class/WC_Twoinc.php:6767
+#: class/WC_Twoinc.php:6755 class/WC_Twoinc.php:6762
 msgid "The security code is not valid."
 msgstr "Säkerhetskoden är inte giltig."
 
-#: class/WC_Twoinc.php:6773 class/WC_Twoinc.php:6787
+#: class/WC_Twoinc.php:6768 class/WC_Twoinc.php:6778
 #, php-format
 msgid "Unable to retrieve %s order information."
 msgstr "Det gick inte att hämta %s orderinformation."
 
-#: class/WC_Twoinc.php:6794
+#: class/WC_Twoinc.php:6785
 #, php-format
 msgid "Unable to confirm the order with %s."
 msgstr "Det gick inte att bekräfta beställningen med %s ."
 
-#: class/WC_Twoinc.php:6801
+#: class/WC_Twoinc.php:6792
 #, php-format
 msgid "Order ID %s has been placed with %s."
 msgstr "Order-ID %s har placerats med %s ."
 
-#: class/WC_Twoinc.php:6822
+#: class/WC_Twoinc.php:6813
 msgid "General"
 msgstr "Generellt"
 
-#: class/WC_Twoinc.php:6825
+#: class/WC_Twoinc.php:6816
 msgid "Turn on/off"
 msgstr "Slå på / av"
 
-#: class/WC_Twoinc.php:6827
+#: class/WC_Twoinc.php:6818
 #, php-format
 msgid "Enable %s payments"
 msgstr "Aktivera %s betalningar"
 
-#: class/WC_Twoinc.php:6832 class/WC_Twoinc.php:7638
+#: class/WC_Twoinc.php:6823 class/WC_Twoinc.php:7629
 msgid "Environment"
 msgstr "Miljö"
 
-#: class/WC_Twoinc.php:6837
+#: class/WC_Twoinc.php:6828
 #, php-format
 msgid "%s API key"
 msgstr "%s API-nyckel"
 
 #. translators: %s is the contact email address for obtaining production API keys
-#: class/WC_Twoinc.php:6841
+#: class/WC_Twoinc.php:6832
 #, php-format
 msgid "API key for the sandbox environment is available on your merchant portal (however please reach out to %s for access to production keys)."
 msgstr "API-nyckel för sandbox-miljön finns i din säljarportal (kontakta dock %s för åtkomst till produktionsnycklar)."
 
-#: class/WC_Twoinc.php:6846
+#: class/WC_Twoinc.php:6837
 msgid "Vendor name (optional)"
 msgstr "Leverantörsnamn (valfritt)"
 
 #. translators: %1$s and %2$s are both the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:6850
+#: class/WC_Twoinc.php:6841
 #, php-format
 msgid "If this store represents one of several vendor sites sharing the same %1$s merchant account, enter a name here to identify this specific site/vendor on each order sent to %2$s. Leave blank if you only run a single site."
 msgstr "Om denna butik representerar en av flera leverantörssajter som delar samma %1$s-handlarkonto, ange ett namn här för att identifiera denna specifika sajt/leverantör på varje order som skickas till %2$s. Lämna tomt om du bara driver en sajt."
 
-#: class/WC_Twoinc.php:6858
+#: class/WC_Twoinc.php:6849
 msgid "Checkout fields"
 msgstr "Kassafält"
 
-#: class/WC_Twoinc.php:6861
+#: class/WC_Twoinc.php:6852
 msgid "Title"
 msgstr "Titel"
 
-#: class/WC_Twoinc.php:6868
+#: class/WC_Twoinc.php:6859
 msgid "Subtitle"
 msgstr "Underrubrik"
 
-#: class/WC_Twoinc.php:6870
+#: class/WC_Twoinc.php:6861
 msgid "Optional subtitle shown beneath the title at checkout."
 msgstr "Valfri underrubrik som visas under titeln i kassan."
 
-#: class/WC_Twoinc.php:6878
+#: class/WC_Twoinc.php:6869
 msgid "Show message on product pages"
 msgstr "Visa meddelande på produktsidor"
 
-#: class/WC_Twoinc.php:6879
+#: class/WC_Twoinc.php:6870
 msgid "Shows a short promotional line on product pages, beneath the add to cart button. Off by default. Where it lands depends on your theme."
 msgstr "Visar en kort kampanjrad på produktsidor, under knappen för att lägga i varukorgen. Av som standard. Var den hamnar beror på ditt tema."
 
-#: class/WC_Twoinc.php:6886
+#: class/WC_Twoinc.php:6877
 msgid "Product page message"
 msgstr "Meddelande på produktsidan"
 
-#: class/WC_Twoinc.php:6888
+#: class/WC_Twoinc.php:6879
 msgid "Optional. Empty uses the default wording. Avoid naming a number of days unless you are certain of the terms you offer: terms run from fulfilment, and the terms actually available come from your merchant record."
 msgstr "Valfritt. Tomt fält använder standardtexten. Undvik att ange ett antal dagar om du inte är säker på de betalningsvillkor du erbjuder: villkoren löper från fullgörande och de villkor som faktiskt är tillgängliga kommer från din merchant-post."
 
-#: class/WC_Twoinc.php:6895
+#: class/WC_Twoinc.php:6886
 msgid "Show buy button on product pages"
 msgstr "Visa köpknapp på produktsidor"
 
-#: class/WC_Twoinc.php:6896
+#: class/WC_Twoinc.php:6887
 msgid "Adds a button beside Add to cart that adds the item and opens checkout with this payment method already selected. It does not place the order. Off by default. Where it lands depends on your theme."
 msgstr "Lägger till en knapp bredvid Lägg i varukorg som lägger till varan och öppnar kassan med denna betalningsmetod redan vald. Den lägger inte beställningen. Av som standard. Var den hamnar beror på ditt tema."
 
-#: class/WC_Twoinc.php:6906
+#: class/WC_Twoinc.php:6897
 #, php-format
 msgid "Minimum order value, %s"
 msgstr "Minsta beställningsvärde, %s"
 
-#: class/WC_Twoinc.php:6914
+#: class/WC_Twoinc.php:6905
 msgid "Minimum order value tax basis"
 msgstr "Momsgrund för minsta beställningsvärde"
 
-#: class/WC_Twoinc.php:6918
+#: class/WC_Twoinc.php:6909
 msgid "Including tax (gross)"
 msgstr "Inklusive moms (brutto)"
 
-#: class/WC_Twoinc.php:6919
+#: class/WC_Twoinc.php:6910
 msgid "Excluding tax (net)"
 msgstr "Exklusive moms (netto)"
 
-#: class/WC_Twoinc.php:6921
+#: class/WC_Twoinc.php:6912
 msgid "Whether the basket is compared against the minimum including or excluding tax."
 msgstr "Om varukorgen jämförs med minimivärdet inklusive eller exklusive moms."
 
-#: class/WC_Twoinc.php:6924
+#: class/WC_Twoinc.php:6915
 msgid "Pre-approve buyer during checkout"
 msgstr "Förhandsgodkänna köparen i kassan"
 
-#: class/WC_Twoinc.php:6925
+#: class/WC_Twoinc.php:6916
 msgid "Approve buyer when phone and company name is filled out."
 msgstr "Godkänn köpare när telefon och företagsnamn är ifyllt"
 
-#: class/WC_Twoinc.php:6932
+#: class/WC_Twoinc.php:6923
 #, php-format
 msgid "Show \"What is %s\" link in checkout"
 msgstr "Visa länken \"Vad är %s \" i kassan"
 
-#: class/WC_Twoinc.php:6938
+#: class/WC_Twoinc.php:6929
 msgid "Display input tooltips"
 msgstr "Visa verktygstips för inmatning"
 
-#: class/WC_Twoinc.php:6952
+#: class/WC_Twoinc.php:6943
 msgid "Show invoice email field"
 msgstr "Visa e-postfältet för faktura"
 
-#: class/WC_Twoinc.php:6953
+#: class/WC_Twoinc.php:6944
 msgid "Adds an input field where buyers can input optional additional email address to receive invoice."
 msgstr "Lägger till ett inmatningsfält där köpare kan ange valfri ytterligare e-postadress för att ta emot faktura."
 
-#: class/WC_Twoinc.php:6960
+#: class/WC_Twoinc.php:6951
 msgid "Show PO number field"
 msgstr "Visa fältet för PO-nummer"
 
-#: class/WC_Twoinc.php:6961
+#: class/WC_Twoinc.php:6952
 msgid "Adds an input field where buyers can input their purchase order number to display on the invoice."
 msgstr "Lägger till ett inmatningsfält där köpare kan ange sitt inköpsordernummer för att visas på fakturan."
 
-#: class/WC_Twoinc.php:6968
+#: class/WC_Twoinc.php:6959
 msgid "Show project field"
 msgstr "Visa fältet för projekt"
 
-#: class/WC_Twoinc.php:6969
+#: class/WC_Twoinc.php:6960
 msgid "Adds an input field where buyers can input their project in the company to display on the invoice."
 msgstr "Lägger till ett inmatningsfält där köpare kan mata in sitt projekt i företaget att visa på fakturan."
 
-#: class/WC_Twoinc.php:6976
+#: class/WC_Twoinc.php:6967
 msgid "Show department field"
 msgstr "Visa fältet för avdelning"
 
-#: class/WC_Twoinc.php:6977
+#: class/WC_Twoinc.php:6968
 msgid "Adds an input field where buyers can input their department to display on the invoice."
 msgstr "Lägger till ett inmatningsfält där köpare kan ange sin avdelning att visa på fakturan."
 
-#: class/WC_Twoinc.php:6987
+#: class/WC_Twoinc.php:6978
 msgid "Enable company search in address entry"
 msgstr "Aktivera företagssökning vid adressinmatning"
 
-#: class/WC_Twoinc.php:6988
+#: class/WC_Twoinc.php:6979
 msgid "When enabled, the buyer may search for their company within the address entry section of the checkout. Otherwise, company search will be visible within the payment method."
 msgstr "När detta är aktiverat kan köparen söka efter sitt företag i adressavsnittet i kassan. Annars visas företagssökningen i betalningsmetoden."
 
-#: class/WC_Twoinc.php:6995
+#: class/WC_Twoinc.php:6986
 msgid "Autofill company address"
 msgstr "Autofyll av företagsadress"
 
-#: class/WC_Twoinc.php:6996
+#: class/WC_Twoinc.php:6987
 msgid "Enables automatically filling in the registered address from the national registry."
 msgstr "Möjliggör att automatiskt fylla i den registrerade adressen från officiella register"
 
-#: class/WC_Twoinc.php:7008 class/WC_Twoinc.php:7022 class/WC_Twoinc.php:7653
+#: class/WC_Twoinc.php:6999 class/WC_Twoinc.php:7013 class/WC_Twoinc.php:7644
 msgid "Payment terms"
 msgstr "Betalningsvillkor"
 
-#: class/WC_Twoinc.php:7011
+#: class/WC_Twoinc.php:7002
 msgid "Payment terms type"
 msgstr "Betalningsvillkorstyp"
 
-#: class/WC_Twoinc.php:7012
+#: class/WC_Twoinc.php:7003
 msgid "Standard counts the term days from the invoice date. End of month counts them from the end of the invoice month."
 msgstr "Standard räknar terminsdagarna från fakturadatumet. Månadsslut räknar dem från slutet av fakturamånaden."
 
-#: class/WC_Twoinc.php:7016
+#: class/WC_Twoinc.php:7007
 msgid "Standard (from invoice date)"
 msgstr "Standard (från fakturadatum)"
 
-#: class/WC_Twoinc.php:7017
+#: class/WC_Twoinc.php:7008
 msgid "End of month"
 msgstr "Månadsskifte"
 
-#: class/WC_Twoinc.php:7023
+#: class/WC_Twoinc.php:7014
 msgid "Select the payment term(s) you want to offer."
 msgstr "Välj betalningsvillkor du vill erbjuda."
 
-#: class/WC_Twoinc.php:7028
+#: class/WC_Twoinc.php:7019
 msgid "Custom payment terms (days)"
 msgstr "Anpassade betalningsvillkor (dagar)"
 
-#: class/WC_Twoinc.php:7034
+#: class/WC_Twoinc.php:7025
 msgid "Default payment terms"
 msgstr "Standardbetalningsvillkor"
 
-#: class/WC_Twoinc.php:7035
+#: class/WC_Twoinc.php:7026
 msgid "Select the payment term that will be automatically selected for your customer. Automatic leaves the choice to the checkout, which uses your own default term when you offer it."
 msgstr "Välj det betalningsvillkor som automatiskt väljs för din kund. Automatiskt lämnar valet till kassan, som använder ditt eget standardvillkor när du erbjuder det."
 
-#: class/WC_Twoinc.php:7042
+#: class/WC_Twoinc.php:7033
 msgid "Surcharge method"
 msgstr "Tilläggsstrategi"
 
-#: class/WC_Twoinc.php:7043
+#: class/WC_Twoinc.php:7034
 msgid "Select a method to surcharge your customer."
 msgstr "Välj en metod för att debitera din kund."
 
-#: class/WC_Twoinc.php:7047
+#: class/WC_Twoinc.php:7038
 msgid "No surcharge applied"
 msgstr "Ingen tilläggsavgift appliceras"
 
-#: class/WC_Twoinc.php:7048
+#: class/WC_Twoinc.php:7039
 msgid "Percentage"
 msgstr "Procent"
 
-#: class/WC_Twoinc.php:7049
+#: class/WC_Twoinc.php:7040
 msgid "Fixed fee"
 msgstr "Fast belopp"
 
-#: class/WC_Twoinc.php:7050
+#: class/WC_Twoinc.php:7041
 msgid "Fixed fee and percentage"
 msgstr "Fast belopp och procent"
 
-#: class/WC_Twoinc.php:7055
+#: class/WC_Twoinc.php:7046
 msgid "Surcharge calculation basis"
 msgstr "Grund för tilläggsberäkning"
 
-#: class/WC_Twoinc.php:7056
+#: class/WC_Twoinc.php:7047
 msgid "Total fee charges the configured surcharge for the chosen term. Fee difference charges only the difference versus the default term (which then shows no surcharge)."
 msgstr "Totalavgift debiterar det konfigurerade tillägget för det valda villkoret. Avgiftsskillnad debiterar endast skillnaden mot standardvillkoret (som då inte visar något tillägg)."
 
-#: class/WC_Twoinc.php:7060
+#: class/WC_Twoinc.php:7051
 msgid "Total fee for selected term"
 msgstr "Total avgift för valt villkor"
 
-#: class/WC_Twoinc.php:7061
+#: class/WC_Twoinc.php:7052
 msgid "Fee difference vs default payment term"
 msgstr "Avgiftsskillnad mot standard betalningsvillkor"
 
-#: class/WC_Twoinc.php:7066
+#: class/WC_Twoinc.php:7057
 msgid "Surcharge line description"
 msgstr "Beskrivning av tilläggsavgift"
 
-#: class/WC_Twoinc.php:7067
+#: class/WC_Twoinc.php:7058
 #, php-format
 msgid "Buyer-facing label for the surcharge line. Use %s for the term length in days. Leave blank to use the brand default."
 msgstr "Etikett som visas för köparen på tilläggsavgiftsraden. Använd %s för villkorets längd i dagar. Lämna fältet tomt för att använda varumärkets standardtext."
 
-#: class/WC_Twoinc.php:7073
+#: class/WC_Twoinc.php:7064
 msgid "Surcharge tax treatment"
 msgstr "Skattehantering av tillägg"
 
-#: class/WC_Twoinc.php:7074
+#: class/WC_Twoinc.php:7065
 msgid "How the surcharge line is taxed. Standard applies your store's default tax rules to the fee. Specific tax class taxes the fee under a WooCommerce tax class you select below — to leave the fee untaxed, create a tax class with a 0% rate and select it here."
 msgstr "Hur tilläggsraden beskattas. Standard tillämpar butikens standardskatteregler på avgiften. Specifik skatteklass beskattar avgiften enligt en WooCommerce-skatteklass du väljer nedan — för att lämna avgiften obeskattad, skapa en skatteklass med 0 % skattesats och välj den här."
 
-#: class/WC_Twoinc.php:7096
+#: class/WC_Twoinc.php:7087
 msgid "Surcharge tax class"
 msgstr "Skatteklass för tillägg"
 
-#: class/WC_Twoinc.php:7097
+#: class/WC_Twoinc.php:7088
 msgid "The WooCommerce tax class applied to the surcharge when the tax treatment is \"Specific tax class\". Manage tax classes under WooCommerce → Settings → Tax."
 msgstr "Den WooCommerce-skatteklass som tillämpas på tillägget när skattehanteringen är \"Specifik skatteklass\". Hantera skatteklasser under WooCommerce → Inställningar → Skatt."
 
-#: class/WC_Twoinc.php:7107
+#: class/WC_Twoinc.php:7098
 msgid "Payment surcharge configuration"
 msgstr "Konfiguration av tilläggsavgift"
 
-#: class/WC_Twoinc.php:7117
+#: class/WC_Twoinc.php:7108
 msgid "Surcharge rounding"
 msgstr "Avrundning av tillägg"
 
-#: class/WC_Twoinc.php:7118
+#: class/WC_Twoinc.php:7109
 msgid "Snap the buyer surcharge line to a clean increment. Select None for standard two-decimal amounts."
 msgstr "Avrunda köparens tilläggsavgiftsrad till ett jämnt steg. Välj Ingen för vanliga belopp med två decimaler."
 
-#: class/WC_Twoinc.php:7122
+#: class/WC_Twoinc.php:7113
 msgid "None"
 msgstr "Ingen"
 
-#: class/WC_Twoinc.php:7123
+#: class/WC_Twoinc.php:7114
 msgid "Up"
 msgstr "Uppåt"
 
-#: class/WC_Twoinc.php:7124
+#: class/WC_Twoinc.php:7115
 msgid "Down"
 msgstr "Nedåt"
 
-#: class/WC_Twoinc.php:7130
+#: class/WC_Twoinc.php:7121
 msgid "Rounding step"
 msgstr "Avrundningssteg"
 
-#: class/WC_Twoinc.php:7131
+#: class/WC_Twoinc.php:7122
 msgid "Increment the surcharge is rounded to (e.g. 1 = whole units, 0.50 = nearest half). Applies only when a rounding direction is selected."
 msgstr "Steget som tilläggsavgiften avrundas till (t.ex. 1 = hela enheter, 0,50 = närmaste halva). Gäller endast när en avrundningsriktning är vald."
 
-#: class/WC_Twoinc.php:7140
+#: class/WC_Twoinc.php:7131
 msgid "Order management"
 msgstr "Orderhantering"
 
-#: class/WC_Twoinc.php:7143
+#: class/WC_Twoinc.php:7134
 msgid "Fulfilment trigger statuses"
 msgstr "Utlösande statusar för uppfyllelse"
 
 #. translators: %1$s and %2$s are both the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:7151
+#: class/WC_Twoinc.php:7142
 #, php-format
 msgid "Which order status(es) tell %1$s an order is fulfilled. Defaults to \"Completed\" — add another status here (e.g. a custom status from another plugin) if your workflow never sets an order to Completed, otherwise %2$s is never notified and the order is left un-fulfilled indefinitely."
 msgstr "Vilken/vilka orderstatus(ar) som talar om för %1$s att en order är levererad. Standard är \"Slutförd\" — lägg till en annan status här (t.ex. en anpassad status från ett annat tillägg) om ditt arbetsflöde aldrig sätter en order till Slutförd, annars meddelas aldrig %2$s och ordern lämnas outfyllda på obestämd tid."
 
-#: class/WC_Twoinc.php:7159
+#: class/WC_Twoinc.php:7150
 msgid "Tax"
 msgstr "Skatt"
 
-#: class/WC_Twoinc.php:7162
+#: class/WC_Twoinc.php:7153
 msgid "Validate tax subtotals"
 msgstr "Validera delsummor för skatt"
 
-#: class/WC_Twoinc.php:7165
+#: class/WC_Twoinc.php:7156
 msgid "When checked, a per-tax-rate tax_subtotals breakdown is sent with orders, order updates and refunds, for validation against the order lines. When unchecked, tax_subtotals is omitted from all of them."
 msgstr "När rutan är markerad skickas en tax_subtotals-uppdelning per momssats med ordrar, orderuppdateringar och återbetalningar, för validering mot orderraderna. När den inte är markerad utesluts tax_subtotals från alla dessa."
 
-#: class/WC_Twoinc.php:7170
+#: class/WC_Twoinc.php:7161
 msgid "Tax codes for 0% lines"
 msgstr "Momskoder för rader med 0 %"
 
-#: class/WC_Twoinc.php:7177
+#: class/WC_Twoinc.php:7168
 msgid "Diagnostics"
 msgstr "Diagnostik"
 
-#: class/WC_Twoinc.php:7180
+#: class/WC_Twoinc.php:7171
 msgid "Disable checkout rate limiting"
 msgstr "Inaktivera hastighetsbegränsning i kassan"
 
-#: class/WC_Twoinc.php:7181
+#: class/WC_Twoinc.php:7172
 msgid "Serve the checkout AJAX endpoints unmetered"
 msgstr "Servera kassans AJAX-slutpunkter utan hastighetsbegränsning"
 
-#: class/WC_Twoinc.php:7183
+#: class/WC_Twoinc.php:7174
 msgid "The checkout AJAX endpoints spend your API key, so each client address is allowed a fixed number of requests per minute. Turn this on only if legitimate buyers are being refused — that happens when the store sits behind a reverse proxy or CDN and every buyer reaches PHP as the same address, which collapses the per-buyer allowance into a store-wide one. The lasting fix is to list the proxy below."
 msgstr "Kassans AJAX-slutpunkter förbrukar din API-nyckel, så varje klientadress tillåts ett fast antal förfrågningar per minut. Aktivera detta endast om legitima köpare nekas — det händer när butiken sitter bakom en reverse proxy eller CDN och alla köpare når PHP som samma adress, vilket slår ihop den per-köpare-tillåtna mängden till en butiksomfattande. Den varaktiga lösningen är att lista proxyn nedan."
 
-#: class/WC_Twoinc.php:7187
+#: class/WC_Twoinc.php:7178
 msgid "Trusted proxy addresses"
 msgstr "Betrodda proxyadresser"
 
-#: class/WC_Twoinc.php:7189
+#: class/WC_Twoinc.php:7180
 msgid "Addresses of your own reverse proxies, load balancers or CDN egress, as IPs or CIDR ranges, separated by commas or new lines. These IP addresses will be exempt from rate limiting."
 msgstr "Adresser till dina egna reverse proxyservrar, lastbalanserare eller CDN-utgångar, som IP-adresser eller CIDR-intervall, separerade med kommatecken eller nya rader. Dessa IP-adresser undantas från hastighetsbegränsning."
 
-#: class/WC_Twoinc.php:7194
+#: class/WC_Twoinc.php:7185
 msgid "Custom request headers"
 msgstr "Anpassade begäranshuvuden"
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:7198
+#: class/WC_Twoinc.php:7189
 #, php-format
 msgid "If your IT administrator asks you to add headers to the calls your store makes to the %s API (for example a firewall token), add them here. Every header listed is sent on all calls your store makes from your server."
 msgstr "Om din IT-administratör ber dig lägga till huvuden på anropen som din butik gör mot %s-API:et (till exempel en brandväggstoken), lägger du till dem här. Alla huvuden i listan skickas på alla anrop som din butik gör från din server."
 
-#: class/WC_Twoinc.php:7203
+#: class/WC_Twoinc.php:7194
 msgid "Disable SSL verification"
 msgstr "Inaktivera SSL-verifiering"
 
-#: class/WC_Twoinc.php:7204
+#: class/WC_Twoinc.php:7195
 msgid "Skip SSL certificate verification on outbound API requests"
 msgstr "Hoppa över SSL-certifikatverifiering för utgående API-förfrågningar"
 
-#: class/WC_Twoinc.php:7206
+#: class/WC_Twoinc.php:7197
 msgid "WARNING: this is unsafe for production and only intended for local/dev debugging behind a corporate proxy with custom SSL certificates. Applies in every environment, including Production, while enabled."
 msgstr "VARNING: detta är osäkert för produktion och är endast avsett för lokal/dev-felsökning bakom en företagsproxy med anpassade SSL-certifikat. Gäller i alla miljöer, inklusive produktion, medan det är aktiverat."
 
-#: class/WC_Twoinc.php:7210
+#: class/WC_Twoinc.php:7201
 msgid "Enable debug logging"
 msgstr "Aktivera API-loggning"
 
-#: class/WC_Twoinc.php:7211
+#: class/WC_Twoinc.php:7202
 msgid "Log API requests/responses and other diagnostic detail"
 msgstr "Logga API-förfrågningar/-svar och annan diagnostisk information"
 
-#: class/WC_Twoinc.php:7214
+#: class/WC_Twoinc.php:7205
 #, php-format
 msgid "If enabled, API interactions and other diagnostic detail (e.g. surcharge/FX rounding) are logged. This can be useful for debugging. You can view the logs <a href=\"%s\">here</a>."
 msgstr "Om aktiverat loggas API-interaktioner och annan diagnostisk information (t.ex. avrundning av tillägg/växelkurs). Detta kan vara användbart för felsökning. Du kan se loggarna <a href=\"%s\">här</a>."
 
-#: class/WC_Twoinc.php:7220
+#: class/WC_Twoinc.php:7211
 msgid "Error log"
 msgstr "Fellogg"
 
-#: class/WC_Twoinc.php:7224
+#: class/WC_Twoinc.php:7215
 msgid "Skip user validation at order confirmation"
 msgstr "Hoppa över användarvalidering vid orderbekräftelse"
 
-#: class/WC_Twoinc.php:7225
+#: class/WC_Twoinc.php:7216
 msgid "Accept the confirmation callback without a valid WordPress security token"
 msgstr "Godkänn bekräftelseanropet utan giltig WordPress-säkerhetstoken"
 
-#: class/WC_Twoinc.php:7227
+#: class/WC_Twoinc.php:7218
 msgid "The confirmation callback always checks the order's unique 64-character order reference; this option skips only the additional WordPress security token, which typically expires 12 to 24 hours after the order was placed — and, for a signed-in customer, when their session changes — so a buyer who comes back to a legitimately authorised order can be rejected. The order reference must still match, so the callback is not left open, but the security token's protection against a cross-site request is gone; leave this off unless you are seeing those false rejections."
 msgstr "Bekräftelseanropet kontrollerar alltid orderns unika orderreferens på 64 tecken; det här alternativet hoppar bara över den extra säkerhetstoken från WordPress, som vanligtvis upphör att gälla 12 till 24 timmar efter att ordern lades – och för en inloggad kund så snart sessionen ändras – vilket gör att en köpare som återvänder till en order som faktiskt har godkänts kan avvisas. Orderreferensen måste fortfarande stämma, så anropet står inte öppet, men skyddet som säkerhetstoken ger mot en förfrågan över webbplatsgränser är borta; lämna detta av om du inte ser sådana felaktiga avvisningar."
 
-#: class/WC_Twoinc.php:7231
+#: class/WC_Twoinc.php:7222
 msgid "Clear settings on uninstall of plug-in"
 msgstr "Rensa inställningar vid inaktivering av plugin"
 
-#: class/WC_Twoinc.php:7237
+#: class/WC_Twoinc.php:7228
 msgid "Plugin version"
 msgstr "Plugin-version"
 
-#: class/WC_Twoinc.php:7241
+#: class/WC_Twoinc.php:7232
 msgid "Install health checklist"
 msgstr "Installationschecklista"
 
-#: class/WC_Twoinc.php:7245
+#: class/WC_Twoinc.php:7236
 msgid "Merchant profile"
 msgstr "Säljarprofil"
 
-#: class/WC_Twoinc.php:7304
+#: class/WC_Twoinc.php:7295
 msgid "Merchant ID:"
 msgstr "Handlar-ID:"
 
-#: class/WC_Twoinc.php:7308
+#: class/WC_Twoinc.php:7299
 #, php-format
 msgid "Don't have an API key? Get one by signing up <a href='%s'>here</a>."
 msgstr "Har du ingen API-nyckel? Skaffa en genom att registrera dig <a href='%s'>här</a> ."
 
-#: class/WC_Twoinc.php:7356
+#: class/WC_Twoinc.php:7347
 msgid "Header name"
 msgstr "Huvudnamn"
 
-#: class/WC_Twoinc.php:7357
+#: class/WC_Twoinc.php:7348
 msgid "Value"
 msgstr "Värde"
 
-#: class/WC_Twoinc.php:7358
+#: class/WC_Twoinc.php:7349
 msgid "Also send from browser"
 msgstr "Skicka även från webbläsaren"
 
-#: class/WC_Twoinc.php:7373 class/WC_Twoinc.php:7379
+#: class/WC_Twoinc.php:7364 class/WC_Twoinc.php:7370
 msgid "This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again."
 msgstr "Denna post innehåller tecken som detta fält inte kan hålla, så den visas inte och skickas inte. Skriv in den igen."
 
-#: class/WC_Twoinc.php:7382
+#: class/WC_Twoinc.php:7373
 msgid "This row is not being sent, and the settings cannot be saved until it is corrected or removed."
 msgstr "Denna rad skickas inte och inställningarna kan inte sparas förrän den har rättats eller tagits bort."
 
-#: class/WC_Twoinc.php:7391
+#: class/WC_Twoinc.php:7382
 msgid "Add header"
 msgstr "Lägg till huvud"
 
-#: class/WC_Twoinc.php:7393
+#: class/WC_Twoinc.php:7384
 msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
 msgstr "Markera \"Skicka även från webbläsaren\" endast om din IT-administratör kräver huvudet på anrop från köparens webbläsare utöver dem från din server. Värdet publiceras till köparens webbläsare och kan läsas av vem som helst."
 
-#: class/WC_Twoinc.php:7423
+#: class/WC_Twoinc.php:7414
 msgid "Every custom request header needs a name."
 msgstr "Varje anpassat begäranshuvud måste ha ett namn."
 
 #. translators: %s: the rejected header name
-#: class/WC_Twoinc.php:7428
+#: class/WC_Twoinc.php:7419
 #, php-format
 msgid "\"%s\" is not a valid HTTP header name. Use letters, digits and hyphens."
 msgstr "\"%s\" är inte ett giltigt HTTP-huvudnamn. Använd bokstäver, siffror och bindestreck."
 
 #. translators: %s: the rejected header name
-#: class/WC_Twoinc.php:7436
+#: class/WC_Twoinc.php:7427
 #, php-format
 msgid "The header \"%s\" is reserved and cannot be set from this table."
 msgstr "Huvudet \"%s\" är reserverat och kan inte anges från denna tabell."
 
 #. translators: %s: the header name whose value was rejected
-#: class/WC_Twoinc.php:7443
+#: class/WC_Twoinc.php:7434
 #, php-format
 msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
 msgstr "Värdet för \"%s\" måste vara skrivbar ASCII-text och får inte vara tomt."
 
 #. translators: %s: the duplicated header name
-#: class/WC_Twoinc.php:7450
+#: class/WC_Twoinc.php:7441
 #, php-format
 msgid "The header \"%s\" is listed more than once."
 msgstr "Huvudet \"%s\" är listat mer än en gång."
 
-#: class/WC_Twoinc.php:7528
+#: class/WC_Twoinc.php:7519
 msgid "Select image"
 msgstr "Välj bild"
 
-#: class/WC_Twoinc.php:7551
+#: class/WC_Twoinc.php:7542
 msgid "View error log"
 msgstr "Visa fellogg"
 
-#: class/WC_Twoinc.php:7554
+#: class/WC_Twoinc.php:7545
 msgid "Opens the WooCommerce log viewer filtered to this plugin's log entries."
 msgstr "Öppnar WooCommerce-loggvisaren filtrerad till detta tilläggs loggposter."
 
-#: class/WC_Twoinc.php:7589
+#: class/WC_Twoinc.php:7580
 msgid "Refresh merchant profile"
 msgstr "Uppdatera säljarprofil"
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:7604
+#: class/WC_Twoinc.php:7595
 #, php-format
 msgid "Your offerable payment terms, buyer-surcharge cap, minimum order value and default term are read from %s and cached. They are refreshed every night and whenever the API key or environment is saved; use this to pull a change through now. The nightly refresh runs on WP-Cron. With WP-Cron disabled, the next request more than 24 hours after the last refresh re-reads it, and while a re-read keeps failing one request a minute retries it."
 msgstr "De betalningsvillkor du kan erbjuda, taket för köpartillägget, minsta ordervärde och standardvillkoret hämtas från %s och cachas. De uppdateras varje natt och varje gång API-nyckeln eller miljön sparas; använd detta för att hämta in en ändring nu. Den nattliga uppdateringen körs på WP-Cron. Med WP-Cron avstängt läser den första förfrågan mer än 24 timmar efter senaste uppdateringen om den, och så länge en ny läsning fortsätter att misslyckas gör en förfrågan per minut ett nytt försök."
 
-#: class/WC_Twoinc.php:7633
+#: class/WC_Twoinc.php:7624
 msgid "API key"
 msgstr "API-nyckel"
 
-#: class/WC_Twoinc.php:7634
+#: class/WC_Twoinc.php:7625
 msgid "Configured"
 msgstr "Konfigurerad"
 
-#: class/WC_Twoinc.php:7634
+#: class/WC_Twoinc.php:7625
 msgid "Not configured"
 msgstr "Inte konfigurerad"
 
-#: class/WC_Twoinc.php:7643
+#: class/WC_Twoinc.php:7634
 msgid "SSL verification"
 msgstr "SSL-verifiering"
 
-#: class/WC_Twoinc.php:7644
+#: class/WC_Twoinc.php:7635
 msgid "Disabled"
 msgstr "Avaktiverad"
 
-#: class/WC_Twoinc.php:7644
+#: class/WC_Twoinc.php:7635
 msgid "Enabled"
 msgstr "Aktiverad"
 
-#: class/WC_Twoinc.php:7648
+#: class/WC_Twoinc.php:7639
 msgid "PHP curl extension"
 msgstr "PHP curl-tillägg"
 
-#: class/WC_Twoinc.php:7649
+#: class/WC_Twoinc.php:7640
 msgid "Present"
 msgstr "Finns"
 
-#: class/WC_Twoinc.php:7649
+#: class/WC_Twoinc.php:7640
 msgid "Missing"
 msgstr "Saknas"
 
-#: class/WC_Twoinc.php:7658
+#: class/WC_Twoinc.php:7649
 msgid "Merchant profile last read"
 msgstr "Säljarprofil senast läst"
 
-#: class/WC_Twoinc.php:7682
+#: class/WC_Twoinc.php:7673
 msgid "SSL verification is disabled while the environment is not production-hardened; re-check the \"Disable SSL verification\" setting."
 msgstr "SSL-verifiering är inaktiverad medan miljön inte är produktionssäkrad; kontrollera inställningen \"Inaktivera SSL-verifiering\" igen."
 
-#: class/WC_Twoinc.php:7699 class/WC_Twoinc.php:7729
+#: class/WC_Twoinc.php:7690 class/WC_Twoinc.php:7720
 msgid "Unable to retrieve the order information."
 msgstr "Det gick inte att hämta beställningsinformationen."
 
-#: class/WC_Twoinc.php:7735
+#: class/WC_Twoinc.php:7726
 msgid "Unable to retrieve the order payment information"
 msgstr "Det gick inte att hämta betalningsinformationen"
 
-#: class/WC_Twoinc.php:7741
+#: class/WC_Twoinc.php:7732
 msgid "Missing company ID."
 msgstr "Företags-ID saknas."
 
-#: class/WC_Twoinc.php:7828
+#: class/WC_Twoinc.php:7819
 #, php-format
 msgid "Could not update the order with %s. Reason: %s"
 msgstr "Kunde inte uppdatera ordern med %s. Orsak: %s"
 
-#: class/WC_Twoinc.php:7917
+#: class/WC_Twoinc.php:7908
 #, php-format
 msgid "This change was saved in WooCommerce but was not sent to %1$s, which no longer accepts edits to this order. The %1$s invoice does not include it."
 msgstr "Denna ändring sparades i WooCommerce men skickades inte till %1$s, som inte längre tar emot ändringar av denna order. %1$s-fakturan innehåller den inte."
 
-#: class/WC_Twoinc.php:7937 class/WC_Twoinc.php:7969 class/WC_Twoinc.php:7976
+#: class/WC_Twoinc.php:7928 class/WC_Twoinc.php:7960 class/WC_Twoinc.php:7967
 #, php-format
 msgid "Could not edit the order with %s."
 msgstr "Kunde inte redigera beställningen med %s ."
 
-#: class/WC_Twoinc.php:7991
+#: class/WC_Twoinc.php:7982
 #, php-format
 msgid "The order edit request has been accepted by %s."
 msgstr "Beställningsredigeringsbegäran har accepterats av %s ."
 
-#: class/WC_Twoinc.php:7993
+#: class/WC_Twoinc.php:7984
 #, php-format
 msgid "Order value is now %s."
 msgstr "Ordervärdet är nu %s ."
 
-#: class/WC_Twoinc.php:8382
+#: class/WC_Twoinc.php:8373
 #, php-format
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
 msgstr "Öka din B2B-försäljning med Köp nu, betala senare med %s !"
 
-#: class/WC_Twoinc.php:8383
+#: class/WC_Twoinc.php:8374
 #, php-format
 msgid "%s credit approves 90%% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It is quick, easy and gives you immediate access to the %s Merchant Portal."
 msgstr "%s kredit godkänner 90%% av företagsköparna, betalar dig i förskott och minimerar din risk. För att erbjuda %s i kassan måste du registrera dig. Det är snabbt, enkelt och ger dig omedelbar tillgång till %s Merchant Portal."
 
-#: class/WC_Twoinc.php:8384
+#: class/WC_Twoinc.php:8375
 msgid "Set up my account"
 msgstr "Konfigurera mitt konto"
 
 #. translators: 1: base plugin provenance, e.g. "2.23.9 (eb7bf92cec07, deployed 2026-07-08 11:35 UTC)"
-#: class/WC_Twoinc.php:8470
+#: class/WC_Twoinc.php:8461
 #, php-format
 msgid "Plugin: %s"
 msgstr "Tillägg: %s"
 
 #. translators: 1: overlay plugin slug, 2: overlay provenance
-#: class/WC_Twoinc.php:8478
+#: class/WC_Twoinc.php:8469
 #, php-format
 msgid "Brand overlay: %1$s %2$s"
 msgstr "Varumärkesöverlägg: %1$s %2$s"
 
 #. translators: 1: plugin (and overlay) provenance fragments, 2: WooCommerce version, 3: WordPress version
-#: class/WC_Twoinc.php:8485
+#: class/WC_Twoinc.php:8476
 #, php-format
 msgid "%1$s | WooCommerce: %2$s | WordPress: %3$s"
 msgstr "%1$s | WooCommerce: %2$s | WordPress: %3$s"
 
 #. translators: %s: UTC timestamp the code was deployed
-#: class/WC_Twoinc.php:8517
+#: class/WC_Twoinc.php:8508
 #, php-format
 msgid "deployed %s UTC"
 msgstr "driftsatt %s UTC"
 
-#: class/WC_Twoinc.php:8652
+#: class/WC_Twoinc.php:8643
 #, php-format
 msgid "%s API key verified."
 msgstr "%s API-nyckel verifierad."
 
-#: class/WC_Twoinc.php:8655
+#: class/WC_Twoinc.php:8646
 #, php-format
 msgid "%s rejected that API key, so the previously saved key was kept."
 msgstr "%s avvisade den här API-nyckeln, så den tidigare sparade nyckeln behölls."
 
-#: class/WC_Twoinc.php:8658
+#: class/WC_Twoinc.php:8649
 #, php-format
 msgid "API key saved, but %s could not be reached to verify it."
 msgstr "API-nyckeln har sparats, men %s kunde inte nås för att verifiera den."
 
-#: class/WC_Twoinc.php:8660
+#: class/WC_Twoinc.php:8651
 msgid "API key saved, but it could not be verified because no environment is configured."
 msgstr "API-nyckeln har sparats, men kunde inte verifieras eftersom ingen miljö är konfigurerad."
 
-#: class/WC_Twoinc.php:8662
+#: class/WC_Twoinc.php:8653
 #, php-format
 msgid "API key saved, but %s returned an error while verifying it."
 msgstr "API-nyckeln har sparats, men %s returnerade ett fel vid verifieringen."
 
 #: class/WC_Twoinc_Checkout.php:220 class/WC_Twoinc_Checkout.php:234
 #: class/WC_Twoinc_Checkout.php:248 class/WC_Twoinc_Checkout.php:271
-#: class/WC_Twoinc_Checkout.php:280 class/WC_Twoinc_Helper.php:463
+#: class/WC_Twoinc_Checkout.php:280 class/WC_Twoinc_Helper.php:469
 msgid "Company name"
 msgstr "Företagsnamn"
 
@@ -1703,7 +1703,7 @@ msgstr "Företagsnamn"
 msgid "Company ID"
 msgstr "Organisationsnummer"
 
-#: class/WC_Twoinc_Checkout.php:311 class/WC_Twoinc_Helper.php:487
+#: class/WC_Twoinc_Checkout.php:311 class/WC_Twoinc_Helper.php:493
 msgid "Invoice email address"
 msgstr "E-postadress för faktura"
 
@@ -1711,173 +1711,179 @@ msgstr "E-postadress för faktura"
 msgid "PO Number"
 msgstr "PO-nummer"
 
-#: class/WC_Twoinc_Checkout.php:658
+#: class/WC_Twoinc_Checkout.php:656
 msgid "We require your phone number so we can verify your purchase."
 msgstr "Vi behöver ditt telefonnummer så att vi kan verifiera ditt köp."
 
-#: class/WC_Twoinc_Checkout.php:659
+#: class/WC_Twoinc_Checkout.php:657
 msgid "We use your company name to automatically populate your address and register the company that made the purchase."
 msgstr "Vi använder ditt företagsnamn för att automatiskt fylla i din adress och registrera företaget som gjorde köpet."
 
-#: class/WC_Twoinc_Checkout.php:663
+#: class/WC_Twoinc_Checkout.php:661
 msgid "Company search is temporarily unavailable. Please try again."
 msgstr "Företagssökningen är tillfälligt otillgänglig. Försök igen."
 
 #. translators: %d: minimum number of characters the buyer must type before the company search runs. Left unresolved here and interpolated in JS from the threshold the widget enforces, so the two cannot disagree.
-#: class/WC_Twoinc_Checkout.php:671
+#: class/WC_Twoinc_Checkout.php:669
 #, php-format
 msgid "Enter %d or more characters"
 msgstr "Ange %d eller fler tecken"
 
-#: class/WC_Twoinc_Checkout.php:678
+#: class/WC_Twoinc_Checkout.php:676
 msgid "Enter manually"
 msgstr "Ange manuellt"
 
-#: class/WC_Twoinc_Checkout.php:679
+#: class/WC_Twoinc_Checkout.php:677
 msgid "Search for company"
 msgstr "Sök efter företag"
 
 #. translators: %d: number of companies the search returned, interpolated in JS.
-#: class/WC_Twoinc_Checkout.php:682
+#: class/WC_Twoinc_Checkout.php:680
 #, php-format
 msgid "%d results are available, use up and down arrow keys to navigate."
 msgstr "%d resultat är tillgängliga, använd upp- och nedpilarna för att navigera."
 
-#: class/WC_Twoinc_Checkout.php:683
+#: class/WC_Twoinc_Checkout.php:681
 msgid "1 result is available, use up and down arrow keys to navigate."
 msgstr "1 resultat är tillgängligt, använd upp- och nedpilarna för att navigera."
 
-#: class/WC_Twoinc_Checkout.php:739
+#: class/WC_Twoinc_Checkout.php:737
 msgid "Selected payment terms"
 msgstr "Valda betalningsvillkor"
 
-#: class/WC_Twoinc_Checkout.php:745
+#: class/WC_Twoinc_Checkout.php:743
 #, php-format
 msgid "EOM+%s"
 msgstr "EOM+%s"
 
-#: class/WC_Twoinc_Checkout.php:746
+#: class/WC_Twoinc_Checkout.php:744
 #, php-format
 msgid "EOM+%s: pay %s days after the end of the month"
 msgstr "EOM+%s: betala %s dagar efter månadens slut"
 
-#: class/WC_Twoinc_Checkout.php:754
+#: class/WC_Twoinc_Checkout.php:752
 #, php-format
 msgid "EOM+%1$s: pay %1$s days after the end of the month, plus a %2$s surcharge"
 msgstr "EOM+%1$s: betala %1$s dagar efter månadens slut, plus %2$s i avgift"
 
-#: class/WC_Twoinc_Checkout.php:784
+#: class/WC_Twoinc_Checkout.php:782
 msgid "Registered company"
 msgstr "Registrerat företag"
 
-#: class/WC_Twoinc_Checkout.php:785
+#: class/WC_Twoinc_Checkout.php:783
 msgid "Sole trader"
 msgstr "Enskild firma"
 
-#: class/WC_Twoinc_Checkout.php:786
+#: class/WC_Twoinc_Checkout.php:784
 msgid "Click here to login or sign up as a sole trader."
 msgstr "Klicka här för att logga in eller registrera dig som enskild firma."
 
-#: class/WC_Twoinc_Checkout.php:792
+#: class/WC_Twoinc_Checkout.php:790
 msgid "Select a different sole trader"
 msgstr "Välj en annan enskild firma"
 
-#: class/WC_Twoinc_Checkout.php:793
+#: class/WC_Twoinc_Checkout.php:791
 msgid "Something went wrong setting up sole trader checkout. Please try again."
 msgstr "Något gick fel när kassan för enskild firma skulle förberedas. Försök igen."
 
-#: class/WC_Twoinc_Helper.php:338
+#: class/WC_Twoinc_Helper.php:344
 #, php-format
 msgid "Negative discount amount calculated for %s."
 msgstr "Negativt rabattbelopp beräknat för %s."
 
-#: class/WC_Twoinc_Helper.php:357
+#: class/WC_Twoinc_Helper.php:363
 #, php-format
 msgid "Empty response from %s."
 msgstr "Tomt svar från %s ."
 
-#: class/WC_Twoinc_Helper.php:361
+#: class/WC_Twoinc_Helper.php:367
 #, php-format
 msgid "Response code from %s: %d"
 msgstr "Svarskod från %s : %d"
 
-#: class/WC_Twoinc_Helper.php:431
+#: class/WC_Twoinc_Helper.php:437
 msgid "Buyer and merchant may not be the same company"
 msgstr "Köpare och handlare kan inte vara samma företag"
 
-#: class/WC_Twoinc_Helper.php:450
+#: class/WC_Twoinc_Helper.php:456
 #, php-format
 msgid "Please enter a valid %s to pay on invoice"
 msgstr "Ange giltigt %s för att betala med faktura"
 
-#: class/WC_Twoinc_Helper.php:454 class/WC_Twoinc_Helper.php:457
+#: class/WC_Twoinc_Helper.php:460 class/WC_Twoinc_Helper.php:463
 msgid "Phone number"
 msgstr "Telefonnummer"
 
-#: class/WC_Twoinc_Helper.php:460
+#: class/WC_Twoinc_Helper.php:466
 msgid "Organization number"
 msgstr "Organisationsnummer"
 
-#: class/WC_Twoinc_Helper.php:466
+#: class/WC_Twoinc_Helper.php:472
 msgid "First name"
 msgstr "Förnamn"
 
-#: class/WC_Twoinc_Helper.php:469
+#: class/WC_Twoinc_Helper.php:475
 msgid "Last name"
 msgstr "Efternamn"
 
-#: class/WC_Twoinc_Helper.php:472
+#: class/WC_Twoinc_Helper.php:478
 msgid "Email"
 msgstr "E-post"
 
-#: class/WC_Twoinc_Helper.php:475
+#: class/WC_Twoinc_Helper.php:481
 msgid "Address"
 msgstr "Adress"
 
-#: class/WC_Twoinc_Helper.php:478
+#: class/WC_Twoinc_Helper.php:484
 msgid "City"
 msgstr "Stad"
 
-#: class/WC_Twoinc_Helper.php:481
+#: class/WC_Twoinc_Helper.php:487
 msgid "Country"
 msgstr "Land"
 
-#: class/WC_Twoinc_Helper.php:484
+#: class/WC_Twoinc_Helper.php:490
 msgid "Postal code"
 msgstr "Postnummer"
 
-#: class/WC_Twoinc_Helper.php:2383
+#: class/WC_Twoinc_Helper.php:2451
 msgid "The order lines do not add up to the order total."
 msgstr "Orderraderna summerar inte till orderns totalbelopp."
 
 #. translators: 1: request type (e.g. order_update). 2: product name (e.g. Two). 3: what went wrong.
-#: class/WC_Twoinc_Helper.php:2569
+#: class/WC_Twoinc_Helper.php:2637
 #, php-format
 msgid "The %1$s request was not sent to %2$s: the twoinc_order_postprocessing filter failed (%3$s)."
 msgstr ""
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:3161
+#: class/WC_Twoinc_Helper.php:3229
 #, php-format
 msgid "Shipping \"%s\" cannot be refunded: the order line it refunds was not found."
 msgstr "Frakten ”%s” kan inte återbetalas: orderraden den återbetalar hittades inte."
 
+#. translators: 1: order line name. 2: product name (e.g. Two).
+#: class/WC_Twoinc_Helper.php:3273
+#, php-format
+msgid "\"%1$s\" cannot be refunded as tax alone: %2$s refunds a line's tax only together with its net amount. To correct the tax charged, refund the whole order and rebook it with the correct tax rates."
+msgstr ""
+
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:3359
+#: class/WC_Twoinc_Helper.php:3457
 #, php-format
 msgid "The tax charged on \"%s\" does not match the shop's tax rates."
 msgstr "Skatten som debiterats på ”%s” stämmer inte med butikens skattesatser."
 
-#: class/WC_Twoinc_Payment_Terms.php:1141
+#: class/WC_Twoinc_Payment_Terms.php:1143
 msgid "Payment terms fee"
 msgstr "Avgift för betalningsvillkor"
 
-#: class/WC_Twoinc_Payment_Terms.php:1144
+#: class/WC_Twoinc_Payment_Terms.php:1146
 #, php-format
 msgid "Payment terms fee - %s days from end of month"
 msgstr "Avgift för betalningsvillkor - %s dagar från månadens slut"
 
-#: class/WC_Twoinc_Payment_Terms.php:1145
+#: class/WC_Twoinc_Payment_Terms.php:1147
 #, php-format
 msgid "Payment terms fee - %s days"
 msgstr "Avgift för betalningsvillkor - %s dagar"

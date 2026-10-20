@@ -627,6 +627,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $sku = $product_simple->get_sku();
                     $categories = wp_get_post_terms($product_simple->get_id(), 'product_cat');
                 }
+                if ($is_refund) {
+                    self::refuse_tax_only_refund_line($name, $line_item['line_total'], $line_item['line_tax'], $rate_order);
+                }
 
                 // Guard rounds once at the payload boundary and fails loud on
                 // a genuinely negative discount (TWO-25097); skipped for
@@ -693,6 +696,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 if (self::is_zero_line($shipping)) {
                     continue;
                 }
+                if ($is_refund) {
+                    self::refuse_tax_only_refund_line($shipping->get_name(), $shipping->get_total(), $shipping->get_total_tax(), $rate_order);
+                }
                 $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $rate_order, $is_refund, $refusal);
                 $shipping_rates[$key] = $tax_rate;
                 $shipping_line = [
@@ -728,6 +734,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             foreach ($fees as $fee_key => $fee) {
                 if (self::is_zero_line($fee)) {
                     continue;
+                }
+                if ($is_refund) {
+                    self::refuse_tax_only_refund_line($fee->get_name(), $fee->get_total(), $fee->get_total_tax(), $rate_order);
                 }
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate(
                     self::get_rate_line($fee, $rate_order, $is_refund),
@@ -1236,7 +1245,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * A refund can return the tax alone (or the net alone), so only a line with neither is left out.
+         * A refund can return the net alone, and a line returning the tax alone is refused (TWO-26541), so only a
+         * line with neither is left out.
          */
         private static function is_zero_line($line)
         {
@@ -3229,12 +3239,42 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if (null === $controlled) {
                 return $resolved;
             }
-            // A refund may return only the net or only the tax (e.g. VAT charged to a reverse-charge buyer).
+            // A refund may return only the net (a line returning only the tax is refused before this, TWO-26541).
             $partial = !round((float) $shipping->get_total(), 2) || !round((float) $shipping->get_total_tax(), 2);
             if (!$refusal && (!$is_refund || !$partial)) {
                 $refusal = self::tax_reconcile_refusal($shipping, $controlled['rate']);
             }
             return $controlled;
+        }
+
+        /**
+         * TWO-26541. Refuses a refund line that returns tax with no net amount (each rounded to the cent), so the
+         * refund is not sent. Two's refund validation requires a line's tax to match its net at the line's rate,
+         * which a zero-net line with tax cannot. A wrong tax rate is corrected by refunding the whole order and
+         * rebooking it with the correct rates.
+         *
+         * @return void
+         * @throws Exception naming the line
+         */
+        private static function refuse_tax_only_refund_line($name, $net, $tax, $order)
+        {
+            if (round((float) $net, 2) || !round((float) $tax, 2)) {
+                return;
+            }
+            self::refuse(
+                sprintf(
+                    'Refund of "%s" on order %s returns tax %s with no net amount: refused, not sent (TWO-26541).',
+                    $name,
+                    $order->get_id(),
+                    $tax
+                ),
+                sprintf(
+                    /* translators: 1: order line name. 2: product name (e.g. Two). */
+                    __('"%1$s" cannot be refunded as tax alone: %2$s refunds a line\'s tax only together with its net amount. To correct the tax charged, refund the whole order and rebook it with the correct tax rates.', 'twoinc-payment-gateway'),
+                    $name,
+                    WC_Twoinc_Brand::get('product_name')
+                )
+            );
         }
 
         /**
