@@ -45,20 +45,9 @@ final class EnvironmentOptionsSpec
     }
 
     /** A gateway whose settings are exactly $options, nothing resolved through form defaults. */
-    private static function gateway(array $options): WC_Twoinc
+    private static function gateway(array $options): EnvironmentOptionsSpecGateway
     {
-        return new class ($options) extends WC_Twoinc {
-            private $options;
-            public function __construct($options)
-            {
-                $this->id = WC_Twoinc_Brand::get('gateway_id');
-                $this->options = $options;
-            }
-            public function get_option($key, $empty_value = null)
-            {
-                return $this->options[$key] ?? $empty_value ?? '';
-            }
-        };
+        return new EnvironmentOptionsSpecGateway($options);
     }
 
     private static function assertResolveCase(array $case): void
@@ -219,7 +208,7 @@ final class EnvironmentOptionsSpec
             $before = new ReflectionProperty(WC_Twoinc::class, 'identity_before_save');
             $before->setAccessible(true);
             $before->setValue($gateway, ['api_key' => 'k', 'checkout_env' => 'sandbox']);
-            $gateway->test_post_data = [
+            $gateway->post_data = [
                 $gateway->get_field_key('api_key') => 'k',
                 $gateway->get_field_key('checkout_env') => $posted,
             ];
@@ -228,5 +217,32 @@ final class EnvironmentOptionsSpec
 
             TinyAssert::same($expected, $changing->invoke($gateway), $description);
         }
+    }
+}
+
+/**
+ * A gateway whose settings are exactly the given options, nothing resolved
+ * through form defaults, and whose submitted settings form is $post_data.
+ */
+final class EnvironmentOptionsSpecGateway extends WC_Twoinc
+{
+    public $post_data = [];
+
+    private $options;
+
+    public function __construct(array $options)
+    {
+        $this->id = WC_Twoinc_Brand::get('gateway_id');
+        $this->options = $options;
+    }
+
+    public function get_option($key, $empty_value = null)
+    {
+        return $this->options[$key] ?? $empty_value ?? '';
+    }
+
+    public function get_post_data()
+    {
+        return $this->post_data;
     }
 }
