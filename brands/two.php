@@ -87,7 +87,8 @@ return [
     // not rendered and not saved, but its stored value or declared default
     // still applies. A section title goes when no field under it is
     // listed, fields a merchant adds via wc_two_form_fields always show,
-    // and [] withholds every base field (logged as a warning).
+    // and so does `enabled`, the gateway's on/off switch. A list naming no
+    // other base field ([] included) withholds the rest, logged as a warning.
     // WC_Twoinc::init_form_fields is the only reader.
     'allowed_fields' => null,
 ];

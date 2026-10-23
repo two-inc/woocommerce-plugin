@@ -7341,13 +7341,6 @@ if (!class_exists('WC_Twoinc')) {
             // The gateway's own on/off switch is core's, not a brand choice: WC_Payment_Gateway
             // reads it straight from the stored row, so a withheld one would read off on a fresh install.
             $allowed['enabled'] = true;
-            if (count($allowed) === 1 && !self::$empty_allowlist_logged) {
-                self::$empty_allowlist_logged = true;
-                wc_get_logger()->warning(
-                    'Brand allowed_fields is empty or not a list, so every settings field but the gateway switch is withheld from the admin form.',
-                    ['source' => 'twoinc-payment-gateway']
-                );
-            }
 
             $kept = [];
             // A title row waits here until the first field under it survives.
@@ -7362,6 +7355,20 @@ if (!class_exists('WC_Twoinc')) {
                 } else {
                     $this->withheld_form_fields[$key] = $field;
                 }
+            }
+            // Empty, not a list, or naming no base field beyond the gateway switch: almost certainly a mistake.
+            $listed = 0;
+            foreach ($kept as $key => $field) {
+                if ($key !== 'enabled' && ($field['type'] ?? '') !== 'title') {
+                    $listed++;
+                }
+            }
+            if ($listed === 0 && !self::$empty_allowlist_logged) {
+                self::$empty_allowlist_logged = true;
+                wc_get_logger()->warning(
+                    'Brand allowed_fields names no base settings field, so every one but the gateway switch is withheld from the admin form.',
+                    ['source' => 'twoinc-payment-gateway']
+                );
             }
             return $kept;
         }

@@ -38,6 +38,7 @@ final class AllowedFieldsSpec
             [[], null, 'shown', 'enabled', true, 'the gateway on/off switch is always shown'],
             ['', null, 'shown', 'title', false, 'a value that is not a list withholds every base field'],
             ['', null, 'warnings', '', 1, 'a value that is not a list logs a warning'],
+            [['enabled', 'no_such_field'], null, 'warnings', '', 1, 'a list naming no base field but the gateway switch logs a warning'],
             [null, null, 'shown', 'payment_subtitle', true, 'null shows every field'],
             [null, null, 'form', '', true, 'null leaves the form exactly as listing every base field does'],
             [null, null, 'warnings', '', 0, 'null logs no warning'],
