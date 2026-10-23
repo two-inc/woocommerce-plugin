@@ -7,7 +7,7 @@ const harness = require("./wc-harness");
 const NAME = "ACME Widgets Ltd";
 const NUMBER = "12345678";
 
-describe("ABN-554 — the captured company lives in the WC session", () => {
+describe("the captured company lives in the WC session", () => {
   let ctx;
 
   beforeEach(() => {

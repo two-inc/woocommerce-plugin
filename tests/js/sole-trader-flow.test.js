@@ -951,7 +951,7 @@ describe("TWO-40 — sole-trader flow", () => {
         adopted: false,
         tokens: true,
         shown: false,
-        description: "sole-trader mode with nothing adopted yet — ABN-526"
+        description: "sole-trader mode with nothing adopted yet"
       },
       {
         mode: "sole_trader",
@@ -2814,7 +2814,7 @@ describe("TWO-40 — sole-trader flow", () => {
           refire: true,
           description: "a window return re-firing focus there is not the buyer coming back"
         }
-      ])("$description (ABN-554)", ({ refire }) => {
+      ])("$description", ({ refire }) => {
         const win = launchFromChips();
         const field = ctx.helper.panel.getField()[0];
 
@@ -3279,8 +3279,7 @@ describe("TWO-40 — sole-trader flow", () => {
             win.closed = true;
           },
           focusedAfter: differentSoleTraderBtn,
-          description:
-            "closing a re-signup by hand while adopted gives the launcher its focus back (ABN-561)"
+          description: "closing a re-signup by hand while adopted gives the launcher its focus back"
         },
         {
           adopted: true,
@@ -3290,7 +3289,7 @@ describe("TWO-40 — sole-trader flow", () => {
           },
           // The chip is inside the dropdown the settle closes, so the adopted state's own launcher takes it.
           focusedAfter: differentSoleTraderBtn,
-          description: "the same, launched from the adopted chip rather than the link (ABN-561)"
+          description: "the same, launched from the adopted chip rather than the link"
         },
         {
           // The settle closes the popover the chip lives in, so the holder is gone and the company field's opener lands focus in the query.
@@ -3348,7 +3347,7 @@ describe("TWO-40 — sole-trader flow", () => {
        * leave it absent too, rather than inserting a hidden button into the
        * address form of a checkout that never shows one.
        */
-      test("a settle while adopted does not build the launcher it looks for (ABN-561)", () => {
+      test("a settle while adopted does not build the launcher it looks for", () => {
         openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         const win = fakePopup();

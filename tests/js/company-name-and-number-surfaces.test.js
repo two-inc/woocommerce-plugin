@@ -377,7 +377,7 @@ describe("the company name and number surfaces", () => {
     });
   });
 
-  describe("no company-name row ever carries a required cue (ABN-554)", () => {
+  describe("no company-name row ever carries a required cue", () => {
     /**
      * @param {string} rowSelector
      * @returns {{required: boolean, asterisks: number}}
