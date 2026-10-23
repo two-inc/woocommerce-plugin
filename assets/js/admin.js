@@ -102,10 +102,14 @@ jQuery(function ($) {
     $addressLookupToggle.closest("tr").toggle(searchOn);
   }
 
-  $companySearchToggle.on("change", function () {
-    syncAddressLookupToggle(true);
-  });
-  syncAddressLookupToggle(false);
+  // A brand that withholds company search (allowed_fields) leaves no toggle to
+  // read; its stored value still stands, so address lookup is left as saved.
+  if ($companySearchToggle.length) {
+    $companySearchToggle.on("change", function () {
+      syncAddressLookupToggle(true);
+    });
+    syncAddressLookupToggle(false);
+  }
 
   jQuery("[id*='" + twoinc_admin.gateway_id + "'].wc-settings-sub-title").append(
     '<a href="#" class="collapsed setting-dropdown"><span class="dashicons dashicons-arrow-down-alt2"></span></a>'

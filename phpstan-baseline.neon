@@ -7,12 +7,6 @@ parameters:
 			path: class/WC_Twoinc.php
 
 		-
-			message: '#^Comparison operation "\>" between \*NEVER\* and 0 results in an error\.$#'
-			identifier: greater.invalid
-			count: 1
-			path: class/WC_Twoinc.php
-
-		-
 			message: '#^Method WC_Twoinc\:\:process_admin_options\(\) should return bool but return statement is missing\.$#'
 			identifier: return.missing
 			count: 1
