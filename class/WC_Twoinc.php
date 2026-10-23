@@ -7318,7 +7318,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Keeps only the base fields the brand's `allowed_fields` lists
-         * (TWO-26610). null shows every field. An unlisted field moves to
+         * (TWO-26610), plus `enabled`, which is always shown. null shows every field. An unlisted field moves to
          * $withheld_form_fields: it leaves the form, so WooCommerce neither
          * renders nor saves it, but get_option() still resolves its stored
          * value or declared default. A title row goes when no field under it
@@ -7336,11 +7336,15 @@ if (!class_exists('WC_Twoinc')) {
             if ($allowed === null) {
                 return $fields;
             }
-            $allowed = array_flip(array_map('strval', (array) $allowed));
-            if (!$allowed && !self::$empty_allowlist_logged) {
+            // Anything but a list is read as an empty one, so a malformed key withholds loudly, not silently.
+            $allowed = is_array($allowed) ? array_flip(array_map('strval', $allowed)) : [];
+            // The gateway's own on/off switch is core's, not a brand choice: WC_Payment_Gateway
+            // reads it straight from the stored row, so a withheld one would read off on a fresh install.
+            $allowed['enabled'] = true;
+            if (count($allowed) === 1 && !self::$empty_allowlist_logged) {
                 self::$empty_allowlist_logged = true;
                 wc_get_logger()->warning(
-                    'Brand allowed_fields is empty, so every settings field is withheld from the admin form.',
+                    'Brand allowed_fields is empty or not a list, so every settings field but the gateway switch is withheld from the admin form.',
                     ['source' => 'twoinc-payment-gateway']
                 );
             }

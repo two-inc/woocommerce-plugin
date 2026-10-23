@@ -78,3 +78,10 @@ or declared default still applies. A new setting therefore:
   request-header table's does, skips a withheld field.
 - Is withheld on an overlay until the overlay lists it, so a default-on
   feature still runs there, unseen and uneditable.
+- Comes as a pair with any setting its save or its admin script reads beside
+  it (the payment terms default and its day count; company search and address
+  lookup). An overlay lists both or neither: with one withheld, a validator
+  reading its sibling from the post keeps the stored value instead.
+
+`enabled`, the gateway's own on/off switch, is always shown: WooCommerce reads
+it from the stored row rather than through `get_option()`.
