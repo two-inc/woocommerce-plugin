@@ -629,11 +629,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 }
                 if ($is_refund) {
                     // The order line's name, as the shop admin sees it on the refund, not the catalogue name.
-                    self::refuse_tax_only_refund_line(
+                    self::refuse_unpaired_refund_line(
                         'product',
                         method_exists($line_item, 'get_name') ? $line_item->get_name() : $name,
                         $line_item['line_total'],
                         $line_item['line_tax'],
+                        $tax_rate['rate'],
                         $rate_order
                     );
                 }
@@ -703,10 +704,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 if (self::is_zero_line($shipping)) {
                     continue;
                 }
-                if ($is_refund) {
-                    self::refuse_tax_only_refund_line('shipping', $shipping->get_name(), $shipping->get_total(), $shipping->get_total_tax(), $rate_order);
-                }
                 $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $rate_order, $is_refund, $refusal);
+                if ($is_refund) {
+                    self::refuse_unpaired_refund_line(
+                        'shipping',
+                        $shipping->get_name(),
+                        $shipping->get_total(),
+                        $shipping->get_total_tax(),
+                        $tax_rate['rate'],
+                        $rate_order
+                    );
+                }
                 $shipping_rates[$key] = $tax_rate;
                 $shipping_line = [
                     'name' => 'Shipping - ' . $shipping->get_name(),
@@ -742,13 +750,20 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 if (self::is_zero_line($fee)) {
                     continue;
                 }
-                if ($is_refund) {
-                    self::refuse_tax_only_refund_line('fee', $fee->get_name(), $fee->get_total(), $fee->get_total_tax(), $rate_order);
-                }
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate(
                     self::get_rate_line($fee, $rate_order, $is_refund),
                     $rate_order
                 );
+                if ($is_refund) {
+                    self::refuse_unpaired_refund_line(
+                        'fee',
+                        $fee->get_name(),
+                        $fee->get_total(),
+                        $fee->get_total_tax(),
+                        $tax_rate['rate'],
+                        $rate_order
+                    );
+                }
                 $fee_line = [
                     // Already the resolved, translated, brand-correct label;
                     // no hardcoded prefix: 'type' below carries the semantic
@@ -3354,7 +3369,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if (null === $controlled) {
                 return $resolved;
             }
-            // A refund may return only the net (a line returning only the tax is refused before this, TWO-26541).
+            // A refund line returning only its tax, or only a net that carries tax at this rate, is refused after this
+            // in get_line_items (TWO-26541, TWO-26638); a partial line is not reconciled here.
             $partial = !round((float) $shipping->get_total(), 2) || !round((float) $shipping->get_total_tax(), 2);
             if (!$refusal && (!$is_refund || !$partial)) {
                 $refusal = self::tax_reconcile_refusal($shipping, $controlled['rate']);
@@ -3363,34 +3379,60 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * TWO-26541. Refuses a refund line that returns tax with no net amount (each rounded as the payload rounds
-         * it, to the shop's price decimals), so the refund is not sent. Two's refund validation requires a line's tax to match its net at the line's rate,
-         * which a zero-net line with tax cannot. A wrong tax rate is corrected by refunding the whole order and
-         * rebooking it with the correct rates.
+         * Refuses a refund line that returns only one of its net and its tax (each rounded as the payload rounds it,
+         * to the shop's price decimals), so the refund is not sent. Two's refund validation requires a line's tax to
+         * match its net at the line's rate, which neither half alone can. The plugin never fills in the missing half:
+         * how tax is levied is the shop's decision.
+         * - Tax with no net (TWO-26541). A wrong tax rate is corrected by refunding the whole order and rebooking it
+         *   with the correct rates.
+         * - Net with no tax, on a line whose tax due at `$rate` rounds to at least the smallest price unit (TWO-26638).
+         *   WooCommerce leaves a typed refund total's tax at 0, and shipping and fee rows are always typed. A line
+         *   charged at 0%, or too small to carry tax, is sent unchanged.
+         *
+         * @param float $rate the tax rate sent on the line, as a fraction
          *
          * @return void
          * @throws Exception naming the line
          */
-        private static function refuse_tax_only_refund_line($type, $name, $net, $tax, $order)
+        private static function refuse_unpaired_refund_line($type, $name, $net, $tax, $rate, $order)
         {
-            if ((float) self::round_amt($net) || !(float) self::round_amt($tax)) {
-                return;
+            $has_net = (bool) (float) self::round_amt($net);
+            $has_tax = (bool) (float) self::round_amt($tax);
+            if (!$has_net && $has_tax) {
+                self::refuse(
+                    sprintf(
+                        'Refund of %s "%s" on order %s returns tax %s with no net amount: refused, not sent.',
+                        $type,
+                        $name,
+                        $order->get_id(),
+                        $tax
+                    ),
+                    sprintf(
+                        /* translators: 1: order line name. 2: product name (e.g. Two). */
+                        __('"%1$s" cannot be refunded as tax alone: %2$s refunds a line\'s tax only together with its net amount. To correct the tax charged, refund the whole order and rebook it with the correct tax rates.', 'twoinc-payment-gateway'),
+                        $name,
+                        WC_Twoinc_Brand::get('product_name')
+                    )
+                );
             }
-            self::refuse(
-                sprintf(
-                    'Refund of %s "%s" on order %s returns tax %s with no net amount: refused, not sent.',
-                    $type,
-                    $name,
-                    $order->get_id(),
-                    $tax
-                ),
-                sprintf(
-                    /* translators: 1: order line name. 2: product name (e.g. Two). */
-                    __('"%1$s" cannot be refunded as tax alone: %2$s refunds a line\'s tax only together with its net amount. To correct the tax charged, refund the whole order and rebook it with the correct tax rates.', 'twoinc-payment-gateway'),
-                    $name,
-                    WC_Twoinc_Brand::get('product_name')
-                )
-            );
+            if ($has_net && !$has_tax && (float) self::round_amt(abs((float) $net) * (float) self::round_rate($rate))) {
+                self::refuse(
+                    sprintf(
+                        'Refund of %s "%s" on order %s returns net %s with no tax at rate %s: refused, not sent.',
+                        $type,
+                        $name,
+                        $order->get_id(),
+                        $net,
+                        self::round_rate($rate)
+                    ),
+                    sprintf(
+                        /* translators: 1: order line name. 2: product name (e.g. Two). */
+                        __('"%1$s" has no tax entered: %2$s refunds a line\'s net amount only together with its tax. Enter the tax refunded for this line as well.', 'twoinc-payment-gateway'),
+                        $name,
+                        WC_Twoinc_Brand::get('product_name')
+                    )
+                );
+            }
         }
 
         /**
