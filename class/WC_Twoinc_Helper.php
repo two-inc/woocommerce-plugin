@@ -12,7 +12,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
     {
         private const TAX_RECONCILE_TOLERANCE = 0.02;
 
-        // How far Two's refund validation lets a refund line's tax differ from its net at the line's rate (TWO-26638).
+        // How far Two's refund validation lets a refund line's tax differ from its net at the line's rate, the
+        // difference rounded to cents first, so tax due up to about 0.025 is accepted (TWO-26638).
         private const REFUND_LINE_TAX_TOLERANCE = 0.02;
 
         private const SHIPPING_TAX_RATE_META = 'shipping_tax_rate';
@@ -3388,8 +3389,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * how tax is levied is the shop's decision.
          * - Tax with no net (TWO-26541). A wrong tax rate is corrected by refunding the whole order and rebooking it
          *   with the correct rates.
-         * - Net with no tax, on a line whose tax due at `$rate` exceeds REFUND_LINE_TAX_TOLERANCE, which Two would
-         *   reject (TWO-26638). WooCommerce leaves a typed refund total's tax at 0, and shipping and fee rows are
+         * - Net with no tax, on a line whose tax due at `$rate`, rounded to cents (PHP rounds half up), exceeds
+         *   REFUND_LINE_TAX_TOLERANCE, which Two would reject (TWO-26638). WooCommerce leaves a typed refund total's tax at 0, and shipping and fee rows are
          *   always typed. A line charged at 0%, or whose tax due is within the tolerance, is sent unchanged.
          *
          * @param float $rate the tax rate sent on the line, as a fraction
@@ -3418,7 +3419,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     )
                 );
             }
-            $tax_due = abs((float) self::round_amt($net)) * (float) self::round_rate($rate);
+            $tax_due = round(abs((float) self::round_amt($net)) * (float) self::round_rate($rate), 2);
             if ($has_net && !$has_tax && $tax_due > self::REFUND_LINE_TAX_TOLERANCE) {
                 self::refuse(
                     sprintf(

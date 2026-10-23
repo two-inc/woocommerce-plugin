@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/app\n"
-"POT-Creation-Date: 2026-10-23T23:34:41+00:00\n"
+"POT-Creation-Date: 2026-10-23T23:47:01+00:00\n"
 "PO-Revision-Date: 2025-07-01 10:29+0000\n"
 "Last-Translator: \n"
 "Language-Team: Swedish\n"
@@ -443,7 +443,7 @@ msgstr "Din faktura med %1$s kommer sannolikt att accepteras, under förutsättn
 
 #: class/WC_Twoinc.php:2589 class/WC_Twoinc.php:6393 class/WC_Twoinc.php:6403
 #: class/WC_Twoinc.php:6493 class/WC_Twoinc.php:6523
-#: class/WC_Twoinc_Blocks_Support.php:85 class/WC_Twoinc_Helper.php:417
+#: class/WC_Twoinc_Blocks_Support.php:85 class/WC_Twoinc_Helper.php:418
 #, php-format
 msgid "Invoice purchase with %s is not available for this order."
 msgstr "Fakturaköp med %s är inte tillgängligt för denna beställning."
@@ -1717,7 +1717,7 @@ msgstr "API-nyckeln har sparats, men %s returnerade ett fel vid verifieringen."
 
 #: class/WC_Twoinc_Checkout.php:220 class/WC_Twoinc_Checkout.php:234
 #: class/WC_Twoinc_Checkout.php:248 class/WC_Twoinc_Checkout.php:271
-#: class/WC_Twoinc_Checkout.php:280 class/WC_Twoinc_Helper.php:472
+#: class/WC_Twoinc_Checkout.php:280 class/WC_Twoinc_Helper.php:473
 msgid "Company name"
 msgstr "Företagsnamn"
 
@@ -1725,7 +1725,7 @@ msgstr "Företagsnamn"
 msgid "Company ID"
 msgstr "Organisationsnummer"
 
-#: class/WC_Twoinc_Checkout.php:311 class/WC_Twoinc_Helper.php:496
+#: class/WC_Twoinc_Checkout.php:311 class/WC_Twoinc_Helper.php:497
 msgid "Invoice email address"
 msgstr "E-postadress för faktura"
 
@@ -1808,96 +1808,96 @@ msgstr "Välj en annan enskild firma"
 msgid "Something went wrong setting up sole trader checkout. Please try again."
 msgstr "Något gick fel när kassan för enskild firma skulle förberedas. Försök igen."
 
-#: class/WC_Twoinc_Helper.php:347
+#: class/WC_Twoinc_Helper.php:348
 #, php-format
 msgid "Negative discount amount calculated for %s."
 msgstr "Negativt rabattbelopp beräknat för %s."
 
-#: class/WC_Twoinc_Helper.php:366
+#: class/WC_Twoinc_Helper.php:367
 #, php-format
 msgid "Empty response from %s."
 msgstr "Tomt svar från %s ."
 
-#: class/WC_Twoinc_Helper.php:370
+#: class/WC_Twoinc_Helper.php:371
 #, php-format
 msgid "Response code from %s: %d"
 msgstr "Svarskod från %s : %d"
 
-#: class/WC_Twoinc_Helper.php:440
+#: class/WC_Twoinc_Helper.php:441
 msgid "Buyer and merchant may not be the same company"
 msgstr "Köpare och handlare kan inte vara samma företag"
 
-#: class/WC_Twoinc_Helper.php:459
+#: class/WC_Twoinc_Helper.php:460
 #, php-format
 msgid "Please enter a valid %s to pay on invoice"
 msgstr "Ange giltigt %s för att betala med faktura"
 
-#: class/WC_Twoinc_Helper.php:463 class/WC_Twoinc_Helper.php:466
+#: class/WC_Twoinc_Helper.php:464 class/WC_Twoinc_Helper.php:467
 msgid "Phone number"
 msgstr "Telefonnummer"
 
-#: class/WC_Twoinc_Helper.php:469
+#: class/WC_Twoinc_Helper.php:470
 msgid "Organization number"
 msgstr "Organisationsnummer"
 
-#: class/WC_Twoinc_Helper.php:475
+#: class/WC_Twoinc_Helper.php:476
 msgid "First name"
 msgstr "Förnamn"
 
-#: class/WC_Twoinc_Helper.php:478
+#: class/WC_Twoinc_Helper.php:479
 msgid "Last name"
 msgstr "Efternamn"
 
-#: class/WC_Twoinc_Helper.php:481
+#: class/WC_Twoinc_Helper.php:482
 msgid "Email"
 msgstr "E-post"
 
-#: class/WC_Twoinc_Helper.php:484
+#: class/WC_Twoinc_Helper.php:485
 msgid "Address"
 msgstr "Adress"
 
-#: class/WC_Twoinc_Helper.php:487
+#: class/WC_Twoinc_Helper.php:488
 msgid "City"
 msgstr "Stad"
 
-#: class/WC_Twoinc_Helper.php:490
+#: class/WC_Twoinc_Helper.php:491
 msgid "Country"
 msgstr "Land"
 
-#: class/WC_Twoinc_Helper.php:493
+#: class/WC_Twoinc_Helper.php:494
 msgid "Postal code"
 msgstr "Postnummer"
 
-#: class/WC_Twoinc_Helper.php:2476
+#: class/WC_Twoinc_Helper.php:2477
 msgid "The order lines do not add up to the order total."
 msgstr "Orderraderna summerar inte till orderns totalbelopp."
 
 #. translators: 1: request type (e.g. order_update). 2: product name (e.g. Two). 3: what went wrong.
-#: class/WC_Twoinc_Helper.php:2662
+#: class/WC_Twoinc_Helper.php:2663
 #, php-format
 msgid "The %1$s request was not sent to %2$s: the twoinc_order_postprocessing filter failed (%3$s)."
 msgstr ""
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:3362
+#: class/WC_Twoinc_Helper.php:3363
 #, php-format
 msgid "Shipping \"%s\" cannot be refunded: the order line it refunds was not found."
 msgstr "Frakten ”%s” kan inte återbetalas: orderraden den återbetalar hittades inte."
 
 #. translators: 1: order line name. 2: product name (e.g. Two).
-#: class/WC_Twoinc_Helper.php:3415
+#: class/WC_Twoinc_Helper.php:3416
 #, php-format
 msgid "\"%1$s\" cannot be refunded as tax alone: %2$s refunds a line's tax only together with its net amount. To correct the tax charged, refund the whole order and rebook it with the correct tax rates."
 msgstr ""
 
 #. translators: 1: order line name. 2: product name (e.g. Two).
-#: class/WC_Twoinc_Helper.php:3434
+#: class/WC_Twoinc_Helper.php:3435
 #, php-format
 msgid "\"%1$s\" has no tax entered: %2$s refunds a line's net amount only together with its tax. Enter the tax refunded for this line as well."
 msgstr ""
 
 #. translators: %s: shipping method name
-#: class/WC_Twoinc_Helper.php:3619
+#: class/WC_Twoinc_Helper.php:3620
 #, php-format
 msgid "The tax charged on \"%s\" does not match the shop's tax rates."
 msgstr "Skatten som debiterats på ”%s” stämmer inte med butikens skattesatser."
