@@ -106,6 +106,33 @@ final class EnvironmentOptionsSpec
         foreach ($cases as [$stored, $expected, $description]) {
             TinyAssert::same($expected, WC_Twoinc_Helper::migrate_environment_mode($stored), $description);
         }
+
+        // A shop released builds sent to staging by its hostname keeps staging.
+        $sniffed = [
+            ['production', 'staging', 'sniffed production keeps staging'],
+            ['', 'staging', 'sniffed empty keeps staging'],
+            ['Demo', 'staging', 'sniffed unknown keeps staging'],
+            ['sandbox', 'sandbox', 'sniffing never touched sandbox'],
+            [null, 'sandbox', 'a missing key read sandbox, never sniffed'],
+        ];
+        foreach ($sniffed as [$stored, $expected, $description]) {
+            TinyAssert::same($expected, WC_Twoinc_Helper::migrate_environment_mode($stored, true), $description);
+        }
+
+        // The sniff as released builds ran it: a development hostname, and no developer API host.
+        $hosts = [
+            ['https://shop.merchant.example', null, false, 'a merchant domain was never sniffed'],
+            ['http://localhost:8888', null, true, 'localhost was sniffed'],
+            ['https://woocom.staging.two.inc', null, true, 'a two.inc dev subdomain was sniffed'],
+            ['http://localhost:8888', 'http://portal.localhost/api', false, 'a developer API host took over instead'],
+        ];
+        foreach ($hosts as [$home, $devApiHost, $expected, $description]) {
+            $GLOBALS['test_home_url'] = $home;
+            putenv($devApiHost === null ? 'TWOINC_DEV_API_HOST' : 'TWOINC_DEV_API_HOST=' . $devApiHost);
+            TinyAssert::same($expected, WC_Twoinc_Helper::was_sniffed_to_staging(), $description);
+        }
+        putenv('TWOINC_DEV_API_HOST');
+        $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
     }
 
     /** The dropdown and the field validator read the raw stored row. */
@@ -147,6 +174,7 @@ final class EnvironmentOptionsSpec
             [['checkout_env' => 'staging'], ['checkout_env' => 'staging'], 'a canonical row is left alone'],
             [null, null, 'a fresh install writes nothing'],
         ];
+        $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
 
         foreach ($cases as [$row, $expected, $description]) {
             $gateway = self::gateway([]);
@@ -163,6 +191,16 @@ final class EnvironmentOptionsSpec
 
             TinyAssert::same($expected, $GLOBALS['__twoinc_test_options'][$key] ?? null, $description);
         }
+        // On a hostname released builds sent to staging, the row keeps staging.
+        $GLOBALS['test_home_url'] = 'http://localhost:8888';
+        $gateway = self::gateway([]);
+        $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()] = ['checkout_env' => 'PROD'];
+        $gateway->settings = ['checkout_env' => 'PROD'];
+        $migrate = new ReflectionMethod(WC_Twoinc::class, 'migrate_checkout_env');
+        $migrate->setAccessible(true);
+        $migrate->invoke($gateway);
+        $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
+        TinyAssert::same(['checkout_env' => 'staging'], $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()], 'a sniffed shop is written as staging');
     }
 
     /** A posted environment the save refuses never counts as the identity changing. */

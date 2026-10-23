@@ -302,7 +302,10 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
             $stored = $this->settings['checkout_env'] ?? null;
-            $target = WC_Twoinc_Helper::migrate_environment_mode($stored);
+            $target = WC_Twoinc_Helper::migrate_environment_mode(
+                $stored,
+                WC_Twoinc_Helper::was_sniffed_to_staging()
+            );
             if ($stored === $target) {
                 return;
             }

@@ -2912,18 +2912,36 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * A row with no checkout_env key reads the field default, sandbox. An
          * empty or unknown value was sent to production by every released
          * build, so it keeps production rather than taking the read path's
-         * sandbox fallback.
+         * sandbox fallback. A shop released builds sent to staging by its
+         * hostname (see is_twoinc_development()) instead of production keeps
+         * staging, since that sniffing is gone.
          *
          * @param mixed $stored
+         * @param bool  $sniffed_to_staging whether released builds' hostname
+         *                                  sniffing moved a production shop to staging
          *
          * @return string one of ENVIRONMENT_MODES
          */
-        public static function migrate_environment_mode($stored)
+        public static function migrate_environment_mode($stored, $sniffed_to_staging = false)
         {
             if ($stored === null) {
                 return 'sandbox';
             }
-            return self::recognise_environment_mode($stored) ?? 'production';
+            $mode = self::recognise_environment_mode($stored) ?? 'production';
+            return $mode === 'production' && $sniffed_to_staging ? 'staging' : $mode;
+        }
+
+        /**
+         * Whether released builds sent this shop's production mode to
+         * staging: a development hostname and no developer API host, which
+         * would have taken over (TWO-26604 migration only).
+         *
+         * @return bool
+         */
+        public static function was_sniffed_to_staging()
+        {
+            $dev_api_host = getenv(self::DEV_HOST_ENV_VARS['api']);
+            return self::is_twoinc_development() && !(is_string($dev_api_host) && $dev_api_host !== '');
         }
 
         /**
