@@ -3537,8 +3537,12 @@ if (!class_exists('WC_Twoinc')) {
             if ($this->identity_before_save === null) {
                 return false;
             }
+            $env = $this->get_sibling_field_save_value('checkout_env');
+            // A refused environment is never stored, so it changes nothing (TWO-26604).
+            $env_changing = $env !== $this->identity_before_save['checkout_env']
+                && WC_Twoinc_Helper::is_environment_mode_save_allowed($env, $this->get_stored_checkout_env());
             return $this->get_sibling_field_save_value('api_key') !== $this->identity_before_save['api_key']
-                || $this->get_sibling_field_save_value('checkout_env') !== $this->identity_before_save['checkout_env'];
+                || $env_changing;
         }
 
         /** Whether the posted grid carries a fixed fee for the cap to judge. */

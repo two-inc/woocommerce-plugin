@@ -251,6 +251,7 @@ are out of scope here — they live in the `e2e-tests` repo.
 # The compose default seeds the LOCAL dev config; e2e runs against the
 # staging shop, so pin the staging config first (CI does the same):
 echo WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-demostoregb.json > .env
+echo TWO_INTERNAL_ENVIRONMENTS=1 >> .env
 docker compose up -d
 # wait ~90s for wpcli bootstrap to finish (installs WooCommerce, creates products, activates plugin).
 # An existing stack keeps its gateway settings: run `make clean` first so the staging config is applied

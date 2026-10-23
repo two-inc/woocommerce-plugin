@@ -29,6 +29,8 @@ final class EnvironmentOptionsSpec
             }
             self::testMigrationTable();
             self::testFormOffersTheOptionsInOrder();
+            self::testMigrationPersists();
+            self::testARefusedEnvironmentIsNoIdentityChange();
         } finally {
             putenv('TWO_INTERNAL_ENVIRONMENTS');
             $GLOBALS['test_home_url'] = $home;
@@ -133,6 +135,60 @@ final class EnvironmentOptionsSpec
                 $refused = $e->getMessage() === 'Select a valid environment.';
             }
             TinyAssert::same(!isset($expected['staging']), $refused, $description . ' (save)');
+        }
+    }
+
+    /** migrate_checkout_env() writes the rewritten row back, and leaves a fresh install unwritten. */
+    private static function testMigrationPersists(): void
+    {
+        $cases = [
+            [['checkout_env' => 'PROD', 'title' => 'x'], ['checkout_env' => 'production', 'title' => 'x'], 'a legacy value is rewritten and the rest of the row kept'],
+            [['title' => 'x'], ['title' => 'x', 'checkout_env' => 'production'], 'a row without the key gets production'],
+            [['checkout_env' => 'staging'], ['checkout_env' => 'staging'], 'a canonical row is left alone'],
+            [null, null, 'a fresh install writes nothing'],
+        ];
+
+        foreach ($cases as [$row, $expected, $description]) {
+            $gateway = self::gateway([]);
+            $key = $gateway->get_option_key();
+            if ($row === null) {
+                unset($GLOBALS['__twoinc_test_options'][$key]);
+            } else {
+                $GLOBALS['__twoinc_test_options'][$key] = $row;
+            }
+            $gateway->settings = $row ?? ['checkout_env' => 'sandbox'];
+            $migrate = new ReflectionMethod(WC_Twoinc::class, 'migrate_checkout_env');
+            $migrate->setAccessible(true);
+            $migrate->invoke($gateway);
+
+            TinyAssert::same($expected, $GLOBALS['__twoinc_test_options'][$key] ?? null, $description);
+        }
+    }
+
+    /** A posted environment the save refuses never counts as the identity changing. */
+    private static function testARefusedEnvironmentIsNoIdentityChange(): void
+    {
+        $cases = [
+            [null, 'staging', false, 'staging refused without the flag: no identity change'],
+            ['1', 'staging', true, 'staging accepted with the flag: identity changes'],
+            [null, 'production', true, 'production accepted: identity changes'],
+        ];
+
+        foreach ($cases as [$flag, $posted, $expected, $description]) {
+            self::setFlag($flag);
+            $gateway = self::gateway(['api_key' => 'k', 'checkout_env' => 'sandbox']);
+            $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()] = ['checkout_env' => 'sandbox'];
+            $before = new ReflectionProperty(WC_Twoinc::class, 'identity_before_save');
+            $before->setAccessible(true);
+            $before->setValue($gateway, ['api_key' => 'k', 'checkout_env' => 'sandbox']);
+            $gateway->test_post_data = [
+                $gateway->get_field_key('api_key') => 'k',
+                $gateway->get_field_key('checkout_env') => $posted,
+            ];
+            $changing = new ReflectionMethod(WC_Twoinc::class, 'identity_changing_in_save');
+            $changing->setAccessible(true);
+
+            TinyAssert::same($expected, $changing->invoke($gateway), $description);
         }
     }
 }
