@@ -3279,8 +3279,7 @@ describe("TWO-40 — sole-trader flow", () => {
             win.closed = true;
           },
           focusedAfter: differentSoleTraderBtn,
-          description:
-            "closing a re-signup by hand while adopted gives the launcher its focus back"
+          description: "closing a re-signup by hand while adopted gives the launcher its focus back"
         },
         {
           adopted: true,
