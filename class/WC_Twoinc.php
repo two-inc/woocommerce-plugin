@@ -7343,6 +7343,8 @@ if (!class_exists('WC_Twoinc')) {
             $allowed['enabled'] = true;
 
             $kept = [];
+            // Base fields kept beyond the gateway switch.
+            $listed = 0;
             // A title row waits here until the first field under it survives.
             $pending_title = [];
             foreach ($fields as $key => $field) {
@@ -7352,17 +7354,12 @@ if (!class_exists('WC_Twoinc')) {
                     $kept += $pending_title;
                     $pending_title = [];
                     $kept[$key] = $field;
+                    $listed += $key === 'enabled' ? 0 : 1;
                 } else {
                     $this->withheld_form_fields[$key] = $field;
                 }
             }
             // Empty, not a list, or naming no base field beyond the gateway switch: almost certainly a mistake.
-            $listed = 0;
-            foreach ($kept as $key => $field) {
-                if ($key !== 'enabled' && ($field['type'] ?? '') !== 'title') {
-                    $listed++;
-                }
-            }
             if ($listed === 0 && !self::$empty_allowlist_logged) {
                 self::$empty_allowlist_logged = true;
                 wc_get_logger()->warning(

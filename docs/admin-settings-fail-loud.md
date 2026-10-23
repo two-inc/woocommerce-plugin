@@ -78,15 +78,15 @@ or declared default still applies. A new setting therefore:
   request-header table's does, skips a withheld field.
 - Is withheld on an overlay until the overlay lists it, so a default-on
   feature still runs there, unseen and uneditable.
-- Names the settings it reads beside it. The admin script and the save read
-  some settings from the form to drive others, and read an absent row as
-  empty. So an overlay that lists a driven setting also lists what drives it:
-  - company search drives address lookup;
-  - the payment terms day count drives the default term, custom days and the
-    whole surcharge script;
-  - the surcharge type drives every surcharge setting and grid it shows or
-    hides.
-  Withholding a driven setting while listing its driver is safe.
+- Belongs to a group when the admin script or a save validator reads it
+  beside other settings. Both read a withheld member as empty, not as its
+  stored value, so a partly withheld group behaves as if that member were
+  blank (for example, with custom days withheld, a save with no preset term
+  ticked is refused). An overlay lists a group whole unless that blank reading
+  is what it wants. The groups today: company search and address lookup; the
+  payment terms day count, custom days and default term, which also gate the
+  surcharge script; the surcharge type and the settings and grids it shows or
+  hides; tax treatment and tax class; rounding basis and rounding step.
 
 `enabled`, the gateway's own on/off switch, is always shown: WooCommerce reads
 it from the stored row rather than through `get_option()`.
