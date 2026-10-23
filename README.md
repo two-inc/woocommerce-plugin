@@ -140,9 +140,9 @@ docker compose up -d --force-recreate
 
 ### Environment selector, key and hosts have to agree
 
-The Environment setting offers Production and Sandbox, plus Staging when the
-server sets `TWO_INTERNAL_ENVIRONMENTS=1` (Two's own shops and the local stack
-for `@two.inc` accounts) or `staging` is already stored. The stored mode is the
+The Environment setting offers Production and Sandbox, with Sandbox the
+default; an unrecognised stored value resolves to Sandbox. There are also
+internal environments for the use of Two employees only. The stored mode is the
 environment the gateway talks to; the shop's hostname plays no part.
 
 `docker/config/local.json` seeds `checkout_env` as `sandbox`, so a bare
@@ -251,7 +251,6 @@ are out of scope here — they live in the `e2e-tests` repo.
 # The compose default seeds the LOCAL dev config; e2e runs against the
 # staging shop, so pin the staging config first (CI does the same):
 echo WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-demostoregb.json > .env
-echo TWO_INTERNAL_ENVIRONMENTS=1 >> .env
 docker compose up -d
 # wait ~90s for wpcli bootstrap to finish (installs WooCommerce, creates products, activates plugin).
 # An existing stack keeps its gateway settings: run `make clean` first so the staging config is applied
