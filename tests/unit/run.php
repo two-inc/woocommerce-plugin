@@ -2286,8 +2286,12 @@ final class BrandConfigSpec
         $meta = WC_Twoinc_Brand::meta_key('shipping_tax_rate');
         $mismatch = 'refused: does not match';
         $noParent = 'refused: Shipping "Carrier" cannot be refunded';
-        $defaults = ['type' => 'shipping', 'refundedId' => 5, 'parentRows' => $parent24, 'refundRows' => $restamped, 'parent' => [10.0, 2.4, [1 => 2.4]], 'refund' => [-10.0, -2.4, [1 => -2.4]]];
+        $taxOnly = 'refused: "Carrier" cannot be refunded as tax alone';
+        $taxOnlyProduct = 'refused: "Stub product" cannot be refunded as tax alone';
+        $defaults = ['type' => 'shipping', 'refundedId' => 5, 'parentRows' => $parent24, 'refundRows' => $restamped, 'parent' => [10.0, 2.4, [1 => 2.4]], 'refund' => [-10.0, -2.4, [1 => -2.4]], 'create' => false, 'withProduct' => false, 'catalogue' => false, 'decimals' => null];
         // [overrides of $defaults; parent and refund lines are [net, tax, item taxes by rate id, item meta], expected rate or refusal, description]
+        // create: the line is built for an order request, not a refund. withProduct: the refund also returns a whole
+        // product line, built first. catalogue: the product line's catalogue name differs from its order line name.
         $cases = [
             [['type' => 'line_item'], 0.24, 'product refund after a rate change keeps the charged rate'],
             [['type' => 'fee'], 0.24, 'fee refund after a rate change keeps the charged rate'],
@@ -2299,9 +2303,17 @@ final class BrandConfigSpec
             [['refund' => [-10.0, -5.0, [1 => -5.0]]], 0.24, 'refund of shipping with a rate provided is sent at the charged rate, unchecked'],
             [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, [], [$meta => ['rate' => 0.12, 'name' => 'VAT']]], 'refund' => [-10.0, -3.0, []]], $mismatch, 'refund of a fallback order whose tax does not reconcile with the stored rate is refused'],
             [['refund' => [-4.0, -0.96, [1 => -0.96]]], 0.24, 'partial shipping refund'],
-            [['refund' => [0.0, -2.4, [1 => -2.4]]], 0.24, 'tax-only shipping refund (VAT charged to a reverse-charge buyer) is sent at the charged rate'],
+            [['refund' => [0.0, -2.4, [1 => -2.4]]], $taxOnly, 'tax-only shipping refund is refused by name (TWO-26541)'],
+            [['refund' => [-0.004, -2.4, [1 => -2.4]]], $taxOnly, 'shipping refund whose net rounds to zero is refused as tax-only'],
             [['refund' => [-10.0, 0.0, []]], 0.24, 'net-only shipping refund is sent at the charged rate'],
-            [['type' => 'fee', 'refund' => [0.0, -2.4, [1 => -2.4]]], 0.24, 'tax-only fee refund is sent, not dropped'],
+            [['type' => 'fee', 'refund' => [0.0, -2.4, [1 => -2.4]]], $taxOnly, 'tax-only fee refund is refused by name'],
+            [['type' => 'line_item', 'refund' => [0.0, -2.4, [1 => -2.4]]], $taxOnlyProduct, 'tax-only product refund is refused by name'],
+            [['type' => 'line_item', 'refund' => [0.0, -2.4, [1 => -2.4]], 'catalogue' => true], $taxOnlyProduct, 'tax-only product refund names the order line, not the catalogue product'],
+            [['type' => 'line_item', 'refund' => [0.0, -0.004, [1 => -0.004]]], 0.24, 'product refund of tax that rounds to zero is sent'],
+            [['refund' => [0.004, -2.4, [1 => -2.4]]], $taxOnly, 'shipping refund whose positive net rounds to zero is refused as tax-only'],
+            [['refund' => [-0.4, -2.0, [1 => -2.0]], 'decimals' => 0], $taxOnly, 'shipping refund whose net rounds to zero at the shop price decimals (0) is refused'],
+            [['refund' => [0.0, -2.4, [1 => -2.4]], 'withProduct' => true], $taxOnly, 'refund of a whole product line and a tax-only shipping line is refused as a whole'],
+            [['refund' => [0.0, 2.4, [1 => 2.4]], 'create' => true], 0.24, 'a zero-net taxed shipping line on an order request is not refused: the guard is refund-only'],
             [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, [], [$meta => ['rate' => 0.12, 'name' => 'VAT']]], 'refund' => [-10.0, -1.2, []]], 0.12, 'refund of a fallback order uses the rate stored at checkout'],
             [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, []], 'refund' => [-10.0, -1.2, []]], 0.0, 'refund of an order placed with no rate and no stored rate is sent as charged at 0%, without reading the shop'],
             [['parentRows' => [[2, 0.0, false]], 'refundRows' => [], 'parent' => [10.0, 0.0, [2 => 0.0]], 'refund' => [-10.0, 0.0, [2 => 0.0]]], 0.0, 'refund of shipping with an explicit 0% rate is sent at 0%, with the option on'],
@@ -2325,16 +2337,45 @@ final class BrandConfigSpec
                 $item = new StubShippingItem($net, $tax, $taxes, $itemMeta);
             }
             $parent = new StubTaxOrder(self::stubTaxRows($c['parentRows']), [WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order'], [], 1, [5 => new StubShippingItem(...$c['parent'])]);
-            $refund = new StubRefund([$c['type'] => [$item]], self::stubTaxRows($c['refundRows']));
+            if ($c['catalogue']) {
+                $item['data'] = new class () extends StubProduct {
+                    public function get_name()
+                    {
+                        return 'Catalogue name';
+                    }
 
-            $failures[] = self::shippingRateCaseFailure($expected, static function () use ($refund, $parent, $net, $tax) {
-                $lines = WC_Twoinc_Helper::check_shop_match(WC_Twoinc_Helper::compose_twoinc_refund($refund, $net + $tax, $parent))['line_items'];
+                    public function get_description()
+                    {
+                        return '';
+                    }
+
+                    public function get_sku()
+                    {
+                        return '';
+                    }
+                };
+            }
+            $refundItems = [$c['type'] => [$item]];
+            if ($c['withProduct']) {
+                $refundItems['line_item'] = [new StubProductLineItem(['line_total' => -10.0, 'line_subtotal' => -10.0, 'line_tax' => -2.4, 'taxes' => [1 => -2.4], 'meta' => ['_refunded_item_id' => 5]])];
+            }
+            $refund = new StubRefund($refundItems, self::stubTaxRows($c['refundRows']));
+            $GLOBALS['__twoinc_test_price_decimals'] = $c['decimals'];
+            if ($c['decimals'] === null) {
+                unset($GLOBALS['__twoinc_test_price_decimals']);
+            }
+
+            $failures[] = self::shippingRateCaseFailure($expected, static function () use ($refund, $parent, $item, $net, $tax, $c) {
+                $lines = $c['create']
+                    ? WC_Twoinc_Helper::get_line_items([], [$item], [], $parent, false, null, $rates, false)
+                    : WC_Twoinc_Helper::check_shop_match(WC_Twoinc_Helper::compose_twoinc_refund($refund, $net + $tax, $parent))['line_items'];
                 if (round(array_sum(array_column($lines, 'gross_amount')), 2) !== round($net + $tax, 2)) {
                     return 'lines that do not sum to the refund';
                 }
                 return $lines[0]['tax_rate'];
             }, $description);
         }
+        unset($GLOBALS['__twoinc_test_price_decimals']);
         self::setShippingTaxShop(false, null, []);
 
         TinyAssert::same([], array_values(array_filter($failures)), "Failing cases:\n  " . implode("\n  ", array_filter($failures)));
