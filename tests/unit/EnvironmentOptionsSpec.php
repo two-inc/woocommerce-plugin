@@ -1,0 +1,138 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Environment setting (TWO-26604), driven by the shared case table
+ * tests/unit/fixtures/environment-cases.json, which is byte-identical in the
+ * PrestaShop and Magento plugins.
+ */
+final class EnvironmentOptionsSpec
+{
+    private const DEV_VARS = ['TWOINC_DEV_API_HOST', 'TWOINC_DEV_CHECKOUT_HOST', 'TWOINC_DEV_PORTAL_HOST'];
+
+    public static function runAll(): void
+    {
+        $cases = json_decode((string) file_get_contents(__DIR__ . '/fixtures/environment-cases.json'), true);
+        $home = $GLOBALS['test_home_url'] ?? null;
+        $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
+        foreach (self::DEV_VARS as $var) {
+            putenv($var);
+        }
+
+        try {
+            foreach ($cases['resolve'] as $case) {
+                self::assertResolveCase($case);
+            }
+            foreach ($cases['save'] as $case) {
+                self::assertSaveCase($case);
+            }
+            self::testMigrationTable();
+            self::testFormOffersTheOptionsInOrder();
+        } finally {
+            putenv('TWO_INTERNAL_ENVIRONMENTS');
+            $GLOBALS['test_home_url'] = $home;
+            unset($GLOBALS['__twoinc_test_options'][self::gateway([])->get_option_key()]);
+        }
+        print("EnvironmentOptionsSpec passed.\n");
+    }
+
+    private static function setFlag(?string $flag): void
+    {
+        putenv($flag === null ? 'TWO_INTERNAL_ENVIRONMENTS' : 'TWO_INTERNAL_ENVIRONMENTS=' . $flag);
+    }
+
+    /** A gateway whose settings are exactly $options, nothing resolved through form defaults. */
+    private static function gateway(array $options): WC_Twoinc
+    {
+        return new class ($options) extends WC_Twoinc {
+            private $options;
+            public function __construct($options)
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->options = $options;
+            }
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+        };
+    }
+
+    private static function assertResolveCase(array $case): void
+    {
+        self::setFlag($case['flag']);
+        $stored = $case['stored'] ?? WC_Twoinc_Helper::ENVIRONMENT_MODE_DEFAULT;
+        $gateway = self::gateway(['checkout_env' => $stored]);
+        $description = $case['description'];
+
+        TinyAssert::same($case['options'], WC_Twoinc_Helper::get_environment_mode_options($stored), $description . ' (options)');
+        TinyAssert::same($case['effective'], WC_Twoinc_Helper::get_effective_environment_mode($gateway), $description . ' (effective)');
+        TinyAssert::same($case['api_host'], $gateway->get_twoinc_checkout_host(), $description . ' (API host)');
+        TinyAssert::same($case['checkout_host'], WC_Twoinc_Helper::get_environment_host('checkout', $gateway), $description . ' (checkout host)');
+        TinyAssert::same($case['health_ok'], WC_Twoinc_Helper::is_environment_mode_healthy($stored), $description . ' (health)');
+    }
+
+    private static function assertSaveCase(array $case): void
+    {
+        self::setFlag($case['flag']);
+
+        TinyAssert::same(
+            $case['accepted'],
+            WC_Twoinc_Helper::is_environment_mode_save_allowed($case['submitted'], $case['stored']),
+            $case['description']
+        );
+    }
+
+    /** WooCommerce's column of the migration table: legacy values keep the hosts they reached. */
+    private static function testMigrationTable(): void
+    {
+        $cases = [
+            ['production', 'production', 'production kept'],
+            ['PROD', 'production', 'legacy option key to production'],
+            ['Production', 'production', 'pre-2026-08-31 default to production'],
+            ['prod', 'production', 'alias to production'],
+            ['sandbox', 'sandbox', 'sandbox kept'],
+            ['SANDBOX', 'sandbox', 'legacy option key to sandbox'],
+            ['staging', 'staging', 'staging kept'],
+            ['STAGING', 'staging', 'staging in any case kept'],
+            ['', 'production', 'empty reached production before, so stays on production'],
+            [null, 'production', 'missing key reached production before, so stays on production'],
+            ['Demo', 'production', 'any other value reached production before, so stays on production'],
+        ];
+
+        foreach ($cases as [$stored, $expected, $description]) {
+            TinyAssert::same($expected, WC_Twoinc_Helper::migrate_environment_mode($stored), $description);
+        }
+    }
+
+    /** The dropdown and the field validator read the raw stored row. */
+    private static function testFormOffersTheOptionsInOrder(): void
+    {
+        $cases = [
+            [null, ['checkout_env' => 'sandbox'], ['production' => 'Production', 'sandbox' => 'Sandbox'], 'outside Two infra: production then sandbox'],
+            ['1', ['checkout_env' => 'sandbox'], ['production' => 'Production', 'sandbox' => 'Sandbox', 'staging' => 'Staging'], 'on Two infra: staging last'],
+            [null, ['checkout_env' => 'staging'], ['production' => 'Production', 'sandbox' => 'Sandbox', 'staging' => 'Staging'], 'a stored staging stays offered'],
+            [null, null, ['production' => 'Production', 'sandbox' => 'Sandbox'], 'fresh install: staging refused without the flag'],
+        ];
+
+        foreach ($cases as [$flag, $row, $expected, $description]) {
+            self::setFlag($flag);
+            $gateway = self::gateway([]);
+            if ($row === null) {
+                unset($GLOBALS['__twoinc_test_options'][$gateway->get_option_key()]);
+            } else {
+                $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()] = $row;
+            }
+
+            TinyAssert::same($expected, $gateway->get_checkout_env_options(), $description);
+            $refused = false;
+            try {
+                $gateway->validate_checkout_env_field('checkout_env', 'staging');
+            } catch (Exception $e) {
+                $refused = $e->getMessage() === 'Select a valid environment.';
+            }
+            TinyAssert::same(!isset($expected['staging']), $refused, $description . ' (save)');
+        }
+    }
+}

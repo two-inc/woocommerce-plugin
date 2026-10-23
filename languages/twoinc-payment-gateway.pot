@@ -2003,3 +2003,23 @@ msgstr ""
 #: tillit-payment-gateway.php:305
 msgid "Settings"
 msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Staging"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Sandbox is for testing and moves no real money. Use the API key issued for the environment you select."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Select a valid environment."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Staging (Two internal test environment). Select Sandbox or Production."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Not recognised: Sandbox is in use. Select an environment and save."
+msgstr ""

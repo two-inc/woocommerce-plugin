@@ -70,6 +70,7 @@ services:
       # local dev instance of that page is what covers the remote-shop case.
       TWOINC_DEV_CHECKOUT_HOST: "${TWO_CHECKOUT_BASE_URL:-}"
       TWOINC_DEV_PORTAL_HOST: "${TWO_PORTAL_BASE_URL:-}"
+      TWO_INTERNAL_ENVIRONMENTS: "${TWO_INTERNAL_ENVIRONMENTS:-}"
     volumes:
       - wordpress_data:/var/www/html
       - .:/var/www/html/wp-content/plugins/tillit-payment-gateway

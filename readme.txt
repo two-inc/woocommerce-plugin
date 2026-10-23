@@ -65,6 +65,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 
 = 3.0.0 =
 
+* WooCommerce > Settings > Payments > Two > Environment offers Production and Sandbox, with a note on which API key to use. A shop with no environment saved, or one the plugin does not recognise, is set to Production on update, the environment it was already using. An environment value that is not recognised now uses Sandbox, never Production, and the install health summary says so.
 * Breaking: the "Default shipping tax class" setting has been removed and there is no migration. Its stored value is not carried over anywhere.
 * A shipping line is sent at the tax rate WooCommerce recorded for it, including a 0% rate, and Two checks it. A shipping line with no recorded rate is sent as charged at 0%, unless the shop runs `wp option update twoinc_shipping_tax_from_shop_rates yes`: then its rate is taken from WooCommerce's own shipping tax class (WooCommerce > Settings > Tax, including "based on cart items"), and an order whose shipping tax does not match that rate is refused at checkout with a named error.
 * Compound tax rates are declared at their true combined rate.

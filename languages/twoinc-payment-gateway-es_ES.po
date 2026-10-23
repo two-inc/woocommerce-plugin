@@ -1951,3 +1951,23 @@ msgstr "Días de plazo para pagar su factura"
 #: tillit-payment-gateway.php:305
 msgid "Settings"
 msgstr "Ajustes"
+
+#: class/WC_Twoinc.php
+msgid "Staging"
+msgstr "Staging"
+
+#: class/WC_Twoinc.php
+msgid "Sandbox is for testing and moves no real money. Use the API key issued for the environment you select."
+msgstr "Sandbox es para pruebas y no mueve dinero real. Usa la clave de API emitida para el entorno que selecciones."
+
+#: class/WC_Twoinc.php
+msgid "Select a valid environment."
+msgstr "Selecciona un entorno válido."
+
+#: class/WC_Twoinc.php
+msgid "Staging (Two internal test environment). Select Sandbox or Production."
+msgstr "Staging (entorno de pruebas interno de Two). Selecciona Sandbox o Producción."
+
+#: class/WC_Twoinc.php
+msgid "Not recognised: Sandbox is in use. Select an environment and save."
+msgstr "No reconocido: se está usando Sandbox. Selecciona un entorno y guarda."
