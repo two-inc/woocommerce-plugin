@@ -1964,9 +1964,11 @@ msgstr "Sandbox es para pruebas y no mueve dinero real. Usa la clave de API emit
 msgid "Select a valid environment."
 msgstr "Selecciona un entorno válido."
 
+#. translators: %s: brand name
 #: class/WC_Twoinc.php
-msgid "Staging (Two internal test environment). Select Sandbox or Production."
-msgstr "Staging (entorno de pruebas interno de Two). Selecciona Sandbox o Producción."
+#, php-format
+msgid "Staging (%s internal test environment). Select Sandbox or Production."
+msgstr "Staging (entorno de pruebas interno de %s). Selecciona Sandbox o Producción."
 
 #: class/WC_Twoinc.php
 msgid "Not recognised: Sandbox is in use. Select an environment and save."

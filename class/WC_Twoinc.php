@@ -7671,7 +7671,11 @@ if (!class_exists('WC_Twoinc')) {
             if ($environment === null) {
                 $environment_value = __('Not recognised: Sandbox is in use. Select an environment and save.', 'twoinc-payment-gateway');
             } elseif ($environment === 'staging' && !WC_Twoinc_Helper::is_internal_environments_enabled()) {
-                $environment_value = __('Staging (Two internal test environment). Select Sandbox or Production.', 'twoinc-payment-gateway');
+                $environment_value = sprintf(
+                    /* translators: %s: brand name */
+                    __('Staging (%s internal test environment). Select Sandbox or Production.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name')
+                );
             } else {
                 $environment_value = $environment_labels[$environment];
             }
