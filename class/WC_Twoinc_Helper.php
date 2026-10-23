@@ -2908,10 +2908,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * One-time rewrite of a stored legacy value on an existing install
-         * (TWO-26604). Every build before the explicit allowlist sent
-         * anything but SANDBOX to production, and the pre-2026-08-31 default
-         * was production, so an empty, missing or unknown value keeps
-         * production rather than taking the read path's sandbox fallback.
+         * (TWO-26604), keeping each shop on the environment it reaches today.
+         * A row with no checkout_env key reads the field default, sandbox. An
+         * empty or unknown value was sent to production by every released
+         * build, so it keeps production rather than taking the read path's
+         * sandbox fallback.
          *
          * @param mixed $stored
          *
@@ -2919,6 +2920,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function migrate_environment_mode($stored)
         {
+            if ($stored === null) {
+                return 'sandbox';
+            }
             return self::recognise_environment_mode($stored) ?? 'production';
         }
 

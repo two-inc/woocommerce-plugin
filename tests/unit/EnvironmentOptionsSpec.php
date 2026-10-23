@@ -99,7 +99,7 @@ final class EnvironmentOptionsSpec
             ['staging', 'staging', 'staging kept'],
             ['STAGING', 'staging', 'staging in any case kept'],
             ['', 'production', 'empty reached production before, so stays on production'],
-            [null, 'production', 'missing key reached production before, so stays on production'],
+            [null, 'sandbox', 'missing key read the sandbox field default, so stays on sandbox'],
             ['Demo', 'production', 'any other value reached production before, so stays on production'],
         ];
 
@@ -143,7 +143,7 @@ final class EnvironmentOptionsSpec
     {
         $cases = [
             [['checkout_env' => 'PROD', 'title' => 'x'], ['checkout_env' => 'production', 'title' => 'x'], 'a legacy value is rewritten and the rest of the row kept'],
-            [['title' => 'x'], ['title' => 'x', 'checkout_env' => 'production'], 'a row without the key gets production'],
+            [['title' => 'x'], ['title' => 'x', 'checkout_env' => 'sandbox'], 'a row without the key gets sandbox'],
             [['checkout_env' => 'staging'], ['checkout_env' => 'staging'], 'a canonical row is left alone'],
             [null, null, 'a fresh install writes nothing'],
         ];
