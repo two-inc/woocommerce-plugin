@@ -2,7 +2,7 @@
   "enabled": "yes",
   "title": "Business invoice",
   "subtitle": "Receive the invoice via PDF and email",
-  "checkout_env": "PROD",
+  "checkout_env": "staging",
   "test_checkout_host": "https://api.staging.two.inc",
   "clear_options_on_uninstall": "no",
   "section_api_credentials": "",

@@ -9,6 +9,7 @@ require __DIR__ . '/fixtures/builderorders.php';
 require __DIR__ . '/OrderPostprocessingSpec.php';
 require __DIR__ . '/TaxCodeSpec.php';
 require __DIR__ . '/TaxCodeAdminSpec.php';
+require __DIR__ . '/EnvironmentOptionsSpec.php';
 
 final class TinyAssert
 {
@@ -192,7 +193,7 @@ final class BrandConfigSpec
             'testEnvironmentModeNormalisesStoredCheckoutEnv',
             'testEnvironmentHostFollowsModeAndBrandTemplate',
             'testLocaleFollowsRequestLocaleWithEnglishFallback',
-            'testCheckoutHostPrefersExplicitModeOverDevSniffing',
+            'testCheckoutHostFollowsStoredModeNotHostname',
             'testServiceHostsShareTheApiHostsEnvironment',
             'testDevHostOverridesAreIndependentAndProductionSafe',
             'testOrderEditNeverCarriesTheOrganisationNumber',
@@ -7679,7 +7680,7 @@ final class BrandConfigSpec
 
     private static function testSoleTraderTokensMintedForCapableCountry(): void
     {
-        $gateway = self::tokenMintingGateway(['SOLE_TRADER']);
+        $gateway = self::tokenMintingGateway(['SOLE_TRADER'], ['checkout_env' => 'production']);
         $_REQUEST = ['country' => 'GB'];
         $response = self::runTokensHandler($gateway);
         $_REQUEST = [];
@@ -8293,7 +8294,7 @@ final class BrandConfigSpec
 
     private static function testSoleTraderSignupUrlFollowsEnvAndFilter(): void
     {
-        $gateway = self::soleTraderGateway([], []);
+        $gateway = self::soleTraderGateway(['checkout_env' => 'production'], []);
         TinyAssert::same('https://checkout.two.inc/soletrader/signup', WC_Twoinc_Sole_Trader::get_signup_page_url($gateway));
 
         $gateway = self::soleTraderGateway(['checkout_env' => 'SANDBOX'], []);
@@ -8309,17 +8310,17 @@ final class BrandConfigSpec
     private static function testEnvironmentModeNormalisesStoredCheckoutEnv(): void
     {
         $cases = [
-            ['', 'production'],
+            ['', 'sandbox'],
             ['PROD', 'production'],
             ['Production', 'production'],
             ['SANDBOX', 'sandbox'],
             ['staging', 'staging'],
-            // Outside the allowlist -> production (the pre-template host for
-            // every unrecognised value). The mode splices into the API
-            // hostname, so hostile admin input must not steer it off-domain.
-            ['evil.example/', 'production'],
-            ['api.evil.example/#', 'production'],
-            ['foo', 'production'],
+            // Outside the allowlist -> sandbox, never production (TWO-26604).
+            // The mode splices into the API hostname, so hostile admin input
+            // must not steer it off-domain.
+            ['evil.example/', 'sandbox'],
+            ['api.evil.example/#', 'sandbox'],
+            ['foo', 'sandbox'],
         ];
         foreach ($cases as [$stored, $expected]) {
             $gateway = self::soleTraderGateway(['checkout_env' => $stored], []);
@@ -8348,7 +8349,7 @@ final class BrandConfigSpec
     private static function testEnvironmentHostFollowsModeAndBrandTemplate(): void
     {
         // Two brand (default): production drops the mode suffix.
-        $gateway = self::soleTraderGateway([], []);
+        $gateway = self::soleTraderGateway(['checkout_env' => 'production'], []);
         TinyAssert::same('https://api.two.inc', WC_Twoinc_Helper::get_environment_host('api', $gateway));
 
         $gateway = self::soleTraderGateway(['checkout_env' => 'SANDBOX'], []);
@@ -8367,7 +8368,7 @@ final class BrandConfigSpec
         );
     }
 
-    private static function testCheckoutHostPrefersExplicitModeOverDevSniffing(): void
+    private static function testCheckoutHostFollowsStoredModeNotHostname(): void
     {
         $make = static function (array $options) {
             return new class ($options) extends WC_Twoinc {
@@ -8384,36 +8385,27 @@ final class BrandConfigSpec
             };
         };
 
-        // Non-dev hostname, default mode: production host.
+        // Hostname plays no part (TWO-26604): a stored production reaches
+        // production on a merchant domain and on a *.staging.two.inc one.
         $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
-        TinyAssert::same('https://api.two.inc', $make([])->get_twoinc_checkout_host());
-
-        // Dev-sniffed hostname (*.staging.two.inc) with the default mode: the
-        // free-text test-host override was removed (TWO-25386), so a
-        // dev-sniffed shop now always resolves to the brand's staging host.
+        TinyAssert::same('https://api.two.inc', $make(['checkout_env' => 'production'])->get_twoinc_checkout_host());
         $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
-        TinyAssert::same(
-            'https://api.staging.two.inc',
-            $make([])->get_twoinc_checkout_host()
-        );
+        TinyAssert::same('https://api.two.inc', $make(['checkout_env' => 'production'])->get_twoinc_checkout_host());
 
-        // An explicit mode beats the sniffer — even on a dev hostname.
+        // The stored mode decides, on any hostname.
         TinyAssert::same(
             'https://api.staging.two.inc',
             $make(['checkout_env' => 'staging'])->get_twoinc_checkout_host()
         );
-
-        // Non-dev brand shop with explicit staging mode: no sniffing needed.
         $GLOBALS['test_home_url'] = 'https://brand-shop.staging.brand.example';
         TinyAssert::same('https://api.staging.two.inc', $make(['checkout_env' => 'staging'])->get_twoinc_checkout_host());
     }
 
     /**
      * The invariant TWO-25170 violated: every service host the gateway emits
-     * resolves to the environment the API host resolves to. A dev-sniffed shop
-     * on the never-configured default mode reaches staging over the API, so its
-     * hosted signup page has to be staging's — a production page rejects the
-     * staging-minted delegation token with 401.
+     * resolves to the environment the API host resolves to, so a hosted
+     * signup page never rejects a delegation token minted in another
+     * environment.
      */
     private static function testServiceHostsShareTheApiHostsEnvironment(): void
     {
@@ -8432,10 +8424,10 @@ final class BrandConfigSpec
             };
         };
 
-        // Dev-sniffed shop, default mode: staging both ways (no test-host
-        // override to consult since TWO-25386 removed it).
+        // A stored staging puts every service host on staging, on any
+        // hostname (TWO-26604: no hostname detection).
         $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
-        $gateway = $make([]);
+        $gateway = $make(['checkout_env' => 'staging']);
         TinyAssert::same('https://api.staging.two.inc', $gateway->get_twoinc_checkout_host());
         TinyAssert::same(
             'https://checkout.staging.two.inc',
@@ -8447,8 +8439,7 @@ final class BrandConfigSpec
         );
         TinyAssert::same('https://checkout.staging.two.inc/terms', $gateway->get_terms_page_url());
 
-        // A dev-sniffed shop with an explicit mode follows that mode, not
-        // the staging fallback.
+        // A stored sandbox follows sandbox.
         $gateway = $make(['checkout_env' => 'sandbox']);
         TinyAssert::same('https://api.sandbox.two.inc', $gateway->get_twoinc_checkout_host());
         TinyAssert::same(
@@ -8456,9 +8447,9 @@ final class BrandConfigSpec
             WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
         );
 
-        // A real merchant shop is untouched: production API, production page.
+        // A production merchant shop: production API, production page.
         $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
-        $gateway = $make([]);
+        $gateway = $make(['checkout_env' => 'production']);
         TinyAssert::same('https://api.two.inc', $gateway->get_twoinc_checkout_host());
         TinyAssert::same(
             'https://checkout.two.inc',
@@ -8467,11 +8458,10 @@ final class BrandConfigSpec
         TinyAssert::same('https://checkout.two.inc/terms', $gateway->get_terms_page_url());
 
         // Brand-agnostic: an overlay's own domains follow the same rule, with
-        // no brand-specific branch — the resolution is template-driven.
+        // no brand-specific branch; the resolution is template-driven.
         WC_Twoinc_Brand::reset();
         self::useTestbrand();
-        $GLOBALS['test_home_url'] = 'https://woocom-brand.staging.two.inc';
-        $gateway = $make([]);
+        $gateway = $make(['checkout_env' => 'staging']);
         TinyAssert::same('https://api.staging.testbrand.example', $gateway->get_twoinc_checkout_host());
         TinyAssert::same(
             'https://checkout.staging.testbrand.example',
@@ -8578,10 +8568,10 @@ final class BrandConfigSpec
             };
         };
 
-        // Given: a dev-sniffed shop carrying the never-configured default mode
+        // Given: a dev-sniffed shop with production stored
         $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
         putenv('TWOINC_DEV_API_HOST=http://portal.localhost/api');
-        $gateway = $make([]);
+        $gateway = $make(['checkout_env' => 'production']);
 
         // When: only the API override is set
         // Then: only the API host moves. The other two fall back on their own
@@ -8623,7 +8613,7 @@ final class BrandConfigSpec
         // Then: not one of them is honoured. This is the gate that has to hold
         // even if a deployment accidentally inherits a developer's env.
         $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
-        $production = $make([]);
+        $production = $make(['checkout_env' => 'production']);
         TinyAssert::same('https://api.two.inc', $production->get_twoinc_checkout_host());
         TinyAssert::same(
             'https://checkout.two.inc',
@@ -9299,15 +9289,15 @@ final class BrandConfigSpec
         $key = $gateway->get_option_key();
 
         // Fresh install: no settings row at all.
-        TinyAssert::same(['PROD', 'SANDBOX'], array_keys($gateway->get_checkout_env_options()));
+        TinyAssert::same(['production', 'sandbox'], array_keys($gateway->get_checkout_env_options()));
 
-        // Stored custom allowlisted mode is preserved as an option.
+        // A stored staging is preserved as an option.
         $GLOBALS['__twoinc_test_options'][$key] = ['checkout_env' => 'staging'];
-        TinyAssert::same(['PROD', 'SANDBOX', 'staging'], array_keys($gateway->get_checkout_env_options()));
+        TinyAssert::same(['production', 'sandbox', 'staging'], array_keys($gateway->get_checkout_env_options()));
 
         // Garbage is NOT perpetuated as a selectable option.
         $GLOBALS['__twoinc_test_options'][$key] = ['checkout_env' => 'evil.example/'];
-        TinyAssert::same(['PROD', 'SANDBOX'], array_keys($gateway->get_checkout_env_options()));
+        TinyAssert::same(['production', 'sandbox'], array_keys($gateway->get_checkout_env_options()));
     }
 
     // ── Invoice download state check (TWO-25041) ────────────────────
@@ -11511,7 +11501,7 @@ final class BrandConfigSpec
         // [brand fixture or null for Two, expected URL, copy the tile must
         // carry, whether a consent renders at all, description].
         $cases = [
-            [null, 'https://checkout.two.inc/terms', 'I accept the', true, 'the Two brand resolves its path against the checkout host'],
+            [null, 'https://checkout.sandbox.two.inc/terms', 'I accept the', true, 'the Two brand resolves its path against the checkout host (fresh install: sandbox)'],
             ['absolutetermsbrand', 'https://absolutetermsbrand.example/legal/terms', 'I agree to', true, "an absolute brand URL is taken verbatim, with the brand's own sentence"],
             ['notermsbrand', '', '', false, 'a brand declaring no terms page renders no consent'],
         ];
@@ -18536,4 +18526,5 @@ ProductButtonSpec::runAll();
 OrderPostprocessingSpec::runAll();
 TaxCodeSpec::runAll();
 TaxCodeAdminSpec::runAll();
+EnvironmentOptionsSpec::runAll();
 print("All tests passed.\n");

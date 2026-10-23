@@ -140,15 +140,18 @@ docker compose up -d --force-recreate
 
 ### Environment selector, key and hosts have to agree
 
-`docker/config/local.json` pins `checkout_env` to `PROD`, which
-`WC_Twoinc_Helper::get_environment_mode()` resolves to `production`. On a
-localhost shop that is not the environment the gateway talks to:
-`get_effective_environment_mode()` treats a dev-sniffed shop still carrying the
-default mode as non-production and resolves it from `TWOINC_DEV_API_HOST`
-instead — `https://api.staging.two.inc` gives `staging`, and an unset variable
-falls back to `staging` as well. So a `secret_test_` staging merchant key is
-the key that belongs in `TWO_API_KEY` here, and a production key would never
-be used even if it were set.
+The Environment setting offers Production and Sandbox, with Sandbox the
+default; an unrecognised stored value resolves to Sandbox. There are also
+internal environments for the use of Two employees only. The stored mode is the
+environment the gateway talks to; the shop's hostname plays no part.
+
+`docker/config/local.json` seeds `checkout_env` as `sandbox`, so a bare
+`docker compose up` talks to sandbox. The wpcli bootstrap and `make configure`
+store `production` whenever `TWO_API_BASE_URL` is set, and on a shop with
+production stored the developer overrides apply:
+`get_effective_environment_mode()` resolves the environment from
+`TWOINC_DEV_API_HOST`, so `https://api.staging.two.inc` gives `staging`. Use
+the merchant key for whichever environment that resolves to.
 
 `make run` exports `TWO_API_BASE_URL` (staging for an `@two.inc` gcloud
 account, sandbox otherwise) and docker-compose threads it through as

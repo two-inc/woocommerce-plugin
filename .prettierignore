@@ -13,3 +13,7 @@ tests/js/fixtures/product-button-without-mark.html
 
 # Emitted by tests/unit/fixtures/capture-builder-goldens.php; kept as it prints so a re-capture diffs cleanly.
 tests/unit/fixtures/builder-goldens.json
+
+# Byte-identical to the Magento and PrestaShop plugins' copies (TWO-26604); each
+# repo's prettier config would format it differently.
+tests/unit/fixtures/environment-cases.json
