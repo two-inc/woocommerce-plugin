@@ -12,6 +12,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
     {
         private const TAX_RECONCILE_TOLERANCE = 0.02;
 
+        // How far Two's refund validation lets a refund line's tax differ from its net at the line's rate (TWO-26638).
+        private const REFUND_LINE_TAX_TOLERANCE = 0.02;
+
         private const SHIPPING_TAX_RATE_META = 'shipping_tax_rate';
 
         public const ORDER_POSTPROCESSING_CONTRACT_VERSION = 1;
@@ -3369,8 +3372,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if (null === $controlled) {
                 return $resolved;
             }
-            // A refund line returning only its tax, or only a net that carries tax at this rate, is refused after this
-            // in get_line_items (TWO-26541, TWO-26638); a partial line is not reconciled here.
+            // A refund line returning only its tax, or only a net whose tax due at this rate Two would reject, is
+            // refused after this in get_line_items (TWO-26541, TWO-26638); a partial line is not reconciled here.
             $partial = !round((float) $shipping->get_total(), 2) || !round((float) $shipping->get_total_tax(), 2);
             if (!$refusal && (!$is_refund || !$partial)) {
                 $refusal = self::tax_reconcile_refusal($shipping, $controlled['rate']);
@@ -3385,9 +3388,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * how tax is levied is the shop's decision.
          * - Tax with no net (TWO-26541). A wrong tax rate is corrected by refunding the whole order and rebooking it
          *   with the correct rates.
-         * - Net with no tax, on a line whose tax due at `$rate` rounds to at least the smallest price unit (TWO-26638).
-         *   WooCommerce leaves a typed refund total's tax at 0, and shipping and fee rows are always typed. A line
-         *   charged at 0%, or too small to carry tax, is sent unchanged.
+         * - Net with no tax, on a line whose tax due at `$rate` exceeds REFUND_LINE_TAX_TOLERANCE, which Two would
+         *   reject (TWO-26638). WooCommerce leaves a typed refund total's tax at 0, and shipping and fee rows are
+         *   always typed. A line charged at 0%, or whose tax due is within the tolerance, is sent unchanged.
          *
          * @param float $rate the tax rate sent on the line, as a fraction
          *
@@ -3415,7 +3418,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     )
                 );
             }
-            if ($has_net && !$has_tax && (float) self::round_amt(abs((float) $net) * (float) self::round_rate($rate))) {
+            $tax_due = abs((float) self::round_amt($net)) * (float) self::round_rate($rate);
+            if ($has_net && !$has_tax && $tax_due > self::REFUND_LINE_TAX_TOLERANCE) {
                 self::refuse(
                     sprintf(
                         'Refund of %s "%s" on order %s returns net %s with no tax at rate %s: refused, not sent.',
