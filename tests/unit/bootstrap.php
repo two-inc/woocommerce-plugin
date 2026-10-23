@@ -852,6 +852,12 @@ class WC_Payment_Gateway
         return $this->form_fields;
     }
 
+    // Mirrors WC_Settings_API::get_field_default.
+    public function get_field_default($field)
+    {
+        return empty($field['default']) ? '' : $field['default'];
+    }
+
     // Mirrors WC_Settings_API::get_tooltip_html / get_description_html /
     // get_custom_attribute_html closely enough for the custom field
     // renderers under test: desc_tip true shows the description as a

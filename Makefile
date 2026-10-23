@@ -16,6 +16,10 @@ TWO_API_BASE_URL      ?= https://api.$(TWO_ENV).two.inc
 TWO_PORTAL_BASE_URL   ?= https://portal.$(TWO_ENV).two.inc
 TWO_CHECKOUT_BASE_URL ?= https://checkout.$(TWO_ENV).two.inc
 export TWO_API_BASE_URL TWO_PORTAL_BASE_URL TWO_CHECKOUT_BASE_URL
+# Offers the Staging environment in the admin (TWO-26604). Set for internal
+# Two devs, the same people TWO_ENV points at staging.
+TWO_INTERNAL_ENVIRONMENTS ?= $(if $(filter staging,$(TWO_ENV)),1,)
+export TWO_INTERNAL_ENVIRONMENTS
 
 # Host port the shop publishes. Two stacks on one daemon need different values.
 #

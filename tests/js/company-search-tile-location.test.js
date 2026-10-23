@@ -392,7 +392,7 @@ describe("company-search tile location (TWO-25326)", () => {
     });
   });
 
-  describe("the address-area control is not required either (ABN-554)", () => {
+  describe("the address-area control is not required either", () => {
     test("the display field carries no required flag when the control is in the address area", () => {
       ctx = harness.loadTwoinc({
         gateway_id: GATEWAY_ID,

@@ -2825,19 +2825,144 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Environment modes the host builder accepts. The mode string is
-         * spliced into the API hostname, and WooCommerce's select
-         * validation does not restrict POSTed values to the options list —
-         * so this allowlist is what keeps an admin-supplied string from
-         * steering the gateway's API calls to an arbitrary host.
+         * Stored values the Environment setting accepts, in the order the
+         * dropdown offers them (TWO-26604). The mode is spliced into the API
+         * hostname, and WooCommerce's select validation does not restrict
+         * POSTed values to the options list, so this allowlist is also what
+         * keeps an admin-supplied string from steering the API calls to an
+         * arbitrary host.
          */
         public const ENVIRONMENT_MODES = ['production', 'sandbox', 'staging'];
 
+        /** Fresh-install value, with or without TWO_INTERNAL_ENVIRONMENTS (TWO-26604). */
+        public const ENVIRONMENT_MODE_DEFAULT = 'sandbox';
+
         /**
-         * Mirrors the Magento config repository's mode setting: 'PROD' /
-         * 'Production' map to 'production'; anything outside
-         * ENVIRONMENT_MODES (including the empty default) also resolves to
-         * 'production'.
+         * Whether this shop runs on Two's own infrastructure, which alone may
+         * offer the Staging environment. Enabled only by
+         * TWO_INTERNAL_ENVIRONMENTS=1 exactly; not a security gate (a staging
+         * key is needed to use staging).
+         *
+         * @return bool
+         */
+        public static function is_internal_environments_enabled()
+        {
+            return getenv('TWO_INTERNAL_ENVIRONMENTS') === '1';
+        }
+
+        /**
+         * The canonical mode for a stored value, or null when the value is not
+         * recognised. Trimmed, lowercased, `prod` aliased to `production`.
+         *
+         * @param mixed $value
+         *
+         * @return string|null one of ENVIRONMENT_MODES
+         */
+        public static function recognise_environment_mode($value)
+        {
+            $mode = is_scalar($value) ? strtolower(trim((string) $value)) : '';
+            if ($mode === 'prod') {
+                $mode = 'production';
+            }
+            return in_array($mode, self::ENVIRONMENT_MODES, true) ? $mode : null;
+        }
+
+        /**
+         * The mode a stored value resolves to: anything unrecognised is
+         * sandbox, never production.
+         *
+         * @param mixed $value
+         *
+         * @return string one of ENVIRONMENT_MODES
+         */
+        public static function normalise_environment_mode($value)
+        {
+            return self::recognise_environment_mode($value) ?? 'sandbox';
+        }
+
+        /**
+         * Modes the dropdown offers: Staging only on Two's infrastructure or
+         * when already stored.
+         *
+         * @param mixed $stored
+         *
+         * @return string[]
+         */
+        public static function get_environment_mode_options($stored)
+        {
+            if (self::is_internal_environments_enabled() || self::recognise_environment_mode($stored) === 'staging') {
+                return self::ENVIRONMENT_MODES;
+            }
+            return ['production', 'sandbox'];
+        }
+
+        /**
+         * Whether a submitted mode may be saved over the stored one.
+         *
+         * @param mixed $submitted
+         * @param mixed $stored
+         *
+         * @return bool
+         */
+        public static function is_environment_mode_save_allowed($submitted, $stored)
+        {
+            return is_string($submitted) && in_array($submitted, self::get_environment_mode_options($stored), true);
+        }
+
+        /**
+         * Health checklist verdict: staging is healthy only on Two's
+         * infrastructure, unrecognised values never.
+         *
+         * @param mixed $stored
+         *
+         * @return bool
+         */
+        public static function is_environment_mode_healthy($stored)
+        {
+            $mode = self::recognise_environment_mode($stored);
+            return $mode !== null && ($mode !== 'staging' || self::is_internal_environments_enabled());
+        }
+
+        /**
+         * One-time rewrite of a stored legacy value on an existing install
+         * (TWO-26604), keeping each shop on the environment it reaches today.
+         * A row with no checkout_env key reads the field default, sandbox. An
+         * empty or unknown value was sent to production by every released
+         * build, so it keeps production rather than taking the read path's
+         * sandbox fallback. A shop released builds sent to staging by its
+         * hostname (see is_twoinc_development()) instead of production keeps
+         * staging, since that sniffing is gone.
+         *
+         * @param mixed $stored
+         * @param bool  $sniffed_to_staging whether released builds' hostname
+         *                                  sniffing moved a production shop to staging
+         *
+         * @return string one of ENVIRONMENT_MODES
+         */
+        public static function migrate_environment_mode($stored, $sniffed_to_staging = false)
+        {
+            if ($stored === null) {
+                return 'sandbox';
+            }
+            $mode = self::recognise_environment_mode($stored) ?? 'production';
+            return $mode === 'production' && $sniffed_to_staging ? 'staging' : $mode;
+        }
+
+        /**
+         * Whether released builds sent this shop's production mode to
+         * staging: a development hostname and no developer API host, which
+         * would have taken over (TWO-26604 migration only).
+         *
+         * @return bool
+         */
+        public static function was_sniffed_to_staging()
+        {
+            $dev_api_host = getenv(self::DEV_HOST_ENV_VARS['api']);
+            return self::is_twoinc_development() && !(is_string($dev_api_host) && $dev_api_host !== '');
+        }
+
+        /**
+         * The configured mode, normalised as normalise_environment_mode().
          *
          * @param WC_Payment_Gateway $gateway
          *
@@ -2845,27 +2970,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function get_environment_mode($gateway)
         {
-            $mode = strtolower((string) $gateway->get_option('checkout_env'));
-            if ($mode === 'prod') {
-                $mode = 'production';
-            }
-            if (!in_array($mode, self::ENVIRONMENT_MODES, true)) {
-                $mode = 'production';
-            }
-            return $mode;
+            return self::normalise_environment_mode($gateway->get_option('checkout_env'));
         }
 
         /**
-         * The environment the gateway actually talks to — not always the
-         * configured mode: a dev-sniffed shop (see is_twoinc_development())
-         * carrying the never-configured default 'production' mode is by
-         * definition not a production shop. Local/dev tooling that needs the
-         * API on an arbitrary host (e.g. `make install`'s docker-compose
-         * stack, not on a *.staging.two.inc domain) uses the
-         * TWOINC_DEV_API_HOST env var — a developer-set server var, never a
-         * wp-admin field. Falls back to 'staging' when unset: a test
-         * environment can neither take real money nor accept a production
-         * token.
+         * The environment the gateway actually talks to: the configured mode,
+         * unless a developer API host override applies (see
+         * get_dev_host_override()), in which case every other host follows
+         * the environment of that override host.
          *
          * @param WC_Payment_Gateway $gateway
          *
@@ -2873,15 +2985,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function get_effective_environment_mode($gateway)
         {
-            $mode = self::get_environment_mode($gateway);
-            if ($mode !== 'production' || !self::is_twoinc_development()) {
-                return $mode;
-            }
-            $dev_api_host = getenv('TWOINC_DEV_API_HOST');
-            if ($dev_api_host) {
+            $dev_api_host = self::get_dev_host_override('api', $gateway);
+            if ($dev_api_host !== '') {
                 return self::environment_mode_of_host($dev_api_host, $gateway);
             }
-            return 'staging';
+            return self::get_environment_mode($gateway);
         }
 
         /**
@@ -2966,8 +3074,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * Gated so a production instance can never honour one even if the
          * variable leaks into its process environment: the shop must BOTH
-         * sniff as a development site AND still carry the never-configured
-         * default mode.
+         * sniff as a development site AND have production stored (the
+         * developer stack's seeded mode).
          *
          * @param string             $service key of DEV_HOST_ENV_VARS
          * @param WC_Payment_Gateway $gateway

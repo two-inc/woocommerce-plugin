@@ -81,7 +81,8 @@ function installJQuery() {
  * stored cap with isset(), so a stored 0 renders as `value="0"`.
  *
  * @param {Object} options
- * @param {boolean} options.companySearch stored enable_company_search
+ * @param {boolean|null} options.companySearch stored enable_company_search; null
+ *   renders no row, as for a brand whose allowed_fields withholds it
  * @param {boolean} options.addressLookup stored enable_address_lookup
  * @param {number[]} options.terms preset term checkboxes to render
  * @param {number[]} options.checked which of those start ticked
@@ -223,13 +224,15 @@ function buildSettingsPage(options) {
       (opts.customDays === undefined ? "" : opts.customDays) +
       '" selected></option><option value="">Remove</option></select></td></tr>',
     '    <tr><td><select id="' + FIELD_PREFIX + 'default_payment_term"></select></td></tr>',
-    '    <tr><td><input type="checkbox" id="' +
-      FIELD_PREFIX +
-      'enable_company_search" name="' +
-      FIELD_PREFIX +
-      'enable_company_search"' +
-      (companySearchChecked ? " checked" : "") +
-      " /></td></tr>",
+    opts.companySearch === null
+      ? ""
+      : '    <tr><td><input type="checkbox" id="' +
+        FIELD_PREFIX +
+        'enable_company_search" name="' +
+        FIELD_PREFIX +
+        'enable_company_search"' +
+        (companySearchChecked ? " checked" : "") +
+        " /></td></tr>",
     '    <tr><td><input type="checkbox" id="' +
       FIELD_PREFIX +
       'enable_address_lookup" name="' +

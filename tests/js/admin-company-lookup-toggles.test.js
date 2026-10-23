@@ -61,6 +61,13 @@ describe("company-lookup toggles", () => {
       autofillAfter: false,
       rowShown: false,
       description: "both off stay off, row withdrawn"
+    },
+    {
+      storedSearch: null,
+      storedAutofill: true,
+      autofillAfter: true,
+      rowShown: true,
+      description: "company search withheld by the brand leaves a saved autofill as saved"
     }
   ])("$description", async ({ storedSearch, storedAutofill, autofillAfter, rowShown }) => {
     const { $ } = await loadAdmin({
@@ -68,7 +75,7 @@ describe("company-lookup toggles", () => {
       addressLookup: storedAutofill
     });
 
-    expect($(search()).prop("checked")).toBe(storedSearch);
+    expect($(search()).prop("checked")).toBe(storedSearch === null ? undefined : storedSearch);
     expect($(autofill()).prop("checked")).toBe(autofillAfter);
     expect(autofillRowShown($)).toBe(rowShown);
     expect($(autofill()).prop("disabled")).toBe(false);

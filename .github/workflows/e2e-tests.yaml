@@ -166,6 +166,9 @@ jobs:
           # WordPress is the only variable that moves between them.
           {
             echo "WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-demostoregb.json"
+            # The seeded config stores staging; the flag is what offers
+            # Staging in the admin (TWO-26604).
+            echo "TWO_INTERNAL_ENVIRONMENTS=1"
             echo "WORDPRESS_VERSION=${{ matrix.wordpress }}"
           } > .env
           docker compose up -d

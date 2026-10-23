@@ -28,7 +28,7 @@ const SOLE_TRADER_CONFIG = {
   }
 };
 
-describe("the popover's mode chips show where the keyboard is (ABN-554)", () => {
+describe("the popover's mode chips show where the keyboard is", () => {
   let ctx;
   let $;
   let style;

@@ -1958,3 +1958,25 @@ msgstr "Dagar du kommer ha att betala din faktura"
 #: tillit-payment-gateway.php:305
 msgid "Settings"
 msgstr "Inställningar"
+
+#: class/WC_Twoinc.php
+msgid "Staging"
+msgstr "Staging"
+
+#: class/WC_Twoinc.php
+msgid "Sandbox is for testing and moves no real money. Use the API key issued for the environment you select."
+msgstr "Sandbox är för test och flyttar inga riktiga pengar. Använd API-nyckeln som utfärdats för den miljö du väljer."
+
+#: class/WC_Twoinc.php
+msgid "Select a valid environment."
+msgstr "Välj en giltig miljö."
+
+#. translators: %s: brand name
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Staging (%s internal test environment). Select Sandbox or Production."
+msgstr "Staging (intern testmiljö hos %s). Välj Sandbox eller Produktion."
+
+#: class/WC_Twoinc.php
+msgid "Not recognised: Sandbox is in use. Select an environment and save."
+msgstr "Inte igenkänt: Sandbox används. Välj en miljö och spara."

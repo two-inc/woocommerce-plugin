@@ -21,6 +21,13 @@ if ! wp option get "$OPTION_KEY" >/dev/null 2>&1; then
         <"/opt/tillit-payment-gateway/$SEED"
 fi
 
+# The developer host overrides apply only to a shop with production stored
+# (TWO-26604), so a configured TWO_API_BASE_URL stores production and the
+# override host decides the environment. Without one the seeded sandbox stands.
+if [ -n "$TWO_API_BASE_URL" ]; then
+    wp option patch update "$OPTION_KEY" checkout_env production
+fi
+
 if [ -n "$TWO_API_KEY" ]; then
     wp option patch update "$OPTION_KEY" api_key "$TWO_API_KEY"
 fi

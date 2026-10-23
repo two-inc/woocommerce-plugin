@@ -52,6 +52,13 @@ if (!class_exists('WC_Twoinc')) {
         /** Consent carrier, posted by the classic form and by the Blocks payment data alike. */
         public const TERMS_CONSENT_FIELD = 'twoinc_terms_accepted';
 
+        /**
+         * This base honours the brand key `allowed_fields` (TWO-26610). A
+         * brand overlay checks it to tell a base that withholds unlisted
+         * settings from one that would silently show them all.
+         */
+        public const SUPPORTS_ALLOWED_FIELDS = true;
+
         // Order states in which the Two API refuses order edits. Shared by
         // the fulfilment skip-check and the edit gate in
         // process_update_twoinc_order — their identity guarantees the
@@ -103,6 +110,12 @@ if (!class_exists('WC_Twoinc')) {
         // api_key/checkout_env as stored when a settings save began; null outside a save.
         private ?array $identity_before_save = null;
 
+        // Base fields the brand's allowed_fields leaves out, by key: off the form, still read by get_option().
+        private array $withheld_form_fields = [];
+
+        // An empty allowed_fields is logged once per request, not on every gateway construction.
+        private static bool $empty_allowlist_logged = false;
+
         public function __construct()
         {
 
@@ -118,6 +131,7 @@ if (!class_exists('WC_Twoinc')) {
             $this->init_settings();
             $this->migrate_legacy_company_search_key();
             $this->drop_removed_settings();
+            $this->migrate_checkout_env();
             $this->drop_renamed_option_rows();
             $this->drop_fabricated_due_in_days();
             $this->migrate_se_tax_subtotals();
@@ -217,51 +231,99 @@ if (!class_exists('WC_Twoinc')) {
         }
         public function get_twoinc_checkout_host()
         {
-            // Installs predating the explicit environment mode carry the
-            // default mode and rely on dev-environment sniffing (localhost,
-            // TWOINC_DEV_HOSTNAMES, *.two.inc subdomains); set checkout_env
-            // instead of extending the sniffer. Local/dev tooling that needs
-            // the API to resolve to an arbitrary local host reads
-            // TWOINC_DEV_API_HOST — a server env var, never a wp-admin field
-            // (the merchant-editable test-host override was removed,
-            // TWO-25386). The override lives in get_environment_host() as of
-            // TWO-40, alongside the sibling overrides for the other two
-            // service hosts, so all three are gated by one predicate rather
-            // than a copy per call site.
+            // The stored environment mode decides the host (TWO-26604); the
+            // hostname plays no part. Local/dev tooling that needs the API on
+            // an arbitrary host reads TWOINC_DEV_API_HOST, a server env var,
+            // never a wp-admin field (TWO-25386), gated in
+            // get_environment_host() alongside the sibling overrides (TWO-40).
             return WC_Twoinc_Helper::get_environment_host('api', $this);
         }
 
         /**
-         * Options for the checkout_env select. Merchants choose between
-         * Production and Sandbox; any other stored mode (e.g. 'staging' on
-         * Two's own staging shops, set via wp-cli rather than the UI) is
-         * preserved as a selectable option so saving the settings form
-         * doesn't silently reset it.
+         * Options for the checkout_env select (TWO-26604): Production and
+         * Sandbox, plus Staging on Two's infrastructure or when already
+         * stored, so saving the form never resets a stored staging.
          *
          * @return array
          */
         public function get_checkout_env_options()
         {
-            $options = [
-                'PROD'    => __('Production', 'twoinc-payment-gateway'),
-                'SANDBOX' => __('Sandbox', 'twoinc-payment-gateway'),
+            $labels = [
+                'production' => __('Production', 'twoinc-payment-gateway'),
+                'sandbox'    => __('Sandbox', 'twoinc-payment-gateway'),
+                'staging'    => __('Staging', 'twoinc-payment-gateway'),
             ];
-            // Raw settings row, NOT $this->get_option(): this runs inside
-            // init_form_fields(), and WC_Settings_API::get_option() on a
-            // missing key re-enters get_form_fields() -> init_form_fields()
-            // — infinite recursion on any install whose settings blob lacks
-            // checkout_env (fresh installs, and dev shops where the field
-            // was previously unset from the form).
-            $saved = get_option($this->get_option_key(), null);
-            $stored = is_array($saved) ? (string) ($saved['checkout_env'] ?? '') : '';
-            $normalized = strtolower($stored);
-            if (
-                in_array($normalized, WC_Twoinc_Helper::ENVIRONMENT_MODES, true)
-                && !in_array($normalized, ['production', 'sandbox'], true)
-            ) {
-                $options[$stored] = ucfirst($normalized);
+            $options = [];
+            foreach (WC_Twoinc_Helper::get_environment_mode_options($this->get_stored_checkout_env()) as $mode) {
+                $options[$mode] = $labels[$mode];
             }
             return $options;
+        }
+
+        /**
+         * The stored checkout_env, read from the raw settings row, NOT
+         * $this->get_option(): this runs inside init_form_fields(), and
+         * WC_Settings_API::get_option() on a missing key re-enters
+         * get_form_fields() -> init_form_fields(), infinite recursion on any
+         * install whose settings blob lacks checkout_env.
+         *
+         * @return string|null null when nothing is stored
+         */
+        private function get_stored_checkout_env()
+        {
+            $saved = get_option($this->get_option_key(), null);
+            if (!is_array($saved) || !array_key_exists('checkout_env', $saved)) {
+                return null;
+            }
+            return is_scalar($saved['checkout_env']) ? (string) $saved['checkout_env'] : '';
+        }
+
+        /**
+         * Refuses an Environment the dropdown does not offer (TWO-26604).
+         * WooCommerce keeps the stored value when a field validator throws.
+         *
+         * @param string $key
+         * @param mixed  $value
+         *
+         * @return string
+         * @throws Exception
+         */
+        public function validate_checkout_env_field($key, $value)
+        {
+            $stored = $this->get_stored_checkout_env();
+            // A post without the field leaves the stored value as it is.
+            if ($value === null) {
+                return $stored ?? WC_Twoinc_Helper::ENVIRONMENT_MODE_DEFAULT;
+            }
+            if (!WC_Twoinc_Helper::is_environment_mode_save_allowed($value, $stored)) {
+                throw new Exception(__('Select a valid environment.', 'twoinc-payment-gateway'));
+            }
+            return $value;
+        }
+
+        /**
+         * Rewrites a stored legacy checkout_env to the canonical set, once
+         * (TWO-26604). Self-limiting: writes only when the stored value is
+         * not already canonical. A fresh install has no settings row and is
+         * left to the field default.
+         *
+         * @return void
+         */
+        private function migrate_checkout_env()
+        {
+            if (!is_array(get_option($this->get_option_key(), null)) || !is_array($this->settings)) {
+                return;
+            }
+            $stored = $this->settings['checkout_env'] ?? null;
+            $target = WC_Twoinc_Helper::migrate_environment_mode(
+                $stored,
+                WC_Twoinc_Helper::was_sniffed_to_staging()
+            );
+            if ($stored === $target) {
+                return;
+            }
+            $this->settings['checkout_env'] = $target;
+            update_option($this->get_option_key(), $this->settings);
         }
 
         /**
@@ -3491,8 +3553,12 @@ if (!class_exists('WC_Twoinc')) {
             if ($this->identity_before_save === null) {
                 return false;
             }
+            $env = $this->get_sibling_field_save_value('checkout_env');
+            // A refused environment is never stored, so it changes nothing (TWO-26604).
+            $env_changing = $env !== $this->identity_before_save['checkout_env']
+                && WC_Twoinc_Helper::is_environment_mode_save_allowed($env, $this->get_stored_checkout_env());
             return $this->get_sibling_field_save_value('api_key') !== $this->identity_before_save['api_key']
-                || $this->get_sibling_field_save_value('checkout_env') !== $this->identity_before_save['checkout_env'];
+                || $env_changing;
         }
 
         /** Whether the posted grid carries a fixed fee for the cap to judge. */
@@ -6821,7 +6887,8 @@ if (!class_exists('WC_Twoinc')) {
                 'checkout_env' => [
                     'type'        => 'select',
                     'title'       => __('Environment', 'twoinc-payment-gateway'),
-                    'default'     => 'SANDBOX',
+                    'description' => __('Sandbox is for testing and moves no real money. Use the API key issued for the environment you select.', 'twoinc-payment-gateway'),
+                    'default'     => WC_Twoinc_Helper::ENVIRONMENT_MODE_DEFAULT,
                     'options'     => $this->get_checkout_env_options(),
                 ],
                 'api_key' => [
@@ -7244,7 +7311,89 @@ if (!class_exists('WC_Twoinc')) {
                 unset($twoinc_form_fields['payment_terms_type']);
             }
 
+            $twoinc_form_fields = $this->apply_allowed_fields($twoinc_form_fields);
+
             $this->form_fields = apply_filters('wc_two_form_fields', $twoinc_form_fields);
+        }
+
+        /**
+         * Keeps only the base fields the brand's `allowed_fields` lists
+         * (TWO-26610), plus `enabled`, which is always shown. null shows every field. An unlisted field moves to
+         * $withheld_form_fields: it leaves the form, so WooCommerce neither
+         * renders nor saves it, but get_option() still resolves its stored
+         * value or declared default. A title row goes when no field under it
+         * survives. Runs before wc_two_form_fields, so a merchant's own
+         * fields are never withheld.
+         *
+         * @param array $fields base form fields, in render order
+         *
+         * @return array
+         */
+        private function apply_allowed_fields(array $fields)
+        {
+            $this->withheld_form_fields = [];
+            $allowed = WC_Twoinc_Brand::get('allowed_fields');
+            if ($allowed === null) {
+                return $fields;
+            }
+            // Anything but a list is read as an empty one, so a malformed key withholds loudly, not silently.
+            $allowed = is_array($allowed) ? array_flip(array_map('strval', $allowed)) : [];
+            // The gateway's own on/off switch is core's, not a brand choice: WC_Payment_Gateway
+            // reads it straight from the stored row, so a withheld one would read off on a fresh install.
+            $allowed['enabled'] = true;
+
+            $kept = [];
+            // Base fields kept beyond the gateway switch.
+            $listed = 0;
+            // A title row waits here until the first field under it survives.
+            $pending_title = [];
+            foreach ($fields as $key => $field) {
+                if (($field['type'] ?? '') === 'title') {
+                    $pending_title = [$key => $field];
+                } elseif (isset($allowed[$key])) {
+                    $kept += $pending_title;
+                    $pending_title = [];
+                    $kept[$key] = $field;
+                    $listed += $key === 'enabled' ? 0 : 1;
+                } else {
+                    $this->withheld_form_fields[$key] = $field;
+                }
+            }
+            // Empty, not a list, or naming no base field beyond the gateway switch: almost certainly a mistake.
+            if ($listed === 0 && !self::$empty_allowlist_logged) {
+                self::$empty_allowlist_logged = true;
+                wc_get_logger()->warning(
+                    'Brand allowed_fields names no base settings field, so every one but the gateway switch is withheld from the admin form.',
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
+            return $kept;
+        }
+
+        /**
+         * WooCommerce falls back to a field's default only while the field
+         * is on the form, so a withheld field resolves its own here. The
+         * default is not memoised into $settings: a later update_option()
+         * would otherwise persist it, freezing a value the merchant cannot
+         * edit.
+         *
+         * @param string $key
+         * @param mixed  $empty_value
+         *
+         * @return mixed
+         */
+        public function get_option($key, $empty_value = null)
+        {
+            if (isset($this->withheld_form_fields[$key])) {
+                if (empty($this->settings)) {
+                    $this->init_settings();
+                }
+                if (!isset($this->settings[$key])) {
+                    $default = $this->get_field_default($this->withheld_form_fields[$key]);
+                    return (!is_null($empty_value) && '' === $default) ? $empty_value : $default;
+                }
+            }
+            return parent::get_option($key, $empty_value);
         }
 
         /**
@@ -7614,7 +7763,24 @@ if (!class_exists('WC_Twoinc')) {
         {
             $api_key = (string) $this->get_option('api_key');
             $api_key_present = $api_key !== '';
-            $environment = WC_Twoinc_Helper::get_environment_mode($this);
+            $stored_environment = $this->get_option('checkout_env');
+            $environment = WC_Twoinc_Helper::recognise_environment_mode($stored_environment);
+            $environment_labels = [
+                'production' => __('Production', 'twoinc-payment-gateway'),
+                'sandbox'    => __('Sandbox', 'twoinc-payment-gateway'),
+                'staging'    => __('Staging', 'twoinc-payment-gateway'),
+            ];
+            if ($environment === null) {
+                $environment_value = __('Not recognised: Sandbox is in use. Select an environment and save.', 'twoinc-payment-gateway');
+            } elseif ($environment === 'staging' && !WC_Twoinc_Helper::is_internal_environments_enabled()) {
+                $environment_value = sprintf(
+                    /* translators: %s: brand name */
+                    __('Staging (%s internal test environment). Select Sandbox or Production.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name')
+                );
+            } else {
+                $environment_value = $environment_labels[$environment];
+            }
             $ssl_disabled = $this->should_disable_ssl_verify();
             $curl_present = extension_loaded('curl');
             $terms = $this->get_merchant_terms_state();
@@ -7627,8 +7793,8 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 [
                     'label' => __('Environment', 'twoinc-payment-gateway'),
-                    'value' => strtoupper($environment),
-                    'ok'    => true,
+                    'value' => $environment_value,
+                    'ok'    => WC_Twoinc_Helper::is_environment_mode_healthy($stored_environment),
                 ],
                 [
                     'label' => __('SSL verification', 'twoinc-payment-gateway'),
@@ -8609,11 +8775,14 @@ if (!class_exists('WC_Twoinc')) {
             $post_data = $this->get_post_data();
             $custom_headers_field = 'woocommerce_' . $this->id . '_custom_headers';
             // Removing every row posts no field key, so absence means cleared.
+            // A withheld field is never posted, so its stored rows stand.
             try {
-                $this->custom_headers_override = $this->validate_two_custom_headers_field(
-                    'custom_headers',
-                    $post_data[$custom_headers_field] ?? null
-                );
+                if (!isset($this->withheld_form_fields['custom_headers'])) {
+                    $this->custom_headers_override = $this->validate_two_custom_headers_field(
+                        'custom_headers',
+                        $post_data[$custom_headers_field] ?? null
+                    );
+                }
             } catch (Exception $e) {
                 // The row notice promises the whole save is refused — halt before anything persists or authenticates.
                 WC_Admin_Settings::add_error($e->getMessage());

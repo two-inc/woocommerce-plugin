@@ -82,4 +82,13 @@ return [
     'intent_approved_notice' => null,
     // On/off for the declined notice, independent of the approved one; explicit bool only, else true (TWO-25224).
     'intent_declined_notice_enabled' => true,
+    // Allowlist of base settings field keys the admin form shows
+    // (TWO-26610). null shows every field. An unlisted field is withheld:
+    // not rendered and not saved, but its stored value or declared default
+    // still applies. A section title goes when no field under it is
+    // listed, fields a merchant adds via wc_two_form_fields always show,
+    // and so does `enabled`, the gateway's on/off switch. A list naming no
+    // other base field ([] included) withholds the rest, logged as a warning.
+    // WC_Twoinc::init_form_fields is the only reader.
+    'allowed_fields' => null,
 ];
