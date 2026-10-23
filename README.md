@@ -338,9 +338,9 @@ line's tax to match its net at the line's rate. The plugin never fills in the
 missing half. A line returning tax with no net amount cannot be refunded: to
 correct a wrong tax rate, refund the whole order and rebook it with the
 correct rates (TWO-26541). A line returning its net with no tax is refused
-when its tax due at the line's rate is more than 0.02, the difference Two's
-refund validation allows, so a line charged at 0% is sent: the admin enters
-the tax refunded for the line as well (TWO-26638).
+when its tax due at the line's rate, rounded to cents, is more than 0.02, the
+difference Two's refund validation allows (TWO-26638). A line charged at 0% is
+sent. For a refused line, the admin enters the tax refunded for it as well.
 WooCommerce fills in a line's tax when the refund quantity is set, but not when
 a refund total is typed, and shipping and fee rows have no quantity, so their
 tax is always typed by hand.
