@@ -63,3 +63,18 @@ prices an order under a configuration nobody chose, and nobody is told.
   answer did not price is labelled as carrying no figure — never an empty gap in
   the admin, and never a formatted zero on a buyer's chip, both of which read as
   "this term carries no fee". A term priced AT zero still shows its zero.
+
+## A brand can withhold a setting from the form
+
+A brand overlay's `allowed_fields` (see `brands/two.php`) lists the base
+settings the form shows; every other base field is withheld (TWO-26610).
+WooCommerce neither renders nor saves a withheld field, but its stored value
+or declared default still applies. A new setting therefore:
+
+- Reads through `get_option()`, which resolves a withheld field's default.
+  Reading `$this->settings` directly sees only what is stored.
+- Treats a missing posted value as "cleared" only while the field is on the
+  form. A save step that runs before WooCommerce's own loop, as the custom
+  request-header table's does, skips a withheld field.
+- Is withheld on an overlay until the overlay lists it, so a default-on
+  feature still runs there, unseen and uneditable.

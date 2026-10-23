@@ -10,6 +10,7 @@ require __DIR__ . '/OrderPostprocessingSpec.php';
 require __DIR__ . '/TaxCodeSpec.php';
 require __DIR__ . '/TaxCodeAdminSpec.php';
 require __DIR__ . '/EnvironmentOptionsSpec.php';
+require __DIR__ . '/AllowedFieldsSpec.php';
 
 final class TinyAssert
 {
@@ -18527,4 +18528,5 @@ OrderPostprocessingSpec::runAll();
 TaxCodeSpec::runAll();
 TaxCodeAdminSpec::runAll();
 EnvironmentOptionsSpec::runAll();
+AllowedFieldsSpec::runAll();
 print("All tests passed.\n");

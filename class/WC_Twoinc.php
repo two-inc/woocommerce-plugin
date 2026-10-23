@@ -52,6 +52,13 @@ if (!class_exists('WC_Twoinc')) {
         /** Consent carrier, posted by the classic form and by the Blocks payment data alike. */
         public const TERMS_CONSENT_FIELD = 'twoinc_terms_accepted';
 
+        /**
+         * This base honours the brand key `allowed_fields` (TWO-26610). A
+         * brand overlay checks it to tell a base that withholds unlisted
+         * settings from one that would silently show them all.
+         */
+        public const SUPPORTS_ALLOWED_FIELDS = true;
+
         // Order states in which the Two API refuses order edits. Shared by
         // the fulfilment skip-check and the edit gate in
         // process_update_twoinc_order — their identity guarantees the
@@ -102,6 +109,12 @@ if (!class_exists('WC_Twoinc')) {
 
         // api_key/checkout_env as stored when a settings save began; null outside a save.
         private ?array $identity_before_save = null;
+
+        // Base fields the brand's allowed_fields leaves out, by key: off the form, still read by get_option().
+        private array $withheld_form_fields = [];
+
+        // An empty allowed_fields is logged once per request, not on every gateway construction.
+        private static bool $empty_allowlist_logged = false;
 
         public function __construct()
         {
@@ -7298,7 +7311,81 @@ if (!class_exists('WC_Twoinc')) {
                 unset($twoinc_form_fields['payment_terms_type']);
             }
 
+            $twoinc_form_fields = $this->apply_allowed_fields($twoinc_form_fields);
+
             $this->form_fields = apply_filters('wc_two_form_fields', $twoinc_form_fields);
+        }
+
+        /**
+         * Keeps only the base fields the brand's `allowed_fields` lists
+         * (TWO-26610). null shows every field. An unlisted field moves to
+         * $withheld_form_fields: it leaves the form, so WooCommerce neither
+         * renders nor saves it, but get_option() still resolves its stored
+         * value or declared default. A title row goes when no field under it
+         * survives. Runs before wc_two_form_fields, so a merchant's own
+         * fields are never withheld.
+         *
+         * @param array $fields base form fields, in render order
+         *
+         * @return array
+         */
+        private function apply_allowed_fields(array $fields)
+        {
+            $this->withheld_form_fields = [];
+            $allowed = WC_Twoinc_Brand::get('allowed_fields');
+            if ($allowed === null) {
+                return $fields;
+            }
+            $allowed = array_flip(array_map('strval', (array) $allowed));
+            if (!$allowed && !self::$empty_allowlist_logged) {
+                self::$empty_allowlist_logged = true;
+                wc_get_logger()->warning(
+                    'Brand allowed_fields is empty, so every settings field is withheld from the admin form.',
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
+
+            $kept = [];
+            // A title row waits here until the first field under it survives.
+            $pending_title = [];
+            foreach ($fields as $key => $field) {
+                if (($field['type'] ?? '') === 'title') {
+                    $pending_title = [$key => $field];
+                } elseif (isset($allowed[$key])) {
+                    $kept += $pending_title;
+                    $pending_title = [];
+                    $kept[$key] = $field;
+                } else {
+                    $this->withheld_form_fields[$key] = $field;
+                }
+            }
+            return $kept;
+        }
+
+        /**
+         * WooCommerce falls back to a field's default only while the field
+         * is on the form, so a withheld field resolves its own here. The
+         * default is not memoised into $settings: a later update_option()
+         * would otherwise persist it, freezing a value the merchant cannot
+         * edit.
+         *
+         * @param string $key
+         * @param mixed  $empty_value
+         *
+         * @return mixed
+         */
+        public function get_option($key, $empty_value = null)
+        {
+            if (isset($this->withheld_form_fields[$key])) {
+                if (empty($this->settings)) {
+                    $this->init_settings();
+                }
+                if (!isset($this->settings[$key])) {
+                    $default = $this->get_field_default($this->withheld_form_fields[$key]);
+                    return (!is_null($empty_value) && '' === $default) ? $empty_value : $default;
+                }
+            }
+            return parent::get_option($key, $empty_value);
         }
 
         /**
@@ -8680,11 +8767,14 @@ if (!class_exists('WC_Twoinc')) {
             $post_data = $this->get_post_data();
             $custom_headers_field = 'woocommerce_' . $this->id . '_custom_headers';
             // Removing every row posts no field key, so absence means cleared.
+            // A withheld field is never posted, so its stored rows stand.
             try {
-                $this->custom_headers_override = $this->validate_two_custom_headers_field(
-                    'custom_headers',
-                    $post_data[$custom_headers_field] ?? null
-                );
+                if (!isset($this->withheld_form_fields['custom_headers'])) {
+                    $this->custom_headers_override = $this->validate_two_custom_headers_field(
+                        'custom_headers',
+                        $post_data[$custom_headers_field] ?? null
+                    );
+                }
             } catch (Exception $e) {
                 // The row notice promises the whole save is refused — halt before anything persists or authenticates.
                 WC_Admin_Settings::add_error($e->getMessage());
