@@ -82,10 +82,11 @@ or declared default still applies. A new setting therefore:
   beside other settings. Withholding part of a group changes how the rest
   behave (for example, with custom days withheld, a save with no preset term
   ticked is refused), so an overlay lists a group whole, or checks the form
-  and the saves it gets. The groups today: company search and address lookup;
-  the payment terms day count, custom days and default term, which also gate
-  the surcharge script; the surcharge type and the settings and grids it shows
-  or hides; tax treatment and tax class; rounding basis and rounding step.
+  and the saves it gets. The groups where this matters today: company search
+  and address lookup; the payment terms day count, custom days and default
+  term, which also gate the surcharge script; the surcharge type and the
+  settings and grids it shows or hides; tax treatment and tax class; rounding
+  basis and rounding step.
 
 `enabled`, the gateway's own on/off switch, is always shown: WooCommerce reads
 it from the stored row rather than through `get_option()`.
