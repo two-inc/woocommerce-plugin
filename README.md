@@ -147,7 +147,7 @@ environment the gateway talks to; the shop's hostname plays no part.
 
 `docker/config/local.json` seeds `checkout_env` as `sandbox`, so a bare
 `docker compose up` talks to sandbox. The wpcli bootstrap and `make configure`
-stores `production` whenever `TWO_API_BASE_URL` is set, and on a shop with
+store `production` whenever `TWO_API_BASE_URL` is set, and on a shop with
 production stored the developer overrides apply:
 `get_effective_environment_mode()` resolves the environment from
 `TWOINC_DEV_API_HOST`, so `https://api.staging.two.inc` gives `staging`. Use
