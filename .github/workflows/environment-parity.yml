@@ -1,22 +1,26 @@
 name: Environment parity
 
 # dev/environment-parity.php (TWO-26613) checks that this plugin and its two
-# siblings offer the same Environment setting: stored values, default,
-# dropdown rule, labels, read path, legacy-value migration and the shared
-# case table. The siblings are public and read with gh api: a PR at its
-# branch name when they have one, else at staging; a push at the branch
-# pushed to.
+# siblings offer the same Environment setting. It regenerates this repo's
+# dev/environment-contract.json from its own code, fails if the committed
+# copy differs, and compares it with the siblings' copies, read with gh api
+# as data: a PR at its branch name when a sibling has one, else staging; a
+# push or the nightly run at the branch it runs on. The nightly run compares
+# staging with the siblings' staging, catching a merge on one repo with no
+# sibling. No secrets: the siblings are public.
 on:
   pull_request:
   push:
     branches: [staging, main]
+  schedule:
+    - cron: "17 5 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: environment-parity-${{ github.ref }}
+  group: environment-parity-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
