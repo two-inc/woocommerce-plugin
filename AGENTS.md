@@ -76,6 +76,25 @@ WordPress and WooCommerce Best Practices
 - Utilize WooCommerce's logging system for debugging.
 - Example: `wc_get_logger()->debug('Your debug message', array('source' => 'your-plugin'));`
 
+The Environment setting matches the other plugins
+
+- `dev/environment-parity.php` (TWO-26613), run by the "Environment parity"
+  workflow, checks that this plugin, two-inc/prestashop-plugin and
+  two-inc/magento-plugin offer the same Environment setting: the stored values
+  and their order, the fresh-install default and the install step that writes
+  it, the dropdown with and without `TWO_INTERNAL_ENVIRONMENTS=1`, how a stored
+  value reads, and the field label, description and option labels. Each plugin's
+  legacy-value migration must land on a stored value, keep the canonical ones
+  and be idempotent; what each one maps is printed, not compared, because the
+  platforms stored different values historically. `environment-cases.json` and
+  the script itself must be byte-identical in all three, so change them in all
+  three, in step.
+- It reads the siblings with `gh api`, at this PR's branch name when a sibling
+  has one, else at `staging`: push a paired change under the same branch name in
+  all three repos. Locally, `ENVIRONMENT_PARITY_SIBLINGS_DIR=<dir> php
+  dev/environment-parity.php` reads them from checkouts named after their repos
+  in `<dir>`.
+
 A guard is invoked through `bash`
 
 - A script committed mode `100644` and run as `./script.sh` exits 126. On a CI

@@ -1,0 +1,36 @@
+name: Environment parity
+
+# dev/environment-parity.php (TWO-26613) checks that this plugin and its two
+# siblings offer the same Environment setting: stored values, default,
+# dropdown rule, labels, read path, legacy-value migration and the shared
+# case table. The siblings are public and read with gh api, at the PR's
+# branch name when they have one, else at staging.
+on:
+  pull_request:
+  push:
+    branches: [staging, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: environment-parity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  environment-parity:
+    name: Environment parity
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          coverage: none
+          tools: none
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          ENVIRONMENT_PARITY_SIBLING_REF: ${{ github.head_ref }}
+        run: php dev/environment-parity.php
