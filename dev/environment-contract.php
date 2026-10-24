@@ -43,16 +43,16 @@ return [
             'calls' => 'WC_Twoinc_Helper::migrate_environment_mode(',
         ],
     ],
-    'declarations' => static function (Plugin $p): array {
+    'declarations' => static function (array $p): array {
         $field = match1(
             "/'checkout_env'\\s*=>\\s*\\[(.*?)\\n\\s*\\],/s",
-            $p->file('class/WC_Twoinc.php'),
+            $p['file']('class/WC_Twoinc.php'),
             'the checkout_env form field'
         )[1];
         $gettext = "__\\(\\s*" . STR . "\\s*,\\s*'twoinc-payment-gateway'\\s*\\)";
         return [
-            'install_default' => [$p->value(match1("/'default'\\s*=>\\s*([^,\\n]+?)\\s*,/", $field, 'its default')[1])],
-            'labels' => labels($p->method('class/WC_Twoinc.php', 'WC_Twoinc', 'get_checkout_env_options')),
+            'install_default' => [$p['value'](match1("/'default'\\s*=>\\s*([^,\\n]+?)\\s*,/", $field, 'its default')[1])],
+            'labels' => labels($p['method']('class/WC_Twoinc.php', 'WC_Twoinc', 'get_checkout_env_options')),
             'field_label' => [unquote(match1("/'title'\\s*=>\\s*{$gettext}/", $field, 'its title')[1])],
             'description' => [unquote(match1("/'description'\\s*=>\\s*{$gettext}/", $field, 'its description')[1])],
         ];
