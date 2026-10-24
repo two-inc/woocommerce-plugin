@@ -2288,6 +2288,9 @@ final class BrandConfigSpec
         $noParent = 'refused: Shipping "Carrier" cannot be refunded';
         $taxOnly = 'refused: "Carrier" cannot be refunded as tax alone';
         $taxOnlyProduct = 'refused: "Stub product" cannot be refunded as tax alone';
+        $netOnly = 'refused: "Carrier" has no tax entered: Two refunds a line\'s net amount only together with its tax. Enter the tax refunded for this line as well.';
+        $netOnlyProduct = 'refused: "Stub product" has no tax entered';
+        $zeroRate = ['parentRows' => [[2, 0.0, false]], 'refundRows' => [], 'parent' => [10.0, 0.0, [2 => 0.0]], 'refund' => [-10.0, 0.0, [2 => 0.0]]];
         $defaults = ['type' => 'shipping', 'refundedId' => 5, 'parentRows' => $parent24, 'refundRows' => $restamped, 'parent' => [10.0, 2.4, [1 => 2.4]], 'refund' => [-10.0, -2.4, [1 => -2.4]], 'create' => false, 'withProduct' => false, 'catalogue' => false, 'decimals' => null];
         // [overrides of $defaults; parent and refund lines are [net, tax, item taxes by rate id, item meta], expected rate or refusal, description]
         // create: the line is built for an order request, not a refund. withProduct: the refund also returns a whole
@@ -2305,7 +2308,17 @@ final class BrandConfigSpec
             [['refund' => [-4.0, -0.96, [1 => -0.96]]], 0.24, 'partial shipping refund'],
             [['refund' => [0.0, -2.4, [1 => -2.4]]], $taxOnly, 'tax-only shipping refund is refused by name (TWO-26541)'],
             [['refund' => [-0.004, -2.4, [1 => -2.4]]], $taxOnly, 'shipping refund whose net rounds to zero is refused as tax-only'],
-            [['refund' => [-10.0, 0.0, []]], 0.24, 'net-only shipping refund is sent at the charged rate'],
+            [['refund' => [-10.0, 0.0, []]], $netOnly, 'net-only shipping refund at 24% is refused by name (TWO-26638)'],
+            [['refund' => [-10.0, -0.004, [1 => -0.004]]], $netOnly, 'shipping refund whose tax rounds to zero is refused as net-only'],
+            [['refund' => [-0.01, 0.0, []]], 0.24, 'net-only shipping refund with a tiny tax due (0.01 at 24%) is sent'],
+            [['refund' => [-0.08, 0.0, []]], 0.24, 'net-only shipping refund whose tax due is within the 0.02 tolerance (0.08 at 24%: 0.0192) is sent'],
+            [['refund' => [-0.09, 0.0, []]], 0.24, 'net-only shipping refund whose tax due rounds to the 0.02 tolerance (0.09 at 24%: 0.0216) is sent'],
+            [['refund' => [-0.1045, 0.0, []]], 0.24, 'net-only shipping refund is measured on its rounded net (0.1045 sends 0.10: 0.024, not 0.0251)'],
+            [['parentRows' => [[1, 10.0, false]], 'parent' => [10.0, 1.0, [1 => 1.0]], 'refund' => [-0.20, 0.0, []]], 0.10, 'net-only refund at the tolerance (0.20 at 10%: float 0.020000000000000004) is sent'],
+            [['parentRows' => [[1, 25.0, false]], 'parent' => [10.0, 2.5, [1 => 2.5]], 'refund' => [-0.10, 0.0, []]], $netOnly, 'net-only refund of 0.10 at 25% (0.025, PHP rounds half up to 0.03) is refused'],
+            [['parentRows' => [[1, 25.0, false]], 'parent' => [10.0, 2.5, [1 => 2.5]], 'refund' => [-0.12, 0.0, []]], $netOnly, 'net-only refund of 0.12 at 25% (0.03) is refused'],
+            [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, [], [$meta => ['rate' => 0.12, 'name' => 'VAT']]], 'refund' => [-10.0, 0.0, []]], $netOnly, 'net-only refund of a fallback order is refused at the rate stored at checkout'],
+            [['refund' => [-0.6, 0.0, []], 'decimals' => 0], $netOnly, 'net-only shipping refund at 0 price decimals is measured on its rounded net (0.6 sends 1: 0.24)'],
             [['type' => 'fee', 'refund' => [0.0, -2.4, [1 => -2.4]]], $taxOnly, 'tax-only fee refund is refused by name'],
             [['type' => 'line_item', 'refund' => [0.0, -2.4, [1 => -2.4]]], $taxOnlyProduct, 'tax-only product refund is refused by name'],
             [['type' => 'line_item', 'refund' => [0.0, -2.4, [1 => -2.4]], 'catalogue' => true], $taxOnlyProduct, 'tax-only product refund names the order line, not the catalogue product'],
@@ -2319,8 +2332,13 @@ final class BrandConfigSpec
             [['parentRows' => [[2, 0.0, false]], 'refundRows' => [], 'parent' => [10.0, 0.0, [2 => 0.0]], 'refund' => [-10.0, 0.0, [2 => 0.0]]], 0.0, 'refund of shipping with an explicit 0% rate is sent at 0%, with the option on'],
             [['refundedId' => null], $noParent, 'shipping refund with no parent line (another plugin built the refund) is refused by name'],
             [['refundedId' => 6], $noParent, 'shipping refund whose parent line was deleted is refused by name'],
-            [['type' => 'line_item', 'refund' => [-10.0, 0.0, []]], 0.24, 'net-only product refund is sent at the charged rate'],
-            [['type' => 'fee', 'refund' => [-10.0, 0.0, []]], 0.24, 'net-only fee refund is sent at the charged rate'],
+            [['type' => 'line_item', 'refund' => [-10.0, 0.0, []]], $netOnlyProduct, 'net-only product refund at 24% is refused by name'],
+            [['type' => 'line_item', 'refund' => [-10.0, 0.0, []], 'catalogue' => true], $netOnlyProduct, 'net-only product refund names the order line, not the catalogue product'],
+            [['type' => 'fee', 'refund' => [-10.0, 0.0, []]], $netOnly, 'net-only fee refund at 24% is refused by name'],
+            [['type' => 'line_item', 'refund' => [-0.01, 0.0, []]], 0.24, 'net-only product refund too small to carry tax is sent'],
+            [['type' => 'line_item'] + $zeroRate, 0.0, 'net-only product refund of a line charged at 0% is sent'],
+            [['type' => 'fee'] + $zeroRate, 0.0, 'net-only fee refund of a line charged at 0% is sent'],
+            [['refund' => [-10.0, 0.0, []], 'withProduct' => true], $netOnly, 'refund of a whole product line and a net-only shipping line is refused as a whole'],
             [['type' => 'line_item', 'refundedId' => null], 0.24, 'product refund with no parent line keeps its own tax rows'],
         ];
 

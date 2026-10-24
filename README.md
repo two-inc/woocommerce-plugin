@@ -332,11 +332,18 @@ registered on the hook (see "What the plugin checks" below). With the control
 blank, the plugin never refuses a request over shipping tax. Each time the
 control supplies a shipping rate, a warning in the WooCommerce log names the
 line, the shipping tax class and the rate. A refund line (product, shipping
-or fee) that returns tax with no net amount is refused with a named error and
-the refund is not sent, because Two's refund validation requires a line's tax
-to match its net at the line's rate. To correct a wrong tax rate, refund the
-whole order and rebook it with the correct rates (TWO-26541). A refund line
-that returns the net with no tax is sent as such.
+or fee) that returns only one of its net and its tax is refused with a named
+error and the refund is not sent, because Two's refund validation requires a
+line's tax to match its net at the line's rate. The plugin never fills in the
+missing half. A line returning tax with no net amount cannot be refunded: to
+correct a wrong tax rate, refund the whole order and rebook it with the
+correct rates (TWO-26541). A line returning its net with no tax is refused
+when its tax due at the line's rate, rounded to cents, is more than 0.02, the
+difference Two's refund validation allows (TWO-26638). A line charged at 0% is
+sent. For a refused line, the admin enters the tax refunded for it as well.
+WooCommerce fills in a line's tax when the refund quantity is set, but not when
+a refund total is typed, and shipping and fee rows have no quantity, so their
+tax is always typed by hand.
 
 A rate resolved from the control is recorded on the shipping line at checkout.
 Order edits, captures and refunds decide from that record, not from the
