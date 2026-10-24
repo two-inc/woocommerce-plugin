@@ -92,9 +92,9 @@ The Environment setting matches the other plugins
   must be byte-identical in all three, so change them in all three, in step.
 - It reads the siblings with `gh api`, at this PR's branch name when a sibling
   has one, else at `staging`: push a paired change under the same branch name in
-  all three repos. Locally, `ENVIRONMENT_PARITY_SIBLINGS_DIR=<dir> php
-  dev/environment-parity.php` reads them from checkouts named after their repos
-  in `<dir>`.
+  all three repos. Locally, run `php dev/environment-parity.php` with
+  `ENVIRONMENT_PARITY_SIBLINGS_DIR=<dir>` to read them from checkouts named
+  after their repos in `<dir>`.
 
 A guard is invoked through `bash`
 
