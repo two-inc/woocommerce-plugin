@@ -1888,13 +1888,13 @@ msgstr "Frakten ”%s” kan inte återbetalas: orderraden den återbetalar hitt
 #: class/WC_Twoinc_Helper.php:3416
 #, php-format
 msgid "\"%1$s\" cannot be refunded as tax alone: %2$s refunds a line's tax only together with its net amount. To correct the tax charged, refund the whole order and rebook it with the correct tax rates."
-msgstr ""
+msgstr "”%1$s” kan inte återbetalas enbart för skatten: %2$s återbetalar en rads skatt endast tillsammans med dess nettobelopp. För att rätta den debiterade skatten, återbetala hela ordern och boka in den på nytt med rätt skattesatser."
 
 #. translators: 1: order line name. 2: product name (e.g. Two).
 #: class/WC_Twoinc_Helper.php:3435
 #, php-format
 msgid "\"%1$s\" has no tax entered: %2$s refunds a line's net amount only together with its tax. Enter the tax refunded for this line as well."
-msgstr ""
+msgstr "”%1$s” har ingen skatt angiven: %2$s återbetalar en rads nettobelopp endast tillsammans med dess skatt. Ange även den återbetalda skatten för den här raden."
 
 #. translators: %s: shipping method name
 #: class/WC_Twoinc_Helper.php:3620

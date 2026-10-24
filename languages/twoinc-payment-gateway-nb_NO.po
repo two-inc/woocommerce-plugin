@@ -1888,13 +1888,13 @@ msgstr "Frakten «%s» kan ikke refunderes: ordrelinjen den refunderer ble ikke 
 #: class/WC_Twoinc_Helper.php:3416
 #, php-format
 msgid "\"%1$s\" cannot be refunded as tax alone: %2$s refunds a line's tax only together with its net amount. To correct the tax charged, refund the whole order and rebook it with the correct tax rates."
-msgstr ""
+msgstr "«%1$s» kan ikke refunderes for avgiften alene: %2$s refunderer avgiften på en linje bare sammen med nettobeløpet. For å korrigere avgiften som ble belastet, refunder hele ordren og registrer den på nytt med riktige avgiftssatser."
 
 #. translators: 1: order line name. 2: product name (e.g. Two).
 #: class/WC_Twoinc_Helper.php:3435
 #, php-format
 msgid "\"%1$s\" has no tax entered: %2$s refunds a line's net amount only together with its tax. Enter the tax refunded for this line as well."
-msgstr ""
+msgstr "«%1$s» har ingen avgift angitt: %2$s refunderer nettobeløpet på en linje bare sammen med avgiften. Skriv også inn avgiften som refunderes for denne linjen."
 
 #. translators: %s: shipping method name
 #: class/WC_Twoinc_Helper.php:3620
