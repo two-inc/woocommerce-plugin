@@ -86,9 +86,10 @@ The Environment setting matches the other plugins
   value reads, and the field label, description and option labels. Each plugin's
   legacy-value migration must land on a stored value, keep the canonical ones
   and be idempotent; what each one maps is printed, not compared, because the
-  platforms stored different values historically. `environment-cases.json` and
-  the script itself must be byte-identical in all three, so change them in all
-  three, in step.
+  platforms stored different values historically. Where this plugin declares the
+  setting is recorded in its own `dev/environment-contract.php`, which the
+  script loads in every repo. `environment-cases.json` and the script itself
+  must be byte-identical in all three, so change them in all three, in step.
 - It reads the siblings with `gh api`, at this PR's branch name when a sibling
   has one, else at `staging`: push a paired change under the same branch name in
   all three repos. Locally, `ENVIRONMENT_PARITY_SIBLINGS_DIR=<dir> php
