@@ -1,16 +1,17 @@
 <?php
 
 /**
- * Where this plugin declares the Environment setting, for
- * dev/environment-parity.php (TWO-26613), which loads this file in each of
- * the three plugin repos and compares what it finds. Runs inside that script
- * and uses its helpers; declare no functions or classes here.
+ * Where this plugin declares the Environment setting (TWO-26613). Read only
+ * by this repo's dev/environment-parity.php, which extracts the contract from
+ * this repo's own code into dev/environment-contract.json; the other plugins
+ * compare that JSON as data. After changing this file or the code it names,
+ * run `php dev/environment-parity.php --write` and commit the JSON. Runs
+ * inside that script and uses its helpers; declare no functions or classes.
  */
 
 return [
     'platform' => 'woocommerce',
     'cases' => 'tests/unit/fixtures/environment-cases.json',
-    'tests' => 'tests',
     'helpers' => [
         'file' => 'class/WC_Twoinc_Helper.php',
         'class' => 'WC_Twoinc_Helper',
@@ -33,14 +34,6 @@ return [
         'variants' => [
             'released host' => ['args' => [false], 'moves' => []],
             'development host' => ['args' => [true], 'moves' => ['production']],
-        ],
-    ],
-    'steps' => [
-        ['file' => 'class/WC_Twoinc.php', 'in' => ['WC_Twoinc', '__construct'], 'calls' => '$this->migrate_checkout_env()'],
-        [
-            'file' => 'class/WC_Twoinc.php',
-            'in' => ['WC_Twoinc', 'migrate_checkout_env'],
-            'calls' => 'WC_Twoinc_Helper::migrate_environment_mode(',
         ],
     ],
     'declarations' => static function (array $p): array {

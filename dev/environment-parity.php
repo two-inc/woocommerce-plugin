@@ -5,38 +5,43 @@
  * offer the same Environment setting (TWO-26613, TWO-26604).
  *
  * This file is byte-identical in two-inc/prestashop-plugin,
- * two-inc/woocommerce-plugin and two-inc/magento-plugin. What differs is
- * dev/environment-contract.php, each plugin's own record of where it declares
- * the setting; nothing here names another plugin's code.
+ * two-inc/woocommerce-plugin and two-inc/magento-plugin. Each repo also has:
+ *   - dev/environment-contract.php, its own record of where it declares the
+ *     setting, read only in that repo;
+ *   - dev/environment-contract.json, the contract this file extracts from
+ *     that repo's own code, committed.
  *
- * Each plugin's contract is extracted by that plugin's own
- * dev/environment-contract.php: this repo's from this checkout, each
- * sibling's from files read with `gh api` (at the same branch name when the
- * sibling has one, else at `staging`, so a paired change pushed under one
- * branch name in all three repos is compared branch to branch). A plugin's
- * environment helpers are lifted out of its source and run here. The check
- * fails when:
- *   - the stored values, their order or the fresh-install default differ, or
- *     the install step does not write that default;
- *   - the dropdown offers different values (fresh, with
- *     TWO_INTERNAL_ENVIRONMENTS=1, or with staging already stored);
- *   - a stored value reads as a different environment;
- *   - the field label, description or option labels differ;
- *   - a plugin's legacy-value migration can return a value outside the stored
- *     values, rewrites a canonical value it has not registered as moving, or
- *     is not idempotent, or its upgrade step no longer calls it;
- *   - environment-cases.json or this file differs between the repos, or this
- *     repo's suite no longer reads the case table.
- * The platforms stored different values historically, so each migration maps
- * legacy values its own way: what each does is printed, not compared.
+ * A run extracts this repo's contract from its own code and fails if the
+ * committed snapshot differs. It then fetches each sibling's snapshot with
+ * `gh api` and compares it as data: no sibling code is ever run. It fails
+ * when:
+ *   - the stored values, their order, the fresh-install default, the
+ *     dropdown (fresh, with TWO_INTERNAL_ENVIRONMENTS=1, or with a value
+ *     stored), how each of INPUTS reads, the field label, description or
+ *     option labels differ, or a plugin installs a value other than its
+ *     declared default;
+ *   - a plugin's legacy-value migration returns a value outside the stored
+ *     values, is not idempotent, or rewrites a canonical value its contract
+ *     does not register as a move;
+ *   - environment-cases.json or this file differs between the repos.
+ * Each platform maps legacy values its own way (the platforms stored
+ * different values historically), so the mappings are printed, not compared.
  *
- * Usage: php dev/environment-parity.php   (run from anywhere; needs gh)
- *   ENVIRONMENT_PARITY_SIBLING_REF=<branch>  fetch each sibling at <branch>
- *                                            when it has one, else staging.
- *                                            CI passes the PR's head branch.
- *   ENVIRONMENT_PARITY_SIBLINGS_DIR=<dir>    read the siblings from local
- *                                            checkouts <dir>/<repo name>
- *                                            instead of fetching.
+ * Which sibling ref is read: a PR reads a sibling at the PR's branch name
+ * when the sibling has that branch, and then a missing snapshot fails.
+ * Otherwise (and for a push, a scheduled run or a sibling without the
+ * branch) it reads the sibling at the base branch: staging, or main for a
+ * push to main; a sibling with no snapshot there yet is a warning, and a
+ * snapshot that differs fails.
+ *
+ * Usage:
+ *   php dev/environment-parity.php           check (needs gh)
+ *   php dev/environment-parity.php --write   regenerate this repo's snapshot
+ *   ENVIRONMENT_PARITY_SIBLING_REF=<branch>  the branch to look for in each
+ *                                            sibling (CI: the PR's head
+ *                                            branch, or the pushed branch)
+ *   ENVIRONMENT_PARITY_SIBLINGS_DIR=<dir>    read the siblings' snapshots from
+ *                                            local checkouts <dir>/<repo>
  */
 
 declare(strict_types=1);
@@ -47,12 +52,10 @@ const REPOS = [
     'magento' => 'two-inc/magento-plugin',
 ];
 const SELF_PATH = 'dev/environment-parity.php';
-const CONTRACT_PATH = 'dev/environment-contract.php';
+const SPEC_PATH = 'dev/environment-contract.php';
+const SNAPSHOT_PATH = 'dev/environment-contract.json';
+const WRITE_COMMAND = 'php dev/environment-parity.php --write';
 const FLAG = 'TWO_INTERNAL_ENVIRONMENTS';
-// The siblings add these files in separate PRs, so until this date (UTC) a
-// sibling ref without them is a warning; from it, a missing copy fails.
-// Delete this and its warning once all three repos carry them on staging.
-const BOOTSTRAP_ENDS = '2026-11-07';
 
 /** Legacy and odd stored values every read and migration is run over. */
 const INPUTS = [null, '', '  ', 'production', 'sandbox', 'staging', 'prod', 'PROD', 'Production', ' production ',
@@ -72,12 +75,37 @@ const STR = "'((?:[^'\\\\]|\\\\.)*)'";
 /** An option label: 'mode' => a translation call on a single-quoted literal. */
 const LABEL_PATTERN = "/'(production|sandbox|staging)'\\s*=>\\s*(?:\\\$this->l|__)\\(\\s*" . STR . '/';
 
-// --- Helpers for dev/environment-contract.php ------------------------------
+/**
+ * members() cases: [source with %s for the class name, constants => value,
+ * static method => [args, result]].
+ */
+const MEMBER_CASES = [
+    'untyped constant' => ["<?php class %s { const X = ['a', 'b']; }", ['X' => ['a', 'b']], []],
+    'typed array constant' => ["<?php class %s { public const array X = ['a']; }", ['X' => ['a']], []],
+    'typed string constant' => ["<?php class %s { final public const string X = 'v'; }", ['X' => 'v'], []],
+    'braces in strings' => [
+        "<?php class %s { public static function f(\$v) { return \"{\$v}}\" . '{'; } const Y = 1; }",
+        ['Y' => 1],
+        ['f' => [['x'], 'x}{']],
+    ],
+    'class keyword before the class' => ["<?php \$n = stdClass::class; class %s { const X = 2; }", ['X' => 2], []],
+    'class inside a guard' => [
+        "<?php if (!class_exists('%1\$s')) { class %1\$s { const X = 3;\n"
+            . " public static function g() { return self::X; } } }",
+        ['X' => 3],
+        ['g' => [[], 3]],
+    ],
+];
 
 function fail(string $message): void
 {
     fwrite(STDOUT, "::error::environment-parity: {$message}\n");
     $GLOBALS['failed'] = true;
+}
+
+function warn(string $message): void
+{
+    fwrite(STDOUT, "::warning::environment-parity: {$message}\n");
 }
 
 function stop(string $message): never
@@ -132,10 +160,16 @@ function one(SimpleXMLElement $xml, string $xpath, string $what): SimpleXMLEleme
     return $nodes[0];
 }
 
+/** A stored value as a readable key: null, or the value in single quotes. */
+function keyOf(?string $value): string
+{
+    return $value === null ? 'null' : "'{$value}'";
+}
+
 /**
- * The source of a class's members, by name: constants as `const X = ...;`,
- * methods as written. Reads tokens, so braces in strings and comments are
- * not miscounted.
+ * The source of a class's members, by name: constants as `const X = ...;`
+ * (typed or not), methods as written. Reads tokens, so braces in strings
+ * and comments are not miscounted.
  */
 function members(string $src, string $class): array
 {
@@ -148,6 +182,7 @@ function members(string $src, string $class): array
         } while ($i < $n && is_array($tokens[$i]) && in_array($tokens[$i][0], $skip, true));
         return $i;
     };
+    $isName = static fn ($t) => is_array($t) && preg_match('/^[A-Za-z_]\w*$/', $t[1]) === 1;
     for ($i = 0; $i < $n; $i++) {
         if (is_array($tokens[$i]) && $tokens[$i][0] === T_CLASS) {
             $j = $next($i);
@@ -169,7 +204,17 @@ function members(string $src, string $class): array
         $t = $tokens[$i];
         $opens = $t === '{' || (is_array($t) && in_array($t[0], [T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES], true));
         if ($depth === 1 && $capture === null && is_array($t) && in_array($t[0], [T_CONST, T_FUNCTION], true)) {
-            $capture = ['kind' => $t[0], 'name' => $tokens[$next($i)][1], 'code' => ''];
+            // A constant's name is the last name before `=`, after any type;
+            // a method's is the first name after `function`.
+            $capture = ['kind' => $t[0], 'name' => null, 'last' => null, 'code' => ''];
+        } elseif ($capture !== null && $capture['name'] === null && $depth === 1) {
+            if ($capture['kind'] === T_FUNCTION && $isName($t)) {
+                $capture['name'] = $t[1];
+            } elseif ($capture['kind'] === T_CONST && $isName($t)) {
+                $capture['last'] = $t[1];
+            } elseif ($capture['kind'] === T_CONST && $t === '=') {
+                $capture['name'] = $capture['last'];
+            }
         }
         if ($capture !== null) {
             $capture['code'] .= is_array($t) ? $t[1] : $t;
@@ -186,13 +231,52 @@ function members(string $src, string $class): array
                 $capture = null;
             }
         } elseif ($t === ';' && $depth === 1 && $capture !== null) {
-            if ($capture['kind'] === T_CONST) {
+            if ($capture['kind'] === T_CONST && $capture['name'] !== null) {
                 $consts[$capture['name']] = $capture['code'];
             }
             $capture = null; // an abstract method has no body
         }
     }
     return ['consts' => $consts, 'methods' => $methods];
+}
+
+/** Lift named constants and static methods into a class of their own. */
+function lift(string $src, string $class, array $consts, array $methods, string $as): void
+{
+    $members = members($src, $class);
+    $code = [];
+    foreach ($consts as $const) {
+        $code[] = $members['consts'][$const] ?? throw new RuntimeException("no constant {$class}::{$const}");
+    }
+    foreach ($methods as $name) {
+        $code[] = 'public static ' . ($members['methods'][$name]
+            ?? throw new RuntimeException("no method {$class}::{$name}()"));
+    }
+    eval("final class {$as} {\n" . implode("\n", $code) . "\n}");
+}
+
+/** Run MEMBER_CASES; a parser that misreads them would misread a plugin. */
+function selfTest(): void
+{
+    foreach (MEMBER_CASES as $case => [$template, $consts, $calls]) {
+        $class = 'EnvironmentParityCase' . md5($case);
+        $lifted = $class . 'Lifted';
+        try {
+            lift(sprintf($template, $class), $class, array_keys($consts), array_keys($calls), $lifted);
+            foreach ($consts as $name => $want) {
+                if (constant("{$lifted}::{$name}") !== $want) {
+                    throw new RuntimeException("constant {$name} reads " . json_encode(constant("{$lifted}::{$name}")));
+                }
+            }
+            foreach ($calls as $name => [$args, $want]) {
+                if ([$lifted, $name](...$args) !== $want) {
+                    throw new RuntimeException("{$name}() returns " . json_encode([$lifted, $name](...$args)));
+                }
+            }
+        } catch (Throwable $e) {
+            fail("members() misreads the case '{$case}': " . $e->getMessage() . '; fix members() in ' . SELF_PATH . '.');
+        }
+    }
 }
 
 /** Run `gh api` with retries. Returns [0, stdout] or [404, ''], else stops. */
@@ -219,148 +303,132 @@ function gh(array $args): array
     stop('gh api ' . implode(' ', $args) . ' failed: ' . trim($err));
 }
 
-/**
- * One plugin, as a map of closures over its files: this checkout, a local
- * sibling checkout, or the sibling's repo through gh api. A map rather than
- * a class, because Magento's setup:di:compile includes every PHP file in the
- * module that declares one, and this file must only ever run on purpose.
- *
- * Keys: name, label; has(path), file(path), method(path, class, name),
- * lift(path, class, consts, methods), call(name, ...args), constant(name),
- * value(expr).
- */
-function plugin(string $name, string $label, ?string $dir, string $repo, string $ref): array
-{
-    $files = $parsed = [];
-    $lifted = 'EnvironmentParity_' . $name;
-    $fetch = static function (string $path) use (&$files, $dir, $repo, $ref): ?string {
-        if (array_key_exists($path, $files)) {
-            return $files[$path];
-        }
-        if ($dir !== null) {
-            $file = "{$dir}/{$path}";
-            return $files[$path] = is_file($file) ? (string) file_get_contents($file) : null;
-        }
-        [$code, $out] = gh([
-            '-H',
-            'Accept: application/vnd.github.raw',
-            "repos/{$repo}/contents/{$path}?ref=" . rawurlencode($ref),
-        ]);
-        return $files[$path] = $code === 404 ? null : $out;
-    };
-    $file = static function (string $path) use ($fetch): string {
-        return $fetch($path) ?? throw new RuntimeException("no {$path}");
-    };
-    $members = static function (string $path, string $class) use (&$parsed, $file): array {
-        return $parsed["{$path}#{$class}"] ??= members($file($path), $class);
-    };
-    $method = static function (string $path, string $class, string $name) use ($members): string {
-        return $members($path, $class)['methods'][$name]
-            ?? throw new RuntimeException("no method {$class}::{$name}() in {$path}");
-    };
-    $constant = static fn (string $const) => constant("{$lifted}::{$const}");
-    return [
-        'name' => $name,
-        'label' => $label,
-        'has' => static fn (string $path): bool => $fetch($path) !== null,
-        'file' => $file,
-        'method' => $method,
-        // Lift the named constants and static methods of a class into a
-        // class of their own, so they run here without the platform.
-        'lift' => static function (string $path, string $class, array $consts, array $names) use ($members, $method, $lifted): void {
-            $code = [];
-            foreach ($consts as $const) {
-                $code[] = $members($path, $class)['consts'][$const]
-                    ?? throw new RuntimeException("no constant {$class}::{$const}");
-            }
-            foreach ($names as $name) {
-                $code[] = 'public static ' . $method($path, $class, $name);
-            }
-            eval("final class {$lifted} {\n" . implode("\n", $code) . "\n}");
-        },
-        'call' => static fn (string $name, ...$args) => [$lifted, $name](...$args),
-        'constant' => $constant,
-        // A literal, or a lifted constant named as `self::X` or `Class::X`.
-        'value' => static function (string $expr) use ($constant, $lifted): string {
-            if (preg_match('/^' . STR . '$/', $expr, $m)) {
-                return unquote($m[1]);
-            }
-            if (preg_match('/^(?:self|static|\\\\?\w+)::(\w+)$/', $expr, $m) && defined("{$lifted}::{$m[1]}")) {
-                return (string) $constant($m[1]);
-            }
-            throw new RuntimeException("cannot resolve {$expr}");
-        },
-    ];
-}
-
 function setFlag(?string $flag): void
 {
     putenv($flag === null ? FLAG : FLAG . '=' . $flag);
 }
 
-/** Load a plugin's dev/environment-contract.php from wherever its files are. */
-function loadContract(array $plugin): array
+/**
+ * This repo's snapshot, extracted from its own code as dev/environment-
+ * contract.php describes. Only this repo's code is ever run here.
+ */
+function extractSnapshot(string $root, array $spec): array
 {
-    $tmp = tempnam(sys_get_temp_dir(), 'environment-contract');
-    file_put_contents($tmp, $plugin['file'](CONTRACT_PATH));
-    try {
-        $spec = require $tmp;
-    } finally {
-        unlink($tmp);
-    }
-    if (!is_array($spec) || ($spec['platform'] ?? null) !== $plugin['name']) {
-        throw new RuntimeException(CONTRACT_PATH . " does not describe the {$plugin['name']} plugin");
-    }
-    return $spec;
-}
-
-/** One plugin's contract, from its own description of where it lives. */
-function contract(array $plugin, array $spec): array
-{
+    $file = static function (string $path) use ($root): string {
+        $src = is_file("{$root}/{$path}") ? file_get_contents("{$root}/{$path}") : false;
+        return $src === false ? throw new RuntimeException("no {$path}") : $src;
+    };
     $h = $spec['helpers'];
-    $plugin['lift']($h['file'], $h['class'], array_values($h['consts']), $h['methods']);
-    $c = ['modes' => $plugin['constant']($h['consts']['modes']), 'default' => $plugin['constant']($h['consts']['default'])];
+    $lifted = 'EnvironmentParity_' . $spec['platform'];
+    try {
+        lift($file($h['file']), $h['class'], array_values($h['consts']), $h['methods'], $lifted);
+    } catch (RuntimeException $e) {
+        throw new RuntimeException($e->getMessage() . " in {$h['file']}; update 'helpers' in " . SPEC_PATH);
+    }
+    $call = static fn (string $name, ...$args) => [$lifted, $name](...$args);
+    $p = [
+        'file' => $file,
+        'method' => static fn (string $path, string $class, string $name): string => members($file($path), $class)
+            ['methods'][$name] ?? throw new RuntimeException(
+                "no method {$class}::{$name}() in {$path}; update 'declarations' in " . SPEC_PATH
+            ),
+        'value' => static function (string $expr) use ($lifted): string {
+            if (preg_match('/^' . STR . '$/', $expr, $m)) {
+                return unquote($m[1]);
+            }
+            if (preg_match('/^(?:self|static|\\\\?\w+)::(\w+)$/', $expr, $m) && defined("{$lifted}::{$m[1]}")) {
+                return (string) constant("{$lifted}::{$m[1]}");
+            }
+            throw new RuntimeException("cannot resolve {$expr}; add its constant to 'helpers.consts' in " . SPEC_PATH);
+        },
+    ];
+
+    $c = [
+        'modes' => constant("{$lifted}::{$h['consts']['modes']}"),
+        'default' => constant("{$lifted}::{$h['consts']['default']}"),
+    ];
     foreach (OPTION_STATES as $state => [$stored, $flag]) {
         setFlag($flag);
-        $c['options'][$state] = $plugin['call']($h['options'], $stored);
+        $c['options'][$state] = $call($h['options'], $stored);
     }
     setFlag(null);
     foreach (INPUTS as $input) {
-        $c['reads'][json_encode($input)] = $plugin['call']($h['read'], $input);
+        $c['reads'][keyOf($input)] = $call($h['read'], $input);
     }
     // A setting declared in more than one file must read the same in each.
-    foreach (($spec['declarations'])($plugin) as $key => $declared) {
+    foreach (($spec['declarations'])($p) as $key => $declared) {
         if ($key !== 'labels' && count(array_unique($declared)) !== 1) {
             throw new RuntimeException("declares {$key} differently in its own files: " . json_encode($declared));
         }
         $c[$key] = $key === 'labels' ? $declared : $declared[0];
     }
-    $c['case_table_sha256'] = hash('sha256', $plugin['file']($spec['cases']));
+    $c['case_table_sha256'] = hash('sha256', $file($spec['cases']));
 
     $migration = [];
     foreach ($spec['migrate']['variants'] as $variant => ['args' => $args, 'moves' => $moves]) {
-        $what = "{$plugin['name']} migration ({$variant})";
+        $map = [];
         foreach (INPUTS as $input) {
-            $to = $plugin['call']($spec['migrate']['method'], $input, ...$args);
-            $migration[$variant][json_encode($input)] = $to;
-            if (!in_array($to, $c['modes'], true)) {
-                fail("{$what} rewrites " . json_encode($input) . ' to ' . json_encode($to) . ', not a stored value.');
-            } elseif ($plugin['call']($spec['migrate']['method'], $to, ...$args) !== $to) {
-                fail("{$what} is not idempotent on " . json_encode($input) . '.');
+            $map[keyOf($input)] = $call($spec['migrate']['method'], $input, ...$args);
+        }
+        $migration[$variant] = ['moves' => $moves, 'map' => $map];
+    }
+    return [
+        '_comment' => 'Generated by `' . WRITE_COMMAND . '` (TWO-26613). Do not edit by hand.',
+        'platform' => $spec['platform'],
+        'inputs' => array_map('keyOf', INPUTS),
+        'contract' => $c,
+        'migration' => $migration,
+    ];
+}
+
+function encode(array $snapshot): string
+{
+    return json_encode($snapshot, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
+}
+
+/** Shape problems in a snapshot read as data, or null when it is usable. */
+function shapeError(mixed $snapshot, string $platform): ?string
+{
+    if (!is_array($snapshot) || ($snapshot['platform'] ?? null) !== $platform) {
+        return "is not a {$platform} snapshot";
+    }
+    if (($snapshot['inputs'] ?? null) !== array_map('keyOf', INPUTS)) {
+        return 'was generated over a different INPUTS list';
+    }
+    foreach (['modes', 'default', 'install_default', 'options', 'reads', 'labels'] as $key) {
+        if (!array_key_exists($key, $snapshot['contract'] ?? [])) {
+            return "has no contract.{$key}";
+        }
+    }
+    foreach ($snapshot['migration'] ?? [null] as $variant) {
+        if (!is_array($variant['moves'] ?? null) || !is_array($variant['map'] ?? null)) {
+            return 'has a migration without moves and map';
+        }
+    }
+    return null;
+}
+
+/** Migration invariants, checked on a snapshot as data. */
+function checkMigration(string $name, array $snapshot): void
+{
+    $modes = $snapshot['contract']['modes'];
+    foreach ($snapshot['migration'] as $variant => ['moves' => $moves, 'map' => $map]) {
+        $what = "{$name} migration ({$variant})";
+        foreach ($map as $from => $to) {
+            if (!in_array($to, $modes, true)) {
+                fail("{$what} rewrites {$from} to " . json_encode($to) . ', not a stored value; fix the migration.');
+            } elseif (($map[keyOf($to)] ?? null) !== $to) {
+                fail("{$what} is not idempotent: {$from} becomes {$to}, which becomes " . json_encode($map[keyOf($to)] ?? null) . '.');
             }
-            if (in_array($input, $c['modes'], true) && $to !== $input && !in_array($input, $moves, true)) {
-                fail("{$what} rewrites the canonical {$input} to {$to}.");
+        }
+        foreach ($modes as $mode) {
+            $to = $map[keyOf($mode)] ?? null;
+            if ($to !== $mode && !in_array($mode, $moves, true)) {
+                fail("{$what} rewrites the canonical {$mode} to " . json_encode($to) . "; fix the migration, or register"
+                    . " the move under the variant's 'moves' in that plugin's " . SPEC_PATH . '.');
             }
         }
     }
-    foreach ($spec['steps'] as ['file' => $path, 'in' => $in, 'calls' => $needle]) {
-        $where = $in === null ? $plugin['file']($path) : $plugin['method']($path, $in[0], $in[1]);
-        if (strpos($where, $needle) === false) {
-            $at = $in === null ? $path : "{$in[0]}::{$in[1]}() in {$path}";
-            fail("{$plugin['name']}: {$at} no longer calls {$needle}; the upgrade must migrate through it.");
-        }
-    }
-    return [$c, $migration];
 }
 
 /** Fail unless every plugin has the same value; for a map, name each entry that differs. */
@@ -382,121 +450,122 @@ function compare(string $what, array $values): void
         return;
     }
     $detail = implode('; ', array_map(static fn ($k, $v) => "{$k} {$v}", array_keys($seen), $seen));
-    fail("{$what} differs: {$detail}.");
+    fail("{$what} differs: {$detail}. Fix the plugin that is wrong, then run `" . WRITE_COMMAND . '` there and commit.');
+}
+
+/** Read one file of a sibling, as text: [found, text]. Never executed. */
+function siblingFile(string $repo, ?string $dir, string $ref, string $path): array
+{
+    if ($dir !== null) {
+        return is_file("{$dir}/{$path}") ? [true, (string) file_get_contents("{$dir}/{$path}")] : [false, ''];
+    }
+    [$code, $out] = gh([
+        '-H',
+        'Accept: application/vnd.github.raw',
+        "repos/{$repo}/contents/{$path}?ref=" . rawurlencode($ref),
+    ]);
+    return [$code === 0, $out];
 }
 
 // --- Main ------------------------------------------------------------------
 
 $root = dirname(__DIR__);
 setFlag(null);
-if (!is_file($root . '/' . CONTRACT_PATH)) {
-    stop('no ' . CONTRACT_PATH . ' in this checkout.');
+selfTest();
+if (!is_file($root . '/' . SPEC_PATH)) {
+    stop('no ' . SPEC_PATH . ' in this checkout.');
 }
-$self = (require $root . '/' . CONTRACT_PATH)['platform'] ?? null;
+$spec = require $root . '/' . SPEC_PATH;
+$self = $spec['platform'] ?? null;
 if (!isset(REPOS[$self])) {
-    stop(CONTRACT_PATH . ' names no known platform.');
+    stop(SPEC_PATH . " names no known platform; set 'platform' to one of " . implode(', ', array_keys(REPOS)) . '.');
+}
+try {
+    $fresh = extractSnapshot($root, $spec);
+} catch (Throwable $e) {
+    stop("{$self}: " . $e->getMessage() . '.');
+}
+
+if (in_array('--write', $argv, true)) {
+    file_put_contents($root . '/' . SNAPSHOT_PATH, encode($fresh));
+    echo 'environment-parity: wrote ' . SNAPSHOT_PATH . ".\n";
+    exit(0);
+}
+
+$committed = is_file($root . '/' . SNAPSHOT_PATH) ? (string) file_get_contents($root . '/' . SNAPSHOT_PATH) : null;
+if ($committed !== encode($fresh)) {
+    $what = $committed === null ? 'is missing' : 'does not match this checkout';
+    fail(SNAPSHOT_PATH . " {$what}: run `" . WRITE_COMMAND . '` and commit it.');
 }
 
 $siblingsDir = getenv('ENVIRONMENT_PARITY_SIBLINGS_DIR') ?: null;
 $requested = getenv('ENVIRONMENT_PARITY_SIBLING_REF') ?: 'staging';
-$plugins = [];
+$base = $requested === 'main' ? 'main' : 'staging';
+$snapshots = [$self => $fresh];
+$mine = (string) file_get_contents(__FILE__);
+$labels = [];
 foreach (REPOS as $name => $repo) {
-    $repoName = basename($repo);
     if ($name === $self) {
-        $plugins[$name] = plugin($name, "{$repoName} (this checkout)", $root, $repo, '');
-    } elseif ($siblingsDir !== null) {
-        $plugins[$name] = plugin($name, "{$siblingsDir}/{$repoName}", "{$siblingsDir}/{$repoName}", $repo, '');
-    } else {
-        // A branch the sibling lacks is the normal case for a change on one
-        // side only, so it falls back to staging.
-        $ref = 'staging';
-        if ($requested !== 'staging' && gh(["repos/{$repo}/branches/{$requested}", '--jq', '.name'])[0] === 0) {
-            $ref = $requested;
-        }
-        $plugins[$name] = plugin($name, "{$repo}@{$ref}", null, $repo, $ref);
-    }
-}
-$siblings = array_diff_key($plugins, [$self => true]);
-echo "environment-parity: {$self} compared with "
-    . implode(' and ', array_map(static fn ($p) => $p['label'], $siblings)) . ".\n";
-
-$contracts = $migrations = [];
-$selfSpec = null;
-foreach ($plugins as $name => $plugin) {
-    if ($name !== $self && !$plugin['has'](CONTRACT_PATH)) {
-        if (gmdate('Y-m-d') < BOOTSTRAP_ENDS) {
-            echo "::warning::environment-parity: {$plugin['label']} has no " . CONTRACT_PATH
-                . ' yet, so it is not compared; until ' . BOOTSTRAP_ENDS . " that is a warning.\n";
-        } else {
-            fail("{$plugin['label']} has no " . CONTRACT_PATH . '.');
-        }
-        unset($plugins[$name]);
         continue;
     }
-    try {
-        $spec = loadContract($plugin);
-        $selfSpec = $name === $self ? $spec : $selfSpec;
-        [$contracts[$name], $migrations[$name]] = contract($plugin, $spec);
-    } catch (Throwable $e) {
-        fail("{$plugin['label']}: " . $e->getMessage() . '.');
-        unset($plugins[$name]);
+    $dir = $siblingsDir === null ? null : $siblingsDir . '/' . basename($repo);
+    // Strict only where the sibling carries the same branch: a paired change.
+    $ref = $base;
+    if ($dir === null && !in_array($requested, ['staging', 'main'], true)) {
+        [$code] = gh(['repos/' . $repo . '/branches/' . rawurlencode($requested), '--jq', '.name']);
+        $ref = $code === 0 ? $requested : $base;
+    }
+    $strict = $dir !== null || $ref === $requested && $ref !== $base;
+    $label = $labels[$name] = $dir ?? "{$repo}@{$ref}";
+
+    [$found, $json] = siblingFile($repo, $dir, $ref, SNAPSHOT_PATH);
+    if (!$found) {
+        $msg = "{$label} has no " . SNAPSHOT_PATH;
+        if ($strict) {
+            fail("{$msg}; add it on that branch with `" . WRITE_COMMAND . '` and commit it.');
+        } else {
+            warn("{$msg} yet, so it is not compared.");
+        }
+        continue;
+    }
+    $snapshot = json_decode($json, true);
+    $error = shapeError($snapshot, $name);
+    if ($error !== null) {
+        fail("{$label} " . SNAPSHOT_PATH . " {$error}; run `" . WRITE_COMMAND . '` there and commit.');
+        continue;
+    }
+    $snapshots[$name] = $snapshot;
+
+    [$found, $theirs] = siblingFile($repo, $dir, $ref, SELF_PATH);
+    if (!$found || $theirs !== $mine) {
+        fail(SELF_PATH . ' ' . ($found ? 'differs from' : 'is missing at') . " {$label}; the three copies must be byte-identical.");
     }
 }
 
+$contracts = array_map(static fn ($s) => $s['contract'], $snapshots);
 foreach (array_unique(array_merge(...array_map('array_keys', array_values($contracts)))) as $key) {
     compare($key, array_map(static fn ($c) => $c[$key] ?? null, $contracts));
 }
-foreach ($contracts as $name => $c) {
+foreach ($snapshots as $name => $snapshot) {
+    $c = $snapshot['contract'];
     if ($c['install_default'] !== $c['default']) {
-        fail("{$name} installs {$c['install_default']} but declares the default {$c['default']}.");
+        fail("{$name} installs {$c['install_default']} but declares the default {$c['default']}; fix the install step.");
     }
     if (array_keys($c['labels']) !== $c['modes']) {
         fail("{$name} labels " . json_encode(array_keys($c['labels'])) . ', not every stored value in order.');
     }
-}
-
-// This repo's suite must still run the case table.
-if ($selfSpec !== null) {
-    $readers = 0;
-    $files = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator("{$root}/{$selfSpec['tests']}", FilesystemIterator::SKIP_DOTS)
-    );
-    foreach ($files as $file) {
-        if (
-            substr($file->getFilename(), -4) === '.php'
-            && strpos((string) file_get_contents($file->getPathname()), 'environment-cases.json') !== false
-        ) {
-            $readers++;
-        }
-    }
-    if ($readers === 0) {
-        fail("no PHP file under {$selfSpec['tests']}/ reads environment-cases.json; the suite must run the case table.");
-    }
-}
-
-// This file must be the same in all three.
-$mine = (string) file_get_contents(__FILE__);
-foreach ($siblings as $plugin) {
-    if (!$plugin['has'](SELF_PATH)) {
-        if (gmdate('Y-m-d') < BOOTSTRAP_ENDS) {
-            echo "::warning::environment-parity: {$plugin['label']} has no " . SELF_PATH
-                . ' yet; until ' . BOOTSTRAP_ENDS . " that is a warning.\n";
-        } else {
-            fail("{$plugin['label']} has no " . SELF_PATH . '; all three plugins must carry the same copy.');
-        }
-    } elseif ($plugin['file'](SELF_PATH) !== $mine) {
-        fail(SELF_PATH . " differs from the copy at {$plugin['label']}; the three must be byte-identical.");
-    }
+    checkMigration($name, $snapshot);
 }
 
 if (!empty($GLOBALS['failed'])) {
     exit(1);
 }
 
-$c = $contracts[$self];
+$c = $fresh['contract'];
 printf(
-    "environment-parity OK across %s: stored values %s, default %s, labels %s, case table sha256 %s.\n",
-    implode(', ', array_keys($contracts)),
+    "environment-parity OK across %s (%s): stored values %s, default %s, labels %s, case table sha256 %s.\n",
+    implode(', ', array_keys($snapshots)),
+    implode(', ', $labels),
     implode(', ', $c['modes']),
     $c['default'],
     implode(', ', $c['labels']),
@@ -506,9 +575,10 @@ foreach ($c['options'] as $state => $options) {
     printf("  dropdown, %s: %s\n", $state, implode(', ', $options));
 }
 echo "Legacy-value migration per plugin (printed, not compared):\n";
-foreach ($migrations as $name => $variants) {
-    foreach ($variants as $variant => $map) {
+foreach ($snapshots as $name => $snapshot) {
+    foreach ($snapshot['migration'] as $variant => ['moves' => $moves, 'map' => $map]) {
         $moved = array_map(static fn ($from, $to) => "{$from}->{$to}", array_keys($map), $map);
-        printf("  %s, %s: %s\n", $name, $variant, implode(' ', $moved));
+        $registered = $moves ? ' (registered moves: ' . implode(', ', $moves) . ')' : '';
+        printf("  %s, %s%s: %s\n", $name, $variant, $registered, implode(' ', $moved));
     }
 }
