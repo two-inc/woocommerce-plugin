@@ -8450,7 +8450,7 @@ if (!class_exists('WC_Twoinc')) {
                         $request_type,
                         $order->get_id() ? ' for order ' . $order->get_id() : '',
                         $status,
-                        $idempotency_key,
+                        $idempotency_key ?? 'none',
                         WC_Twoinc_Helper::get_api_rejection_reason($response)
                     ),
                     ['source' => 'twoinc-payment-gateway']
@@ -8463,7 +8463,7 @@ if (!class_exists('WC_Twoinc')) {
         public const LAST_EDIT_KEY_META = 'last_edit_idempotency_key';
 
         /** The key of the order request make_order_request() sent last. */
-        private $last_order_idempotency_key = '';
+        private $last_order_idempotency_key = null;
 
         /** One per checkout attempt: the order reference the attempt minted, hashed. */
         private static function create_idempotency_key($order): string
@@ -8479,15 +8479,19 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @param array                $payload what is sent, after the postprocessing hook
          * @param WC_Order_Refund|null $refund
+         *
+         * @return string|null null only for an intent with no shopper session to tell buyers apart
          */
-        private function order_idempotency_key(string $request_type, array $payload, $order, $refund = null): string
+        private function order_idempotency_key(string $request_type, array $payload, $order, $refund = null): ?string
         {
             $two_order_id = (string) $this->get_twoinc_order_id($order);
             switch ($request_type) {
                 case 'order_create':
                     return self::create_idempotency_key($order);
                 case 'order_intent':
-                    return WC_Twoinc_Helper::idempotency_key('intent', [], $payload);
+                    // Keyed on the shopper's session so two buyers never share a key; with none, it goes unkeyed.
+                    $session = function_exists('WC') && WC()->session ? (string) WC()->session->get_customer_id() : '';
+                    return $session === '' ? null : WC_Twoinc_Helper::idempotency_key('intent', [], [$session, $payload]);
                 case 'order_update':
                     // Chained on the last accepted edit's key, or the create key before the first, so every edit
                     // in a sequence differs (A, B, A, B: four keys) while a retry, with nothing accepted since,
@@ -8509,8 +8513,8 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Every write (anything but a GET) carries an Idempotency-Key (TWO-26658): the caller's, or one named
-         * after the method and endpoint with a hash of the payload.
+         * A write (anything but a GET) carries the Idempotency-Key its caller built (TWO-26658); a write with
+         * none is sent without one.
          *
          * @param string      $method
          * @param string|null $idempotency_key
@@ -8537,8 +8541,8 @@ if (!class_exists('WC_Twoinc')) {
             if (self::is_valid_header_value($trace)) {
                 $headers['HTTP_X_CLOUD_TRACE_CONTEXT'] = $trace;
             }
-            if (strtoupper((string) $method) !== 'GET') {
-                $idempotency_key = $idempotency_key ?? WC_Twoinc_Helper::idempotency_key(strtolower($method) . str_replace('/', '_', (string) $endpoint), [], $payload ?: []);
+            // Never a key the caller did not build: a fallback could be shared between buyers.
+            if ($idempotency_key !== null && $idempotency_key !== '' && strtoupper((string) $method) !== 'GET') {
                 $headers['Idempotency-Key'] = $idempotency_key;
             }
             $log_key = isset($headers['Idempotency-Key']) ? " (Idempotency-Key {$headers['Idempotency-Key']})" : '';

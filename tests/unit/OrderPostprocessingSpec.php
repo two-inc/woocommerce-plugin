@@ -50,6 +50,7 @@ final class OrderPostprocessingSpec
             'testAnEditSequenceNeverRepeatsAKey',
             'testEveryOrderWriteLogsItsKeyWhateverTheOutcome',
             'testOnlyWritesCarryAKeyAndEveryWriteDoes',
+            'testEveryWriteCallSitePassesItsOwnKey',
             'testEveryOrderSendGoesThroughTheChokeFunction',
             'testIntentIsBuiltServerSideAsTheBrowserUsedToSendIt',
             'testAnIntentThatCannotBeSentIsAnErrorNotADecline',
@@ -1034,6 +1035,7 @@ final class OrderPostprocessingSpec
         // [driver, expected request type, trigger, endpoint, description]
         return [
             [static function ($gateway) {
+                WC()->session = new StubSession();
                 WC()->cart = new StubIntentCart();
                 self::driveIntent($gateway, ['intent' => json_encode(['buyer' => ['company' => ['country_prefix' => 'NO']]])]);
             }, 'order_intent', 'checkout', '/v1/order_intent', 'intent'],
@@ -1140,7 +1142,7 @@ final class OrderPostprocessingSpec
         $reference = WC_Twoinc_Brand::meta_key('order_reference');
         // [driver, endpoint, expected key given (sent payload, order), description]
         $cases = [
-            [...$paths['intent'], fn ($p) => 'intent_' . self::keyHash($p), 'order intent: a hash of what it sends'],
+            [...$paths['intent'], fn ($p) => 'intent_' . self::keyHash(['session-a', $p]), 'order intent: the shopper\'s session and a hash of what it sends'],
             // The fixture's 'ref' is replaced by the reference the attempt mints.
             [...$paths['create'], fn ($p, $o) => $o->meta[$reference] === 'ref' ? 'no fresh reference' : 'create_42_' . self::keyHash($o->meta[$reference]), 'order create: the checkout attempt\'s order reference, hashed'],
             [...$paths['update'], fn ($p) => 'edit_two-1_' . self::keyHash(['create_42_' . self::keyHash('ref'), $p]), 'order edit: the Two order, chained on the create key before any edit is accepted'],
@@ -1169,6 +1171,12 @@ final class OrderPostprocessingSpec
             $GLOBALS['__twoinc_test_session_customer'] = '';
             TinyAssert::same([], self::writesTo($endpoint, $other['token mint']), "$endpoint: minted with no shopper session");
         }
+        // An intent with no session is still asked, with no key rather than one buyers would share.
+        self::reset();
+        $GLOBALS['__twoinc_test_session_customer'] = '';
+        $sent = self::writesTo('/v1/order_intent', $paths['intent'][0]);
+        TinyAssert::same(1, count($sent), 'an intent with no shopper session is still sent');
+        TinyAssert::same([null, false], [$sent[0]['idempotency_key'], array_key_exists('Idempotency-Key', $sent[0]['headers'])], 'an intent with no shopper session carries no key');
         unset($GLOBALS['__twoinc_test_session_customer']);
     }
 
@@ -1205,8 +1213,10 @@ final class OrderPostprocessingSpec
                 $other['token mint']($gateway);
             };
         };
-        $intent = static function (string $country) {
-            return static function ($gateway) use ($country) {
+        $intent = static function (string $country, string $shopper = 'session-a') {
+            return static function ($gateway) use ($country, $shopper) {
+                $GLOBALS['__twoinc_test_session_customer'] = $shopper;
+                WC()->session = new StubSession();
                 WC()->cart = new StubIntentCart();
                 self::driveIntent($gateway, ['intent' => json_encode(['buyer' => ['company' => ['country_prefix' => $country, 'organization_number' => $country . '1']]])]);
             };
@@ -1243,6 +1253,7 @@ final class OrderPostprocessingSpec
             [$refund(99), $refund(100), '/v1/order/two-1/refund', false, 'a second refund record on the same order'],
             [$paths['update'], $resend('order_update', '/v1/order/two-1', 'PUT', ['purchase_order_number' => 'PO-2']), '/v1/order/two-1', false, 'an edit that changes the order'],
             [$intent('NO'), $intent('SE'), '/v1/order_intent', false, 'an intent for another buyer'],
+            [$intent('NO'), $intent('NO', 'session-b'), '/v1/order_intent', false, 'the same intent from another shopper'],
             [$session('session-a'), $session('session-b'), '/autofill/v1/delegation', false, 'another shopper\'s mint'],
             [$paths['capture'], $paths['cancel'], null, false, 'two operations on one Two order'],
         ];
@@ -1320,9 +1331,9 @@ final class OrderPostprocessingSpec
             ['GET', null, null, 'a read carries none'],
             ['GET', 'confirm_two-1', null, 'nor does a read a caller passed one'],
             ['POST', 'confirm_two-1', 'confirm_two-1', 'the caller\'s key is sent as given'],
-            ['POST', null, 'post_v1_example_' . self::keyHash($payload), 'a write with no key of its own is named after its endpoint and payload'],
-            ['PUT', null, 'put_v1_example_' . self::keyHash($payload), 'a PUT likewise'],
-            ['DELETE', null, 'delete_v1_example_' . self::keyHash($payload), 'a DELETE likewise'],
+            ['POST', null, null, 'a write its caller built no key for is sent with none, never a fallback'],
+            ['PUT', '', null, 'nor with an empty one'],
+            ['DELETE', 'cancel_two-1', 'cancel_two-1', 'a DELETE carries its caller\'s key too'],
         ];
         foreach ($cases as [$method, $key, $expected, $description]) {
             self::reset();
@@ -1348,6 +1359,31 @@ final class OrderPostprocessingSpec
             WC_Twoinc_Helper::idempotency_key('refund', [str_repeat('a', 120) . 'b']) !== WC_Twoinc_Helper::idempotency_key('refund', [str_repeat('a', 120) . 'c']),
             'two long keys differing only past the cut stay apart'
         );
+    }
+
+    /** make_request() builds no fallback, so a write call site that passes no key would go unkeyed. */
+    private static function testEveryWriteCallSitePassesItsOwnKey(): void
+    {
+        $offenders = [];
+        foreach (glob(WC_TWOINC_PLUGIN_PATH . 'class/*.php') as $file) {
+            $source = (string) file_get_contents($file);
+            preg_match_all('/->make_request\(/', $source, $calls, PREG_OFFSET_CAPTURE);
+            foreach ($calls[0] as [, $offset]) {
+                // The call's own arguments, up to its matching parenthesis.
+                $depth = 0;
+                for ($end = $offset + strlen('->make_request'); $end < strlen($source); $end++) {
+                    $depth += ['(' => 1, ')' => -1][$source[$end]] ?? 0;
+                    if ($depth === 0) {
+                        break;
+                    }
+                }
+                $call = substr($source, $offset, $end - $offset + 1);
+                if (strpos($call, "'GET'") === false && stripos($call, 'idempotency_key') === false && strpos($call, '$key') === false) {
+                    $offenders[] = basename($file) . ':' . (substr_count($source, "\n", 0, $offset) + 1);
+                }
+            }
+        }
+        TinyAssert::same([], $offenders, 'writes sent without a key of their own');
     }
 
     private static function testEveryOrderSendGoesThroughTheChokeFunction(): void

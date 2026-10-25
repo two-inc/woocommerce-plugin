@@ -146,8 +146,9 @@ Key Conventions
 - Every request to Two goes through `make_request()`, and every write (anything
   but a GET) sends `Idempotency-Key`. An order request gets its key in
   `make_order_request()`; any other write passes one built with
-  `WC_Twoinc_Helper::idempotency_key()`. A write with none is named after its
-  method, endpoint and payload, which is a fallback, not a key to rely on.
+  `WC_Twoinc_Helper::idempotency_key()`. `make_request()` builds no fallback:
+  a write passed no key goes without one, and a spec fails on any write call
+  site that passes none.
 - A key names one logical operation: the same on every retry, different for every
   other operation. Build it from durable ids (the Two order id, a WooCommerce
   order or refund id, the order reference a checkout attempt mints) plus a hash of

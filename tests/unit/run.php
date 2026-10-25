@@ -14927,13 +14927,13 @@ final class BrandConfigSpec
             ['name' => 'X-Blank', 'value' => '   ', 'send_from_browser' => 'yes'],
             ['name' => 'X-Tenant', 'value' => 'tenant-7', 'send_from_browser' => 'yes'],
         ]]);
-        $gateway->make_request('/v1/order_intent', ['a' => 1]);
+        $gateway->make_request('/v1/order_intent', ['a' => 1], 'POST', [], null, 30, 'intent_own');
         $headers = self::sentHeaders();
 
         TinyAssert::same('real-key', $headers['X-API-Key'] ?? null, 'a stored row must not clobber the API key');
         TinyAssert::same('application/json; charset=utf-8', $headers['Content-Type'] ?? null);
         TinyAssert::same('tenant-7', $headers['X-Tenant'] ?? null, 'the usable row still travels');
-        TinyAssert::same(WC_Twoinc_Helper::idempotency_key('post_v1_order_intent', [], ['a' => 1]), $headers['Idempotency-Key'] ?? null, 'a stored row must not replace the Idempotency-Key');
+        TinyAssert::same('intent_own', $headers['Idempotency-Key'] ?? null, 'a stored row must not replace the Idempotency-Key');
         $dropped_names = [
             'idempotency-key', 'X-IDEMPOTENCY-KEY', 'X Bad Name', 'Host', 'Content-Length', 'X-Forwarded-For', 'x-real-ip', 'X-Unicode', 'X-Blank',
             'Two-Delegated-Authority-Token', 'Connection', 'keep-alive', 'PROXY-AUTHENTICATE',
