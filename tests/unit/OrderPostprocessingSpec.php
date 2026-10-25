@@ -48,6 +48,7 @@ final class OrderPostprocessingSpec
             'testEveryWriteSendsItsIdempotencyKey',
             'testARetryReusesItsKeyAndAnotherOperationDoesNot',
             'testAnEditSequenceNeverRepeatsAKey',
+            'testAnEditWithAnUnknownOutcomeNeverHidesTheNextOne',
             'testEveryOrderWriteLogsItsKeyWhateverTheOutcome',
             'testOnlyWritesCarryAKeyAndEveryWriteDoes',
             'testEveryWriteCallSitePassesItsOwnKey',
@@ -1287,6 +1288,53 @@ final class OrderPostprocessingSpec
         TinyAssert::same(json_encode($sent[0]['payload']), json_encode($sent[2]['payload']), 'the first and third edits send the same payload');
         TinyAssert::same($keys[3], $GLOBALS['__twoinc_test_wc_orders'][42]->meta[WC_Twoinc_Brand::meta_key(WC_Twoinc::LAST_EDIT_KEY_META)] ?? null, 'the last accepted edit\'s key is stored on the order');
         TinyAssert::same('edit_two-1_' . self::keyHash([$keys[0], $sent[1]['payload']]), $keys[1], 'an edit chains on the key of the edit accepted before it');
+    }
+
+    /**
+     * TWO-26662: Two may have applied an edit that got no answer or a 5xx, so the stored hash is cleared and the
+     * next edit is sent even when it goes back to what was stored. A refused edit keeps the stored hash.
+     */
+    private static function testAnEditWithAnUnknownOutcomeNeverHidesTheNextOne(): void
+    {
+        $update = new ReflectionMethod(WC_Twoinc::class, 'process_update_twoinc_order');
+        $update->setAccessible(true);
+        $meta = static function (string $po): array {
+            return [
+                'order_reference' => 'ref', 'company_id' => '912345678', 'department' => '', 'project' => '',
+                'purchase_order_number' => $po, 'invoice_emails' => [], 'payment_reference_message' => '',
+                'payment_reference_ocr' => '', 'payment_reference' => '', 'payment_reference_type' => '', 'vendor_name' => '',
+            ];
+        };
+        $hash_key = WC_Twoinc_Brand::meta_key('req_body_hash');
+        // The order stands at A, as last accepted, and is edited to B. [answer to the edit to B (0: none), next edit, edits sent, hash stored after B ('' for none), description]
+        $cases = [
+            [0, 'A', 2, '', 'a timed-out edit followed by an edit back to A is sent'],
+            [503, 'A', 2, '', 'an edit answered with a 5xx followed by an edit back to A is sent'],
+            [0, 'B', 2, '', 'a timed-out edit made again is sent again'],
+            [200, 'B', 1, 'B', 'an accepted edit followed by an identical edit is still skipped'],
+            [400, 'A', 1, 'A', 'a refused edit followed by an edit back to A is skipped, as before'],
+            [400, 'B', 2, 'A', 'a refused edit made again is sent again, as before'],
+        ];
+        foreach ($cases as [$status, $next, $sends, $stored, $description]) {
+            self::reset();
+            $gateway = self::recordingGateway();
+            $order = self::exampleOrder();
+            $order->meta[WC_Twoinc_Brand::meta_key('order_state')] = 'VERIFIED';
+            $order->meta[$hash_key] = WC_Twoinc_Helper::hash_order_pair($order, $meta('A'))[0];
+            $gateway->statuses = [$status];
+            $update->invoke($gateway, $order, $meta('B'));
+            $after = $order->meta[$hash_key] ?? null;
+            $update->invoke($gateway, $order, $meta($next));
+            $sent = array_values(array_filter($gateway->sent, static function ($s) {
+                return $s['endpoint'] === '/v1/order/two-1';
+            }));
+            TinyAssert::same($stored === '' ? '' : WC_Twoinc_Helper::hash_order_pair($order, $meta($stored))[0], $after, "$description: hash stored after the edit to B");
+            TinyAssert::same($sends, count($sent), "$description: edits sent");
+            if ($sends === 2) {
+                // Nothing was accepted in between, so only the same edit again repeats its key.
+                TinyAssert::same($next === 'B', $sent[0]['idempotency_key'] === $sent[1]['idempotency_key'], "$description: {$sent[0]['idempotency_key']} against {$sent[1]['idempotency_key']}");
+            }
+        }
     }
 
     private static function testEveryOrderWriteLogsItsKeyWhateverTheOutcome(): void
