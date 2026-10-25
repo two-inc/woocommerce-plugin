@@ -867,7 +867,7 @@ final class TaxCodeSpec
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->calls[] = $endpoint;
                 return array_shift($this->responses) ?? ['response' => ['code' => 500], 'body' => ''];

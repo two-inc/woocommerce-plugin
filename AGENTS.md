@@ -141,6 +141,26 @@ Key Conventions
 9. Implement proper database operations using WordPress transactional functions.
 10. Use WordPress's WP_Cron API for scheduling tasks.
 
+## Every write to Two carries an Idempotency-Key
+
+- Every request to Two goes through `make_request()`, and every write (anything
+  but a GET) sends `Idempotency-Key`. An order request gets its key in
+  `make_order_request()`; any other write passes one built with
+  `WC_Twoinc_Helper::idempotency_key()`. `make_request()` builds no fallback:
+  a write passed no key goes without one, and a spec fails on any write call
+  site that passes none.
+- A key names one logical operation: the same on every retry, different for every
+  other operation. Build it from durable ids (the Two order id, a WooCommerce
+  order or refund id, the order reference a checkout attempt mints) plus a hash of
+  the payload only where the operation has no record of its own. Never from the
+  time, a random value or an in-memory counter. An edit chains on the key of the
+  last edit Two accepted, stored on the order, so a sequence never repeats a key.
+- A key is never shared between buyers: when the id that tells them apart (the
+  session) is missing, refuse the write rather than send a shared key.
+- Every order write logs its key and outcome whatever the debug setting.
+- A new write adds a row to the key specs in `tests/unit/OrderPostprocessingSpec.php`
+  and to the README's key table.
+
 ## The plugin package contains plugin files only
 
 Two exclusion lists decide what merchants receive, and both must agree:

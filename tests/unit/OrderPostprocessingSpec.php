@@ -45,6 +45,12 @@ final class OrderPostprocessingSpec
             'testAChangedPayloadKeepsWhatTheShopDeclaredBeyondItsLines',
             'testTheOlderFiltersOutputIsSentAsBefore',
             'testEveryRequestTypeFiresOnce',
+            'testEveryWriteSendsItsIdempotencyKey',
+            'testARetryReusesItsKeyAndAnotherOperationDoesNot',
+            'testAnEditSequenceNeverRepeatsAKey',
+            'testEveryOrderWriteLogsItsKeyWhateverTheOutcome',
+            'testOnlyWritesCarryAKeyAndEveryWriteDoes',
+            'testEveryWriteCallSitePassesItsOwnKey',
             'testEveryOrderSendGoesThroughTheChokeFunction',
             'testIntentIsBuiltServerSideAsTheBrowserUsedToSendIt',
             'testAnIntentThatCannotBeSentIsAnErrorNotADecline',
@@ -280,6 +286,13 @@ final class OrderPostprocessingSpec
             {
                 return 29.0;
             }
+
+            public $refund_id = 99;
+
+            public function get_id()
+            {
+                return $this->refund_id;
+            }
         };
     }
 
@@ -311,8 +324,14 @@ final class OrderPostprocessingSpec
 
             public $tax_code_map = [];
 
+            /** @var array options read before the defaults below */
+            public $options = [];
+
             public function get_option($key, $empty_value = null)
             {
+                if (array_key_exists($key, $this->options)) {
+                    return $this->options[$key];
+                }
                 if ($key === 'tax_code_map') {
                     return $this->tax_code_map;
                 }
@@ -328,7 +347,7 @@ final class OrderPostprocessingSpec
             public $reads = [];
             public $two_order = ['id' => 'two-1', 'line_items' => [], 'refunds' => []];
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 if ($method === 'GET') {
                     $this->reads[] = $endpoint;
@@ -336,12 +355,29 @@ final class OrderPostprocessingSpec
                         ? ['response' => ['code' => 404], 'body' => '{}']
                         : ['response' => ['code' => 200], 'body' => json_encode($this->two_order)];
                 }
-                $this->sent[] = ['endpoint' => $endpoint, 'method' => $method, 'payload' => $payload];
-                return [
-                    'response' => ['code' => $this->status],
+                $status = array_shift($this->statuses) ?? $this->status;
+                $reply = $status === 0 ? new WP_Error('http_request_failed', 'Operation timed out') : [
+                    'response' => ['code' => $status],
                     'body' => $this->body ?? '{"id":"two-1","status":"APPROVED","state":"VERIFIED","approved":true,"amount":"-29.00","gross_amount":"150.00","payment_url":"https://pay.example/1","merchant_urls":{"merchant_confirmation_url":"https://shop.example/thanks"}}',
+                    'headers' => [],
                 ];
+                $sent = ['endpoint' => $endpoint, 'method' => $method, 'payload' => $payload, 'idempotency_key' => $idempotency_key];
+                if ($this->wire) {
+                    $GLOBALS['__twoinc_test_http_calls'] = [];
+                    $GLOBALS['__twoinc_test_http_response'] = $reply;
+                    parent::make_request($endpoint, $payload, $method, $params, $api_key_override, $timeout, $idempotency_key);
+                    unset($GLOBALS['__twoinc_test_http_response']);
+                    $sent['headers'] = $GLOBALS['__twoinc_test_http_calls'][0]['args']['headers'];
+                }
+                $this->sent[] = $sent;
+                return $reply;
             }
+
+            /** @var bool whether a write also goes through the real make_request(), recording the headers sent */
+            public $wire = false;
+
+            /** @var int[] statuses the next writes answer with, in turn, before $status; 0 is no response */
+            public $statuses = [];
         };
     }
 
@@ -971,15 +1007,13 @@ final class OrderPostprocessingSpec
         }
     }
 
-    private static function testEveryRequestTypeFiresOnce(): void
+    /**
+     * Drives each order request through the code path that sends it.
+     *
+     * @return array [driver(gateway, order), request type, trigger, endpoint, description]
+     */
+    private static function orderRequestPaths(): array
     {
-        $run = static function (callable $drive) {
-            $gateway = self::recordingGateway();
-            $order = self::exampleOrder();
-            $order->refunds = [self::shippingRefund()];
-            $drive($gateway, $order);
-            return $gateway->sent;
-        };
         $call = static function (string $method, ...$args) {
             return static function ($gateway, $order) use ($method, $args) {
                 $reflection = new ReflectionMethod(WC_Twoinc::class, $method);
@@ -999,8 +1033,9 @@ final class OrderPostprocessingSpec
             'payment_reference_ocr' => '', 'payment_reference' => '', 'payment_reference_type' => '', 'vendor_name' => '',
         ];
         // [driver, expected request type, trigger, endpoint, description]
-        $paths = [
+        return [
             [static function ($gateway) {
+                WC()->session = new StubSession();
                 WC()->cart = new StubIntentCart();
                 self::driveIntent($gateway, ['intent' => json_encode(['buyer' => ['company' => ['country_prefix' => 'NO']]])]);
             }, 'order_intent', 'checkout', '/v1/order_intent', 'intent'],
@@ -1025,6 +1060,18 @@ final class OrderPostprocessingSpec
                 $gateway->on_order_cancelled(42);
             }, 'cancel', 'status_change', '/v1/order/two-1/cancel', 'cancel'],
         ];
+    }
+
+    private static function testEveryRequestTypeFiresOnce(): void
+    {
+        $run = static function (callable $drive) {
+            $gateway = self::recordingGateway();
+            $order = self::exampleOrder();
+            $order->refunds = [self::shippingRefund()];
+            $drive($gateway, $order);
+            return $gateway->sent;
+        };
+        $paths = self::orderRequestPaths();
         foreach ($paths as [$drive, $type, $trigger, $endpoint, $description]) {
             self::reset();
             self::arm('record');
@@ -1043,6 +1090,300 @@ final class OrderPostprocessingSpec
             $bodyless = in_array($type, ['order_confirm', 'cancel'], true);
             TinyAssert::same($bodyless, in_array($endpoint, array_column($sent, 'endpoint'), true), "$description: sent or held back wrongly when its subscriber threw");
         }
+    }
+
+    /** The Idempotency-Key a hash-suffixed key ends in, computed here independently of the plugin's helper. */
+    private static function keyHash($value): string
+    {
+        return substr(hash('sha256', is_string($value) ? $value : json_encode($value)), 0, 16);
+    }
+
+    /** Write drivers beyond the order requests: the surcharge quote, the merchant fee rates and the token mints. */
+    private static function otherWriteDrivers(): array
+    {
+        return [
+            'fee quote' => static function ($gateway) {
+                $gateway->options = ['surcharge_type' => 'percentage', 'surcharge_grid' => [30 => ['percentage' => 2.0]]];
+                WC_Twoinc_Payment_Terms::reset_fee_cache();
+                WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 150.0, 'NO');
+            },
+            'merchant rates' => static function ($gateway) {
+                WC_Twoinc_Payment_Terms::fetch_merchant_rates($gateway, [30, 60], 'NO');
+            },
+            'token mint' => static function ($gateway) {
+                WC()->session = new StubSession();
+                WC_Twoinc_Sole_Trader::mint_tokens($gateway);
+            },
+        ];
+    }
+
+    /** Runs $drivers in turn against one gateway and order, returning the writes sent to $endpoint (null: every write). */
+    private static function writesTo(?string $endpoint, callable ...$drivers): array
+    {
+        $gateway = self::recordingGateway();
+        $gateway->wire = true;
+        $order = self::exampleOrder();
+        $order->refunds = [self::shippingRefund()];
+        foreach ($drivers as $drive) {
+            $drive($gateway, $order);
+        }
+        return array_values(array_filter($gateway->sent, static function ($sent) use ($endpoint) {
+            return $endpoint === null || $sent['endpoint'] === $endpoint;
+        }));
+    }
+
+    private static function testEveryWriteSendsItsIdempotencyKey(): void
+    {
+        $paths = [];
+        foreach (self::orderRequestPaths() as [$drive, , , $endpoint, $description]) {
+            $paths[$description] = [$drive, $endpoint];
+        }
+        $other = self::otherWriteDrivers();
+        $reference = WC_Twoinc_Brand::meta_key('order_reference');
+        // [driver, endpoint, expected key given (sent payload, order), description]
+        $cases = [
+            [...$paths['intent'], fn ($p) => 'intent_' . self::keyHash(['session-a', $p]), 'order intent: the shopper\'s session and a hash of what it sends'],
+            // The fixture's 'ref' is replaced by the reference the attempt mints.
+            [...$paths['create'], fn ($p, $o) => $o->meta[$reference] === 'ref' ? 'no fresh reference' : 'create_42_' . self::keyHash($o->meta[$reference]), 'order create: the checkout attempt\'s order reference, hashed'],
+            [...$paths['update'], fn ($p) => 'edit_two-1_' . self::keyHash(['create_42_' . self::keyHash('ref'), $p]), 'order edit: the Two order, chained on the create key before any edit is accepted'],
+            [...$paths['confirm'], fn () => 'confirm_two-1', 'confirm'],
+            [...$paths['capture'], fn () => 'fulfil_two-1', 'whole-order fulfil'],
+            [...$paths['refund'], fn () => 'refund_two-1_99', 'refund: the Two order and the refund record'],
+            [...$paths['cancel'], fn () => 'cancel_two-1', 'cancel'],
+            [$other['fee quote'], '/v1/pricing/order/fee', fn ($p) => 'fee_quote_' . self::keyHash($p), 'surcharge fee quote'],
+            [$other['merchant rates'], '/pricing/v1/merchant/rates', fn ($p) => 'merchant_rates_' . self::keyHash($p), 'merchant fee rates'],
+            [$other['token mint'], '/registry/v1/delegation', fn ($p) => 'registry_delegation_' . self::keyHash(['session-a', $p]), 'sole-trader registry token: the shopper\'s session and the payload'],
+            [$other['token mint'], '/autofill/v1/delegation', fn ($p) => 'autofill_delegation_' . self::keyHash(['session-a', $p]), 'sole-trader autofill token: the shopper\'s session and the payload'],
+        ];
+        foreach ($cases as [$drive, $endpoint, $expected, $description]) {
+            self::reset();
+            $GLOBALS['__twoinc_test_session_customer'] = 'session-a';
+            $sent = self::writesTo($endpoint, $drive);
+            TinyAssert::same(1, count($sent), "$description: sent once");
+            $key = $expected($sent[0]['payload'], $GLOBALS['__twoinc_test_wc_orders'][42]);
+            TinyAssert::same($key, $sent[0]['idempotency_key'], "$description: key");
+            TinyAssert::same($key, $sent[0]['headers']['Idempotency-Key'] ?? null, "$description: header");
+            TinyAssert::true(strlen($key) <= 100 && preg_match('/^[a-z0-9_-]+$/D', $key) === 1, "$description: not a lowercase ASCII key of at most 100 characters: $key");
+        }
+        // With no session id nothing tells buyers apart, so no mint is sent under a key they would share.
+        foreach (['/registry/v1/delegation', '/autofill/v1/delegation'] as $endpoint) {
+            self::reset();
+            $GLOBALS['__twoinc_test_session_customer'] = '';
+            TinyAssert::same([], self::writesTo($endpoint, $other['token mint']), "$endpoint: minted with no shopper session");
+        }
+        // An intent with no session is still asked, with no key rather than one buyers would share.
+        self::reset();
+        $GLOBALS['__twoinc_test_session_customer'] = '';
+        $sent = self::writesTo('/v1/order_intent', $paths['intent'][0]);
+        TinyAssert::same(1, count($sent), 'an intent with no shopper session is still sent');
+        TinyAssert::same([null, false], [$sent[0]['idempotency_key'], array_key_exists('Idempotency-Key', $sent[0]['headers'])], 'an intent with no shopper session carries no key');
+        unset($GLOBALS['__twoinc_test_session_customer']);
+    }
+
+    private static function testARetryReusesItsKeyAndAnotherOperationDoesNot(): void
+    {
+        $paths = [];
+        foreach (self::orderRequestPaths() as [$drive, , , , $description]) {
+            $paths[$description] = $drive;
+        }
+        $other = self::otherWriteDrivers();
+        $create = static function (string $company) {
+            return static function ($gateway) use ($company) {
+                WC()->session = new StubSession();
+                WC()->cart = new StubCart(150.0, 21.0, false);
+                $_POST = ['company_id' => $company, 'company_name' => 'Buyer AS'];
+                $gateway->process_payment(42);
+            };
+        };
+        $resend = static function (string $type, string $endpoint, string $method, array $payload = []) {
+            return static function ($gateway, $order) use ($type, $endpoint, $method, $payload) {
+                $gateway->make_order_request($type, 'test', $endpoint, $payload, $method, $order);
+            };
+        };
+        $refund = static function (int $id) {
+            return static function ($gateway, $order) use ($id) {
+                $refund = self::shippingRefund();
+                $refund->refund_id = $id;
+                $gateway->make_order_request('refund', 'order_refund', '/v1/order/two-1/refund', ['amount' => '29.00'], 'POST', $order, $refund);
+            };
+        };
+        $session = static function (string $id) use ($other) {
+            return static function ($gateway) use ($id, $other) {
+                $GLOBALS['__twoinc_test_session_customer'] = $id;
+                $other['token mint']($gateway);
+            };
+        };
+        $intent = static function (string $country, string $shopper = 'session-a') {
+            return static function ($gateway) use ($country, $shopper) {
+                $GLOBALS['__twoinc_test_session_customer'] = $shopper;
+                WC()->session = new StubSession();
+                WC()->cart = new StubIntentCart();
+                self::driveIntent($gateway, ['intent' => json_encode(['buyer' => ['company' => ['country_prefix' => $country, 'organization_number' => $country . '1']]])]);
+            };
+        };
+        // The first send gets no answer, so nothing is accepted or recorded.
+        $unanswered = static function (callable $drive) {
+            return static function ($gateway, $order) use ($drive) {
+                $gateway->statuses = [0];
+                $drive($gateway, $order);
+            };
+        };
+        // The same event again, as when the first send got no answer and so recorded no new state.
+        $retry = static function (callable $drive) {
+            return static function ($gateway, $order) use ($drive) {
+                unset($order->meta[WC_Twoinc_Brand::meta_key('order_state')], $order->meta[WC_Twoinc_Brand::meta_key('req_body_hash')]);
+                $drive($gateway, $order);
+            };
+        };
+        // [first, second, endpoint (null: every write), whether they share a key, description]
+        $cases = [
+            [$paths['capture'], $retry($paths['capture']), '/v1/order/two-1/fulfillments', true, 'a completion event retried resends the same fulfil'],
+            [$paths['cancel'], $retry($paths['cancel']), '/v1/order/two-1/cancel', true, 'a cancellation retried resends the same cancel'],
+            // One gateway answers one redirect, so the reload is the confirm sent again.
+            [$paths['confirm'], $resend('order_confirm', '/v1/order/two-1/confirm', 'POST'), '/v1/order/two-1/confirm', true, 'a reloaded confirmation redirect resends the same confirm'],
+            [$paths['refund'], $retry($paths['refund']), '/v1/order/two-1/refund', true, 'a retried refund of the same refund record'],
+            [$unanswered($paths['update']), $retry($paths['update']), '/v1/order/two-1', true, 'an edit retried after no answer, nothing accepted since'],
+            [$paths['update'], $retry($paths['update']), '/v1/order/two-1', false, 'the same edit again after Two accepted it chains on that edit'],
+            [$create('912345678'), $resend('order_create', '/v1/order', 'POST'), '/v1/order', true, 'a network retry of the same checkout attempt'],
+            [$intent('NO'), $intent('NO'), '/v1/order_intent', true, 'the same intent asked again'],
+            [$other['fee quote'], $other['fee quote'], '/v1/pricing/order/fee', true, 'the same fee quote asked again'],
+            [$session('session-a'), $session('session-a'), '/autofill/v1/delegation', true, 'a mint retried in the same session'],
+            [$create('912345678'), $create('987654321'), '/v1/order', false, 'a new checkout attempt with another buyer company'],
+            [$create('912345678'), $create('912345678'), '/v1/order', false, 'a new checkout attempt with the same cart and company'],
+            [$refund(99), $refund(100), '/v1/order/two-1/refund', false, 'a second refund record on the same order'],
+            [$paths['update'], $resend('order_update', '/v1/order/two-1', 'PUT', ['purchase_order_number' => 'PO-2']), '/v1/order/two-1', false, 'an edit that changes the order'],
+            [$intent('NO'), $intent('SE'), '/v1/order_intent', false, 'an intent for another buyer'],
+            [$intent('NO'), $intent('NO', 'session-b'), '/v1/order_intent', false, 'the same intent from another shopper'],
+            [$session('session-a'), $session('session-b'), '/autofill/v1/delegation', false, 'another shopper\'s mint'],
+            [$paths['capture'], $paths['cancel'], null, false, 'two operations on one Two order'],
+        ];
+        foreach ($cases as [$first, $second, $endpoint, $same, $description]) {
+            self::reset();
+            $GLOBALS['__twoinc_test_session_customer'] = 'session-a';
+            $sent = self::writesTo($endpoint, $first, $second);
+            TinyAssert::same(2, count($sent), "$description: both sent");
+            TinyAssert::same($same, $sent[0]['headers']['Idempotency-Key'] === $sent[1]['headers']['Idempotency-Key'], "$description: {$sent[0]['headers']['Idempotency-Key']} against {$sent[1]['headers']['Idempotency-Key']}");
+        }
+        unset($GLOBALS['__twoinc_test_session_customer']);
+    }
+
+    private static function testAnEditSequenceNeverRepeatsAKey(): void
+    {
+        $update = new ReflectionMethod(WC_Twoinc::class, 'update_twoinc_order');
+        $update->setAccessible(true);
+        $edit = static function (string $po) use ($update) {
+            return static function ($gateway, $order) use ($update, $po) {
+                $update->invoke($gateway, $order, [
+                    'order_reference' => 'ref', 'company_id' => '912345678', 'department' => '', 'project' => '',
+                    'purchase_order_number' => $po, 'invoice_emails' => [], 'payment_reference_message' => '',
+                    'payment_reference_ocr' => '', 'payment_reference' => '', 'payment_reference_type' => '', 'vendor_name' => '',
+                ]);
+            };
+        };
+        self::reset();
+        $sent = self::writesTo('/v1/order/two-1', $edit('A'), $edit('B'), $edit('A'), $edit('B'));
+        $keys = array_column(array_column($sent, 'headers'), 'Idempotency-Key');
+        TinyAssert::same(4, count(array_unique($keys)), 'A, B, A, B must send four keys: ' . json_encode($keys));
+        TinyAssert::same(json_encode($sent[0]['payload']), json_encode($sent[2]['payload']), 'the first and third edits send the same payload');
+        TinyAssert::same($keys[3], $GLOBALS['__twoinc_test_wc_orders'][42]->meta[WC_Twoinc_Brand::meta_key(WC_Twoinc::LAST_EDIT_KEY_META)] ?? null, 'the last accepted edit\'s key is stored on the order');
+        TinyAssert::same('edit_two-1_' . self::keyHash([$keys[0], $sent[1]['payload']]), $keys[1], 'an edit chains on the key of the edit accepted before it');
+    }
+
+    private static function testEveryOrderWriteLogsItsKeyWhateverTheOutcome(): void
+    {
+        $paths = [];
+        foreach (self::orderRequestPaths() as [$drive, $type, , $endpoint, $description]) {
+            $paths[$description] = [$drive, $type, $endpoint];
+        }
+        // [status (0: no response), log level, what the line reports, description]
+        $outcomes = [
+            [200, 'info', 'HTTP 200', 'accepted'],
+            [400, 'error', 'HTTP 400', 'refused'],
+            [0, 'error', 'no response (Operation timed out)', 'timed out'],
+        ];
+        foreach (['create', 'update', 'confirm', 'capture', 'cancel', 'refund'] as $path) {
+            [$drive, $type, $endpoint] = $paths[$path];
+            foreach ($outcomes as [$status, $level, $reported, $outcome]) {
+                self::reset();
+                $gateway = self::recordingGateway();
+                $gateway->statuses = [$status];
+                $order = self::exampleOrder();
+                $order->refunds = [self::shippingRefund()];
+                $drive($gateway, $order);
+                $key = $gateway->sent[0]['idempotency_key'] ?? '';
+                $lines = array_values(array_filter($GLOBALS['__twoinc_test_logs'], static function ($log) use ($key) {
+                    return $key !== '' && strpos($log['message'], "Idempotency-Key $key") !== false;
+                }));
+                TinyAssert::same(1, count($lines), "$path $outcome: one log line names the key, debug logging off: " . json_encode($GLOBALS['__twoinc_test_logs']));
+                TinyAssert::same($level, $lines[0]['level'], "$path $outcome: level");
+                TinyAssert::true(strpos($lines[0]['message'], $type) === 0 && strpos($lines[0]['message'], $status === 400 ? 'HTTP 400' : $reported) !== false, "$path $outcome: names the request and its outcome: {$lines[0]['message']}");
+            }
+        }
+    }
+
+    private static function testOnlyWritesCarryAKeyAndEveryWriteDoes(): void
+    {
+        // The plugin's own make_request(), not the recording override.
+        $send = new ReflectionMethod(WC_Twoinc::class, 'make_request');
+        $payload = ['a' => 1];
+        // [method, the caller's key, header sent, description]
+        $cases = [
+            ['GET', null, null, 'a read carries none'],
+            ['GET', 'confirm_two-1', null, 'nor does a read a caller passed one'],
+            ['POST', 'confirm_two-1', 'confirm_two-1', 'the caller\'s key is sent as given'],
+            ['POST', null, null, 'a write its caller built no key for is sent with none, never a fallback'],
+            ['PUT', '', null, 'nor with an empty one'],
+            ['DELETE', 'cancel_two-1', 'cancel_two-1', 'a DELETE carries its caller\'s key too'],
+        ];
+        foreach ($cases as [$method, $key, $expected, $description]) {
+            self::reset();
+            $before = count($GLOBALS['__twoinc_test_http_calls'] ?? []);
+            $send->invoke(self::recordingGateway(), '/v1/example', $payload, $method, [], null, 30, $key);
+            $calls = array_slice($GLOBALS['__twoinc_test_http_calls'] ?? [], $before);
+            TinyAssert::same(1, count($calls), "$description: one request");
+            TinyAssert::same($expected, $calls[0]['args']['headers']['Idempotency-Key'] ?? null, $description);
+        }
+
+        $long = 'refund_' . str_repeat('a', 120);
+        // [operation, ids, hashed, key, description]
+        $keys = [
+            ['confirm', ['two-1'], null, 'confirm_two-1', 'the operation and its ids'],
+            ['Edit', ['Two-1 X'], null, 'edit_two-1-x', 'lowercased, anything outside a-z, 0-9, _ and - folded to a hyphen'],
+            ['edit', ['two-1'], $payload, 'edit_two-1_' . self::keyHash($payload), 'a hashed payload goes last'],
+            ['refund', [str_repeat('a', 120)], null, substr($long, 0, 83) . '_' . self::keyHash($long), 'over 100 characters, the cut is made unique by a hash of the whole key'],
+        ];
+        foreach ($keys as [$operation, $ids, $hashed, $expected, $description]) {
+            TinyAssert::same($expected, WC_Twoinc_Helper::idempotency_key($operation, $ids, $hashed), $description);
+        }
+        TinyAssert::true(
+            WC_Twoinc_Helper::idempotency_key('refund', [str_repeat('a', 120) . 'b']) !== WC_Twoinc_Helper::idempotency_key('refund', [str_repeat('a', 120) . 'c']),
+            'two long keys differing only past the cut stay apart'
+        );
+    }
+
+    /** make_request() builds no fallback, so a write call site that passes no key would go unkeyed. */
+    private static function testEveryWriteCallSitePassesItsOwnKey(): void
+    {
+        $offenders = [];
+        foreach (glob(WC_TWOINC_PLUGIN_PATH . 'class/*.php') as $file) {
+            $source = (string) file_get_contents($file);
+            preg_match_all('/->make_request\(/', $source, $calls, PREG_OFFSET_CAPTURE);
+            foreach ($calls[0] as [, $offset]) {
+                // The call's own arguments, up to its matching parenthesis.
+                $depth = 0;
+                for ($end = $offset + strlen('->make_request'); $end < strlen($source); $end++) {
+                    $depth += ['(' => 1, ')' => -1][$source[$end]] ?? 0;
+                    if ($depth === 0) {
+                        break;
+                    }
+                }
+                $call = substr($source, $offset, $end - $offset + 1);
+                if (strpos($call, "'GET'") === false && stripos($call, 'idempotency_key') === false && strpos($call, '$key') === false) {
+                    $offenders[] = basename($file) . ':' . (substr_count($source, "\n", 0, $offset) + 1);
+                }
+            }
+        }
+        TinyAssert::same([], $offenders, 'writes sent without a key of their own');
     }
 
     private static function testEveryOrderSendGoesThroughTheChokeFunction(): void
@@ -1264,7 +1605,7 @@ final class OrderPostprocessingSpec
                 return null;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->sent[] = ['endpoint' => $endpoint, 'payload' => $payload];
                 return ['response' => ['code' => 200], 'body' => '{"approved":true}'];

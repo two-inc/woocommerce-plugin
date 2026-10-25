@@ -462,7 +462,7 @@ class StubSession
 
     public function get_customer_id()
     {
-        return $GLOBALS['__twoinc_test_session_customer'] ?? '';
+        return $GLOBALS['__twoinc_test_session_customer'] ?? 't_stubshopper';
     }
 
     public function get($key, $default = null)

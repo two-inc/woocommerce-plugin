@@ -854,7 +854,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 'POST',
                 array(),
                 null,
-                self::SURCHARGE_PRICING_TIMEOUT
+                self::SURCHARGE_PRICING_TIMEOUT,
+                WC_Twoinc_Helper::idempotency_key('fee_quote', [], $request)
             );
 
             if (is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) < 200 || (int) wp_remote_retrieve_response_code($response) >= 300) {
@@ -941,14 +942,15 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return ['success' => false];
             }
 
-            $response = $gateway->make_request('/pricing/v1/merchant/rates', [
+            $rates_request = [
                 'buyer_country_code' => $buyer_country,
-                // No admin recourse-pricing config yet — hardcoded false.
+                // No admin recourse-pricing config yet: hardcoded false.
                 'recourse_pricing' => false,
                 // payout_schedule omitted: the server infers it from the
                 // merchant's payee accounts (matches Magento).
                 'net_terms' => $net_terms,
-            ], 'POST', array(), null, 10);
+            ];
+            $response = $gateway->make_request('/pricing/v1/merchant/rates', $rates_request, 'POST', array(), null, 10, WC_Twoinc_Helper::idempotency_key('merchant_rates', [], $rates_request));
 
             if (
                 is_wp_error($response)
