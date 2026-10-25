@@ -47,6 +47,8 @@ final class OrderPostprocessingSpec
             'testEveryRequestTypeFiresOnce',
             'testEveryWriteSendsItsIdempotencyKey',
             'testARetryReusesItsKeyAndAnotherOperationDoesNot',
+            'testAnEditSequenceNeverRepeatsAKey',
+            'testEveryOrderWriteLogsItsKeyWhateverTheOutcome',
             'testOnlyWritesCarryAKeyAndEveryWriteDoes',
             'testEveryOrderSendGoesThroughTheChokeFunction',
             'testIntentIsBuiltServerSideAsTheBrowserUsedToSendIt',
@@ -352,8 +354,9 @@ final class OrderPostprocessingSpec
                         ? ['response' => ['code' => 404], 'body' => '{}']
                         : ['response' => ['code' => 200], 'body' => json_encode($this->two_order)];
                 }
-                $reply = [
-                    'response' => ['code' => $this->status],
+                $status = array_shift($this->statuses) ?? $this->status;
+                $reply = $status === 0 ? new WP_Error('http_request_failed', 'Operation timed out') : [
+                    'response' => ['code' => $status],
                     'body' => $this->body ?? '{"id":"two-1","status":"APPROVED","state":"VERIFIED","approved":true,"amount":"-29.00","gross_amount":"150.00","payment_url":"https://pay.example/1","merchant_urls":{"merchant_confirmation_url":"https://shop.example/thanks"}}',
                     'headers' => [],
                 ];
@@ -371,6 +374,9 @@ final class OrderPostprocessingSpec
 
             /** @var bool whether a write also goes through the real make_request(), recording the headers sent */
             public $wire = false;
+
+            /** @var int[] statuses the next writes answer with, in turn, before $status; 0 is no response */
+            public $statuses = [];
         };
     }
 
@@ -1137,7 +1143,7 @@ final class OrderPostprocessingSpec
             [...$paths['intent'], fn ($p) => 'intent_' . self::keyHash($p), 'order intent: a hash of what it sends'],
             // The fixture's 'ref' is replaced by the reference the attempt mints.
             [...$paths['create'], fn ($p, $o) => $o->meta[$reference] === 'ref' ? 'no fresh reference' : 'create_42_' . self::keyHash($o->meta[$reference]), 'order create: the checkout attempt\'s order reference, hashed'],
-            [...$paths['update'], fn ($p) => 'edit_two-1_' . self::keyHash($p), 'order edit: the Two order and a hash of the edit'],
+            [...$paths['update'], fn ($p) => 'edit_two-1_' . self::keyHash(['create_42_' . self::keyHash('ref'), $p]), 'order edit: the Two order, chained on the create key before any edit is accepted'],
             [...$paths['confirm'], fn () => 'confirm_two-1', 'confirm'],
             [...$paths['capture'], fn () => 'fulfil_two-1', 'whole-order fulfil'],
             [...$paths['refund'], fn () => 'refund_two-1_99', 'refund: the Two order and the refund record'],
@@ -1156,6 +1162,12 @@ final class OrderPostprocessingSpec
             TinyAssert::same($key, $sent[0]['idempotency_key'], "$description: key");
             TinyAssert::same($key, $sent[0]['headers']['Idempotency-Key'] ?? null, "$description: header");
             TinyAssert::true(strlen($key) <= 100 && preg_match('/^[a-z0-9_-]+$/D', $key) === 1, "$description: not a lowercase ASCII key of at most 100 characters: $key");
+        }
+        // With no session id nothing tells buyers apart, so no mint is sent under a key they would share.
+        foreach (['/registry/v1/delegation', '/autofill/v1/delegation'] as $endpoint) {
+            self::reset();
+            $GLOBALS['__twoinc_test_session_customer'] = '';
+            TinyAssert::same([], self::writesTo($endpoint, $other['token mint']), "$endpoint: minted with no shopper session");
         }
         unset($GLOBALS['__twoinc_test_session_customer']);
     }
@@ -1199,6 +1211,13 @@ final class OrderPostprocessingSpec
                 self::driveIntent($gateway, ['intent' => json_encode(['buyer' => ['company' => ['country_prefix' => $country, 'organization_number' => $country . '1']]])]);
             };
         };
+        // The first send gets no answer, so nothing is accepted or recorded.
+        $unanswered = static function (callable $drive) {
+            return static function ($gateway, $order) use ($drive) {
+                $gateway->statuses = [0];
+                $drive($gateway, $order);
+            };
+        };
         // The same event again, as when the first send got no answer and so recorded no new state.
         $retry = static function (callable $drive) {
             return static function ($gateway, $order) use ($drive) {
@@ -1213,7 +1232,8 @@ final class OrderPostprocessingSpec
             // One gateway answers one redirect, so the reload is the confirm sent again.
             [$paths['confirm'], $resend('order_confirm', '/v1/order/two-1/confirm', 'POST'), '/v1/order/two-1/confirm', true, 'a reloaded confirmation redirect resends the same confirm'],
             [$paths['refund'], $retry($paths['refund']), '/v1/order/two-1/refund', true, 'a retried refund of the same refund record'],
-            [$paths['update'], $retry($paths['update']), '/v1/order/two-1', true, 'an edit retried with nothing changed'],
+            [$unanswered($paths['update']), $retry($paths['update']), '/v1/order/two-1', true, 'an edit retried after no answer, nothing accepted since'],
+            [$paths['update'], $retry($paths['update']), '/v1/order/two-1', false, 'the same edit again after Two accepted it chains on that edit'],
             [$create('912345678'), $resend('order_create', '/v1/order', 'POST'), '/v1/order', true, 'a network retry of the same checkout attempt'],
             [$intent('NO'), $intent('NO'), '/v1/order_intent', true, 'the same intent asked again'],
             [$other['fee quote'], $other['fee quote'], '/v1/pricing/order/fee', true, 'the same fee quote asked again'],
@@ -1234,6 +1254,60 @@ final class OrderPostprocessingSpec
             TinyAssert::same($same, $sent[0]['headers']['Idempotency-Key'] === $sent[1]['headers']['Idempotency-Key'], "$description: {$sent[0]['headers']['Idempotency-Key']} against {$sent[1]['headers']['Idempotency-Key']}");
         }
         unset($GLOBALS['__twoinc_test_session_customer']);
+    }
+
+    private static function testAnEditSequenceNeverRepeatsAKey(): void
+    {
+        $update = new ReflectionMethod(WC_Twoinc::class, 'update_twoinc_order');
+        $update->setAccessible(true);
+        $edit = static function (string $po) use ($update) {
+            return static function ($gateway, $order) use ($update, $po) {
+                $update->invoke($gateway, $order, [
+                    'order_reference' => 'ref', 'company_id' => '912345678', 'department' => '', 'project' => '',
+                    'purchase_order_number' => $po, 'invoice_emails' => [], 'payment_reference_message' => '',
+                    'payment_reference_ocr' => '', 'payment_reference' => '', 'payment_reference_type' => '', 'vendor_name' => '',
+                ]);
+            };
+        };
+        self::reset();
+        $sent = self::writesTo('/v1/order/two-1', $edit('A'), $edit('B'), $edit('A'), $edit('B'));
+        $keys = array_column(array_column($sent, 'headers'), 'Idempotency-Key');
+        TinyAssert::same(4, count(array_unique($keys)), 'A, B, A, B must send four keys: ' . json_encode($keys));
+        TinyAssert::same(json_encode($sent[0]['payload']), json_encode($sent[2]['payload']), 'the first and third edits send the same payload');
+        TinyAssert::same($keys[3], $GLOBALS['__twoinc_test_wc_orders'][42]->meta[WC_Twoinc_Brand::meta_key(WC_Twoinc::LAST_EDIT_KEY_META)] ?? null, 'the last accepted edit\'s key is stored on the order');
+        TinyAssert::same('edit_two-1_' . self::keyHash([$keys[0], $sent[1]['payload']]), $keys[1], 'an edit chains on the key of the edit accepted before it');
+    }
+
+    private static function testEveryOrderWriteLogsItsKeyWhateverTheOutcome(): void
+    {
+        $paths = [];
+        foreach (self::orderRequestPaths() as [$drive, $type, , $endpoint, $description]) {
+            $paths[$description] = [$drive, $type, $endpoint];
+        }
+        // [status (0: no response), log level, what the line reports, description]
+        $outcomes = [
+            [200, 'info', 'HTTP 200', 'accepted'],
+            [400, 'error', 'HTTP 400', 'refused'],
+            [0, 'error', 'no response (Operation timed out)', 'timed out'],
+        ];
+        foreach (['create', 'update', 'confirm', 'capture', 'cancel', 'refund'] as $path) {
+            [$drive, $type, $endpoint] = $paths[$path];
+            foreach ($outcomes as [$status, $level, $reported, $outcome]) {
+                self::reset();
+                $gateway = self::recordingGateway();
+                $gateway->statuses = [$status];
+                $order = self::exampleOrder();
+                $order->refunds = [self::shippingRefund()];
+                $drive($gateway, $order);
+                $key = $gateway->sent[0]['idempotency_key'] ?? '';
+                $lines = array_values(array_filter($GLOBALS['__twoinc_test_logs'], static function ($log) use ($key) {
+                    return $key !== '' && strpos($log['message'], "Idempotency-Key $key") !== false;
+                }));
+                TinyAssert::same(1, count($lines), "$path $outcome: one log line names the key, debug logging off: " . json_encode($GLOBALS['__twoinc_test_logs']));
+                TinyAssert::same($level, $lines[0]['level'], "$path $outcome: level");
+                TinyAssert::true(strpos($lines[0]['message'], $type) === 0 && strpos($lines[0]['message'], $status === 400 ? 'HTTP 400' : $reported) !== false, "$path $outcome: names the request and its outcome: {$lines[0]['message']}");
+            }
+        }
     }
 
     private static function testOnlyWritesCarryAKeyAndEveryWriteDoes(): void

@@ -8145,6 +8145,10 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
 
+            // The next edit chains on this one (TWO-26658).
+            $order->update_meta_data(WC_Twoinc_Brand::meta_key(self::LAST_EDIT_KEY_META), $this->last_order_idempotency_key);
+            $order->save();
+
             $order_note = sprintf(__('The order edit request has been accepted by %s.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
             if ($gross_amount) {
                 $order_note = $order_note . " " . sprintf(__('Order value is now %s.', 'twoinc-payment-gateway'), strval($gross_amount));
@@ -8341,6 +8345,7 @@ if (!class_exists('WC_Twoinc')) {
                 'accept-language',
                 'x-api-key',
                 'idempotency-key',
+                'x-idempotency-key',
                 'two-delegated-authority-token',
                 'x-forwarded-for',
                 'x-real-ip',
@@ -8419,8 +8424,23 @@ if (!class_exists('WC_Twoinc')) {
         {
             $payload = $this->postprocess_order_payload($request_type, $trigger, $endpoint, $payload, $order, $refund);
             $idempotency_key = $this->order_idempotency_key($request_type, $payload, $order, $refund);
+            $this->last_order_idempotency_key = $idempotency_key;
             $response = $this->make_request($endpoint, $payload, $method, [], null, 30, $idempotency_key);
             $status = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
+            if ($status < 400 && $request_type !== 'order_intent' && function_exists('wc_get_logger')) {
+                // Every order write names its key whatever the outcome and the debug setting, so support can
+                // match it with Two's records (TWO-26658). An intent is too frequent to log unless refused.
+                wc_get_logger()->{$status ? 'info' : 'error'}(
+                    sprintf(
+                        '%s request for order %s sent with Idempotency-Key %s: %s',
+                        $request_type,
+                        $order->get_id(),
+                        $idempotency_key,
+                        $status ? 'HTTP ' . $status : 'no response (' . (is_wp_error($response) ? $response->get_error_message() : 'unknown') . ')'
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
             if ($status >= 400 && function_exists('wc_get_logger')) {
                 // An intent is refused routinely (no order yet, a rate limit), so it is only a warning.
                 $level = $request_type === 'order_intent' ? 'warning' : 'error';
@@ -8439,6 +8459,18 @@ if (!class_exists('WC_Twoinc')) {
             return $response;
         }
 
+        /** Order meta holding the key of the last edit Two accepted (TWO-26658). */
+        public const LAST_EDIT_KEY_META = 'last_edit_idempotency_key';
+
+        /** The key of the order request make_order_request() sent last. */
+        private $last_order_idempotency_key = '';
+
+        /** One per checkout attempt: the order reference the attempt minted, hashed. */
+        private static function create_idempotency_key($order): string
+        {
+            return WC_Twoinc_Helper::idempotency_key('create', [$order->get_id()], (string) $order->get_meta(WC_Twoinc_Brand::meta_key('order_reference'), true));
+        }
+
         /**
          * The Idempotency-Key for an order request (TWO-26658), one per logical operation. An order create is one
          * per checkout attempt: process_payment() mints a fresh order reference for every attempt and saves it on
@@ -8453,11 +8485,15 @@ if (!class_exists('WC_Twoinc')) {
             $two_order_id = (string) $this->get_twoinc_order_id($order);
             switch ($request_type) {
                 case 'order_create':
-                    return WC_Twoinc_Helper::idempotency_key('create', [$order->get_id()], (string) $order->get_meta(WC_Twoinc_Brand::meta_key('order_reference'), true));
+                    return self::create_idempotency_key($order);
                 case 'order_intent':
                     return WC_Twoinc_Helper::idempotency_key('intent', [], $payload);
                 case 'order_update':
-                    return WC_Twoinc_Helper::idempotency_key('edit', [$two_order_id], $payload);
+                    // Chained on the last accepted edit's key, or the create key before the first, so every edit
+                    // in a sequence differs (A, B, A, B: four keys) while a retry, with nothing accepted since,
+                    // repeats its own.
+                    $previous = (string) $order->get_meta(WC_Twoinc_Brand::meta_key(self::LAST_EDIT_KEY_META), true);
+                    return WC_Twoinc_Helper::idempotency_key('edit', [$two_order_id], [$previous ?: self::create_idempotency_key($order), $payload]);
                 case 'order_confirm':
                     return WC_Twoinc_Helper::idempotency_key('confirm', [$two_order_id]);
                 case 'capture':

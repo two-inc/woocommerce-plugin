@@ -152,7 +152,11 @@ Key Conventions
   other operation. Build it from durable ids (the Two order id, a WooCommerce
   order or refund id, the order reference a checkout attempt mints) plus a hash of
   the payload only where the operation has no record of its own. Never from the
-  time, a random value or an in-memory counter.
+  time, a random value or an in-memory counter. An edit chains on the key of the
+  last edit Two accepted, stored on the order, so a sequence never repeats a key.
+- A key is never shared between buyers: when the id that tells them apart (the
+  session) is missing, refuse the write rather than send a shared key.
+- Every order write logs its key and outcome whatever the debug setting.
 - A new write adds a row to the key specs in `tests/unit/OrderPostprocessingSpec.php`
   and to the README's key table.
 

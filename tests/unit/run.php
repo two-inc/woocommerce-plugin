@@ -7679,6 +7679,8 @@ final class BrandConfigSpec
         $prop->setAccessible(true);
         $prop->setValue(null, $gateway);
         $GLOBALS['__twoinc_test_ajax_json'] = null;
+        // A wc-ajax request always carries the shopper's session, which keys the mint.
+        WC()->session = WC()->session ?? new StubSession();
         try {
             WC_Twoinc_Sole_Trader::ajax_tokens();
         } finally {
@@ -8313,6 +8315,7 @@ final class BrandConfigSpec
 
     private static function testSoleTraderTokenMintReadsHeaderCaseInsensitively(): void
     {
+        WC()->session = new StubSession();
         $gateway = self::soleTraderGateway([], [
             '/registry/v1/delegation' => [
                 'response' => ['code' => 200],
@@ -8331,6 +8334,7 @@ final class BrandConfigSpec
 
     private static function testSoleTraderTokenMintFailsClosed(): void
     {
+        WC()->session = new StubSession();
         // Second mint failing voids the pair — never hand the browser half a flow
         $gateway = self::soleTraderGateway([], [
             '/registry/v1/delegation' => [
@@ -14906,6 +14910,7 @@ final class BrandConfigSpec
             ['name' => 'x-real-ip', 'value' => '10.0.0.1', 'send_from_browser' => 'yes'],
             ['name' => 'Two-Delegated-Authority-Token', 'value' => 'forged', 'send_from_browser' => 'yes'],
             ['name' => 'idempotency-key', 'value' => 'forged', 'send_from_browser' => 'yes'],
+            ['name' => 'X-IDEMPOTENCY-KEY', 'value' => 'forged', 'send_from_browser' => 'yes'],
             ['name' => 'Connection', 'value' => 'close', 'send_from_browser' => 'yes'],
             ['name' => 'keep-alive', 'value' => 'timeout=5', 'send_from_browser' => 'yes'],
             ['name' => 'PROXY-AUTHENTICATE', 'value' => 'Basic', 'send_from_browser' => 'yes'],
@@ -14930,7 +14935,7 @@ final class BrandConfigSpec
         TinyAssert::same('tenant-7', $headers['X-Tenant'] ?? null, 'the usable row still travels');
         TinyAssert::same(WC_Twoinc_Helper::idempotency_key('post_v1_order_intent', [], ['a' => 1]), $headers['Idempotency-Key'] ?? null, 'a stored row must not replace the Idempotency-Key');
         $dropped_names = [
-            'idempotency-key', 'X Bad Name', 'Host', 'Content-Length', 'X-Forwarded-For', 'x-real-ip', 'X-Unicode', 'X-Blank',
+            'idempotency-key', 'X-IDEMPOTENCY-KEY', 'X Bad Name', 'Host', 'Content-Length', 'X-Forwarded-For', 'x-real-ip', 'X-Unicode', 'X-Blank',
             'Two-Delegated-Authority-Token', 'Connection', 'keep-alive', 'PROXY-AUTHENTICATE',
             'Proxy-Authorization', 'TE', 'trailer', 'Transfer-Encoding', 'upgrade', 'Authorization', 'COOKIE',
         ];
@@ -15181,6 +15186,8 @@ final class BrandConfigSpec
             [[['name' => '', 'value' => 'v']], 'needs a name', 'a value with no name is unusable'],
             [[['name' => 'X-API-Key', 'value' => 'v']], 'is reserved', 'the API key header is the plugin\'s own'],
             [[['name' => 'idempotency-key', 'value' => 'v']], 'is reserved', 'each write composes its own Idempotency-Key'],
+            [[['name' => 'X-Idempotency-Key', 'value' => 'v']], 'is reserved', 'nor may a row send the X- form beside it'],
+            [[['name' => 'x-IDEMPOTENCY-key', 'value' => 'v']], 'is reserved', 'in any case'],
             [[['name' => 'content-type', 'value' => 'v']], 'is reserved', 'reserved names match case-insensitively'],
             [[['name' => 'Content-Type', 'value' => 'v']], 'is reserved', 'nor does the canonical casing slip through'],
             [[['name' => 'Host', 'value' => 'v']], 'is reserved', 'Host addresses the request itself'],

@@ -162,11 +162,16 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
 
         /**
          * Each buyer's mint is its own operation (TWO-26658), so the key carries the shopper's session id beside
-         * the payload: keyed on the payload alone, every buyer of the shop would share one key.
+         * the payload: keyed on the payload alone, every buyer of the shop would share one key. With no session
+         * there is nothing to tell buyers apart, so the mint is refused rather than sent under a shared key.
          */
         private static function mint_token($gateway, string $endpoint, array $payload): ?string
         {
             $session = function_exists('WC') && WC()->session ? (string) WC()->session->get_customer_id() : '';
+            if ($session === '') {
+                self::log_refusal('token mint', 'no shopper session to key the request on');
+                return null;
+            }
             $operation = strtok(trim($endpoint, '/'), '/') . '_delegation';
             $key = WC_Twoinc_Helper::idempotency_key($operation, [], [$session, $payload]);
             $response = $gateway->make_request($endpoint, $payload, 'POST', array(), null, 8, $key);
