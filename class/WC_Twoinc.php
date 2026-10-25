@@ -8340,6 +8340,7 @@ if (!class_exists('WC_Twoinc')) {
                 'accept-encoding',
                 'accept-language',
                 'x-api-key',
+                'idempotency-key',
                 'two-delegated-authority-token',
                 'x-forwarded-for',
                 'x-real-ip',
@@ -8416,17 +8417,20 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function make_order_request($request_type, $trigger, $endpoint, array $payload, $method, $order, $refund = null)
         {
-            $response = $this->make_request($endpoint, $this->postprocess_order_payload($request_type, $trigger, $endpoint, $payload, $order, $refund), $method);
+            $payload = $this->postprocess_order_payload($request_type, $trigger, $endpoint, $payload, $order, $refund);
+            $idempotency_key = $this->order_idempotency_key($request_type, $payload, $order, $refund);
+            $response = $this->make_request($endpoint, $payload, $method, [], null, 30, $idempotency_key);
             $status = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
             if ($status >= 400 && function_exists('wc_get_logger')) {
                 // An intent is refused routinely (no order yet, a rate limit), so it is only a warning.
                 $level = $request_type === 'order_intent' ? 'warning' : 'error';
                 wc_get_logger()->$level(
                     sprintf(
-                        '%s request%s refused by the API (HTTP %d): %s',
+                        '%s request%s refused by the API (HTTP %d, Idempotency-Key %s): %s',
                         $request_type,
                         $order->get_id() ? ' for order ' . $order->get_id() : '',
                         $status,
+                        $idempotency_key,
                         WC_Twoinc_Helper::get_api_rejection_reason($response)
                     ),
                     ['source' => 'twoinc-payment-gateway']
@@ -8436,11 +8440,48 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * @param string $method
+         * The Idempotency-Key for an order request (TWO-26658), one per logical operation. An order create is one
+         * per checkout attempt: process_payment() mints a fresh order reference for every attempt and saves it on
+         * the order before sending, so a new attempt (another company, a retry after a refusal) gets a new key.
+         * The reference is hashed because it also authorises the confirmation redirect.
+         *
+         * @param array                $payload what is sent, after the postprocessing hook
+         * @param WC_Order_Refund|null $refund
+         */
+        private function order_idempotency_key(string $request_type, array $payload, $order, $refund = null): string
+        {
+            $two_order_id = (string) $this->get_twoinc_order_id($order);
+            switch ($request_type) {
+                case 'order_create':
+                    return WC_Twoinc_Helper::idempotency_key('create', [$order->get_id()], (string) $order->get_meta(WC_Twoinc_Brand::meta_key('order_reference'), true));
+                case 'order_intent':
+                    return WC_Twoinc_Helper::idempotency_key('intent', [], $payload);
+                case 'order_update':
+                    return WC_Twoinc_Helper::idempotency_key('edit', [$two_order_id], $payload);
+                case 'order_confirm':
+                    return WC_Twoinc_Helper::idempotency_key('confirm', [$two_order_id]);
+                case 'capture':
+                    return WC_Twoinc_Helper::idempotency_key('fulfil', [$two_order_id]);
+                case 'cancel':
+                    return WC_Twoinc_Helper::idempotency_key('cancel', [$two_order_id]);
+                case 'refund':
+                    if ($refund) {
+                        return WC_Twoinc_Helper::idempotency_key('refund', [$two_order_id, $refund->get_id()]);
+                    }
+            }
+            return WC_Twoinc_Helper::idempotency_key($request_type, [$two_order_id], $payload);
+        }
+
+        /**
+         * Every write (anything but a GET) carries an Idempotency-Key (TWO-26658): the caller's, or one named
+         * after the method and endpoint with a hash of the payload.
+         *
+         * @param string      $method
+         * @param string|null $idempotency_key
          *
          * @return WP_Error|array
          */
-        public function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null, $timeout = 30)
+        public function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null, $timeout = 30, $idempotency_key = null)
         {
             $params = array_merge($params, self::get_api_client_params());
             # If api_key_override is defined, use that key instead of the saved key
@@ -8460,6 +8501,11 @@ if (!class_exists('WC_Twoinc')) {
             if (self::is_valid_header_value($trace)) {
                 $headers['HTTP_X_CLOUD_TRACE_CONTEXT'] = $trace;
             }
+            if (strtoupper((string) $method) !== 'GET') {
+                $idempotency_key = $idempotency_key ?? WC_Twoinc_Helper::idempotency_key(strtolower($method) . str_replace('/', '_', (string) $endpoint), [], $payload ?: []);
+                $headers['Idempotency-Key'] = $idempotency_key;
+            }
+            $log_key = isset($headers['Idempotency-Key']) ? " (Idempotency-Key {$headers['Idempotency-Key']})" : '';
             $response = wp_remote_request(sprintf('%s%s?%s', $this->get_twoinc_checkout_host(), $endpoint, http_build_query($params)), [
                 'method' => $method,
                 'headers' => $headers,
@@ -8491,7 +8537,7 @@ if (!class_exists('WC_Twoinc')) {
                     ]
                 ];
                 if (is_wp_error($response)) {
-                    $logger->error("$method $endpoint: WP_Error: " . $response->get_error_message(), $context);
+                    $logger->error("$method $endpoint$log_key: WP_Error: " . $response->get_error_message(), $context);
                 } else {
                     $raw_body = wp_remote_retrieve_body($response);
                     $decoded_body = json_decode($raw_body, true);
@@ -8500,7 +8546,7 @@ if (!class_exists('WC_Twoinc')) {
                         "headers" => (array) wp_remote_retrieve_headers($response)->getAll(),
                         "status_code" => (int) wp_remote_retrieve_response_code($response)
                     ];
-                    $log_message = "$method $endpoint";
+                    $log_message = "$method $endpoint$log_key";
                     $context["response"] = $response_context;
                     if ($response_context["status_code"] >= 400) {
                         $logger->error($log_message, $context);

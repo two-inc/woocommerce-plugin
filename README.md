@@ -926,6 +926,30 @@ in response to the same events.
   firing alongside it. Any contract change is recorded in the changelog, and the
   CI fixture pins version 1.
 
+## Idempotency keys
+
+Every write the plugin sends to Two (anything but a GET) carries an
+`Idempotency-Key` header naming the operation. A retry of the same operation
+sends the same key, and every other operation a different one. Keys are built
+only from ids the shop already holds, never from the time or a random value, are
+lowercase ASCII and are at most 100 characters.
+
+| Request | Key |
+|---|---|
+| Order create | `create_<WooCommerce order id>_<hash>`: one per checkout attempt, hashed from the order reference each attempt mints, so paying again (with the same or another company) sends a new key |
+| Order edit | `edit_<Two order id>_<hash of the edit>` |
+| Confirm | `confirm_<Two order id>` |
+| Fulfil | `fulfil_<Two order id>` |
+| Cancel | `cancel_<Two order id>` |
+| Refund | `refund_<Two order id>_<WooCommerce refund id>` |
+| Order intent, surcharge quote, merchant fee rates | `intent_`, `fee_quote_` or `merchant_rates_`, then a hash of the request |
+| Sole-trader token mints | `registry_delegation_` or `autofill_delegation_`, then a hash of the shopper's session and the request |
+
+With debug logging on, each request's log line names the key it sent, and an
+order request Two refuses is logged with its key whatever the debug setting, so
+a request can be matched with Two's records. `Idempotency-Key` is reserved: a Diagnostics custom header
+row cannot set it.
+
 ## Post installation optional steps
 
 Once Wordpress has been set up, a recommended plugin theme to install is:

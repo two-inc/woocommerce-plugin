@@ -384,6 +384,38 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
         }
 
+        /** Two's limit on an Idempotency-Key (TWO-26658). */
+        public const IDEMPOTENCY_KEY_MAX_LENGTH = 100;
+
+        /**
+         * The Idempotency-Key for one logical write (TWO-26658): `<operation>_<ids>[_<hash>]`, lowercase ASCII.
+         * It is built only from durable ids and, for an operation with no record of its own, a hash of what it
+         * sends, so a retry of the same operation sends the same key and any other operation a different one.
+         *
+         * @param array             $ids    the durable ids naming the thing written, in order
+         * @param array|string|null $hashed hashed onto the end when given: the payload, or an id too long or too
+         *                                  private to send as it is
+         */
+        public static function idempotency_key(string $operation, array $ids = [], $hashed = null): string
+        {
+            $parts = array_merge([$operation], array_map('strval', $ids));
+            if ($hashed !== null) {
+                $parts[] = self::idempotency_hash($hashed);
+            }
+            $key = preg_replace('/[^a-z0-9_-]+/', '-', strtolower(implode('_', $parts)));
+            if (strlen($key) > self::IDEMPOTENCY_KEY_MAX_LENGTH) {
+                // Still unique per input: the hash covers the whole key, not only the part kept.
+                $key = substr($key, 0, self::IDEMPOTENCY_KEY_MAX_LENGTH - 17) . '_' . self::idempotency_hash($key);
+            }
+            return $key;
+        }
+
+        /** @param array|string $value */
+        private static function idempotency_hash($value): string
+        {
+            return substr(hash('sha256', is_string($value) ? $value : (string) json_encode(self::utf8ize($value))), 0, 16);
+        }
+
         /**
          * The API's own reason for refusing a request, as it sent it (TWO-26092).
          *

@@ -469,7 +469,7 @@ final class BrandConfigSpec
                     return true;
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     if (strpos($endpoint, 'verify_api_key') !== false) {
                         return $this->verify_code === 200
@@ -714,7 +714,7 @@ final class BrandConfigSpec
                     return [30];
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     return $this->verify_code === 200
                         ? ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])]
@@ -2628,7 +2628,7 @@ final class BrandConfigSpec
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return array_shift($this->responses);
             }
@@ -2797,7 +2797,7 @@ final class BrandConfigSpec
                 return $this->allowlist;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->calls[] = $endpoint;
                 return $this->response ?? ['response' => ['code' => 200], 'body' => '{}'];
@@ -3243,7 +3243,7 @@ final class BrandConfigSpec
                 return null;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->calls[] = $endpoint;
                 return ['response' => ['code' => 200], 'body' => $this->body];
@@ -3560,7 +3560,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->calls++;
                 if ($this->on_request) {
@@ -3781,7 +3781,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 throw new RuntimeException('no fetch should be attempted with fresh clocks');
             }
@@ -3975,7 +3975,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return array_shift($this->responses);
             }
@@ -4127,7 +4127,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return array_shift($this->responses);
             }
@@ -4266,7 +4266,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->calls++;
                 return array_shift($this->responses);
@@ -4349,7 +4349,7 @@ final class BrandConfigSpec
                     return true;
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     $this->endpoints[] = $endpoint;
                     return array_shift($this->responses);
@@ -4458,7 +4458,7 @@ final class BrandConfigSpec
                     return 'https://api.example';
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     $this->endpoints[] = $endpoint;
                     $this->timeouts[] = $timeout;
@@ -4740,7 +4740,7 @@ final class BrandConfigSpec
                     return $key === 'api_key' ? 'key' : ($empty_value ?? '');
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     return array_shift($this->responses);
                 }
@@ -5994,7 +5994,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return array_shift($this->responses);
             }
@@ -6044,7 +6044,7 @@ final class BrandConfigSpec
                     return $this->options[$key] ?? $empty_value ?? '';
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     $this->calls++;
                     return array_shift($this->responses);
@@ -6207,7 +6207,7 @@ final class BrandConfigSpec
                 return $this->options['__test_available_terms'] ?? [14, 30, 60, 90];
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 if (strpos($endpoint, '/v1/pricing/order/fee') === 0) {
                     return [
@@ -7454,7 +7454,7 @@ final class BrandConfigSpec
                 return [30, 60];
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->quoted_terms[] = $payload['order_terms']['duration_days'] ?? null;
                 return ['response' => ['code' => 200], 'body' => json_encode(['buyer_fee_share' => '7.00', 'currency' => 'EUR'])];
@@ -7512,7 +7512,7 @@ final class BrandConfigSpec
                     return $this->options[$key] ?? $empty_value ?? '';
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     if (strpos($endpoint, 'verify_api_key') !== false) {
                         return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
@@ -7637,7 +7637,7 @@ final class BrandConfigSpec
                 return $this->options[$key] ?? $empty_value ?? '';
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->requests[] = $endpoint;
                 foreach ($this->responses as $prefix => $response) {
@@ -9384,7 +9384,7 @@ final class BrandConfigSpec
                 return $empty_value ?? '';
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->requests[] = ['endpoint' => $endpoint, 'params' => $params, 'timeout' => $timeout];
                 foreach ($this->responses as $prefix => &$queue) {
@@ -9869,7 +9869,7 @@ final class BrandConfigSpec
                 return [14, 30, 60, 90];
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 if (strpos($endpoint, '/refdata/v1/fx-rates') !== 0) {
                     $this->requests[] = ['endpoint' => $endpoint, 'payload' => $payload];
@@ -10531,7 +10531,7 @@ final class BrandConfigSpec
                 return null;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->make_request_calls++;
                 return array_shift($this->responses);
@@ -10742,7 +10742,7 @@ final class BrandConfigSpec
                 return array_map('intval', $this->options['payment_terms_days'] ?? [30]);
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 if (strpos($endpoint, '/v1/pricing/order/fee') === false) {
                     return new WP_Error();
@@ -10785,7 +10785,7 @@ final class BrandConfigSpec
 
             // Defaults to null where the real helper defaults to a number: a
             // call site that passes nothing must be visible as nothing.
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = null)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = null, $idempotency_key = null)
             {
                 if (strpos($endpoint, '/v1/pricing/order/fee') === false) {
                     return new WP_Error();
@@ -10863,7 +10863,7 @@ final class BrandConfigSpec
                 return [30];
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return ['response' => ['code' => 200], 'body' => json_encode(['buyer_fee_share' => '12.50', 'currency' => 'GBP'])];
             }
@@ -11035,7 +11035,7 @@ final class BrandConfigSpec
                 return [30, 60];
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 // The 60-day term does not resolve; the 30-day one does.
                 $days = (int) ($payload['order_terms']['duration_days'] ?? 0);
@@ -11269,7 +11269,7 @@ final class BrandConfigSpec
                 return [30, 60];
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return [
                     'response' => ['code' => 200],
@@ -13053,7 +13053,7 @@ final class BrandConfigSpec
                 return $this->options[$key] ?? $empty_value ?? '';
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return $this->wp_error_response ? new WP_Error('http_request_failed', 'timed out') : false;
             }
@@ -13191,7 +13191,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->make_request_calls++;
                 return array_shift($this->responses);
@@ -13235,7 +13235,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->make_request_calls++;
                 return array_shift($this->responses);
@@ -13283,7 +13283,7 @@ final class BrandConfigSpec
                     return true;
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     return $this->response;
                 }
@@ -13352,7 +13352,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42', 'available_terms' => [30]])];
             }
@@ -13405,7 +13405,7 @@ final class BrandConfigSpec
                     return true;
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     return $this->response;
                 }
@@ -13469,7 +13469,7 @@ final class BrandConfigSpec
                     return true;
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     if (strpos($endpoint, 'verify_api_key') !== false) {
                         return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
@@ -13559,7 +13559,7 @@ final class BrandConfigSpec
                     return true;
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     return $this->response;
                 }
@@ -13614,7 +13614,7 @@ final class BrandConfigSpec
                 return $this->options[$key] ?? $empty_value ?? '';
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 // Truthy, not a WP_Error, but no 'body' key — the
                 // malformed/unexpected shape under test.
@@ -13683,7 +13683,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->make_request_calls++;
                 $this->seen_timeout = $timeout;
@@ -13907,7 +13907,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->make_request_calls++;
                 return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42', 'short_name' => 'Acme'])];
@@ -13959,7 +13959,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->seen_timeout = $timeout;
                 return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
@@ -14905,6 +14905,7 @@ final class BrandConfigSpec
             ['name' => 'X-Forwarded-For', 'value' => '10.0.0.1', 'send_from_browser' => 'yes'],
             ['name' => 'x-real-ip', 'value' => '10.0.0.1', 'send_from_browser' => 'yes'],
             ['name' => 'Two-Delegated-Authority-Token', 'value' => 'forged', 'send_from_browser' => 'yes'],
+            ['name' => 'idempotency-key', 'value' => 'forged', 'send_from_browser' => 'yes'],
             ['name' => 'Connection', 'value' => 'close', 'send_from_browser' => 'yes'],
             ['name' => 'keep-alive', 'value' => 'timeout=5', 'send_from_browser' => 'yes'],
             ['name' => 'PROXY-AUTHENTICATE', 'value' => 'Basic', 'send_from_browser' => 'yes'],
@@ -14927,8 +14928,9 @@ final class BrandConfigSpec
         TinyAssert::same('real-key', $headers['X-API-Key'] ?? null, 'a stored row must not clobber the API key');
         TinyAssert::same('application/json; charset=utf-8', $headers['Content-Type'] ?? null);
         TinyAssert::same('tenant-7', $headers['X-Tenant'] ?? null, 'the usable row still travels');
+        TinyAssert::same(WC_Twoinc_Helper::idempotency_key('post_v1_order_intent', [], ['a' => 1]), $headers['Idempotency-Key'] ?? null, 'a stored row must not replace the Idempotency-Key');
         $dropped_names = [
-            'X Bad Name', 'Host', 'Content-Length', 'X-Forwarded-For', 'x-real-ip', 'X-Unicode', 'X-Blank',
+            'idempotency-key', 'X Bad Name', 'Host', 'Content-Length', 'X-Forwarded-For', 'x-real-ip', 'X-Unicode', 'X-Blank',
             'Two-Delegated-Authority-Token', 'Connection', 'keep-alive', 'PROXY-AUTHENTICATE',
             'Proxy-Authorization', 'TE', 'trailer', 'Transfer-Encoding', 'upgrade', 'Authorization', 'COOKIE',
         ];
@@ -15178,6 +15180,7 @@ final class BrandConfigSpec
             [[['name' => 'X-Bad:', 'value' => 'v']], 'not a valid HTTP header name', 'a colon would terminate the name'],
             [[['name' => '', 'value' => 'v']], 'needs a name', 'a value with no name is unusable'],
             [[['name' => 'X-API-Key', 'value' => 'v']], 'is reserved', 'the API key header is the plugin\'s own'],
+            [[['name' => 'idempotency-key', 'value' => 'v']], 'is reserved', 'each write composes its own Idempotency-Key'],
             [[['name' => 'content-type', 'value' => 'v']], 'is reserved', 'reserved names match case-insensitively'],
             [[['name' => 'Content-Type', 'value' => 'v']], 'is reserved', 'nor does the canonical casing slip through'],
             [[['name' => 'Host', 'value' => 'v']], 'is reserved', 'Host addresses the request itself'],
@@ -15482,7 +15485,7 @@ final class BrandConfigSpec
                 return 'merchant-from-settings';
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->calls[] = ['endpoint' => $endpoint, 'payload' => $payload, 'method' => $method, 'params' => $params];
                 return $this->reply;
@@ -15707,7 +15710,7 @@ final class BrandConfigSpec
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return array_shift($this->responses) ?: ['response' => ['code' => 200], 'body' => '{}'];
             }
@@ -17662,7 +17665,7 @@ final class CaptureMemorySpec
                 return null;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return $this->response;
             }
