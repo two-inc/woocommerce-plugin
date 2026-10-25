@@ -7975,6 +7975,13 @@ if (!class_exists('WC_Twoinc')) {
                         $order->update_meta_data(WC_Twoinc_Brand::meta_key('req_body_hash'), $twoinc_updated_order_hash);
                         $order->update_meta_data(WC_Twoinc_Brand::meta_key('invoice_hash'), $twoinc_invoice_hash);
                         $order->save();
+                    } elseif ($updated === null) {
+                        // Two may have applied the edit, so the stored hash may no longer be what Two holds: an
+                        // edit back to it must still be sent (TWO-26662). The last accepted key stays, so the
+                        // next edit chains as before.
+                        $order->update_meta_data(WC_Twoinc_Brand::meta_key('req_body_hash'), '');
+                        $order->save();
+                        $updated = false;
                     }
                     if ($forced_reload) {
                         WC_Twoinc_Helper::append_admin_force_reload();
@@ -8084,7 +8091,8 @@ if (!class_exists('WC_Twoinc')) {
          *                     fetch (which can itself cost a remote GET)
          *                     on hot paths like fulfilment.
          *
-         * @return boolean
+         * @return bool|null true when Two accepted the edit, false when it was not sent or Two refused it, null
+         *                   when its outcome is unknown (no answer, or a 5xx) and Two may have applied it
          */
         private function update_twoinc_order($order, $twoinc_meta = null, $trigger = 'admin_edit')
         {
@@ -8125,7 +8133,7 @@ if (!class_exists('WC_Twoinc')) {
             if (is_wp_error($response)) {
                 $error_message = sprintf(__('Could not edit the order with %s.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
                 $order->add_order_note($error_message);
-                return false;
+                return null;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
@@ -8134,7 +8142,7 @@ if (!class_exists('WC_Twoinc')) {
                 $contact_message = sprintf(__('Please contact %s support with order ID: %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), $twoinc_order_id);
                 $response_message = sprintf(__('Response: %s', 'twoinc-payment-gateway'), $twoinc_err);
                 $order->add_order_note($error_message . ' ' . $contact_message . ' ' . $response_message);
-                return false;
+                return (int) wp_remote_retrieve_response_code($response) >= 500 ? null : false;
             }
 
             $gross_amount = null;
