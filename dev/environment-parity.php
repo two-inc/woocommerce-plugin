@@ -1,11 +1,13 @@
 <?php
 
 /**
- * dev/environment-parity.php: the PrestaShop, WooCommerce and Magento plugins
- * offer the same Environment setting (TWO-26613, TWO-26604).
+ * dev/environment-parity.php: the PrestaShop, WooCommerce, Magento and
+ * OpenCart plugins offer the same Environment setting (TWO-26613, TWO-26604,
+ * TWO-26671).
  *
  * This file is byte-identical in two-inc/prestashop-plugin,
- * two-inc/woocommerce-plugin and two-inc/magento-plugin. Each repo also has:
+ * two-inc/woocommerce-plugin, two-inc/magento-plugin and
+ * two-inc/opencart-plugin. Each repo also has:
  *   - dev/environment-contract.php, its own record of where it declares the
  *     setting, read only in that repo;
  *   - dev/environment-contract.json, the contract this file extracts from
@@ -50,6 +52,7 @@ const REPOS = [
     'prestashop' => 'two-inc/prestashop-plugin',
     'woocommerce' => 'two-inc/woocommerce-plugin',
     'magento' => 'two-inc/magento-plugin',
+    'opencart' => 'two-inc/opencart-plugin',
 ];
 const SELF_PATH = 'dev/environment-parity.php';
 const SPEC_PATH = 'dev/environment-contract.php';
@@ -128,6 +131,20 @@ function match1(string $pattern, string $subject, string $what): array
 function unquote(string $single): string
 {
     return strtr($single, ["\\'" => "'", '\\\\' => '\\']);
+}
+
+/**
+ * The strings of an OpenCart language file (`$_['key'] = 'value';`), by key.
+ * Read as text, never included.
+ */
+function languageStrings(string $src): array
+{
+    preg_match_all('/^\$_\[\s*' . STR . '\s*\]\s*=\s*' . STR . '\s*;/m', $src, $m, PREG_SET_ORDER);
+    $strings = [];
+    foreach ($m as [, $key, $value]) {
+        $strings[unquote($key)] = unquote($value);
+    }
+    return $strings;
 }
 
 /** Option labels in a piece of source, in the order written. */
@@ -349,7 +366,11 @@ function extractSnapshot(string $root, array $spec): array
     ];
     foreach (OPTION_STATES as $state => [$stored, $flag]) {
         setFlag($flag);
-        $c['options'][$state] = $call($h['options'], $stored);
+        // A plugin whose rule takes the flag as an argument names the method
+        // that reads its raw value ('flag'); the others read the process.
+        $c['options'][$state] = isset($h['flag'])
+            ? $call($h['options'], $stored, $call($h['flag'], $flag))
+            : $call($h['options'], $stored);
     }
     setFlag(null);
     foreach (INPUTS as $input) {
@@ -538,7 +559,7 @@ foreach (REPOS as $name => $repo) {
 
     [$found, $theirs] = siblingFile($repo, $dir, $ref, SELF_PATH);
     if (!$found || $theirs !== $mine) {
-        fail(SELF_PATH . ' ' . ($found ? 'differs from' : 'is missing at') . " {$label}; the three copies must be byte-identical.");
+        fail(SELF_PATH . ' ' . ($found ? 'differs from' : 'is missing at') . " {$label}; every copy must be byte-identical.");
     }
 }
 

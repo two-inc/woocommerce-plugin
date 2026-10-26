@@ -1,6 +1,6 @@
 name: Environment parity
 
-# dev/environment-parity.php (TWO-26613) checks that this plugin and its two
+# dev/environment-parity.php (TWO-26613) checks that this plugin and its
 # siblings offer the same Environment setting. It regenerates this repo's
 # dev/environment-contract.json from its own code, fails if the committed
 # copy differs, and compares it with the siblings' copies, read with gh api
