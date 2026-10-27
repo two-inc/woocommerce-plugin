@@ -761,7 +761,8 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
  * The chips, inside the panel and after the results — the tab order the DOM
  * already describes, and the reason the panel exists in this shape at all.
  * `white-space: normal` deliberately, not nowrap/ellipsis: a chip label may
- * wrap onto two lines and must not truncate.
+ * wrap onto two lines and must not truncate. The chips share one row and wrap
+ * only when the width requires it, as on the other platforms' checkouts.
  */
 .two-company-mode-chips {
   display: flex;
@@ -773,7 +774,8 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
 }
 
 .two-company-mode-chip {
-  flex: 1 1 calc(50% - 8px);
+  flex: 1 1 auto;
+  min-width: 84px;
   box-sizing: border-box;
   text-align: center;
   padding: 5px 12px;
