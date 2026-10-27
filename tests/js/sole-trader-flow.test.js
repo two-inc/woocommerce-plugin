@@ -4997,19 +4997,21 @@ describe("TWO-40 — sole-trader flow", () => {
   });
 
   /**
-   * Each chip declares a half-row flex basis so the row fills its full
-   * width, leaving no slack to the right. Asserted against the stylesheet
-   * source rather than a rendered box: jsdom does no flex layout, so a
+   * The chips share one row sized to their labels and grow to fill its full
+   * width, leaving no slack to the right; they wrap only when the width
+   * requires it, as on the other platforms' checkouts. Asserted against the
+   * stylesheet source rather than a rendered box: jsdom does no flex layout, so a
    * computed-width assertion here would be vacuous rather than wrong.
    */
   describe("the chip row fills its full width", () => {
-    test("each chip declares a half-row flex basis, so two share a row and a third grows to fill its own", () => {
+    test("each chip sizes to its label and grows, so all three share a row until the width runs out", () => {
       const rule = /^\.two-company-mode-chip\s*\{([^}]*)\}/m.exec(stylesheetSource());
 
       expect(rule).not.toBeNull();
-      // `flex-grow: 1` is what fills the row; the `calc(50% - <gap>)` basis is
-      // what decides how many chips land on it.
-      expect(rule[1]).toMatch(/flex:\s*1\s+1\s+calc\(50%\s*-\s*\d+px\)/);
+      // `flex-grow: 1` fills the row; the `auto` basis lets every chip that
+      // fits share it, and `min-width` decides when one has to wrap.
+      expect(rule[1]).toMatch(/flex:\s*1\s+1\s+auto\s*;/);
+      expect(rule[1]).toMatch(/min-width:\s*84px\s*;/);
     });
 
     test("the row itself wraps, or the third chip has nowhere to go", () => {
