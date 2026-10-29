@@ -22,7 +22,6 @@ const body = {
   tax_amount: "40.00",
   gross_amount: "240.00",
   discount_amount: "0.00",
-  invoice_type: "FUNDED_INVOICE",
   buyer: {
     company: { company_name: BUYER_COMPANY, country_prefix: "GB", organization_number: "15717462" },
     representative: {

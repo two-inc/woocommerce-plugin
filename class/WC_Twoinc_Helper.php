@@ -1555,7 +1555,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $req_body = ['currency' => $order->get_currency()] + $totals + [
                 'discount_amount' => WC_Twoinc_Helper::order_discount_amount($order),
                 'discount_rate' => '0',
-                'invoice_type' => 'FUNDED_INVOICE',
                 'invoice_details' => $invoice_details,
                 'buyer' => [
                     'company' => [
@@ -1694,7 +1693,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $req_body = ['currency' => $order->get_currency()] + self::order_totals($order, self::placed_without_prepaid($order) ? [] : self::$whole_order_check['tenders']) + [
                 'discount_amount' => WC_Twoinc_Helper::order_discount_amount($order),
                 'discount_rate' => '0',
-                'invoice_type' => 'FUNDED_INVOICE',
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
@@ -1855,7 +1853,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 return $line;
             }, self::expect_order_totals($order, 'order_intent', false, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates, false)));
             $req_body = self::order_totals($order) + [
-                'invoice_type' => 'FUNDED_INVOICE',
                 'buyer' => $buyer,
                 'currency' => $order->get_currency(),
                 'line_items' => $line_items,
