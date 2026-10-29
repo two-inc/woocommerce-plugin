@@ -165,7 +165,7 @@ final class BrandConfigSpec
             'testSurchargeTaxTreatmentRequiresExplicitSelection',
             'testPaymentTermsValidationRequiresSelection',
             'testDefaultTermCoercedToOfferedSet',
-            'testOrderPayloadCarriesSelectedAndAvailableTerms',
+            'testOrderPayloadCarriesSelectedTermOnly',
             'testCartFeeAndOrderPayloadChargeTheSameTerm',
             'testPaymentTermsInvalidPostFallsBackToDefault',
             'testPaymentTermsDisabledMeansNoPayloadTerms',
@@ -7564,7 +7564,7 @@ final class BrandConfigSpec
         unset($GLOBALS['__twoinc_test_is_checkout'], $GLOBALS['__twoinc_test_transients']);
     }
 
-    private static function testOrderPayloadCarriesSelectedAndAvailableTerms(): void
+    private static function testOrderPayloadCarriesSelectedTermOnly(): void
     {
         $gateway = self::termsGateway(['payment_terms_days' => ['14', '30', '60', '90']]);
         $_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] = '60';
@@ -7589,7 +7589,7 @@ final class BrandConfigSpec
         );
 
         TinyAssert::same(['type' => 'NET_TERMS', 'duration_days' => 60], $body['terms']);
-        TinyAssert::same([14, 30, 60, 90], $body['available_terms']);
+        TinyAssert::same(false, array_key_exists('available_terms', $body), 'the create-order request does not define available_terms');
     }
 
     private static function testPaymentTermsInvalidPostFallsBackToDefault(): void

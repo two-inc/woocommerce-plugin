@@ -1598,7 +1598,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             // Shape from WC_Twoinc_Payment_Terms::get_order_payload_terms (TWO-24751).
             if ($payment_terms) {
                 $req_body['terms'] = $payment_terms['terms'];
-                $req_body['available_terms'] = $payment_terms['available_terms'];
             }
 
             if (!$skip_csrf_token) {
