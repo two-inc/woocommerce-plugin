@@ -25,7 +25,7 @@ final class OrderTermWireSpec
     public static function runAll(): void
     {
         self::testSelectedTermIsWhatTheOrderBodyCarries();
-        self::testTermThatIsNotOfferedIsNotSilentlyReplacedByTheDefault();
+        self::testTermThatIsNotOfferedIsRefusedAndNeverReplacedByTheDefault();
         print("OrderTermWireSpec passed.\n");
     }
 
@@ -111,12 +111,15 @@ final class OrderTermWireSpec
      * The buyer chooses a term and places the order.
      *
      * @param string $channel 'ajax' records the selection through the select-term AJAX and posts no term with the
-     *                        submit; 'posted' leaves the session on the default and posts the hidden field with the submit
+     *                        submit; 'posted' leaves the session on $sessionTerm (the default unless a test says otherwise) and posts the hidden field with the submit;
+     *                        'session' finds the term already in the session (recorded earlier, since withdrawn by the
+     *                        merchant) and posts no term with the submit
      *
-     * @return array{0:array,1:?array,2:object,3:mixed} the select-term reply (ajax only), the POST /v1/order body
-     *                                                  (null when none was sent), the order, process_payment()'s result
+     * @return array{0:array,1:?array,2:object,3:mixed,4:mixed} the select-term reply (ajax only), the POST /v1/order
+     *                                                  body (null when none was sent), the order, process_payment()'s
+     *                                                  result, and the session's recorded term after it all
      */
-    private static function placeOrderSelecting(string $channel, int $selectedDays, string $termType): array
+    private static function placeOrderSelecting(string $channel, int $selectedDays, string $termType, int $sessionTerm = 30): array
     {
         $gateway = self::gateway($termType);
         $order = self::order();
@@ -146,9 +149,11 @@ final class OrderTermWireSpec
                 WC_Twoinc_Payment_Terms::ajax_select_term();
                 $reply = (array) $GLOBALS['__twoinc_test_ajax_json'];
                 $_POST = [];
+            } elseif ($channel === 'session') {
+                WC()->session->set(WC_Twoinc_Payment_Terms::SESSION_KEY, $selectedDays);
             } else {
                 // The session has not caught up with the chip: the hidden field is the only signal on the submit.
-                WC()->session->set(WC_Twoinc_Payment_Terms::SESSION_KEY, 30);
+                WC()->session->set(WC_Twoinc_Payment_Terms::SESSION_KEY, $sessionTerm);
                 $_POST = [WC_Twoinc_Payment_Terms::SESSION_KEY => (string) $selectedDays];
             }
 
@@ -169,7 +174,7 @@ final class OrderTermWireSpec
         }
         TinyAssert::true(count($bodies) <= 1, 'at most one POST /v1/order reached the wire');
 
-        return [$reply, $bodies[0] ?? null, $order, $result];
+        return [$reply, $bodies[0] ?? null, $order, $result, WC()->session->get(WC_Twoinc_Payment_Terms::SESSION_KEY)];
     }
 
     private static function testSelectedTermIsWhatTheOrderBodyCarries(): void
@@ -201,37 +206,50 @@ final class OrderTermWireSpec
     }
 
     /**
-     * CURRENT BEHAVIOUR for a term that is not offered, pinned so a change in
-     * either direction is a deliberate, visible edit. It differs by channel:
+     * A term the merchant does not offer is refused, never replaced by the
+     * default (ABN-621), whichever way it arrives:
      *
-     * - Posted with the submit: refused. process_payment() stops before
-     *   POST /v1/order and tells the buyer the term is no longer available.
-     * - Recorded through the select-term AJAX: FINDING, a silent default.
-     *   set_selected_term() quietly substitutes the default, the AJAX answers
-     *   success with the substituted term, and a submit that carries no posted
-     *   term goes out as the 30-day default although the request named 45.
-     *   The hidden field a real checkout posts alongside would catch it (the
-     *   first row), so the exposure is a client that records a term and
-     *   submits without the field.
+     * - Posted with the submit: process_payment() stops before POST /v1/order
+     *   and tells the buyer the term is no longer available.
+     * - Recorded through the select-term AJAX: the AJAX answers an error and
+     *   stores nothing, so there is no substituted term to be sent later.
+     * - Already in the session, then withdrawn by the merchant: a submit with
+     *   no posted term is refused before POST /v1/order rather than booked as
+     *   the default, and the stale choice is dropped so a retry books what the
+     *   reloaded checkout shows.
+     *
+     * An offered term posted with the submit still wins over a stale session
+     * term, and a buyer who never chose a term still gets the default.
      */
-    private static function testTermThatIsNotOfferedIsNotSilentlyReplacedByTheDefault(): void
+    private static function testTermThatIsNotOfferedIsRefusedAndNeverReplacedByTheDefault(): void
     {
-        // [channel, selected days, POST /v1/order duration_days today (null: refused, none sent), description]
+        $refusal = ['success' => false, 'data' => WC_Twoinc_Payment_Terms::unoffered_term_message()];
+        // [channel, selected days, session term after, description]
         $cases = [
-            ['posted', 45, null, 'a 45 posted with the submit is not offered and the submit is refused before POST /v1/order'],
-            ['ajax', 45, 30, 'FINDING, silent default: a 45 recorded through the AJAX is not offered and is sent as the 30-day default'],
+            ['posted', 45, 30, 'a 45 posted with the submit is not offered: the submit is refused before POST /v1/order'],
+            ['session', 45, null, 'a 45 already in the session is not offered: the submit is refused before POST /v1/order and the stale choice is dropped'],
         ];
-        foreach ($cases as [$channel, $selected, $currentDays, $description]) {
-            [$reply, $body, , $result] = self::placeOrderSelecting($channel, $selected, 'standard');
+        foreach ($cases as [$channel, $selected, $sessionAfter, $description]) {
+            [, $body, , $result, $session] = self::placeOrderSelecting($channel, $selected, 'standard');
 
-            if ($currentDays === null) {
-                TinyAssert::same('failure', $result['result'] ?? null, $description . ': the submit fails');
-                TinyAssert::same(null, $body, $description . ': nothing is sent to POST /v1/order');
-                continue;
-            }
-            TinyAssert::same('success', $result['result'] ?? null, $description . ': the order is placed');
-            TinyAssert::same($currentDays, $body['terms']['duration_days'] ?? null, $description . ': terms.duration_days');
-            TinyAssert::same(['success' => true, 'data' => ['selected' => $currentDays]], $reply, $description . ': the AJAX reports success with the substituted term');
+            TinyAssert::same('failure', $result['result'] ?? null, $description . ': the submit fails');
+            TinyAssert::same(null, $body, $description . ': nothing is sent to POST /v1/order');
+            TinyAssert::same($sessionAfter, $session, $description . ': the session term afterwards');
         }
+
+        // The AJAX refuses outright: an error reply and nothing recorded. With nothing
+        // recorded, the buyer has made no choice, so a submit without a posted term books
+        // the default, as it does for any buyer who never chose.
+        [$reply, $body, , $result, $session] = self::placeOrderSelecting('ajax', 45, 'standard');
+        $description = 'a 45 recorded through the AJAX is refused';
+        TinyAssert::same($refusal, ['success' => $reply['success'] ?? null, 'data' => $reply['data'] ?? null], $description . ': the AJAX answers the refusal, not a substituted term');
+        TinyAssert::same(null, $session, $description . ': nothing is recorded in the session');
+        TinyAssert::same(30, $body['terms']['duration_days'] ?? null, $description . ': a buyer who then never chose a term gets the default');
+
+        // A stale session term does not override an offered term posted with the submit.
+        [, $body, , $result] = self::placeOrderSelecting('posted', 60, 'standard', 45);
+        $description = 'a 60 posted with the submit while the session holds a withdrawn 45';
+        TinyAssert::same('success', $result['result'] ?? null, $description . ': the order is placed');
+        TinyAssert::same(60, $body['terms']['duration_days'] ?? null, $description . ': terms.duration_days is the posted offered term');
     }
 }

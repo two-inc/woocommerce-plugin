@@ -172,8 +172,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
         /**
          * The buyer's current selection from the WC session, validated against
-         * the available set (an invalid or stale selection falls back to the
-         * default rather than erroring).
+         * the available set. A stale selection falls back to the default here
+         * for display and pricing only: process_payment() refuses it first
+         * (get_unoffered_chosen_term()), so an order is never booked on it.
          */
         public static function get_selected_term($gateway): ?int
         {
@@ -187,20 +188,67 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * Store the buyer's selection. Returns the term actually stored
-         * (invalid input resolves to the default).
+         * Store the buyer's selection and return it, or null when the merchant
+         * does not offer that term: nothing is stored then. A term that is not
+         * offered is refused, never replaced by the default, so the order is
+         * not booked under a term the buyer did not choose.
          */
         public static function set_selected_term($gateway, $days): ?int
         {
-            $terms = self::get_available_terms($gateway);
             $days = (int) $days;
-            if (!in_array($days, $terms, true)) {
-                $days = self::get_default_term($gateway);
+            if (!in_array($days, self::get_available_terms($gateway), true)) {
+                return null;
             }
             if (function_exists('WC') && (WC()->session ?? null)) {
                 WC()->session->set(self::SESSION_KEY, $days);
             }
             return $days;
+        }
+
+        /**
+         * Buyer-facing refusal of a term that is not offered, shared by the
+         * select-term answer and the submit so the two read the same.
+         */
+        public static function unoffered_term_message(): string
+        {
+            return __('The selected payment term is no longer available. Please review the payment options and place the order again.', 'twoinc-payment-gateway');
+        }
+
+        /**
+         * The term the buyer chose when the merchant does not offer it: the
+         * posted selection (the hidden checkout field) else the session's.
+         * Such a choice must be refused, never turned into the default. 0 when
+         * the buyer never chose a term, when the choice is offered, or when
+         * nothing is offered at all (the submit's deliberate fail-open on an
+         * empty set).
+         */
+        public static function get_unoffered_chosen_term($gateway): int
+        {
+            $offered = self::get_available_terms($gateway);
+            if (count($offered) === 0) {
+                return 0;
+            }
+            $posted = isset($_POST[self::SESSION_KEY]) ? (int) $_POST[self::SESSION_KEY] : 0;
+            $session = function_exists('WC') ? (WC()->session ?? null) : null;
+            $chosen = $posted > 0 ? $posted : ($session ? (int) $session->get(self::SESSION_KEY) : 0);
+            return ($chosen > 0 && !in_array($chosen, $offered, true)) ? $chosen : 0;
+        }
+
+        /**
+         * Drop a stored selection the merchant no longer offers, so the
+         * reloaded checkout shows what a retry would book (the default)
+         * instead of refusing every retry. An offered selection is kept.
+         */
+        public static function forget_unoffered_selection($gateway): void
+        {
+            $session = function_exists('WC') ? (WC()->session ?? null) : null;
+            $offered = self::get_available_terms($gateway);
+            if ($session && count($offered) > 0) {
+                $stored = (int) $session->get(self::SESSION_KEY);
+                if ($stored > 0 && !in_array($stored, $offered, true)) {
+                    $session->set(self::SESSION_KEY, null);
+                }
+            }
         }
 
         /**
@@ -1254,6 +1302,10 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             }
             $days = isset($_POST['days']) ? (int) $_POST['days'] : 0;
             $stored = self::set_selected_term($gateway, $days);
+            if ($stored === null) {
+                wp_send_json_error(self::unoffered_term_message());
+                return;
+            }
             wp_send_json_success(['selected' => $stored]);
         }
 

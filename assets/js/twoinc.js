@@ -3636,6 +3636,13 @@ let twoincTermChips = {
           // Recalculate totals so the offset fee follows the new term;
           // updated_checkout then re-renders the chips.
           jQuery(document.body).trigger("update_checkout");
+        } else if (response && response.success === false) {
+          // The server refused the term (the merchant no longer offers it)
+          // and recorded nothing. Put the chips, and the field the order is
+          // composed on, back on the term the server holds, and re-fetch the
+          // offered set, so the tick never shows a term the order will not
+          // be booked under.
+          twoincTermChips.refresh();
         }
       })
       .fail(function () {
