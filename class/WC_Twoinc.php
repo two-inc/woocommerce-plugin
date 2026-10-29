@@ -8029,8 +8029,7 @@ if (!class_exists('WC_Twoinc')) {
                         $order,
                         $twoinc_meta['department'] ?? '',
                         $twoinc_meta['project'] ?? '',
-                        $twoinc_meta['purchase_order_number'] ?? '',
-                        $twoinc_meta['vendor_name'] ?? ''
+                        $twoinc_meta['purchase_order_number'] ?? ''
                     ),
                     $order
                 );
@@ -8123,8 +8122,7 @@ if (!class_exists('WC_Twoinc')) {
                     $order,
                     $twoinc_meta['department'],
                     $twoinc_meta['project'],
-                    $twoinc_meta['purchase_order_number'],
-                    $twoinc_meta['vendor_name']
+                    $twoinc_meta['purchase_order_number']
                 ),
                 'PUT',
                 $order
