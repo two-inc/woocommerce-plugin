@@ -6310,10 +6310,12 @@ if (!class_exists('WC_Twoinc')) {
             // hard-blocking every checkout on a cold cache. Do not "tighten"
             // this to abort on an empty set.
             if (class_exists('WC_Twoinc_Payment_Terms')) {
-                $posted_term = isset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]) ? (int) $_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] : 0;
-                $offered = WC_Twoinc_Payment_Terms::get_available_terms($this);
-                if ($posted_term > 0 && count($offered) > 0 && !in_array($posted_term, $offered, true)) {
-                    $term_error = __('The selected payment term is no longer available. Please review the payment options and place the order again.', 'twoinc-payment-gateway');
+                // The choice may be the posted field or one already recorded in
+                // the session (a term withdrawn since it was selected): either
+                // is refused, and only a buyer who never chose gets the default.
+                if (WC_Twoinc_Payment_Terms::get_unoffered_chosen_term($this) > 0) {
+                    WC_Twoinc_Payment_Terms::forget_unoffered_selection($this);
+                    $term_error = WC_Twoinc_Payment_Terms::unoffered_term_message();
                     WC_Twoinc_Helper::display_ajax_error($term_error);
                     return self::payment_failure($term_error);
                 }
