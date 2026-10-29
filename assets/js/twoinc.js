@@ -3637,11 +3637,17 @@ let twoincTermChips = {
           // updated_checkout then re-renders the chips.
           jQuery(document.body).trigger("update_checkout");
         } else if (response && response.success === false) {
-          // The server refused the term (the merchant no longer offers it)
-          // and recorded nothing. Put the chips, and the field the order is
-          // composed on, back on the term the server holds, and re-fetch the
-          // offered set, so the tick never shows a term the order will not
-          // be booked under.
+          // The server refused the term (the merchant no longer offers it) and
+          // recorded nothing. Adopt the offered set and the term it holds when
+          // the refusal carries them, then put the chips, and the field the
+          // order is composed on, back on that term, so the tick never shows a
+          // term the order will not be booked under and the refused chip is
+          // not offered again.
+          const held = response.data;
+          if (held && Array.isArray(held.terms)) {
+            cfg.terms = held.terms.map(Number);
+            cfg.selected = held.selected;
+          }
           twoincTermChips.refresh();
         }
       })
