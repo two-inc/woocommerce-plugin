@@ -238,10 +238,10 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * After a submit is refused over a term that is not offered: drop a
          * stored selection that is itself no longer offered, so the reloaded
          * checkout shows what a retry would book (the default) instead of
-         * refusing every retry, and ask the classic checkout to update, which
-         * re-renders the chips and the hidden field from the page's last
-         * accepted term (a failed submit does not update the checkout by
-         * itself). An offered stored selection is kept.
+         * refusing every retry. An offered stored selection is kept. The classic
+         * checkout re-reads the live set from the select-term answer after any
+         * failed submit (twoincTermChips.resync()), since a failed submit does
+         * not update the checkout by itself.
          */
         public static function recover_from_unoffered_refusal($gateway): void
         {
@@ -254,8 +254,6 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             if ($stored > 0 && count($offered) > 0 && !in_array($stored, $offered, true)) {
                 $session->set(self::SESSION_KEY, null);
             }
-            // Read by WC's failed-checkout reply as refresh:true.
-            $session->set('refresh_totals', true);
         }
 
         /**

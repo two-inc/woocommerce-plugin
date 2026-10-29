@@ -220,8 +220,8 @@ final class OrderTermWireSpec
      *   the default, and the stale choice is dropped so a retry books what the
      *   reloaded checkout shows.
      *
-     * A refused submit also asks the classic checkout to update, because a
-     * failed submit does not update it by itself.
+     * The AJAX's refusal carries the live offered set and selected term, which
+     * the classic checkout re-reads after a failed submit.
      *
      * An offered term posted with the submit still wins over a stale session
      * term, and a buyer who never chose a term still gets the default.
@@ -240,7 +240,6 @@ final class OrderTermWireSpec
             TinyAssert::same('failure', $result['result'] ?? null, $description . ': the submit fails');
             TinyAssert::same(null, $body, $description . ': nothing is sent to POST /v1/order');
             TinyAssert::same($sessionAfter, $session, $description . ': the session term afterwards');
-            TinyAssert::same(true, WC()->session->get('refresh_totals'), $description . ': the failed checkout reply asks the checkout to update');
         }
 
         // The AJAX refuses outright: an error reply and nothing recorded. With nothing
@@ -254,6 +253,11 @@ final class OrderTermWireSpec
         TinyAssert::same(30, $reply['data']['selected'] ?? null, $description . ': the refusal carries the term the server holds');
         TinyAssert::same(null, $session, $description . ': nothing is recorded in the session');
         TinyAssert::same(30, $body['terms']['duration_days'] ?? null, $description . ': a buyer who then never chose a term gets the default');
+
+        // Day 0 is the checkout's resync probe after a failed submit: never offered, so always this refusal.
+        [$reply] = self::placeOrderSelecting('ajax', 0, 'standard');
+        TinyAssert::same(false, $reply['success'] ?? null, 'day 0 is refused');
+        TinyAssert::same([30, 60, 90], $reply['data']['terms'] ?? null, 'day 0 answers with the live offered set');
 
         // A stale session term does not override an offered term posted with the submit.
         [, $body, , $result] = self::placeOrderSelecting('posted', 60, 'standard', 45);
