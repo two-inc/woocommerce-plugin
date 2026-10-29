@@ -1781,7 +1781,7 @@ final class BrandConfigSpec
             return $payload;
         }, 10, 2);
 
-        $body = WC_Twoinc_Helper::compose_twoinc_edit_order(new StubOrder(), 'IT', 'Project X', '', '');
+        $body = WC_Twoinc_Helper::compose_twoinc_edit_order(new StubOrder(), 'IT', 'Project X', '');
 
         TinyAssert::same('Brand line', $body['line_items'][0]['name']);
         TinyAssert::same('Overlay Vendor', $body['vendor_name']);
@@ -2093,7 +2093,7 @@ final class BrandConfigSpec
             '',
             []
         );
-        $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, 'IT', 'Project X', '', '');
+        $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, 'IT', 'Project X', '');
 
         TinyAssert::same('BR-7', $create['shipping_details']['tracking_number']);
         TinyAssert::same('bring', $create['shipping_details']['carrier_name']);
@@ -8597,7 +8597,7 @@ final class BrandConfigSpec
         TinyAssert::same('912345678', $create['buyer']['company']['organization_number']);
 
         // When: the same order is composed for an edit PUT
-        $edit = WC_Twoinc_Helper::compose_twoinc_edit_order(new StubOrder(), 'IT', 'Project X', '', '');
+        $edit = WC_Twoinc_Helper::compose_twoinc_edit_order(new StubOrder(), 'IT', 'Project X', '');
 
         // Then: no buyer block at all, so no organisation number to blank
         TinyAssert::same(false, array_key_exists('buyer', $edit));
@@ -9780,7 +9780,7 @@ final class BrandConfigSpec
             };
             $create = WC_Twoinc_Helper::compose_twoinc_order($order, 'test-order-reference', '912345678', 'IT', 'Project X', '', []);
             TinyAssert::same($expected, $create['discount_amount'], 'create: ' . $description);
-            $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, 'IT', 'Project X', '', '');
+            $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, 'IT', 'Project X', '');
             TinyAssert::same($expected, $edit['discount_amount'], 'edit: ' . $description);
         }
     }
