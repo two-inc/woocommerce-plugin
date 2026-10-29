@@ -818,6 +818,46 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       expect(shown(".twoinc-loader")).toBe(false);
     });
 
+    // A failed submit does not update the checkout, so the term chips would be
+    // redrawn from the page's own bootstrap and a term withdrawn since the page
+    // loaded would be ticked and refused again on every retry.
+    test("checkout_error re-reads the live terms and re-renders the chips", () => {
+      const SELECT_URL = "https://shop.example.test/?wc-ajax=two_select_term";
+      window.twoinc.payment_terms = {
+        enabled: true,
+        terms: [30, 45, 60],
+        selected: 45,
+        select_url: SELECT_URL,
+        csrf_token: "t"
+      };
+      ajax.calls.length = 0;
+
+      $(document.body).trigger("checkout_error");
+
+      const call = ajax.calls.find((c) => c.url === SELECT_URL);
+      expect(call).toBeDefined();
+      expect(harness.requestParams(call).get("days")).toBe("0");
+
+      call.succeed({ success: false, data: { message: "gone", terms: [30, 60], selected: 30 } });
+
+      expect(window.twoinc.payment_terms.terms).toEqual([30, 60]);
+      expect(window.twoinc.payment_terms.selected).toBe(30);
+    });
+
+    test("checkout_error with terms off asks the server nothing about them", () => {
+      window.twoinc.payment_terms = {
+        enabled: false,
+        terms: [],
+        select_url: "https://shop.example.test/?wc-ajax=two_select_term",
+        csrf_token: "t"
+      };
+      ajax.calls.length = 0;
+
+      $(document.body).trigger("checkout_error");
+
+      expect(ajax.calls.filter((c) => /two_select_term/.test(c.url || "")).length).toBe(0);
+    });
+
     test("checkout_error with nothing running leaves a good verdict alone", () => {
       // `abandonOrderIntentCheck()` is careful not to reset the tile when nothing was
       // running — and the unconditional re-arm then had `getApproval()`'s own clear

@@ -3618,6 +3618,37 @@ let twoincTermChips = {
     }, twoincTermChips.commitDelayMs);
   },
 
+  /**
+   * Take on the offered set and the selected term the server answered a
+   * refusal with, and re-render. An answer without them (a bad nonce) only
+   * re-renders from what the page already holds.
+   *
+   * @param {Object|string} held the refusal's data
+   */
+  adoptRefusal: function (held) {
+    const cfg = twoincTermChips.config();
+    if (held && Array.isArray(held.terms)) {
+      cfg.terms = held.terms.map(Number);
+      cfg.selected = held.selected;
+    }
+    twoincTermChips.refresh();
+  },
+
+  /**
+   * Re-read what the server holds after a failed submit. A failed submit does
+   * not update the checkout, and the chips are drawn from the page's own
+   * bootstrap, so a term withdrawn since the page loaded would be ticked again
+   * and refused again on every retry. Day 0 is never offered, so the answer is
+   * always the refusal, which carries the live offered set and selected term.
+   */
+  resync: function () {
+    const cfg = twoincTermChips.config();
+    if (!cfg.enabled || !cfg.select_url) return;
+    jQuery.post(cfg.select_url, { days: 0, csrf_token: cfg.csrf_token }).done(function (response) {
+      if (response && response.success === false) twoincTermChips.adoptRefusal(response.data);
+    });
+  },
+
   select: function (days) {
     // Supersedes a keyboard commit still waiting out its sweep.
     clearTimeout(twoincTermChips.commitTimer);
@@ -3636,6 +3667,11 @@ let twoincTermChips = {
           // Recalculate totals so the offset fee follows the new term;
           // updated_checkout then re-renders the chips.
           jQuery(document.body).trigger("update_checkout");
+        } else if (response && response.success === false) {
+          // The server refused the term (the merchant no longer offers it) and
+          // recorded nothing: take on what it holds, so the tick and the field
+          // the order is composed on never sit on a term that will be refused.
+          twoincTermChips.adoptRefusal(response.data);
         }
       })
       .fail(function () {
@@ -5569,6 +5605,11 @@ class Twoinc {
       // response that hadn't already landed would have missed the
       // submission anyway.
       Twoinc.getInstance().abandonOrderIntentCheck();
+    });
+
+    // Terms: a refused submit has to leave the chips on what the server holds.
+    $body.on("checkout_error", function () {
+      twoincTermChips.resync();
     });
 
     $body.on("checkout_error", function () {
