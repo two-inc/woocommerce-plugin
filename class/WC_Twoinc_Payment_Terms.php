@@ -1259,25 +1259,21 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
         /**
          * The terms block injected into the order create payload: the
-         * buyer's selected term plus the offered set (the backend records
-         * available_terms for parity with Magento's payload).
+         * buyer's selected term. The create-order request does not define
+         * `available_terms`, so the offered set is not sent.
          *
-         * @return array{terms: array, available_terms: int[]}|null
+         * @return array{terms: array}|null
          */
         public static function get_order_payload_terms($gateway, $order): ?array
         {
             if (!self::is_enabled($gateway)) {
                 return null;
             }
-            $terms = self::get_available_terms($gateway);
             $selected = self::resolve_charged_term($gateway);
             if ($selected === null) {
                 return null;
             }
-            return [
-                'terms' => self::build_terms_block($gateway, $selected),
-                'available_terms' => $terms,
-            ];
+            return ['terms' => self::build_terms_block($gateway, $selected)];
         }
 
         /**
