@@ -59,6 +59,7 @@ final class OrderPostprocessingSpec
             'testIntentRunsTheSameLineFilterAsCreate',
             'testTheTwoOrderIdIsKeptWhenTheChangeHashFails',
             'testNoSubscriberBuildersMatchTheShippingTaxRelease',
+            'testNoRequestBodyCarriesAnInvoiceType',
             'testRecomputeTotalsFromLines',
             'testTheChangeHashIsTakenOverThePostHookPayload',
             'testTheDiffLogIsRedactedAndCapped',
@@ -1093,6 +1094,30 @@ final class OrderPostprocessingSpec
         }
     }
 
+    /** The Two API derives the invoice type from the merchant account, so no request body carries one (ABN-621). */
+    private static function testNoRequestBodyCarriesAnInvoiceType(): void
+    {
+        $checked = [];
+        foreach (self::orderRequestPaths() as [$drive, $type, $trigger, $endpoint, $description]) {
+            self::reset();
+            $gateway = self::recordingGateway();
+            $order = self::exampleOrder();
+            $order->refunds = [self::shippingRefund()];
+            $drive($gateway, $order);
+            foreach ($gateway->sent as $sent) {
+                if (!is_array($sent['payload'] ?? null) || $sent['payload'] === []) {
+                    continue;
+                }
+                $checked[$description] = true;
+                TinyAssert::true(!array_key_exists('invoice_type', $sent['payload']), "$description: the body to {$sent['endpoint']} carries invoice_type");
+            }
+        }
+        // Not vacuous: the three bodies that used to carry the key were each inspected.
+        foreach (['create', 'update', 'intent'] as $description) {
+            TinyAssert::true(isset($checked[$description]), "$description: no body was inspected");
+        }
+    }
+
     /** The Idempotency-Key a hash-suffixed key ends in, computed here independently of the plugin's helper. */
     private static function keyHash($value): string
     {
@@ -1482,7 +1507,6 @@ final class OrderPostprocessingSpec
                 'gross_amount' => number_format($total, 2, '.', ''),
                 'net_amount' => number_format($total - $tax, 2, '.', ''),
                 'tax_amount' => number_format($tax, 2, '.', ''),
-                'invoice_type' => 'FUNDED_INVOICE',
                 'currency' => get_woocommerce_currency(),
             ];
             $actual = array_map(static function ($key) use ($sent) {
