@@ -183,7 +183,7 @@ if (!class_exists('TwoincBuilderFixtureOrder')) {
                 return WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
             },
             'order_update' => static function () use ($order) {
-                return WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+                return WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '');
             },
         ];
         if ($fixture['refund']) {

@@ -147,7 +147,7 @@ final class TaxCodeSpec
             TinyAssert::same($want, $codes($create), $description . ': create codes');
             TinyAssert::same($sent, $create['buyer_vat_number'] ?? null, $description . ': buyer_vat_number');
             TinyAssert::same($sent !== null, array_key_exists('buyer_vat_number', $create), $description . ': key present only when sent');
-            $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+            $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '');
             TinyAssert::same($want, $codes($edit), $description . ': edit codes');
             TinyAssert::true(!array_key_exists('buyer_vat_number', $edit), $description . ': edit never sends the key');
         }
@@ -242,7 +242,7 @@ final class TaxCodeSpec
             }, $payload['line_items']);
         };
 
-        TinyAssert::same(['ES_IVA_EXPORT', 'ES_IVA_EXPORT'], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '')), 'edit');
+        TinyAssert::same(['ES_IVA_EXPORT', 'ES_IVA_EXPORT'], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '')), 'edit');
 
         // A partial refund is sent as full line items, so each carries the code of the line it refunds.
         $refund = new StubRefund([
@@ -450,13 +450,13 @@ final class TaxCodeSpec
         $order->meta['_billing_vat_number'] = '';
         self::useGateway(['standard|exempt' => 'ES_IVA_EXEMPT_ART20', 'standard|none' => 'ES_IVA_EXEMPT_ART20']);
         $record = $order->meta[$meta];
-        TinyAssert::same([$intra, $intra], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '')), 'an edit after the mapping and the VAT number changed sends the recorded codes');
+        TinyAssert::same([$intra, $intra], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '')), 'an edit after the mapping and the VAT number changed sends the recorded codes');
         $refund = new StubRefund(['shipping' => [new StubShippingItem(-10.0, 0.0, [], ['_refunded_item_id' => 6])]], []);
         TinyAssert::same([$intra], $codes(WC_Twoinc_Helper::compose_twoinc_refund($refund, 10.0, $order)), 'so does a refund');
         TinyAssert::same($record, $order->meta[$meta], 'and neither rewrites the record');
 
         $order->addLine(3, 'goods');
-        TinyAssert::same([$intra, 'ES_IVA_EXEMPT_ART20', $intra], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '')), 'a line added by an edit is resolved now');
+        TinyAssert::same([$intra, 'ES_IVA_EXEMPT_ART20', $intra], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '')), 'a line added by an edit is resolved now');
 
         $cases = [
             // record of item 1, the code an unrecorded keyless line takes, description
@@ -468,7 +468,7 @@ final class TaxCodeSpec
         foreach ($cases as [$entry, $expected, $description]) {
             $placed = self::caseOrder(['goods', 'keyless'], 'ES 28001', 'ES 28001', []);
             $placed->meta = [WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order', $meta => ['1' => $entry]];
-            TinyAssert::same([$entry['code'], $expected], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($placed, '', '', '', '')), $description);
+            TinyAssert::same([$entry['code'], $expected], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($placed, '', '', '')), $description);
         }
     }
 
@@ -515,7 +515,7 @@ final class TaxCodeSpec
                     $order->meta[WC_Twoinc_Brand::meta_key('tax_codes')] = $record;
                 }
                 if ($request === 'edit') {
-                    $payload = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+                    $payload = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '');
                 } else {
                     $refunded = array_map(static function ($id) {
                         return new StubShippingItem(-10.0, 0.0, [], ['_refunded_item_id' => $id]);
@@ -561,7 +561,7 @@ final class TaxCodeSpec
             $order = self::caseOrder($lines, 'US 10001', 'US 10001', []);
             TinyAssert::same($wantCreate, $codes(WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', [], '', '', '', '', '', '', true)), "$description: create");
             $order->meta = [WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order'];
-            TinyAssert::same($wantEdit, $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '')), "$description: edit with no record");
+            TinyAssert::same($wantEdit, $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '')), "$description: edit with no record");
         }
     }
 
@@ -597,7 +597,7 @@ final class TaxCodeSpec
             $order->meta[$meta] = $record;
             $order->meta[WC_Twoinc_Brand::prefixed_name('order_id')] = 'two-order';
             self::useGateway(['standard|exempt' => 'X', 'standard|none' => 'ES_IVA_EXEMPT_ART20']);
-            $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+            $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '');
             TinyAssert::same('ES_IVA_EXEMPT_ART20', $edit['line_items'][0]['tax_code'] ?? null, 'a line placed with no code is resolved on an update: ' . json_encode($record));
         }
     }
@@ -741,7 +741,7 @@ final class TaxCodeSpec
         ];
         self::useGateway(['standard|none' => ['X']]);
 
-        TinyAssert::same([$intra, $intra], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '')), 'an update of recorded lines is sent as placed');
+        TinyAssert::same([$intra, $intra], $codes(WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '')), 'an update of recorded lines is sent as placed');
 
         $refund = new StubRefund([
             'line_item' => [new StubProductLineItem(['name' => 'Goods', 'line_subtotal' => -100.0, 'line_total' => -100.0, 'line_tax' => 0.0, 'taxes' => [], 'data' => new TaxCodeSpecProduct(false)])],
@@ -769,7 +769,7 @@ final class TaxCodeSpec
 
         $order->addLine(3, 'goods');
         try {
-            WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+            WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '');
             $refused = false;
         } catch (Exception $e) {
             $refused = true;

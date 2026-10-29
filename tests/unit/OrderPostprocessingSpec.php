@@ -60,6 +60,7 @@ final class OrderPostprocessingSpec
             'testTheTwoOrderIdIsKeptWhenTheChangeHashFails',
             'testNoSubscriberBuildersMatchTheShippingTaxRelease',
             'testNoRequestBodyCarriesAnInvoiceType',
+            'testTheEditBodyOmitsTheOrderLevelVendorNameAndCreateKeepsIt',
             'testRecomputeTotalsFromLines',
             'testTheChangeHashIsTakenOverThePostHookPayload',
             'testTheDiffLogIsRedactedAndCapped',
@@ -412,7 +413,7 @@ final class OrderPostprocessingSpec
         $cases = [
             ['order_intent', WC_Twoinc_Helper::compose_twoinc_intent($order, ['company' => ['country_prefix' => 'NO']]), 'intent'],
             ['order_create', WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []), 'create'],
-            ['order_update', WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', ''), 'update'],
+            ['order_update', WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', ''), 'update'],
             ['refund', WC_Twoinc_Helper::compose_twoinc_refund($refund, 29.0, $order), 'refund'],
             ['order_confirm', [], 'confirm'],
             ['capture', [], 'capture'],
@@ -612,7 +613,7 @@ final class OrderPostprocessingSpec
             },
             'order_update' => static function () use ($send) {
                 $order = self::mismatchedOrder(true);
-                return $send('order_update', 'admin_edit', WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', ''), $order);
+                return $send('order_update', 'admin_edit', WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', ''), $order);
             },
             'refund' => static function () use ($send) {
                 $order = self::mismatchedOrder(true);
@@ -851,7 +852,7 @@ final class OrderPostprocessingSpec
             TinyAssert::same(['0.210000', '7.00'], $sentShipping($gateway->sent[0]['payload']), "$description: create line");
 
             $order->meta[WC_Twoinc_Brand::prefixed_name('order_id')] = 'two-1';
-            $gateway->make_order_request('order_update', 'admin_edit', '/v1/order/two-1', WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', ''), 'PUT', $order);
+            $gateway->make_order_request('order_update', 'admin_edit', '/v1/order/two-1', WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', ''), 'PUT', $order);
             TinyAssert::same(['0.210000', '7.00'], $sentShipping($gateway->sent[1]['payload']), "$description: update line");
 
             $refund = new StubRefund(['shipping' => [new StubShippingItem(-29.0, -7.0, [], ['_refunded_item_id' => 5])]], []);
@@ -1001,7 +1002,7 @@ final class OrderPostprocessingSpec
             add_filter($filter, $callback, 10, 1);
             $order = self::exampleOrder();
             $body = $type === 'order_update'
-                ? WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '')
+                ? WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '')
                 : WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
             $gateway = self::recordingGateway();
             $gateway->make_order_request($type, 'test', '/v1/order', $body, 'POST', $order);
@@ -1116,6 +1117,26 @@ final class OrderPostprocessingSpec
         foreach (['create', 'update', 'intent'] as $description) {
             TinyAssert::true(isset($checked[$description]), "$description: no body was inspected");
         }
+    }
+
+    /** Two's API does not define an order-level vendor_name on an edit, so only create sends it; line items are untouched (ABN-621). */
+    private static function testTheEditBodyOmitsTheOrderLevelVendorNameAndCreateKeepsIt(): void
+    {
+        $update = new ReflectionMethod(WC_Twoinc::class, 'update_twoinc_order');
+        $update->setAccessible(true);
+        self::reset();
+        $sent = self::writesTo('/v1/order/two-1', static function ($gateway, $order) use ($update) {
+            $update->invoke($gateway, $order, [
+                'order_reference' => 'ref', 'company_id' => '912345678', 'department' => '', 'project' => '',
+                'purchase_order_number' => '', 'invoice_emails' => [], 'payment_reference_message' => '',
+                'payment_reference_ocr' => '', 'payment_reference' => '', 'payment_reference_type' => '', 'vendor_name' => 'Vendor Ltd',
+            ]);
+        });
+        TinyAssert::true($sent !== [] && is_array($sent[0]['payload'] ?? null) && $sent[0]['payload'] !== [], 'no edit body was inspected');
+        TinyAssert::true(!array_key_exists('vendor_name', $sent[0]['payload']), 'the edit body carries an order-level vendor_name');
+
+        $create = WC_Twoinc_Helper::compose_twoinc_order(self::exampleOrder(), 'ref', '912345678', '', '', '', [], '', '', '', '', 'Vendor Ltd');
+        TinyAssert::same('Vendor Ltd', $create['vendor_name'] ?? null, 'the create body must still carry vendor_name');
     }
 
     /** The Idempotency-Key a hash-suffixed key ends in, computed here independently of the plugin's helper. */
@@ -2145,7 +2166,7 @@ final class OrderPostprocessingSpec
                     return WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
                 },
                 'order_update' => static function () use ($order) {
-                    return WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+                    return WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '');
                 },
                 'capture' => static function () {
                     return [];
@@ -2230,7 +2251,7 @@ final class OrderPostprocessingSpec
                     return WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
                 },
                 'order_update' => static function () use ($order) {
-                    return WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+                    return WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '');
                 },
                 'order_intent' => static function () use ($order) {
                     return WC_Twoinc_Helper::compose_twoinc_intent($order, []);
@@ -2264,7 +2285,7 @@ final class OrderPostprocessingSpec
             return WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);
         };
         $update = static function ($order) {
-            return WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+            return WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '');
         };
         $refund = static function (float $amount) {
             return static function ($order) use ($amount) {
@@ -2449,7 +2470,7 @@ final class OrderPostprocessingSpec
             if ($recorded !== null) {
                 $order->meta[$meta] = $recorded;
             }
-            $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '', '');
+            $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, '', '', '');
             TinyAssert::same($update, [$edit['gross_amount'], $edit['net_amount'], $edit['prepaid_amount'] ?? null], "$description: update");
             // The change hash recomposes the create body: it must not see a change the order never had.
             $create = WC_Twoinc_Helper::compose_twoinc_order($order, 'ref', '912345678', '', '', '', []);

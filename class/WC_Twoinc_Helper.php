@@ -1657,7 +1657,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @param string   $department
          * @param string   $project
          * @param string   $purchase_order_number
-         * @param string   $vendor_name
          *
          * @return array
          */
@@ -1665,8 +1664,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $order,
             $department,
             $project,
-            $purchase_order_number,
-            $vendor_name
+            $purchase_order_number
         ) {
 
             $billing_address = [
@@ -1704,10 +1702,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'shipping_address' => $shipping_address,
                 'shipping_details' => WC_Twoinc_Helper::get_shipping_details($order)
             ];
-
-            if ($vendor_name) {
-                $req_body['vendor_name'] = $vendor_name;
-            }
 
             if ($purchase_order_number) {
                 $req_body['buyer_purchase_order_number'] = $purchase_order_number;
