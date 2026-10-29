@@ -188,8 +188,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * Store the buyer's selection and return it, or null when the merchant
-         * does not offer that term: nothing is stored then. A term that is not
+         * Return the buyer's selection (storing it when a session exists), or
+         * null when the merchant does not offer that term: nothing is stored then. A term that is not
          * offered is refused, never replaced by the default, so the order is
          * not booked under a term the buyer did not choose.
          */
@@ -235,20 +235,27 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * Drop a stored selection the merchant no longer offers, so the
-         * reloaded checkout shows what a retry would book (the default)
-         * instead of refusing every retry. An offered selection is kept.
+         * After a submit is refused over a term that is not offered: drop a
+         * stored selection that is itself no longer offered, so the reloaded
+         * checkout shows what a retry would book (the default) instead of
+         * refusing every retry, and ask the classic checkout to update, which
+         * re-renders the chips and the hidden field from the page's last
+         * accepted term (a failed submit does not update the checkout by
+         * itself). An offered stored selection is kept.
          */
-        public static function forget_unoffered_selection($gateway): void
+        public static function recover_from_unoffered_refusal($gateway): void
         {
             $session = function_exists('WC') ? (WC()->session ?? null) : null;
-            $offered = self::get_available_terms($gateway);
-            if ($session && count($offered) > 0) {
-                $stored = (int) $session->get(self::SESSION_KEY);
-                if ($stored > 0 && !in_array($stored, $offered, true)) {
-                    $session->set(self::SESSION_KEY, null);
-                }
+            if (!$session) {
+                return;
             }
+            $offered = self::get_available_terms($gateway);
+            $stored = (int) $session->get(self::SESSION_KEY);
+            if ($stored > 0 && count($offered) > 0 && !in_array($stored, $offered, true)) {
+                $session->set(self::SESSION_KEY, null);
+            }
+            // Read by WC's failed-checkout reply as refresh:true.
+            $session->set('refresh_totals', true);
         }
 
         /**
@@ -1303,7 +1310,13 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             $days = isset($_POST['days']) ? (int) $_POST['days'] : 0;
             $stored = self::set_selected_term($gateway, $days);
             if ($stored === null) {
-                wp_send_json_error(self::unoffered_term_message());
+                // Carries the live offered set and the term the server holds, so
+                // the chips can drop a withdrawn term instead of offering it again.
+                wp_send_json_error([
+                    'message' => self::unoffered_term_message(),
+                    'terms' => self::get_available_terms($gateway),
+                    'selected' => self::get_selected_term($gateway),
+                ]);
                 return;
             }
             wp_send_json_success(['selected' => $stored]);

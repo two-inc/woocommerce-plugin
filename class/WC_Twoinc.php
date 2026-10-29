@@ -6314,7 +6314,7 @@ if (!class_exists('WC_Twoinc')) {
                 // the session (a term withdrawn since it was selected): either
                 // is refused, and only a buyer who never chose gets the default.
                 if (WC_Twoinc_Payment_Terms::get_unoffered_chosen_term($this) > 0) {
-                    WC_Twoinc_Payment_Terms::forget_unoffered_selection($this);
+                    WC_Twoinc_Payment_Terms::recover_from_unoffered_refusal($this);
                     $term_error = WC_Twoinc_Payment_Terms::unoffered_term_message();
                     WC_Twoinc_Helper::display_ajax_error($term_error);
                     return self::payment_failure($term_error);

@@ -789,6 +789,21 @@ describe("payment terms chips", () => {
         expect(chips.pendingTerm).toBeNull();
       });
 
+      // The refusal carries the live offered set, so a term the merchant has
+      // withdrawn since the page loaded is not left on offer to be refused again.
+      test("a refusal carrying the live offered set drops the withdrawn chip", () => {
+        const chips = chooseAndAnswer(60, 90, {
+          success: false,
+          data: { message: "not available", terms: [30, 60], selected: 60 }
+        });
+
+        expect(ctx.$(".twoinc-term-chip").map((i, el) => ctx.$(el).attr("data-days")).get()).toEqual(["30", "60"]);
+        expect(selectedDays()).toBe("60");
+        expect(ctx.$("input[name='two_selected_term']").val()).toBe("60");
+        expect(chips.config().terms).toEqual([30, 60]);
+        expect(chips.config().selected).toBe(60);
+      });
+
       test("an accepted term is kept and recorded as the one the server holds", () => {
         const chips = chooseAndAnswer(60, 90, { success: true, data: { selected: 90 } });
 
