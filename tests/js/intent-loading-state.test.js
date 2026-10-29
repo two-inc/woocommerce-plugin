@@ -845,6 +845,12 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("checkout_error with terms off asks the server nothing about them", () => {
+      window.twoinc.payment_terms = {
+        enabled: false,
+        terms: [],
+        select_url: "https://shop.example.test/?wc-ajax=two_select_term",
+        csrf_token: "t"
+      };
       ajax.calls.length = 0;
 
       $(document.body).trigger("checkout_error");

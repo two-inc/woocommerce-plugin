@@ -797,7 +797,12 @@ describe("payment terms chips", () => {
           data: { message: "not available", terms: [30, 60], selected: 60 }
         });
 
-        expect(ctx.$(".twoinc-term-chip").map((i, el) => ctx.$(el).attr("data-days")).get()).toEqual(["30", "60"]);
+        expect(
+          ctx
+            .$(".twoinc-term-chip")
+            .map((i, el) => ctx.$(el).attr("data-days"))
+            .get()
+        ).toEqual(["30", "60"]);
         expect(selectedDays()).toBe("60");
         expect(ctx.$("input[name='two_selected_term']").val()).toBe("60");
         expect(chips.config().terms).toEqual([30, 60]);
