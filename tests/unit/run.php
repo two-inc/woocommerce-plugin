@@ -2986,8 +2986,8 @@ final class BrandConfigSpec
             [$delivery, '912345678', 'Delivery Depot AS', 'the delivery role alone'],
             [array_merge($invoice, $delivery), '923456789', 'Invoice Holdings AS', 'both roles captured'],
             // Refused before any meta is written: no number may go out under a manual name.
-            [['billing_company' => 'Typed By Hand AS'] + $delivery, null, null, 'billing in manual entry'],
-            [['company_name' => 'Typed By Hand AS'] + $delivery, null, null, 'tile billing in manual entry'],
+            [['billing_company' => 'Typed By Hand AS', 'company_manual_entry' => '1'] + $delivery, null, null, 'billing in manual entry'],
+            [['billing_company' => 'Delivery Depot AS'] + $delivery, '912345678', 'Delivery Depot AS', 'billing mirroring the delivery address'],
         ];
 
         foreach ($cases as $case) {

@@ -255,6 +255,36 @@ let twoincCompanyCapture = {
 
   setModeFor: function (role, value) {
     twoincCompanyCapture.record(role).mode = value;
+    if ((role || twoincAddressRoles.primary()) === twoincAddressRoles.invoice()) {
+      twoincCompanyCapture.syncManualEntryCarrier();
+    }
+  },
+
+  /** POST key telling the server billing is in manual entry (TWO-26775). */
+  MANUAL_ENTRY_KEY: "company_manual_entry",
+
+  /** @returns {string} "1" while billing is in manual entry, else "" */
+  manualEntryFlag: function () {
+    return twoincCompanyCapture.modeFor(twoincAddressRoles.invoice()) === "manual" ? "1" : "";
+  },
+
+  /**
+   * Keep the classic form's manual-entry flag current. A billing name with no
+   * number reads the same whether the buyer typed it or the delivery address
+   * mirrored it, so the server is told outright: under manual entry no other
+   * role's number may go out with the order (TWO-26775).
+   */
+  syncManualEntryCarrier: function () {
+    const form = document.querySelector('form[name="checkout"]');
+    if (!form) return;
+    let input = form.querySelector('input[name="' + twoincCompanyCapture.MANUAL_ENTRY_KEY + '"]');
+    if (!input) {
+      input = document.createElement("input");
+      input.type = "hidden";
+      input.name = twoincCompanyCapture.MANUAL_ENTRY_KEY;
+      form.appendChild(input);
+    }
+    input.value = twoincCompanyCapture.manualEntryFlag();
   },
 
   /** Attribute holding the name/number pairing tag. */
@@ -502,17 +532,18 @@ let twoincCompanyCapture = {
   },
 
   /**
-   * Does billing hold a company of any kind: a capture, or a name typed in
-   * manual entry? Either keeps the delivery role's number off the order, so a
-   * manual name never goes out with another role's number (TWO-26775).
+   * Does billing hold a company of its own: a capture, or manual entry? Either
+   * keeps the delivery role's number off the order, so a manual name never goes
+   * out with another role's number (TWO-26775). Read off the mode, not the
+   * name: a delivery address the checkout mirrors into billing brings a name
+   * with no number too.
    *
    * @returns {boolean}
    */
   invoiceHoldsCompany: function () {
     const invoice = twoincAddressRoles.invoice();
     return (
-      twoincCompanyCapture.hasCapture(invoice) ||
-      twoincUtilHelper.blankToEmpty(twoincCompanyCapture.nameField(invoice).val()) !== ""
+      twoincCompanyCapture.hasCapture(invoice) || twoincCompanyCapture.modeFor(invoice) === "manual"
     );
   },
 

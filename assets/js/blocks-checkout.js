@@ -522,6 +522,7 @@
       payload[twoincCompanyCapture.nameFieldSelector(search.role).slice(1)] =
         company.company_name || "";
     });
+    payload[twoincCompanyCapture.MANUAL_ENTRY_KEY] = twoincCompanyCapture.manualEntryFlag();
     return payload;
   }
 

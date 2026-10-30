@@ -6349,11 +6349,12 @@ if (!class_exists('WC_Twoinc')) {
             // number itself, so a tampered field carries no more risk than
             // searching a different real company.
             //
-            // Only where billing holds no company at all: a billing name with
-            // no number is manual entry, and the delivery role's number must
-            // not go out under it, whether another company's or the very
-            // number the buyer just gave up (TWO-26775).
-            if ($company_id === '' && $company_name === '') {
+            // Never under billing's manual entry: the delivery role's number
+            // must not go out with a typed name, whether another company's or
+            // the very number the buyer just gave up (TWO-26775).
+            $billing_manual_entry = array_key_exists('company_manual_entry', $_POST)
+                && sanitize_text_field($_POST['company_manual_entry']) === '1';
+            if ($company_id === '' && !$billing_manual_entry) {
                 $shipping_company_id = array_key_exists('shipping_company_id', $_POST)
                     ? sanitize_text_field($_POST['shipping_company_id'])
                     : '';

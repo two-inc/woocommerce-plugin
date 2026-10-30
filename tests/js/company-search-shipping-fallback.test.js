@@ -94,39 +94,35 @@ describe("TWO-40 — billing-first, shipping-fallback company resolution", () =>
     expect(customerCompany().company_name).toBe("Acme Ltd");
   });
 
-  // A billing name with no number is manual entry, and the delivery role's number must not go out
-  // under it (TWO-26775); only a billing role holding nothing at all falls back.
+  // Under billing's manual entry the delivery role's number must not go out with the typed name
+  // (TWO-26775); a billing name with no number outside manual entry (a mirrored delivery address)
+  // still falls back.
   test.each([
+    { manual: true, expectedId: "", expectedName: "", description: "billing in manual entry" },
     {
-      billingName: "Acme Ltd",
-      expectedId: "",
-      expectedName: "",
-      description: "billing keeps a name"
-    },
-    {
-      billingName: "",
+      manual: false,
       expectedId: "22222222",
       expectedName: "Ship Co",
-      description: "billing holds nothing"
+      description: "billing keeping a name outside manual entry"
     }
   ])(
     "billing number dropped after shipping had a capture, $description",
-    ({ billingName, expectedId, expectedName, description }) => {
+    ({ manual, expectedId, expectedName, description }) => {
       capture.write("Acme Ltd", "11111111", { role: roles.invoice() });
       capture.write("Ship Co", "22222222", { role: roles.delivery() });
       expect(customerCompany().organization_number).toBe("11111111");
 
-      capture.write(billingName, "", { role: roles.invoice() });
+      if (manual) capture.setModeFor(roles.invoice(), "manual");
+      capture.write("Acme Ltd", "", { role: roles.invoice() });
 
       expect({
         description,
         id: customerCompany().organization_number,
-        name: customerCompany().company_name
-      }).toEqual({
-        description,
-        id: expectedId,
-        name: expectedName
-      });
+        name: customerCompany().company_name,
+        posted: document.querySelector('input[name="company_manual_entry"]')
+          ? document.querySelector('input[name="company_manual_entry"]').value
+          : ""
+      }).toEqual({ description, id: expectedId, name: expectedName, posted: manual ? "1" : "" });
     }
   );
 
