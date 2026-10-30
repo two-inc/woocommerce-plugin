@@ -246,7 +246,7 @@ let twoincCompanyCapture = {
   },
 
   set mode(value) {
-    twoincCompanyCapture.record().mode = value;
+    twoincCompanyCapture.setModeFor(undefined, value);
   },
 
   modeFor: function (role) {
@@ -3836,6 +3836,12 @@ let soleTraderAutofillPending = false;
 /** Set by a rate-limited lookup, page-global like the answer above. */
 let soleTraderAutofillBackoffUntil = 0;
 
+/** Marks an address field with the value the plugin itself last wrote there (TWO-26775). */
+const ADDRESS_WRITTEN_ATTR = "data-twoinc-written";
+
+/** The shared panel's own class for the cover a refused signup window leaves over the popover (TWO-26775). */
+const SIGNUP_PANEL_CLASS = "two-company-dropdown__signup";
+
 /**
  * Sole trader checkout — presentation only (TWO-24754).
  *
@@ -3845,16 +3851,6 @@ let soleTraderAutofillBackoffUntil = 0;
  * hosted signup popup, and autofills the company fields from
  * GET /autofill/v1/buyer/current. Mirrors the Magento reference flow.
  */
-/** Marks an address field with the value the plugin itself last wrote there (TWO-26775). */
-const ADDRESS_WRITTEN_ATTR = "data-twoinc-written";
-
-/** What a press can focus: a press on anything else moves no focus (TWO-26775). */
-const FOCUSABLE_SELECTOR =
-  'a[href], button, input, select, textarea, label, summary, [tabindex], [contenteditable=""], [contenteditable="true"]';
-
-/** The shared panel's own class for the cover a refused signup window leaves over the popover (TWO-26775). */
-const SIGNUP_PANEL_CLASS = "two-company-dropdown__signup";
-
 function createSoleTraderController(companySearch) {
   const controller = {
     mode: "business", // 'business' | 'sole_trader'
@@ -3876,6 +3872,10 @@ function createSoleTraderController(companySearch) {
     focusinHandler: null,
     /** @type {Function|null} the capture-phase `mousedown` listener bound beside it */
     pressHandler: null,
+    /** @type {Function|null} the capture-phase `mouseup` listener that hands the press to `settlePress` */
+    releaseHandler: null,
+    /** @type {Object|null} the press `pressHandler` noted, until its release */
+    pendingPress: null,
     /** @type {boolean} whether the last launch found focus held somewhere — the settle then gives it back */
     restoreOnSettle: false,
     /** @type {Element|null} the control a launch took focus from, given it back once the popup settles */
@@ -4875,19 +4875,72 @@ function createSoleTraderController(companySearch) {
         if (relaunch && typeof relaunch.click === "function") relaunch.click();
       };
       document.addEventListener("focusin", controller.focusinHandler, true);
-      // A press on content that takes no focus moves none, so the rules above never see it, yet the
-      // buyer has come back to the checkout: the popup closes. The popover is left to the panel's own
-      // outside-press close, which spares a press inside it (TWO-26775).
+      // A press that moves no focus never reaches the rules above, yet the buyer has come back to the
+      // checkout. Which presses those are is the browser's call, not the target's: page text, the
+      // popover's own dead space, a control macOS Safari and Firefox do not focus on click, or one
+      // inside a `tabindex="-1"` container. So the press is noted, and judged once its click has run
+      // by whether focus actually moved (TWO-26775).
       controller.pressHandler = function (event) {
         const target = event && event.target;
+        controller.pendingPress = null;
         if (!target || typeof target.closest !== "function") return;
-        // A control takes the focus, and the rules above, or its own click handler, decide.
-        if (target.closest(FOCUSABLE_SELECTOR)) return;
-        if (!controller.abandonablePopups().length) return;
-        controller.closeAbandonedPopups();
-        controller.closeDropdownOnSettle = false;
+        const popups = controller.abandonablePopups();
+        if (!popups.length) return;
+        // Rule (1): this role's own Sole trader chip raises the popup from its click.
+        const chip = target.closest("." + companySearch.modeChipClass);
+        const popover = controller.ownPopover();
+        if (
+          chip &&
+          chip.getAttribute("data-two-chip") === "soletrader" &&
+          popover &&
+          popover.contains(chip)
+        )
+          return;
+        controller.pendingPress = { target: target, focus: document.activeElement, popups: popups };
+      };
+      controller.releaseHandler = function () {
+        const press = controller.pendingPress;
+        if (!press) return;
+        controller.pendingPress = null;
+        // After the click, which the browser dispatches in the same task as this release.
+        window.setTimeout(function () {
+          controller.settlePress(press);
+        }, 0);
       };
       document.addEventListener("mousedown", controller.pressHandler, true);
+      document.addEventListener("mouseup", controller.releaseHandler, true);
+    },
+
+    /**
+     * Judge a press once its click has run. Focus that moved to another element was the
+     * `focusin` rules' to judge. A press that moved none closes the popups that were up when it
+     * began, and the popover too unless the press was inside it (TWO-26775).
+     *
+     * @param {{target: Element, focus: Element|null, popups: Array}} press noted by the press handler
+     */
+    settlePress: function (press) {
+      const active = document.activeElement;
+      const moved =
+        active !== press.focus &&
+        !!active &&
+        active !== document.body &&
+        active !== document.documentElement;
+      if (moved) return;
+      const left = press.popups.filter(function (watcher) {
+        return !watcher.decided && !watcher.win.closed;
+      });
+      if (!left.length) return;
+      left.forEach(function (watcher) {
+        if (typeof watcher.win.close === "function") watcher.win.close();
+      });
+      // The popover is this rule's call, not the settle poll's.
+      controller.closeDropdownOnSettle = false;
+      const popover = controller.ownPopover();
+      // The field counts as inside, as in the rules above.
+      const field = jQuery(companySearch.companyFieldSelector())[0];
+      if (press.target !== field && !(popover && popover.contains(press.target))) {
+        companySearch.closeCompanySearchDropdown({ returnFocus: false });
+      }
     },
 
     /** Test seam / teardown: drop the focus listeners. */
@@ -4895,8 +4948,11 @@ function createSoleTraderController(companySearch) {
       if (!controller.focusinHandler) return;
       document.removeEventListener("focusin", controller.focusinHandler, true);
       document.removeEventListener("mousedown", controller.pressHandler, true);
+      document.removeEventListener("mouseup", controller.releaseHandler, true);
       controller.focusinHandler = null;
       controller.pressHandler = null;
+      controller.releaseHandler = null;
+      controller.pendingPress = null;
       controller.parkedFocus = null;
     },
 
@@ -5255,6 +5311,9 @@ function createSoleTraderController(companySearch) {
       window.removeEventListener("pagehide", controller.handlePageHide);
     },
 
+    /** How long a buyer lookup may stay unanswered before it counts as failed. */
+    BUYER_LOOKUP_TIMEOUT_MS: 15000,
+
     /**
      * Read the buyer on the Two cookie. Invokes cb(buyer) with the buyer
      * details, or cb(null) when none exist (404). No UI side effects — the
@@ -5264,9 +5323,6 @@ function createSoleTraderController(companySearch) {
      * `BUYER_LOOKUP_TIMEOUT_MS`, invokes cb(null, true, response): a
      * distinction that only matters to a caller which holds the answer.
      */
-    /** How long a buyer lookup may stay unanswered before it counts as failed. */
-    BUYER_LOOKUP_TIMEOUT_MS: 15000,
-
     fetchCurrentBuyer: function (cb) {
       if (!controller.tokens) {
         cb(null);
@@ -6635,7 +6691,11 @@ class Twoinc {
     }
     write("city", twoincUtilHelper.blankToEmpty(payload.city));
     write("postcode", twoincUtilHelper.blankToEmpty(payload.postal_code));
-    Twoinc.getInstance().setRegion(role, payload.region);
+    // Stamped like the lines above, so a later sole-trader autofill may replace it (TWO-26775).
+    if (Twoinc.getInstance().setRegion(role, payload.region)) {
+      const $state = jQuery(twoincAddressRoles.field(role, "state"));
+      $state.attr(ADDRESS_WRITTEN_ATTR, twoincUtilHelper.blankToEmpty($state.val()));
+    }
 
     // Update order review in case there is a shipping change
     jQuery(document.body).trigger("update_checkout");
@@ -6730,11 +6790,11 @@ class Twoinc {
    *
    * @param {string} role
    * @param {*} region
-   * @returns {void}
+   * @returns {boolean} whether the region went into the state control
    */
   setRegion(role, region) {
     const value = twoincUtilHelper.blankToEmpty(region);
-    if (!value) return;
+    if (!value) return false;
     const instance = Twoinc.getInstance();
     const code = instance.ownSubdivisionCode(role, value);
 
@@ -6751,10 +6811,10 @@ class Twoinc {
       if (hit) {
         $state.val(hit.id);
         if (isSelect) $state.trigger("change");
-        return;
+        return true;
       }
       if (!code) instance.appendRegionToCity(role, value);
-      return;
+      return false;
     }
 
     // A hidden input is WooCommerce's marker for "this country's address
@@ -6762,10 +6822,11 @@ class Twoinc {
     // the region can simply be written into.
     if ($state.length && $state.attr("type") !== "hidden") {
       $state.val(value);
-      return;
+      return true;
     }
 
     if (!code) instance.appendRegionToCity(role, value);
+    return false;
   }
 
   /**

@@ -1793,7 +1793,7 @@ msgstr "Autónomo"
 
 #: class/WC_Twoinc_Checkout.php:785
 msgid "Sign up or log in as a sole trader"
-msgstr "Regístrate o inicia sesión como autónomo"
+msgstr "Regístrese o inicie sesión como autónomo"
 
 #: class/WC_Twoinc_Checkout.php:791
 msgid "Select a different sole trader"

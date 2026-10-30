@@ -1793,7 +1793,7 @@ msgstr "Eenmanszaak"
 
 #: class/WC_Twoinc_Checkout.php:785
 msgid "Sign up or log in as a sole trader"
-msgstr "Meld je aan of log in als eenmanszaak"
+msgstr "Meld u aan of log in als eenmanszaak"
 
 #: class/WC_Twoinc_Checkout.php:791
 msgid "Select a different sole trader"

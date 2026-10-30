@@ -38,6 +38,8 @@ function buildForm() {
     '  <input type="text" id="billing_postcode" value="" />',
     '  <input type="text" id="billing_state" value="" />',
     '  <p id="page_text">Some text on the page</p>',
+    '  <button type="button" id="page_button">Apply coupon</button>',
+    '  <input type="checkbox" id="ship_to_different" />',
     '  <div class="twoinc-sole-trader-note-slot"></div>',
     "</form>"
   ].join("\n");
@@ -189,9 +191,31 @@ describe("TWO-26775 sole-trader rulings", () => {
         typed: TYPED,
         expected: Object.assign({ name: "Registered Ltd", id: "12345678" }, TYPED),
         description: "a buyer with no number is refused whole"
+      },
+      {
+        buyer: FULL,
+        typed: {},
+        registry: {
+          street: "Registry Road",
+          city: "Registry City",
+          postal_code: "RG1 1AA",
+          region: "Surrey"
+        },
+        expected: {
+          name: "Trader Name",
+          id: "TWO:ST1",
+          address_1: "1 New Street",
+          address_2: "",
+          city: "Newtown",
+          postcode: "NT1 1AA",
+          state: "Kent",
+          phone: "+441234"
+        },
+        description: "a state the registry pick wrote is the plugin's, so it is replaced"
       }
-    ])("$description", ({ buyer, typed, expected, description }) => {
+    ])("$description", ({ buyer, typed, registry, expected, description }) => {
       pickRegistered();
+      if (registry) ctx.Twoinc.getInstance().setAddress(registry);
       Object.keys(typed).forEach((key) => {
         $("#" + (key === "phone" ? "billing_phone" : "billing_" + key)).val(typed[key]);
       });
@@ -307,7 +331,25 @@ describe("TWO-26775 sole-trader rulings", () => {
     expect($("#company_id").val()).toBe("12345678");
   });
 
-  /** A press on content that takes no focus closes the popup; the popover only when the press was outside it. */
+  function launchWithPopup() {
+    openPanel();
+    const win = fakePopup();
+    window.open = jest.fn(() => win);
+    jest.useFakeTimers();
+    soleTrader.bindFocusinListener();
+    chipNode("soletrader").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    jest.advanceTimersByTime(1);
+    return win;
+  }
+
+  /** A trusted press as the browser sends it, with no focus moved: jsdom performs no default action. */
+  function pressAndRelease(node) {
+    ["mousedown", "mouseup", "click"].forEach(function (type) {
+      node.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true }));
+    });
+  }
+
+  /** S12.3: a press that moves no focus closes the popup; the popover only when the press was outside it. */
   test.each([
     {
       target: () => document.getElementById("page_text"),
@@ -318,34 +360,62 @@ describe("TWO-26775 sole-trader rulings", () => {
       target: () => document.querySelector(".two-company-dropdown"),
       popover: true,
       description: "the popover's own padding"
+    },
+    {
+      target: () => document.getElementById("page_button"),
+      popover: false,
+      description: "a button the browser does not focus on click"
+    },
+    {
+      target: () => document.getElementById("ship_to_different"),
+      popover: false,
+      description: "a checkbox the browser does not focus on click"
+    },
+    {
+      arrange: () => document.querySelector("form").setAttribute("tabindex", "-1"),
+      target: () => document.querySelector(".two-company-dropdown"),
+      popover: true,
+      description: "the popover's own padding inside a tabindex=-1 container"
+    },
+    {
+      arrange: () => document.querySelector("form").setAttribute("tabindex", "-1"),
+      target: () => document.getElementById("page_button"),
+      popover: false,
+      description: "a button inside a tabindex=-1 container"
     }
-  ])("a press on $description closes the popup", ({ target, popover }) => {
-    openPanel();
-    const win = fakePopup();
-    window.open = jest.fn(() => win);
-    jest.useFakeTimers();
-    soleTrader.bindFocusinListener();
-    chipNode("soletrader").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    jest.advanceTimersByTime(1);
+  ])("a press on $description closes the popup", ({ arrange, target, popover }) => {
+    if (arrange) arrange();
+    const win = launchWithPopup();
 
-    target().dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    pressAndRelease(target());
     jest.advanceTimersByTime(300);
 
     expect(win.close).toHaveBeenCalled();
     expect(ctx.helper.companySearchDropdownIsOpen()).toBe(popover);
   });
 
-  test("a press on a control leaves the popup to the focus rules", () => {
-    openPanel();
-    const win = fakePopup();
-    window.open = jest.fn(() => win);
-    soleTrader.bindFocusinListener();
-    chipNode("soletrader").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  test("a press on this role's Sole trader chip raises the popup and leaves it open", () => {
+    const win = launchWithPopup();
+    win.focus.mockClear();
 
-    document
-      .getElementById("billing_city")
-      .dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    pressAndRelease(chipNode("soletrader"));
+    jest.advanceTimersByTime(300);
 
+    expect(win.focus).toHaveBeenCalled();
     expect(win.close).not.toHaveBeenCalled();
+    expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
+  });
+
+  test("a press whose focus lands on a control is judged by the focus rules alone", () => {
+    const win = launchWithPopup();
+    const city = document.getElementById("billing_city");
+
+    city.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    city.focus();
+    city.dispatchEvent(new window.MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    jest.advanceTimersByTime(300);
+
+    expect(win.close).toHaveBeenCalledTimes(1);
+    expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
   });
 });

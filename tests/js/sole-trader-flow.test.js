@@ -3590,7 +3590,11 @@ describe("TWO-40 — sole-trader flow", () => {
         soleTrader.bindFocusinListener();
 
         expect(onWindow).not.toHaveBeenCalled();
-        expect(onDocument.mock.calls.map((call) => call[0])).toEqual(["focusin", "mousedown"]);
+        expect(onDocument.mock.calls.map((call) => call[0])).toEqual([
+          "focusin",
+          "mousedown",
+          "mouseup"
+        ]);
       });
 
       /** Tab to the chip then Enter or Space: the chip's activation raises the popup, no mousedown and no `focusin` raise. */

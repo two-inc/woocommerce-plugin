@@ -126,6 +126,18 @@ describe("TWO-40 — billing-first, shipping-fallback company resolution", () =>
     }
   );
 
+  test("the plain mode setter keeps the manual-entry flag current through a sole-trader detour", () => {
+    const posted = () => document.querySelector('input[name="company_manual_entry"]').value;
+    capture.setModeFor(roles.invoice(), "manual");
+    expect(posted()).toBe("1");
+
+    capture.mode = "sole_trader";
+    expect(posted()).toBe("");
+
+    capture.mode = "manual";
+    expect(posted()).toBe("1");
+  });
+
   test("shipping manual entry (name, no number): does not count as captured on either side", () => {
     // Manual entry writes a name with NO number, same shape guardCompanyRetype
     // and enterManualCompanyEntry both produce — never through write() with a

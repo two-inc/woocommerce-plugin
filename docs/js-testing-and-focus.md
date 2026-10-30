@@ -86,13 +86,17 @@ can answer with the other role's popover outright.
 
 ## A press on content that takes no focus
 
-A press on page text, padding or any other node that takes no focus moves no
-focus, so the three rules above never see it, yet the buyer has come back to the
-checkout: a capture-phase `mousedown` on the document closes an open popup
-(TWO-26775). It leaves a press on a control alone, since focus or the control's
-own click handler decides that one. The popover is left to the panel's own
-outside-press close, so a press on the popover's own padding closes the popup
-and keeps the popover.
+A press that moves no focus never reaches the three rules above, yet the buyer
+has come back to the checkout. Which presses those are is the browser's call,
+not the target's: page text, the popover's own padding, a button, checkbox or
+radio that macOS Safari and Firefox do not focus on click, or a press inside a
+`tabindex="-1"` container. So a capture-phase `mousedown` notes where focus was,
+and once the press's click has run (a 0 ms timeout after `mouseup`) it checks
+whether focus moved to another element. If it did, the rules above have already
+decided. If it did not, the popups that were up when the press began close, and
+the popover closes too unless the press was inside it (the company field counts
+as inside). A press on this role's own Sole trader chip is left to the chip's
+click, which raises the popup (TWO-26775).
 
 ## What a hand-closed signup popup leaves behind
 
@@ -114,8 +118,10 @@ the field's own opener off, so the popover the settle just closed stays closed.
 The autofill prefetch keeps `window.open` out of the click's own gesture, so a
 popup blocker can refuse it. The shared panel then draws its signup cover over
 the popover, opening the popover first where the launch came from outside it:
-one button, "Sign up or log in as a sole trader", focused and announced, whose
-click is a gesture of its own. The panel takes the cover down on any chip or
+one button, "Sign up or log in as a sole trader", whose click is a gesture of
+its own. Focus moves to the button, so a screen reader says the caption once, as
+the button's name: the cover has no role or name of its own, and the status
+region stays empty. The panel takes the cover down on any chip or
 mode change and when the popover closes, and a window opening takes it down
 too. A popover closing over a detour that adopted nothing, with nothing left in
 flight, hands the mode back to the stored capture through the panel's
