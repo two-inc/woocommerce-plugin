@@ -70,10 +70,14 @@
     /**
      * Inline, like LIVE_STYLE and for the same reason: the two checkouts ship
      * separate stylesheets, and the panel has to cover the popover on both.
-     * `background: inherit` draws it in the popover's own colour.
+     * `background: inherit` draws it in the popover's own colour, and
+     * `padding: inherit` keeps the button inside the gutter the chips sit in.
      */
     const SIGNUP_PANEL_STYLE = 'position:absolute;top:0;right:0;bottom:0;left:0;z-index:1;'
-        + 'display:flex;align-items:center;justify-content:center;background:inherit;';
+        + 'display:flex;align-items:center;justify-content:center;background:inherit;padding:inherit;';
+
+    /** The chip rule grows a chip to fill its row; the lone button keeps its own width, centred. */
+    const SIGNUP_BUTTON_STYLE = 'flex:0 1 auto;';
 
     /** Off-screen without `display: none`, which takes a region out of the tree. */
     const LIVE_STYLE = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;'
@@ -250,6 +254,8 @@
         this._closing = false;
         /** Suppresses it for a whole signup flight; see `holdFieldOpener()`. */
         this._openerHeld = false;
+        /** Answers whether the signup flight is still up, so a window return keeps the hold. */
+        this._openerFlight = null;
         /** A window-level focus is in hand, so the field focus beside it is that window's. */
         this._openerReturnPending = false;
         /** The `focus` half of that pair seen, waiting on the `focusin` that ends it. */
@@ -279,7 +285,7 @@
     // ----------------------------------------------------------- announcing
 
     /**
-     * The panel's live region, built on first use and parked on `<body>`.
+     * The panel's live region, built when the panel first attaches and parked on `<body>`.
      *
      * Outside the panel because the panel carries `hidden` between opens, and a
      * live region inside a hidden subtree is not in the accessibility tree to
@@ -526,6 +532,9 @@
         }
         this._field = field;
         this._buildPanel(this._ensureWrap(field));
+        // Empty, ahead of its first sentence: a screen reader can miss a change
+        // to a region that arrived with it.
+        this._liveRegion();
         this.syncChips();
 
         // Manual entry owns the field: it is a plain text input holding what
@@ -834,6 +843,12 @@
         this._bindEvent(field, 'focusin', function () {
             if (!self._openerHeld) return;
             if (self._openerReturnFocusSeen) {
+                // One return of many while the flight is up: the next is the same pair again.
+                if (self._openerFlight && self._openerFlight()) {
+                    self._openerReturnPending = false;
+                    self._openerReturnFocusSeen = false;
+                    return;
+                }
                 self.holdFieldOpener(false);
                 return;
             }
@@ -1069,12 +1084,14 @@
         if (!this._open) this.open();
         this.hideSignupPanel();
         const cover = document.createElement('div');
+        // A plain container, with no role or name of its own: the focus move
+        // says the caption once, as the button's name, and the status region
+        // stays empty, so nothing says it twice.
         cover.className = SIGNUP_PANEL_CLASS;
-        cover.setAttribute('role', 'group');
-        cover.setAttribute('aria-label', caption);
         cover.style.cssText = SIGNUP_PANEL_STYLE;
         const button = document.createElement('button');
         button.type = 'button';
+        button.style.cssText = SIGNUP_BUTTON_STYLE;
         // The selected chip's look, so the button reads as part of the popover.
         button.className = `${CHIP_CLASS} ${CHIP_SELECTED_CLASS}`;
         button.textContent = caption;
@@ -1098,7 +1115,6 @@
         this._signup = cover;
         this._signupMode = this.getSelectedMode();
         button.focus();
-        this._announce(caption);
     };
 
     /** Take the signup panel down, giving the popover back. */
@@ -1129,11 +1145,19 @@
      * measured a second to a minute after it, however long the buyer stays away
      * — so the hold is unbounded in time and ends on the pair itself.
      *
+     * A hold given a `flight` outlasts every window return while that flight
+     * is up: the buyer can move between the popup and the checkout any number
+     * of times, and only the return after it has ended releases the hold
+     * (TWO-26775).
+     *
      * @param {boolean} held
+     * @param {object} [options] `{ flight: function(): boolean }`, whether the
+     *        signup the hold stands for is still up
      */
-    CompanySearchPanel.prototype.holdFieldOpener = function (held) {
+    CompanySearchPanel.prototype.holdFieldOpener = function (held, options) {
         if (!held && !this._openerHeld) return;
         this._openerHeld = !!held;
+        this._openerFlight = (held && options && typeof options.flight === 'function') ? options.flight : null;
         this._openerReturnPending = false;
         this._openerReturnFocusSeen = false;
         this._openerArrivalFocusSeen = false;

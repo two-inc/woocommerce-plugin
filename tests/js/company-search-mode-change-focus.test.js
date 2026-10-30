@@ -138,6 +138,20 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
     );
   });
 
+  test("a blocked launch says the caption once, as the focused button's name (TWO-26775)", () => {
+    open();
+
+    clickChip("soletrader");
+
+    const cover = document.querySelector(".two-company-dropdown__signup");
+    const button = cover.querySelector("button");
+    expect(document.activeElement).toBe(button);
+    expect(button.textContent).toBe("Sign up or log in as a sole trader");
+    expect(cover.hasAttribute("role")).toBe(false);
+    expect(cover.hasAttribute("aria-label")).toBe(false);
+    expect(document.querySelector(".two-company-dropdown__status").textContent).toBe("");
+  });
+
   test("the registered-company chip puts the caret back in the query field", () => {
     open();
     clickChip("soletrader");
