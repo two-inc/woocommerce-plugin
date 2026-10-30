@@ -6759,8 +6759,8 @@ class Twoinc {
     const region = source && typeof source === "object" ? blank(source.region) : "";
     const $state = jQuery(twoincAddressRoles.field(role, "state"));
     if (region && (!blank($state.val()) || this.holdsOwnWrite($state))) {
-      // The city is the buyer's or this record's, never a place to park the region (TWO-26775).
-      if (this.setRegion(role, region, { appendToCity: false })) {
+      // With no state control the region joins the city only when this record wrote the city: never one the buyer typed (TWO-26775).
+      if (this.setRegion(role, region, { appendToCity: !!values.city })) {
         $state.attr(ADDRESS_WRITTEN_ATTR, blank($state.val()));
         wroteAddress = true;
       }
