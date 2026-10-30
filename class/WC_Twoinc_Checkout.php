@@ -781,7 +781,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'text' => [
                         'registered_business' => __('Registered company', 'twoinc-payment-gateway'),
                         'sole_trader' => __('Sole trader', 'twoinc-payment-gateway'),
-                        'popup_prompt' => __('Click here to login or sign up as a sole trader.', 'twoinc-payment-gateway'),
+                        // The one button on the panel a refused signup window leaves over the popover (TWO-26775).
+                        'signup_panel' => __('Sign up or log in as a sole trader', 'twoinc-payment-gateway'),
                         // One link covers both "pick a different existing
                         // registration" and "register a new one" (TWO-40):
                         // that choice is made inside the hosted signup's own

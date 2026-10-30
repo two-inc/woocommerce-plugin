@@ -78,8 +78,8 @@ description: "The vendored company-search-panel.js (two-copy edit rule, parity d
   control, so taking it back would undo the buyer's own Tab (TWO-25326). The
   `focusin` classifier runs BECAUSE focus landed elsewhere. A country change
   leaves the buyer in the country select. The sole-trader settle places focus
-  itself once the popup has gone, and the company field's own opener is what
-  brings the picker back there (TWO-25658).
+  itself once the popup has gone, through `restoreFieldFocus()`, so the popover
+  it closed stays closed (TWO-26775).
 - **Escape is bound to the PANEL and to the company field, not to the query
   field.** Outside registered-company mode the query row is withdrawn and a chip
   is what holds focus, and the popover is drawn over the control below the field
@@ -125,6 +125,11 @@ description: "The vendored company-search-panel.js (two-copy edit rule, parity d
   the control it hits. The popover that closes gives its own field's tab
   stop back before the newly opened one takes its. A pointer press outside the open
   popover closes it too, with the company field counted as inside the control.
+- **A refused signup window gets the panel's own signup cover**
+  (`showSignupPanel()`), never a cover built in `assets/js/twoinc.js`, so the
+  blocked-popup prompt looks and behaves the same on every platform that carries
+  this control. The panel removes it itself on a chip or mode change and on
+  close, and reports every close through the `onClose` option (TWO-26775).
 - **No company field carries a required cue.** Neither the search control nor
   WooCommerce's native company row takes the `required` attribute or an
   asterisk, in any capture mode, placement or country: the payment tile's own

@@ -467,7 +467,7 @@ describe("company search country gate, sole-trader availability still in flight"
     text: {
       registered_business: "Registered company",
       sole_trader: "Sole trader",
-      popup_prompt: "",
+      signup_panel: "",
       select_different: "",
       error: ""
     }

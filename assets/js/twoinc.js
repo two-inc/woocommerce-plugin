@@ -246,7 +246,7 @@ let twoincCompanyCapture = {
   },
 
   set mode(value) {
-    twoincCompanyCapture.record().mode = value;
+    twoincCompanyCapture.setModeFor(undefined, value);
   },
 
   modeFor: function (role) {
@@ -255,6 +255,36 @@ let twoincCompanyCapture = {
 
   setModeFor: function (role, value) {
     twoincCompanyCapture.record(role).mode = value;
+    if ((role || twoincAddressRoles.primary()) === twoincAddressRoles.invoice()) {
+      twoincCompanyCapture.syncManualEntryCarrier();
+    }
+  },
+
+  /** POST key telling the server billing is in manual entry (TWO-26775). */
+  MANUAL_ENTRY_KEY: "company_manual_entry",
+
+  /** @returns {string} "1" while billing is in manual entry, else "" */
+  manualEntryFlag: function () {
+    return twoincCompanyCapture.modeFor(twoincAddressRoles.invoice()) === "manual" ? "1" : "";
+  },
+
+  /**
+   * Keep the classic form's manual-entry flag current. A billing name with no
+   * number reads the same whether the buyer typed it or the delivery address
+   * mirrored it, so the server is told outright: under manual entry no other
+   * role's number may go out with the order (TWO-26775).
+   */
+  syncManualEntryCarrier: function () {
+    const form = document.querySelector('form[name="checkout"]');
+    if (!form) return;
+    let input = form.querySelector('input[name="' + twoincCompanyCapture.MANUAL_ENTRY_KEY + '"]');
+    if (!input) {
+      input = document.createElement("input");
+      input.type = "hidden";
+      input.name = twoincCompanyCapture.MANUAL_ENTRY_KEY;
+      form.appendChild(input);
+    }
+    input.value = twoincCompanyCapture.manualEntryFlag();
   },
 
   /** Attribute holding the name/number pairing tag. */
@@ -399,7 +429,7 @@ let twoincCompanyCapture = {
         twoincCompanyCapture.syncOrderCompany();
       }
     } else if (
-      !twoincCompanyCapture.hasCapture(twoincAddressRoles.invoice()) &&
+      !twoincCompanyCapture.invoiceHoldsCompany() &&
       twoincCompanyCapture.deliveryFormExistsAndInPlay()
     ) {
       // The fallback role's own write reaches the order intent only while
@@ -430,7 +460,7 @@ let twoincCompanyCapture = {
    * @returns {boolean}
    */
   deliveryIsOrderCompanySource: function () {
-    if (twoincCompanyCapture.hasCapture(twoincAddressRoles.invoice())) return false;
+    if (twoincCompanyCapture.invoiceHoldsCompany()) return false;
     return (
       twoincCompanyCapture.deliveryFormExistsAndInPlay() &&
       twoincCompanyCapture.hasCapture(twoincAddressRoles.delivery())
@@ -499,6 +529,22 @@ let twoincCompanyCapture = {
       twoincCompanyCapture.numberField(delivery).val()
     );
     instance.customerCompany.country_prefix = twoincAddressRoles.country(delivery);
+  },
+
+  /**
+   * Does billing hold a company of its own: a capture, or manual entry? Either
+   * keeps the delivery role's number off the order, so a manual name never goes
+   * out with another role's number (TWO-26775). Read off the mode, not the
+   * name: a delivery address the checkout mirrors into billing brings a name
+   * with no number too.
+   *
+   * @returns {boolean}
+   */
+  invoiceHoldsCompany: function () {
+    const invoice = twoincAddressRoles.invoice();
+    return (
+      twoincCompanyCapture.hasCapture(invoice) || twoincCompanyCapture.modeFor(invoice) === "manual"
+    );
   },
 
   /**
@@ -686,18 +732,47 @@ let twoincCompanyCapture = {
     if (pair === twoincCompanyCapture.rememberedPair) return;
     twoincCompanyCapture.rememberedPair = pair;
     window.clearTimeout(twoincCompanyCapture.rememberTimer);
+    twoincCompanyCapture.pendingRemember = {
+      url: url,
+      data: {
+        csrf_token: twoincUtilHelper.proxyCsrfToken(),
+        company_id: number,
+        company_name: name,
+        country: capturedIn
+      }
+    };
+    if (!twoincCompanyCapture.rememberFlushBound) {
+      twoincCompanyCapture.rememberFlushBound = true;
+      window.addEventListener("pagehide", twoincCompanyCapture.flushRemember);
+    }
     twoincCompanyCapture.rememberTimer = window.setTimeout(function () {
-      jQuery.ajax({
-        type: "POST",
-        url: url,
-        data: {
-          csrf_token: twoincUtilHelper.proxyCsrfToken(),
-          company_id: number,
-          company_name: name,
-          country: capturedIn
-        }
-      });
+      const pending = twoincCompanyCapture.pendingRemember;
+      twoincCompanyCapture.pendingRemember = null;
+      if (pending) jQuery.ajax({ type: "POST", url: pending.url, data: pending.data });
     }, twoincCompanyCapture.REMEMBER_DEBOUNCE_MS);
+  },
+
+  /** @type {Object|null} the write the debounce still holds: its url and data */
+  pendingRemember: null,
+
+  rememberFlushBound: false,
+
+  /**
+   * Send a write the debounce still holds as the page goes. A reload inside
+   * the debounce would otherwise replay the cart's previous company, number
+   * included, over a buyer who had just let it go (TWO-26775).
+   */
+  flushRemember: function () {
+    const pending = twoincCompanyCapture.pendingRemember;
+    if (!pending) return;
+    twoincCompanyCapture.pendingRemember = null;
+    window.clearTimeout(twoincCompanyCapture.rememberTimer);
+    if (
+      navigator.sendBeacon &&
+      navigator.sendBeacon(pending.url, new URLSearchParams(pending.data))
+    )
+      return;
+    jQuery.ajax({ type: "POST", url: pending.url, data: pending.data });
   },
 
   /** The control owning one role, falling back on the primary role's. */
@@ -1249,6 +1324,11 @@ class TwoCompanySearch {
         },
         onExitManualEntry: () => {
           this.exitManualCompanyEntry();
+        },
+        // A popover closed over a sole-trader detour that adopted nothing, with nothing left in
+        // flight, hands the mode back to the stored capture (TWO-26775).
+        onClose: () => {
+          this.soleTrader.settleUnadopted();
         }
       });
     } else {
@@ -2115,21 +2195,18 @@ class TwoCompanySearch {
     // has by then started typing into.
     if (twoincCompanyCapture.modeFor(this.role) === "manual") return;
 
+    // The name the buyer was looking at, read before the mode switch below
+    // repaints anything.
+    const name = this.getCompanyName();
+
     twoincCompanyCapture.setModeFor(this.role, "manual");
 
-    jQuery(this.companyFieldSelector()).val("");
-    twoincCompanyCapture.nameField(this.role).val("");
-    twoincCompanyCapture.numberField(this.role).val("");
-
-    // This role's own registry address too, mirroring clearSelectedCompany —
-    // but ONLY when a registry lookup actually wrote it. Reaching manual entry
-    // does not imply one ran, and clearing unconditionally would blank a
-    // logged-in buyer's own account-prefilled address for no reason.
-    const addressState = Twoinc.getInstance().addressStateFor(this.role);
-    if (addressState.registryApplied) {
-      Twoinc.getInstance().clearAddress(this.role);
-      addressState.registryApplied = false;
-    }
+    // The name stays, ready to edit, and so does the address; only the number
+    // goes (TWO-26775). Through `write()`, the one writer of the number, so
+    // the pairing tag, the instance record and the cart's remembered company
+    // drop it too: a reload must never bring it back.
+    jQuery(this.companyFieldSelector()).val(name);
+    twoincCompanyCapture.write(name, "", { role: this.role });
     // Billing-first, shipping-fallback (TWO-40): manual entry on
     // EITHER role drops that role's own number, which can change what the
     // order intent resolves to regardless of which role owns it.
@@ -3759,6 +3836,12 @@ let soleTraderAutofillPending = false;
 /** Set by a rate-limited lookup, page-global like the answer above. */
 let soleTraderAutofillBackoffUntil = 0;
 
+/** Marks an address field with the value the plugin itself last wrote there (TWO-26775). */
+const ADDRESS_WRITTEN_ATTR = "data-twoinc-written";
+
+/** The shared panel's own class for the cover a refused signup window leaves over the popover (TWO-26775). */
+const SIGNUP_PANEL_CLASS = "two-company-dropdown__signup";
+
 /**
  * Sole trader checkout — presentation only (TWO-24754).
  *
@@ -3787,6 +3870,12 @@ function createSoleTraderController(companySearch) {
     messageHandler: null,
     /** @type {Function|null} the capture-phase `focusin` listener, `bindFocusinListener`'s */
     focusinHandler: null,
+    /** @type {Function|null} the capture-phase `mousedown` listener bound beside it */
+    pressHandler: null,
+    /** @type {Function|null} the capture-phase `mouseup` listener that hands the press to `settlePress` */
+    releaseHandler: null,
+    /** @type {Object|null} the press `pressHandler` noted, until its release */
+    pendingPress: null,
     /** @type {boolean} whether the last launch found focus held somewhere — the settle then gives it back */
     restoreOnSettle: false,
     /** @type {Element|null} the control a launch took focus from, given it back once the popup settles */
@@ -3997,32 +4086,13 @@ function createSoleTraderController(companySearch) {
     },
 
     render: function () {
-      const cfg = controller.config();
       const $container = jQuery("." + companySearch.soleTraderNoteSlotClass);
       $container.empty().removeClass("hidden");
 
-      // Bell-icon note + signup link — shown only when sole-trader mode is
-      // active and signup is needed, and as the fallback when an
-      // auto-launched popup is blocked. The mode chips themselves are NOT
-      // built here — they render as children of the company-search panel, see
+      // The slot holds only the error line now: a refused signup window gets
+      // the panel over the popover instead of a link here (TWO-26775). The mode
+      // chips render as children of the company-search panel, see
       // TwoCompanySearch#chips().
-      const $note = jQuery(
-        '<div class="twoinc-sole-trader-note hidden">' +
-          '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">' +
-          '<path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0M3.124 7.5A8.969 8.969 0 015.292 3m13.416 0a8.969 8.969 0 012.168 4.5"/>' +
-          "</svg></div>"
-      );
-      jQuery("<a>", {
-        href: "#",
-        class: "twoinc-sole-trader-note__link",
-        text: cfg.text.popup_prompt
-      })
-        .on("click", function (event) {
-          event.preventDefault();
-          controller.launchSignup();
-        })
-        .appendTo($note);
-      $container.append($note);
 
       // Mint happens once, eagerly, from `Twoinc#initialize()` (see
       // `primeTokens`) — not here, so the toggle becoming visible for a
@@ -4103,10 +4173,49 @@ function createSoleTraderController(companySearch) {
       companySearch.syncModeChips();
     },
 
-    showNote: function (show) {
-      jQuery("." + companySearch.soleTraderNoteSlotClass)
-        .find(".twoinc-sole-trader-note")
-        .toggleClass("hidden", !show);
+    /** @returns {boolean} whether the blocked-popup panel is on screen */
+    signupPanelIsUp: function () {
+      const popover = controller.ownPopover();
+      return !!popover && !!popover.querySelector("." + SIGNUP_PANEL_CLASS);
+    },
+
+    /**
+     * The browser refused the signup window (TWO-26775). The autofill prefetch
+     * keeps the open out of the click's own gesture, so a popup blocker can
+     * refuse it; the shared panel then covers the popover with one button,
+     * whose click is a gesture of its own and opens the window with the tokens
+     * already held. The panel itself takes it down on any chip or mode change
+     * and when the popover closes; a window opening takes it down here.
+     *
+     * @param {Object} [options] the refused launch's own options, replayed
+     */
+    showSignupPanel: function (options) {
+      const panel = companySearch.panel;
+      if (!panel || typeof panel.showSignupPanel !== "function") return;
+      const caption =
+        (controller.config().text && controller.config().text.signup_panel) ||
+        "Sign up or log in as a sole trader";
+      // The popover is what the panel stands on, so no settle may close it.
+      controller.closeDropdownOnSettle = false;
+      panel.showSignupPanel(caption, function () {
+        controller.launchSignup(options);
+      });
+    },
+
+    removeSignupPanel: function () {
+      const panel = companySearch.panel;
+      if (panel && typeof panel.hideSignupPanel === "function") panel.hideSignupPanel();
+    },
+
+    /**
+     * Leave a sole-trader detour that adopted nothing and has nothing left in
+     * flight, clearing nothing: the mode goes back to what the stored capture
+     * says (TWO-26775).
+     */
+    settleUnadopted: function () {
+      if (controller.mode !== "sole_trader" || controller.soleTraderAdopted) return;
+      if (controller.isBusy() || controller.signupPanelIsUp()) return;
+      controller.setMode("business");
     },
 
     /**
@@ -4296,13 +4405,10 @@ function createSoleTraderController(companySearch) {
       // Read, never fetched: `render()` resolves it, and an unresolved answer
       // means the popup rather than a wait, so both arms stay in the click's
       // own gesture — see `openPopup`.
-      const autofilled = controller.heldAutofill();
-      if (autofilled) {
-        // Same criterion as the post-signup path: a buyer object at all.
-        controller.setCompany(autofilled.organization_number, autofilled.company_name, autofilled);
-        controller.showNote(false);
-        return;
-      }
+      // Only a registration under the checkout's own email is applied unasked;
+      // anyone else goes through the popup, where the buyer chooses (TWO-26775).
+      const held = controller.heldAutofill();
+      if (controller.buyerMatchesCheckout(held) && controller.adoptBuyer(held)) return;
       controller.launchSignup(undefined, heldFocus);
     },
 
@@ -4343,7 +4449,13 @@ function createSoleTraderController(companySearch) {
       // redundant same-mode `setMode("sole_trader")` must not zero a live
       // re-signup's own `soleTraderReconfirmingCount` mid-flight.
       const isTransition = mode !== controller.mode;
+      // Read before the reset below: only a sole trader this detour adopted is
+      // its own to clear on the way out. One that adopted nothing leaves the
+      // name, number and address exactly as the chip click found them
+      // (TWO-26775).
+      const clearsCapture = controller.soleTraderAdopted;
       controller.mode = mode;
+      controller.removeSignupPanel();
       if (isTransition) {
         controller.soleTraderAdopted = false;
         controller.soleTraderReconfirmingCount = 0;
@@ -4371,7 +4483,7 @@ function createSoleTraderController(companySearch) {
       // `lockCapturedFields()` closes the panel once there is a company to show.
       if (mode !== "sole_trader") {
         controller.leaveSoleTraderMode();
-        controller.setCompany("", "");
+        if (clearsCapture) controller.setCompany("", "");
         twoincDomHelper.toggleBusinessFields();
         Twoinc.getInstance().enableCompanySearch();
         // The buyer may have been in manual entry when they switched to sole
@@ -4394,7 +4506,6 @@ function createSoleTraderController(companySearch) {
      * ever runs. Split out so both paths share identical "leaving" semantics.
      */
     leaveSoleTraderMode: function () {
-      controller.showNote(false);
       twoincCompanyCapture
         .nameField()
         .add(twoincCompanyCapture.numberFieldSelector())
@@ -4488,8 +4599,8 @@ function createSoleTraderController(companySearch) {
     },
 
     /**
-     * Open the hosted signup popup, falling back to the visible link if the
-     * browser blocks the window. Re-entrancy-guarded (TWO-40): a second
+     * Open the hosted signup popup, falling back to the panel over the popover
+     * if the browser blocks the window. Re-entrancy-guarded (TWO-40): a second
      * activation while one is already opening is dropped, and an activation
      * while an already-open popup's outcome is undecided raises that popup
      * instead of opening a second one.
@@ -4534,11 +4645,12 @@ function createSoleTraderController(companySearch) {
           controller.parkLaunchFocus();
           controller.watchPopupClose(win, isReconfirming);
         }
-        controller.showNote(!win);
+        if (win) controller.removeSignupPanel();
+        else controller.showSignupPanel(options);
       } finally {
         // Released once the synchronous open has returned, blocked or not —
         // held any longer and a blocked popup would lock the buyer out of
-        // retrying via the fallback link.
+        // retrying from the panel's button.
         controller.openingSignup = false;
       }
     },
@@ -4549,7 +4661,8 @@ function createSoleTraderController(companySearch) {
      * (TWO-40). `window.closed` polling is the only signal a same-origin
      * opener has for "the popup went away", with no cooperation from the
      * popup and no event for it. If nothing was adopted by close time, hand
-     * the checkout back to an ordinary company search.
+     * the checkout back to the mode its stored capture describes, clearing
+     * nothing (TWO-26775).
      *
      * Reads `soleTraderAdopted`, not `#company_id`'s raw value, which can
      * hold an unrelated id from an earlier capture and would wrongly read as
@@ -4611,6 +4724,8 @@ function createSoleTraderController(companySearch) {
         controller.mode === "sole_trader" &&
         !controller.soleTraderAdopted &&
         !controller.signupConfirming &&
+        // The panel a refused relaunch left is the buyer's next step; it settles the mode itself.
+        !controller.signupPanelIsUp() &&
         // A popup relaunched inside this poll's stale window owns the mode
         // now — reverting under it would drop its eventual ACCEPTED on the
         // `mode !== "sole_trader"` gate.
@@ -4644,7 +4759,9 @@ function createSoleTraderController(companySearch) {
       const node = controller.refocusOnSettle;
       controller.refocusOnSettle = null;
       if (outcomeOwned || document.activeElement !== document.body) return;
-      if (node && node.isConnected && companySearch.isOnScreen(jQuery(node))) {
+      const panel = companySearch.panel;
+      const field = panel && panel.getField && panel.getField()[0];
+      if (node && node !== field && node.isConnected && companySearch.isOnScreen(jQuery(node))) {
         node.focus();
         return;
       }
@@ -4656,8 +4773,12 @@ function createSoleTraderController(companySearch) {
         if ($launcher.length && companySearch.isOnScreen($launcher)) $launcher.trigger("focus");
         return;
       }
-      // Unlike Magento, the company field's opener reopening the popover after an abandoned signup
-      // is accepted (TWO-25658).
+      // Through the panel, so the field's own opener stays off: focus coming back to the field
+      // after an abandoned signup does not reopen the popover the settle just closed (TWO-26775).
+      if (field && field.isConnected && companySearch.isOnScreen(jQuery(field))) {
+        panel.restoreFieldFocus();
+        return;
+      }
       companySearch.focusVisibleCompanyField(companySearch.companyFieldSelector());
     },
 
@@ -4754,13 +4875,108 @@ function createSoleTraderController(companySearch) {
         if (relaunch && typeof relaunch.click === "function") relaunch.click();
       };
       document.addEventListener("focusin", controller.focusinHandler, true);
+      // A press that moves no focus never reaches the rules above, yet the buyer has come back to the
+      // checkout. Which presses those are is the browser's call, not the target's: page text, the
+      // popover's own dead space, a control macOS Safari and Firefox do not focus on click, or one
+      // inside a `tabindex="-1"` container. So the press is noted, and judged once its click has run
+      // by whether focus actually moved (TWO-26775).
+      controller.pressHandler = function (event) {
+        const target = event && event.target;
+        controller.pendingPress = null;
+        // Only a primary-button press on content is a click: a right press opens the context menu,
+        // and one on the page's own scrollbar (target `html`) or an element's scrollbar scrolls.
+        if (
+          !target ||
+          typeof target.closest !== "function" ||
+          event.button !== 0 ||
+          target === document.documentElement ||
+          controller.pressIsOnScrollbar(event)
+        ) {
+          return;
+        }
+        const popups = controller.abandonablePopups();
+        if (!popups.length) return;
+        // Rule (1): this role's own Sole trader chip raises the popup from its click.
+        const chip = target.closest("." + companySearch.modeChipClass);
+        const popover = controller.ownPopover();
+        if (
+          chip &&
+          chip.getAttribute("data-two-chip") === "soletrader" &&
+          popover &&
+          popover.contains(chip)
+        )
+          return;
+        controller.pendingPress = { target: target, focus: document.activeElement, popups: popups };
+      };
+      controller.releaseHandler = function () {
+        const press = controller.pendingPress;
+        if (!press) return;
+        controller.pendingPress = null;
+        // After the click, which the browser dispatches in the same task as this release.
+        window.setTimeout(function () {
+          controller.settlePress(press);
+        }, 0);
+      };
+      document.addEventListener("mousedown", controller.pressHandler, true);
+      document.addEventListener("mouseup", controller.releaseHandler, true);
+    },
+
+    /**
+     * A press on a native scrollbar lands outside the target's client box (TWO-26775).
+     *
+     * @param {MouseEvent} event the mousedown
+     * @returns {boolean}
+     */
+    pressIsOnScrollbar: function (event) {
+      const target = event.target;
+      const width = target.clientWidth;
+      const height = target.clientHeight;
+      if (!width && !height) return false;
+      return event.offsetX >= width || event.offsetY >= height;
+    },
+
+    /**
+     * Judge a press once its click has run. Focus that moved to another element was the
+     * `focusin` rules' to judge. A press that moved none closes the popups that were up when it
+     * began, and the popover too unless the press was inside it (TWO-26775).
+     *
+     * @param {{target: Element, focus: Element|null, popups: Array}} press noted by the press handler
+     */
+    settlePress: function (press) {
+      const active = document.activeElement;
+      const moved =
+        active !== press.focus &&
+        !!active &&
+        active !== document.body &&
+        active !== document.documentElement;
+      if (moved) return;
+      const left = press.popups.filter(function (watcher) {
+        return !watcher.decided && !watcher.win.closed;
+      });
+      if (!left.length) return;
+      left.forEach(function (watcher) {
+        if (typeof watcher.win.close === "function") watcher.win.close();
+      });
+      // The popover is this rule's call, not the settle poll's.
+      controller.closeDropdownOnSettle = false;
+      const popover = controller.ownPopover();
+      // The field counts as inside, as in the rules above.
+      const field = jQuery(companySearch.companyFieldSelector())[0];
+      if (press.target !== field && !(popover && popover.contains(press.target))) {
+        companySearch.closeCompanySearchDropdown({ returnFocus: false });
+      }
     },
 
     /** Test seam / teardown: drop the focus listeners. */
     unbindFocusinListener: function () {
       if (!controller.focusinHandler) return;
       document.removeEventListener("focusin", controller.focusinHandler, true);
+      document.removeEventListener("mousedown", controller.pressHandler, true);
+      document.removeEventListener("mouseup", controller.releaseHandler, true);
       controller.focusinHandler = null;
+      controller.pressHandler = null;
+      controller.releaseHandler = null;
+      controller.pendingPress = null;
       controller.parkedFocus = null;
     },
 
@@ -4933,9 +5149,10 @@ function createSoleTraderController(companySearch) {
         // search for. Locking here, not on every switch into sole-trader
         // mode, is what lets the dropdown+spinner survive the autofill/popup
         // round trip.
-        controller.lockCapturedFields(companyId, companyName);
-        // Read by `watchPopupClose()` in place of `#company_id`'s raw value.
+        // Read by `watchPopupClose()` in place of `#company_id`'s raw value. Set before the lock,
+        // whose popover close would otherwise read an unadopted detour and revert it.
         controller.soleTraderAdopted = true;
+        controller.lockCapturedFields(companyId, companyName);
       }
       twoincCompanyCapture.write(companyName, companyId, { role: companySearch.role });
       // The visible field too, when this is the clearing call setMode("business")
@@ -4951,15 +5168,8 @@ function createSoleTraderController(companySearch) {
       // have nothing to do with sole-trader signup, but a buyer who just
       // enrolled must still have their address land. Explicit bypass rather
       // than making the switch context-aware.
-      const buyerAddress = buyer && (buyer.billing_address || buyer.address);
-      if (companyId && buyerAddress) {
-        instance.setAddress(buyerAddress, companySearch.role);
-        instance.addressStateFor(companySearch.role).registryApplied = true;
-      }
-      // This role's own phone field, where the form has one (WooCommerce
-      // renders `#shipping_phone` only on stores that ask for it).
-      if (companyId && buyer && buyer.phone_number) {
-        jQuery(twoincAddressRoles.field(companySearch.role, "phone")).val(buyer.phone_number);
+      if (companyId && buyer) {
+        instance.writeSoleTraderAddress(buyer, companySearch.role);
       }
       // Re-evaluate which company fields are shown, after the write above
       // (TWO-25326): `#company_id`'s visibility depends on the value it
@@ -4976,6 +5186,45 @@ function createSoleTraderController(companySearch) {
       if (companyId) {
         instance.getApproval();
       }
+    },
+
+    /**
+     * Adopt an autofill buyer under the sole-trader write rules (TWO-26775):
+     * the number always, the name only when the buyer carries one (a blank
+     * keeps the name already on the form), and the address and phone by
+     * `writeSoleTraderAddress()`. A buyer with no number is refused whole,
+     * writing nothing, so it cannot leave a name with no number behind.
+     *
+     * @param {Object|boolean|null} buyer
+     * @returns {boolean} whether a sole trader was adopted
+     */
+    adoptBuyer: function (buyer) {
+      if (!buyer || typeof buyer !== "object") return false;
+      const number = twoincUtilHelper.blankToEmpty(buyer.organization_number).trim();
+      if (!number) return false;
+      const name =
+        twoincUtilHelper.blankToEmpty(buyer.company_name).trim() || companySearch.getCompanyName();
+      controller.setCompany(number, name, buyer);
+      controller.removeSignupPanel();
+      return true;
+    },
+
+    /**
+     * Whether a prefetched buyer is registered under the email the checkout
+     * holds, compared trimmed and case-blind. A blank on either side is no
+     * match.
+     *
+     * @param {Object|boolean|null} buyer
+     * @returns {boolean}
+     */
+    buyerMatchesCheckout: function (buyer) {
+      if (!buyer || typeof buyer !== "object") return false;
+      const entered = twoincUtilHelper
+        .blankToEmpty(twoincAddressRoles.value(twoincAddressRoles.invoice(), "email"))
+        .trim()
+        .toLowerCase();
+      const own = twoincUtilHelper.blankToEmpty(buyer.email).trim().toLowerCase();
+      return entered !== "" && own === entered;
     },
 
     /**
@@ -5086,12 +5335,16 @@ function createSoleTraderController(companySearch) {
       window.removeEventListener("pagehide", controller.handlePageHide);
     },
 
+    /** How long a buyer lookup may stay unanswered before it counts as failed. */
+    BUYER_LOOKUP_TIMEOUT_MS: 15000,
+
     /**
      * Read the buyer on the Two cookie. Invokes cb(buyer) with the buyer
      * details, or cb(null) when none exist (404). No UI side effects — the
      * caller decides what to do with the result.
      *
-     * A request that produced no answer invokes cb(null, true, response) — a
+     * A request that produced no answer, including one still unanswered after
+     * `BUYER_LOOKUP_TIMEOUT_MS`, invokes cb(null, true, response): a
      * distinction that only matters to a caller which holds the answer.
      */
     fetchCurrentBuyer: function (cb) {
@@ -5111,13 +5364,29 @@ function createSoleTraderController(companySearch) {
       // call with no server hop to attach them from.
       const query = new URLSearchParams(window.twoinc.api_client_params || {}).toString();
       let refused = null;
+      // Answered once, whichever comes first: the response or the timeout. A
+      // lookup that never answers would otherwise hold the ACCEPTED flight, and
+      // with it Sole trader mode, for the life of the page (TWO-26775).
+      let answered = false;
+      const abort = typeof AbortController === "function" ? new AbortController() : null;
+      const answer = function (buyer, failed, response) {
+        if (answered) return;
+        answered = true;
+        clearTimeout(timer);
+        cb(buyer, failed, response);
+      };
+      const timer = setTimeout(function () {
+        if (abort) abort.abort();
+        answer(null, true, null);
+      }, controller.BUYER_LOOKUP_TIMEOUT_MS);
       fetch(
         window.twoinc.twoinc_checkout_host +
           "/autofill/v1/buyer/current" +
           (query ? "?" + query : ""),
         {
           credentials: "include",
-          headers: headers
+          headers: headers,
+          signal: abort ? abort.signal : undefined
         }
       )
         .then(function (response) {
@@ -5135,12 +5404,12 @@ function createSoleTraderController(companySearch) {
         })
         .then(
           function (json) {
-            cb(json || null);
+            answer(json || null);
           },
           // Paired with the success handler rather than chained after it, so
           // a throw from the callback itself cannot re-enter it as a failure.
           function () {
-            cb(null, true, refused);
+            answer(null, true, refused);
           }
         );
     },
@@ -5153,7 +5422,7 @@ function createSoleTraderController(companySearch) {
      * async-delayed `window.open()` is refused outright by WebKit, so neither
      * the token mint nor the autofill lookup is in this path — `render()`
      * resolves both up front and every caller reaches here inside the click's
-     * own gesture. The visible note link is the fallback for a refusal.
+     * own gesture. The panel over the popover is the fallback for a refusal.
      *
      * Brand overlays need nothing added here: a branded deployment resolves
      * this URL's host from the brand registry's own URL template (see
@@ -5257,7 +5526,7 @@ function createSoleTraderController(companySearch) {
           // this before deciding the buyer abandoned signup with nothing
           // captured.
           controller.signupConfirming = true;
-          controller.fetchCurrentBuyer(function (buyer) {
+          controller.fetchCurrentBuyer(function (buyer, failed) {
             // Authenticated path (TWO-40): the server has just told this
             // browser who the buyer is, so the email they authenticated with
             // is the answer, full stop. Re-checking it against the
@@ -5265,8 +5534,8 @@ function createSoleTraderController(companySearch) {
             // signs up under a different address completes OTP, the stale
             // email match disagrees with the server, and the same popup
             // reopens forever.
-            const resolved = !!buyer;
             controller.signupConfirming = false;
+            let adopted = false;
             try {
               // Decremented here rather than only on popup close so a
               // resolved re-signup un-blocks the Business
@@ -5280,12 +5549,17 @@ function createSoleTraderController(companySearch) {
                   controller.soleTraderReconfirmingCount - 1
                 );
               }
-              if (resolved) {
-                // A signup replaces the cookie's buyer.
-                controller.holdAutofill(buyer);
-                controller.setCompany(buyer.organization_number, buyer.company_name, buyer);
-                controller.showNote(false);
-              } else {
+              // A signup replaces the cookie's buyer.
+              if (buyer) controller.holdAutofill(buyer);
+              adopted = controller.adoptBuyer(buyer);
+              if (!adopted && !failed) {
+                // Signed up, yet nobody to adopt: the signup is offered again
+                // (TWO-26775). Outside any gesture, so a browser that refuses
+                // the window gets the panel's button instead, which is one.
+                // The flight below is still held, so the popover it covers
+                // stays open.
+                controller.launchSignup();
+              } else if (!adopted) {
                 controller.showError();
               }
             } finally {
@@ -5294,6 +5568,11 @@ function createSoleTraderController(companySearch) {
               // above zero for the life of the page, leaving `isBusy()` true
               // and every exit from sole-trader mode refused.
               controller.settleFlight();
+              // A lookup that answered nothing usable after its popup already
+              // closed has no close left to settle the mode on, so it is
+              // settled here: nothing may stay in Sole trader mode on stale
+              // state (TWO-26775).
+              if (!adopted) controller.settleUnadopted();
             }
           });
         } else {
@@ -6425,20 +6704,94 @@ class Twoinc {
       .filter(Boolean)
       .join(" ");
 
+    const write = function (name, value) {
+      jQuery(twoincAddressRoles.field(role, name)).val(value).attr(ADDRESS_WRITTEN_ATTR, value);
+    };
     if (premises) {
-      jQuery(twoincAddressRoles.field(role, "address_1")).val(premises);
-      jQuery(twoincAddressRoles.field(role, "address_2")).val(street);
+      write("address_1", premises);
+      write("address_2", street);
     } else {
-      jQuery(twoincAddressRoles.field(role, "address_1")).val(street);
+      write("address_1", street);
     }
-    jQuery(twoincAddressRoles.field(role, "city")).val(twoincUtilHelper.blankToEmpty(payload.city));
-    jQuery(twoincAddressRoles.field(role, "postcode")).val(
-      twoincUtilHelper.blankToEmpty(payload.postal_code)
-    );
-    Twoinc.getInstance().setRegion(role, payload.region);
+    write("city", twoincUtilHelper.blankToEmpty(payload.city));
+    write("postcode", twoincUtilHelper.blankToEmpty(payload.postal_code));
+    // Stamped like the lines above, so a later sole-trader autofill may replace it (TWO-26775).
+    if (Twoinc.getInstance().setRegion(role, payload.region)) {
+      const $state = jQuery(twoincAddressRoles.field(role, "state"));
+      $state.attr(ADDRESS_WRITTEN_ATTR, twoincUtilHelper.blankToEmpty($state.val()));
+    }
 
     // Update order review in case there is a shipping change
     jQuery(document.body).trigger("update_checkout");
+  }
+
+  /**
+   * Write an adopted sole trader's address and phone onto a role (TWO-26775).
+   *
+   * Unlike `setAddress()`, a blank is not a value: each field is written only
+   * when the buyer record carries something for it, and a blank clears a field
+   * only while it still holds what the plugin itself wrote there, so a record
+   * missing a field never wipes the buyer's own typing. The state is filled
+   * only while it is empty or still the plugin's. Country, email and the
+   * buyer's own names are never written.
+   *
+   * @param {Object} buyer the autofill buyer
+   * @param {string} role
+   * @returns {void}
+   */
+  writeSoleTraderAddress(buyer, role) {
+    const blank = twoincUtilHelper.blankToEmpty;
+    const source = buyer.billing_address || buyer.address;
+    const values = { phone: blank(buyer.phone_number) };
+    if (source && typeof source === "object") {
+      const street = blank(source.street !== undefined ? source.street : source.street_address);
+      const premises = [source.building, source.apartment].map(blank).filter(Boolean).join(" ");
+      values.address_1 = premises || street;
+      values.address_2 = premises ? street : blank(source.address_line_2);
+      values.city = blank(source.city);
+      values.postcode = blank(source.postal_code);
+    }
+    let wroteAddress = false;
+    Object.keys(values).forEach((name) => {
+      const $field = jQuery(twoincAddressRoles.field(role, name));
+      if (this.writeOwnedValue($field, values[name]) && name !== "phone") wroteAddress = true;
+    });
+    const region = source && typeof source === "object" ? blank(source.region) : "";
+    const $state = jQuery(twoincAddressRoles.field(role, "state"));
+    if (region && (!blank($state.val()) || this.holdsOwnWrite($state))) {
+      // With no state control the region joins the city only when this record wrote the city: never one the buyer typed (TWO-26775).
+      if (this.setRegion(role, region, { appendToCity: !!values.city })) {
+        $state.attr(ADDRESS_WRITTEN_ATTR, blank($state.val()));
+        wroteAddress = true;
+      }
+    }
+    if (!wroteAddress) return;
+    this.addressStateFor(role).registryApplied = true;
+    jQuery(document.body).trigger("update_checkout");
+  }
+
+  /** @returns {boolean} whether a field still holds the value the plugin last wrote into it */
+  holdsOwnWrite($field) {
+    const written = $field.attr(ADDRESS_WRITTEN_ATTR);
+    return written !== undefined && written === twoincUtilHelper.blankToEmpty($field.val());
+  }
+
+  /**
+   * One field of `writeSoleTraderAddress()`'s rule.
+   *
+   * @returns {boolean} whether the field changed or was claimed
+   */
+  writeOwnedValue($field, value) {
+    if (!$field.length) return false;
+    const current = twoincUtilHelper.blankToEmpty($field.val());
+    if (value === "") {
+      if (current === "" || !this.holdsOwnWrite($field)) return false;
+      $field.val("").removeAttr(ADDRESS_WRITTEN_ATTR);
+      return true;
+    }
+    $field.attr(ADDRESS_WRITTEN_ATTR, value);
+    if (current !== value) $field.val(value);
+    return true;
   }
 
   /**
@@ -6463,11 +6816,13 @@ class Twoinc {
    *
    * @param {string} role
    * @param {*} region
-   * @returns {void}
+   * @param {{appendToCity?: boolean}} [options] `appendToCity: false` drops a region with no state control instead
+   * @returns {boolean} whether the region went into the state control
    */
-  setRegion(role, region) {
+  setRegion(role, region, options) {
+    const appendToCity = !options || options.appendToCity !== false;
     const value = twoincUtilHelper.blankToEmpty(region);
-    if (!value) return;
+    if (!value) return false;
     const instance = Twoinc.getInstance();
     const code = instance.ownSubdivisionCode(role, value);
 
@@ -6484,10 +6839,10 @@ class Twoinc {
       if (hit) {
         $state.val(hit.id);
         if (isSelect) $state.trigger("change");
-        return;
+        return true;
       }
-      if (!code) instance.appendRegionToCity(role, value);
-      return;
+      if (!code && appendToCity) instance.appendRegionToCity(role, value);
+      return false;
     }
 
     // A hidden input is WooCommerce's marker for "this country's address
@@ -6495,10 +6850,11 @@ class Twoinc {
     // the region can simply be written into.
     if ($state.length && $state.attr("type") !== "hidden") {
       $state.val(value);
-      return;
+      return true;
     }
 
-    if (!code) instance.appendRegionToCity(role, value);
+    if (!code && appendToCity) instance.appendRegionToCity(role, value);
+    return false;
   }
 
   /**

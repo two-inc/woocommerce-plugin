@@ -6348,7 +6348,13 @@ if (!class_exists('WC_Twoinc')) {
             // is — the order-creation endpoint validates the organisation
             // number itself, so a tampered field carries no more risk than
             // searching a different real company.
-            if ($company_id === '') {
+            //
+            // Never under billing's manual entry: the delivery role's number
+            // must not go out with a typed name, whether another company's or
+            // the very number the buyer just gave up (TWO-26775).
+            $billing_manual_entry = array_key_exists('company_manual_entry', $_POST)
+                && sanitize_text_field($_POST['company_manual_entry']) === '1';
+            if ($company_id === '' && !$billing_manual_entry) {
                 $shipping_company_id = array_key_exists('shipping_company_id', $_POST)
                     ? sanitize_text_field($_POST['shipping_company_id'])
                     : '';
