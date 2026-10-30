@@ -33,7 +33,7 @@ const SOLE_TRADER_CONFIG = {
   text: {
     registered_business: "Registered company",
     sole_trader: "Sole trader",
-    popup_prompt: "Click here to login or sign up as a sole trader.",
+    signup_panel: "Sign up or log in as a sole trader",
     select_different: "Select a different sole trader",
     error: "Something went wrong"
   }
@@ -421,14 +421,14 @@ describe("capture modes composed, not taken one at a time", () => {
       expect($("#billing_company").val()).toBe(name);
     });
 
-    test("manual entry hands the surface back to the native field, cleared", () => {
+    test("manual entry hands the surface back to the native field, keeping the name (TWO-26775)", () => {
       ctx.helper.onPick({ id: "ACME Widgets Ltd", company_id: "912345678" });
       expectVisibleCompanyRow("#billing_company_display_field");
 
       ctx.helper.enterManualCompanyEntry();
 
       expectVisibleCompanyRow("#billing_company_field");
-      expect($("#billing_company").val()).toBe("");
+      expect($("#billing_company").val()).toBe("ACME Widgets Ltd");
       expect($("#company_id").val()).toBe("");
     });
   });

@@ -94,17 +94,41 @@ describe("TWO-40 — billing-first, shipping-fallback company resolution", () =>
     expect(customerCompany().company_name).toBe("Acme Ltd");
   });
 
-  test("billing retyped away after shipping already had a capture: falls back to shipping", () => {
-    capture.write("Acme Ltd", "11111111", { role: roles.invoice() });
-    capture.write("Ship Co", "22222222", { role: roles.delivery() });
-    expect(customerCompany().organization_number).toBe("11111111");
+  // A billing name with no number is manual entry, and the delivery role's number must not go out
+  // under it (TWO-26775); only a billing role holding nothing at all falls back.
+  test.each([
+    {
+      billingName: "Acme Ltd",
+      expectedId: "",
+      expectedName: "",
+      description: "billing keeps a name"
+    },
+    {
+      billingName: "",
+      expectedId: "22222222",
+      expectedName: "Ship Co",
+      description: "billing holds nothing"
+    }
+  ])(
+    "billing number dropped after shipping had a capture, $description",
+    ({ billingName, expectedId, expectedName, description }) => {
+      capture.write("Acme Ltd", "11111111", { role: roles.invoice() });
+      capture.write("Ship Co", "22222222", { role: roles.delivery() });
+      expect(customerCompany().organization_number).toBe("11111111");
 
-    // Clears billing's own number (the retype guard's own shape: name kept,
-    // number dropped).
-    capture.write("Acme Ltd", "", { role: roles.invoice() });
-    expect(customerCompany().organization_number).toBe("22222222");
-    expect(customerCompany().company_name).toBe("Ship Co");
-  });
+      capture.write(billingName, "", { role: roles.invoice() });
+
+      expect({
+        description,
+        id: customerCompany().organization_number,
+        name: customerCompany().company_name
+      }).toEqual({
+        description,
+        id: expectedId,
+        name: expectedName
+      });
+    }
+  );
 
   test("shipping manual entry (name, no number): does not count as captured on either side", () => {
     // Manual entry writes a name with NO number, same shape guardCompanyRetype

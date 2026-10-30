@@ -27,7 +27,7 @@ const SOLE_TRADER_CONFIG = {
   text: {
     registered_business: "Registered company",
     sole_trader: "Sole trader",
-    popup_prompt: "Click here to login or sign up as a sole trader.",
+    signup_panel: "Sign up or log in as a sole trader",
     select_different: "Select a different sole trader",
     error: "Something went wrong"
   }

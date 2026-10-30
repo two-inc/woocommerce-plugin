@@ -819,27 +819,6 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   outline-offset: 2px;
 }
 
-.twoinc-sole-trader-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  color: #6b6b6b;
-}
-.twoinc-sole-trader-note.hidden {
-  display: none;
-}
-.twoinc-sole-trader-note svg {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
-.twoinc-sole-trader-note__link {
-  color: #3043d1;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
 .twoinc-sole-trader-toggle__error {
   flex-basis: 100%;
   color: #b00020;

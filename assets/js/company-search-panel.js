@@ -65,6 +65,15 @@
     const CHIP_CLASS = 'two-company-mode-chip';
     const CHIP_SELECTED_CLASS = 'two-company-mode-chip--selected';
     const LIVE_CLASS = 'two-company-dropdown__status';
+    const SIGNUP_PANEL_CLASS = 'two-company-dropdown__signup';
+
+    /**
+     * Inline, like LIVE_STYLE and for the same reason: the two checkouts ship
+     * separate stylesheets, and the panel has to cover the popover on both.
+     * `background: inherit` draws it in the popover's own colour.
+     */
+    const SIGNUP_PANEL_STYLE = 'position:absolute;top:0;right:0;bottom:0;left:0;z-index:1;'
+        + 'display:flex;align-items:center;justify-content:center;background:inherit;';
 
     /** Off-screen without `display: none`, which takes a region out of the tree. */
     const LIVE_STYLE = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;'
@@ -194,6 +203,7 @@
      *        when the panel is closed — the captured company, or ''.
      * @param {function()} [options.onExitManualEntry] the buyer used the return
      *        link to come back out of manual entry.
+     * @param {function()} [options.onClose] the popover has just closed.
      */
     function CompanySearchPanel(options) {
         const self = this;
@@ -215,6 +225,7 @@
         this.onSelect = options.onSelect || function () {};
         this.getDisplayText = options.getDisplayText || function () { return ''; };
         this.onExitManualEntry = options.onExitManualEntry || function () {};
+        this.onClose = options.onClose || function () {};
 
         assertSearchApi(this.search);
 
@@ -260,6 +271,9 @@
         /** @see _announce */
         this._live = null;
         this._liveTimerId = null;
+        /** @see showSignupPanel */
+        this._signup = null;
+        this._signupMode = null;
     }
 
     // ----------------------------------------------------------- announcing
@@ -1031,7 +1045,79 @@
         this._items = [];
         this._activeIndex = -1;
         this._syncExpanded();
+        this.hideSignupPanel();
         if (!options || options.returnFocus !== false) this.restoreFieldFocus();
+        this.onClose();
+    };
+
+    /**
+     * Cover the popover with one centred button: the route on when the signup
+     * popup was blocked (TWO-26775). Its click is a fresh gesture, which a
+     * blocker allows. Opens the popover first where it is closed, and moves
+     * focus to the button.
+     *
+     * The rest of the popover is `inert` underneath it, so Tab cannot reach a
+     * chip the panel is drawn over; Escape and focus leaving still close the
+     * popover, and the panel with it.
+     *
+     * @param {string} caption the button's text, already translated
+     * @param {function()} onActivate
+     */
+    CompanySearchPanel.prototype.showSignupPanel = function (caption, onActivate) {
+        const self = this;
+        if (!this._panel) return;
+        if (!this._open) this.open();
+        this.hideSignupPanel();
+        const cover = document.createElement('div');
+        cover.className = SIGNUP_PANEL_CLASS;
+        cover.setAttribute('role', 'group');
+        cover.setAttribute('aria-label', caption);
+        cover.style.cssText = SIGNUP_PANEL_STYLE;
+        const button = document.createElement('button');
+        button.type = 'button';
+        // The selected chip's look, so the button reads as part of the popover.
+        button.className = `${CHIP_CLASS} ${CHIP_SELECTED_CLASS}`;
+        button.textContent = caption;
+        this._bindEvent(button, 'click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            onActivate();
+        });
+        cover.appendChild(button);
+        Array.prototype.forEach.call(this._panel.children, function (child) {
+            child.setAttribute('inert', '');
+        });
+        // The popover is the containing block the cover is drawn against. Both
+        // stylesheets position it already; a theme that does not gets one here.
+        const view = this._panel.ownerDocument.defaultView;
+        if (view && view.getComputedStyle(this._panel).position === 'static') {
+            this._panel.style.position = 'relative';
+            cover.setAttribute('data-two-positioned', 'true');
+        }
+        this._panel.appendChild(cover);
+        this._signup = cover;
+        this._signupMode = this.getSelectedMode();
+        button.focus();
+        this._announce(caption);
+    };
+
+    /** Take the signup panel down, giving the popover back. */
+    CompanySearchPanel.prototype.hideSignupPanel = function () {
+        const cover = this._signup;
+        if (!cover) return;
+        this._signup = null;
+        this._signupMode = null;
+        const panel = cover.parentNode;
+        const hadFocus = cover.contains(document.activeElement);
+        this._unbind(cover);
+        cover.remove();
+        if (!panel) return;
+        Array.prototype.forEach.call(panel.children, function (child) {
+            child.removeAttribute('inert');
+        });
+        if (cover.getAttribute('data-two-positioned')) panel.style.position = '';
+        // The button went from under the caret, and an open popover keeps it.
+        if (hadFocus && this._open) this._focusOnOpen();
     };
 
     /**
@@ -1303,6 +1389,9 @@
         const self = this;
         if (!this._chips) return;
         const selected = this.getSelectedMode();
+        // The signup panel answers for the mode it was raised in, and any
+        // other mode, from a chip or a country reset, takes it down.
+        if (this._signup && selected !== this._signupMode) this.hideSignupPanel();
         // The node, read before the sync that takes it away.
         const heldFocus = this._holdsFocus() ? document.activeElement : null;
         this._syncQueryVisibility(selected);
@@ -1332,7 +1421,8 @@
                 // Propagation stops here because one-page checkouts bind
                 // collapse handlers above this node.
                 event.stopPropagation();
-                chip.onActivate();
+                self.hideSignupPanel();
+                chip.onActivate(button);
             });
             self._chips.appendChild(button);
         });

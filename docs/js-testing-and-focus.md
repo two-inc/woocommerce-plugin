@@ -84,19 +84,44 @@ re-rendered chip reads as another role's and the rule inverts on it: returning t
 very chip that launched the popup closes it, and on a two-role page a descendant search
 can answer with the other role's popover outright.
 
-## Where a hand-closed signup popup leaves focus
+## A press on content that takes no focus
 
-A popup the buyer closes themselves decided nothing, so the launcher still owns
-the focus it gave up and gets it back — as long as that launcher survived the
-close. The Sole trader chip does not: it lives inside the dropdown the settle
-closes. Focus then goes to whichever launcher is still standing, which once a
-sole trader is adopted is the "select a different sole trader" link, and that
-link reopens the same chooser. Where nothing was adopted, focus goes to the
-company name field instead, whose own opener reopens the search popover and
-takes the focus into its query.
+A press on page text, padding or any other node that takes no focus moves no
+focus, so the three rules above never see it, yet the buyer has come back to the
+checkout: a capture-phase `mousedown` on the document closes an open popup
+(TWO-26775). It leaves a press on a control alone, since focus or the control's
+own click handler decides that one. The popover is left to the panel's own
+outside-press close, so a press on the popover's own padding closes the popup
+and keeps the popover.
 
-One consistent target — always the company name field — would read better than
-a target that depends on which control the buyer launched from. It is not done:
-the field's opener would have to be revised to guarantee the popover opens when
-that is wanted and stays closed when it is not, and getting that right is hard
-enough that the inconsistency is the safer state to be in.
+## What a hand-closed signup popup leaves behind
+
+A popup the buyer closes themselves decided nothing, so nothing on the form
+changes: the name, the number and the address stay as the chip click found
+them, and the mode goes back to what that stored capture describes (a picked
+company to Registered, a typed name to manual entry). Only a sole trader the
+detour itself adopted is cleared on the way out (TWO-26775).
+
+The popover closes, and the launcher gets its focus back as long as it survived
+the close. The Sole trader chip does not: it lives inside the popover. Focus then
+goes to whichever launcher is still standing, which once a sole trader is adopted
+is the "select a different sole trader" link. Where nothing was adopted, focus goes
+to the company name field through the panel's `restoreFieldFocus()`, which holds
+the field's own opener off, so the popover the settle just closed stays closed.
+
+## A signup window the browser refuses
+
+The autofill prefetch keeps `window.open` out of the click's own gesture, so a
+popup blocker can refuse it. The shared panel then draws its signup cover over
+the popover, opening the popover first where the launch came from outside it:
+one button, "Sign up or log in as a sole trader", focused and announced, whose
+click is a gesture of its own. The panel takes the cover down on any chip or
+mode change and when the popover closes, and a window opening takes it down
+too. A popover closing over a detour that adopted nothing, with nothing left in
+flight, hands the mode back to the stored capture through the panel's
+`onClose` (TWO-26775).
+
+A completed signup whose buyer lookup finds nobody offers the signup again, as
+a second window, with the cover as its fallback. A lookup that fails, or stays
+unanswered past `BUYER_LOOKUP_TIMEOUT_MS`, shows the error and leaves no Sole
+trader mode behind.
