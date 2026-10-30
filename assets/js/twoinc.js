@@ -4883,7 +4883,17 @@ function createSoleTraderController(companySearch) {
       controller.pressHandler = function (event) {
         const target = event && event.target;
         controller.pendingPress = null;
-        if (!target || typeof target.closest !== "function") return;
+        // Only a primary-button press on content is a click: a right press opens the context menu,
+        // and one on the page's own scrollbar (target `html`) or an element's scrollbar scrolls.
+        if (
+          !target ||
+          typeof target.closest !== "function" ||
+          event.button !== 0 ||
+          target === document.documentElement ||
+          controller.pressIsOnScrollbar(event)
+        ) {
+          return;
+        }
         const popups = controller.abandonablePopups();
         if (!popups.length) return;
         // Rule (1): this role's own Sole trader chip raises the popup from its click.
@@ -4909,6 +4919,20 @@ function createSoleTraderController(companySearch) {
       };
       document.addEventListener("mousedown", controller.pressHandler, true);
       document.addEventListener("mouseup", controller.releaseHandler, true);
+    },
+
+    /**
+     * A press on a native scrollbar lands outside the target's client box (TWO-26775).
+     *
+     * @param {MouseEvent} event the mousedown
+     * @returns {boolean}
+     */
+    pressIsOnScrollbar: function (event) {
+      const target = event.target;
+      const width = target.clientWidth;
+      const height = target.clientHeight;
+      if (!width && !height) return false;
+      return event.offsetX >= width || event.offsetY >= height;
     },
 
     /**
@@ -6735,9 +6759,11 @@ class Twoinc {
     const region = source && typeof source === "object" ? blank(source.region) : "";
     const $state = jQuery(twoincAddressRoles.field(role, "state"));
     if (region && (!blank($state.val()) || this.holdsOwnWrite($state))) {
-      this.setRegion(role, region);
-      $state.attr(ADDRESS_WRITTEN_ATTR, blank($state.val()));
-      wroteAddress = true;
+      // The city is the buyer's or this record's, never a place to park the region (TWO-26775).
+      if (this.setRegion(role, region, { appendToCity: false })) {
+        $state.attr(ADDRESS_WRITTEN_ATTR, blank($state.val()));
+        wroteAddress = true;
+      }
     }
     if (!wroteAddress) return;
     this.addressStateFor(role).registryApplied = true;
@@ -6790,9 +6816,11 @@ class Twoinc {
    *
    * @param {string} role
    * @param {*} region
+   * @param {{appendToCity?: boolean}} [options] `appendToCity: false` drops a region with no state control instead
    * @returns {boolean} whether the region went into the state control
    */
-  setRegion(role, region) {
+  setRegion(role, region, options) {
+    const appendToCity = !options || options.appendToCity !== false;
     const value = twoincUtilHelper.blankToEmpty(region);
     if (!value) return false;
     const instance = Twoinc.getInstance();
@@ -6813,7 +6841,7 @@ class Twoinc {
         if (isSelect) $state.trigger("change");
         return true;
       }
-      if (!code) instance.appendRegionToCity(role, value);
+      if (!code && appendToCity) instance.appendRegionToCity(role, value);
       return false;
     }
 
@@ -6825,7 +6853,7 @@ class Twoinc {
       return true;
     }
 
-    if (!code) instance.appendRegionToCity(role, value);
+    if (!code && appendToCity) instance.appendRegionToCity(role, value);
     return false;
   }
 

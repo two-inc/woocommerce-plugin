@@ -3162,6 +3162,26 @@ describe("TWO-40 — sole-trader flow", () => {
         }
       );
 
+      /** As Safari and Firefox on macOS press it: the chip takes no focus, so the press rule settles billing (TWO-26775). */
+      test("a press on the delivery Sole trader chip that moves no focus closes the billing popup and its popover, and launches the delivery one", () => {
+        openWidgetWithChips();
+        const chip = deliveryChip("soletrader");
+        ctx.shippingHelper.soleTrader.bindFocusinListener();
+        const win = launchFromChips();
+        const relaunched = fakePopup();
+        window.open = jest.fn(() => relaunched);
+
+        ["mousedown", "mouseup", "click"].forEach(function (type) {
+          chip.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true }));
+        });
+        jest.runOnlyPendingTimers();
+
+        expect(win.close).toHaveBeenCalledTimes(1);
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
+        expect(window.open).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
       // A host that morphs its markup over the live DOM rebuilds the popover and keeps the
       // field, and can take the wrap the panel built with it.
       test.each([

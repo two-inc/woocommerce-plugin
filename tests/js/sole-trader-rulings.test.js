@@ -212,8 +212,33 @@ describe("TWO-26775 sole-trader rulings", () => {
           phone: "+441234"
         },
         description: "a state the registry pick wrote is the plugin's, so it is replaced"
+      },
+      {
+        buyer: Object.assign({}, FULL, {
+          billing_address: {
+            street: "1 New Street",
+            city: "",
+            postal_code: "NT1 1AA",
+            region: "Kent"
+          }
+        }),
+        typed: { city: "Typed City" },
+        arrange: () => $("#billing_state").attr("type", "hidden"),
+        expected: {
+          name: "Trader Name",
+          id: "TWO:ST1",
+          address_1: "1 New Street",
+          address_2: "",
+          city: "Typed City",
+          postcode: "NT1 1AA",
+          state: "",
+          phone: "+441234"
+        },
+        description:
+          "a region with no state control to take it never lands in the city the buyer typed"
       }
-    ])("$description", ({ buyer, typed, registry, expected, description }) => {
+    ])("$description", ({ buyer, typed, registry, arrange, expected, description }) => {
+      if (arrange) arrange();
       pickRegistered();
       if (registry) ctx.Twoinc.getInstance().setAddress(registry);
       Object.keys(typed).forEach((key) => {
@@ -342,14 +367,21 @@ describe("TWO-26775 sole-trader rulings", () => {
     return win;
   }
 
-  /** A trusted press as the browser sends it, with no focus moved: jsdom performs no default action. */
-  function pressAndRelease(node) {
+  /**
+   * A trusted press as the browser sends it, with no focus moved: jsdom performs no default action.
+   * `init` adds MouseEvent fields; `offsetX` is set on the event itself, jsdom having no layout.
+   */
+  function pressAndRelease(node, init) {
+    const opts = Object.assign({ bubbles: true, cancelable: true }, init);
     ["mousedown", "mouseup", "click"].forEach(function (type) {
-      node.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true }));
+      const event = new window.MouseEvent(type, opts);
+      if (opts.offsetX !== undefined)
+        Object.defineProperty(event, "offsetX", { value: opts.offsetX });
+      node.dispatchEvent(event);
     });
   }
 
-  /** S12.3: a press that moves no focus closes the popup; the popover only when the press was outside it. */
+  /** A press that moves no focus closes the popup; the popover only when the press was outside it. */
   test.each([
     {
       target: () => document.getElementById("page_text"),
@@ -392,6 +424,41 @@ describe("TWO-26775 sole-trader rulings", () => {
 
     expect(win.close).toHaveBeenCalled();
     expect(ctx.helper.companySearchDropdownIsOpen()).toBe(popover);
+  });
+
+  /** Neither a context-menu press nor a scroll is a click on the page, so the popup stays. The popover is the panel's own call. */
+  test.each([
+    {
+      target: () => document.getElementById("page_text"),
+      init: { button: 2 },
+      description: "a right-button press on page text"
+    },
+    {
+      target: () => document.documentElement,
+      init: {},
+      description: "a press on the page's own scrollbar (target html)"
+    },
+    {
+      arrange: () => {
+        const text = document.getElementById("page_text");
+        Object.defineProperty(text, "clientWidth", { configurable: true, value: 100 });
+        Object.defineProperty(text, "clientHeight", { configurable: true, value: 40 });
+      },
+      target: () => document.getElementById("page_text"),
+      init: { offsetX: 105 },
+      description: "a press on an element's scrollbar, outside its client box"
+    }
+  ])("$description leaves the popup", ({ arrange, target, init, description }) => {
+    if (arrange) arrange();
+    const win = launchWithPopup();
+
+    pressAndRelease(target(), init);
+    jest.advanceTimersByTime(300);
+
+    expect({ description, closed: win.close.mock.calls.length }).toEqual({
+      description,
+      closed: 0
+    });
   });
 
   test("a press on this role's Sole trader chip raises the popup and leaves it open", () => {
