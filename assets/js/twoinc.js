@@ -6736,7 +6736,8 @@ class Twoinc {
    * when the buyer record carries something for it, and a blank clears a field
    * only while it still holds what the plugin itself wrote there, so a record
    * missing a field never wipes the buyer's own typing. The state is filled
-   * only while it is empty or still the plugin's. Country, email and the
+   * only while it is empty or still the plugin's, and a region that is blank,
+   * absent or matches no state clears it on the same terms. Country, email and the
    * buyer's own names are never written.
    *
    * @param {Object} buyer the autofill buyer
@@ -6762,12 +6763,20 @@ class Twoinc {
     });
     const region = source && typeof source === "object" ? blank(source.region) : "";
     const $state = jQuery(twoincAddressRoles.field(role, "state"));
-    if (region && (!blank($state.val()) || this.holdsOwnWrite($state))) {
-      // With no state control the region joins the city only when this record wrote the city: never one the buyer typed (TWO-26775).
-      if (this.setRegion(role, region, { appendToCity: !!values.city })) {
-        $state.attr(ADDRESS_WRITTEN_ATTR, blank($state.val()));
-        wroteAddress = true;
-      }
+    // With no state control the region joins the city only when this record wrote the city: never one the buyer typed (TWO-26775).
+    const wroteRegion =
+      region &&
+      (!blank($state.val()) || this.holdsOwnWrite($state)) &&
+      this.setRegion(role, region, { appendToCity: !!values.city });
+    if (wroteRegion) {
+      $state.attr(ADDRESS_WRITTEN_ATTR, blank($state.val()));
+      wroteAddress = true;
+    } else if (this.writeOwnedValue($state, "")) {
+      // A blank, unmatched or absent region retracts a state the plugin wrote, so the previous
+      // sole trader's never outlives them; one the buyer chose stays (TWO-27053). selectWoo
+      // renders a select's label from its value, so a blanked select needs the change.
+      if ($state.is("select")) $state.trigger("change");
+      wroteAddress = true;
     }
     if (!wroteAddress) return;
     this.addressStateFor(role).registryApplied = true;
