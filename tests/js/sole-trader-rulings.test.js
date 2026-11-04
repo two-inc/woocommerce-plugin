@@ -290,6 +290,54 @@ describe("TWO-26775 sole-trader rulings", () => {
     });
   });
 
+  /**
+   * A second sole trader never keeps the first one's state (TWO-27053): a
+   * blank, unmatched or absent region retracts a state the plugin wrote, and
+   * leaves one the buyer chose alone. A select retraction fires `change`, so
+   * selectWoo stops showing the county it no longer holds.
+   */
+  describe("the next sole trader's record and the previous one's state", () => {
+    const STATE_SELECT =
+      '<select id="billing_state"><option value="">Select</option>' +
+      '<option value="KEN">Kent</option><option value="ESX">Essex</option></select>';
+
+    function trader(number, address) {
+      return {
+        organization_number: number,
+        company_name: "Trader " + number,
+        email: "buyer@example.test",
+        billing_address: address
+      };
+    }
+
+    // control, state the buyer chose in between (null: none), next record, state after, changes
+    test.each([
+      ["select", null, { region: "" }, "", 1, "blank region: plugin's state cleared"],
+      ["select", null, { region: "Atlantis" }, "", 1, "unmatched region: plugin's state cleared"],
+      ["select", null, { city: "Leeds" }, "", 1, "no region: plugin's state cleared"],
+      ["select", null, { region: "Essex" }, "ESX", 1, "matching region: plugin's state replaced"],
+      ["select", "ESX", { region: "" }, "ESX", 0, "blank region: buyer's state kept"],
+      ["select", "ESX", { region: "Atlantis" }, "ESX", 0, "unmatched region: buyer's state kept"],
+      ["select", "ESX", { city: "Leeds" }, "ESX", 0, "no region: buyer's state kept"],
+      ["input", null, { region: "" }, "", 0, "blank region: plugin's county cleared"],
+      ["input", null, { city: "Leeds" }, "", 0, "no region: plugin's county cleared"],
+      ["input", "Typed", { city: "Leeds" }, "Typed", 0, "no region: buyer's county kept"]
+    ])("%s, buyer chose %p, then %p -> %p, %p change(s): %s", (...row) => {
+      const [control, chosen, next, state, changes, description] = row;
+      if (control === "select") $("#billing_state").replaceWith(STATE_SELECT);
+      soleTrader.adoptBuyer(trader("TWO:ST1", { street: "1 First Street", region: "Kent" }));
+      expect($("#billing_state").val()).toBe(control === "select" ? "KEN" : "Kent");
+      if (chosen !== null) $("#billing_state").val(chosen);
+      const changed = jest.fn();
+      $("#billing_state").on("change", changed);
+
+      soleTrader.adoptBuyer(trader("TWO:ST2", next));
+
+      const after = [description, $("#billing_state").val(), changed.mock.calls.length];
+      expect(after).toEqual([description, state, changes]);
+    });
+  });
+
   /** A popup closed with no signup clears nothing, and the mode goes back to what the stored capture says. */
   describe("a signup popup closed by hand", () => {
     function launchAndClose(arrange) {
