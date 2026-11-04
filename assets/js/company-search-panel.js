@@ -65,6 +65,19 @@
     const CHIP_CLASS = 'two-company-mode-chip';
     const CHIP_SELECTED_CLASS = 'two-company-mode-chip--selected';
     const LIVE_CLASS = 'two-company-dropdown__status';
+    const SIGNUP_PANEL_CLASS = 'two-company-dropdown__signup';
+
+    /**
+     * Inline, like LIVE_STYLE and for the same reason: the two checkouts ship
+     * separate stylesheets, and the panel has to cover the popover on both.
+     * `background: inherit` draws it in the popover's own colour, and
+     * `padding: inherit` keeps the button inside the gutter the chips sit in.
+     */
+    const SIGNUP_PANEL_STYLE = 'position:absolute;top:0;right:0;bottom:0;left:0;z-index:1;'
+        + 'display:flex;align-items:center;justify-content:center;background:inherit;padding:inherit;';
+
+    /** The chip rule grows a chip to fill its row; the lone button keeps its own width, centred. */
+    const SIGNUP_BUTTON_STYLE = 'flex:0 1 auto;';
 
     /** Off-screen without `display: none`, which takes a region out of the tree. */
     const LIVE_STYLE = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;'
@@ -194,6 +207,7 @@
      *        when the panel is closed — the captured company, or ''.
      * @param {function()} [options.onExitManualEntry] the buyer used the return
      *        link to come back out of manual entry.
+     * @param {function()} [options.onClose] the popover has just closed.
      */
     function CompanySearchPanel(options) {
         const self = this;
@@ -215,6 +229,7 @@
         this.onSelect = options.onSelect || function () {};
         this.getDisplayText = options.getDisplayText || function () { return ''; };
         this.onExitManualEntry = options.onExitManualEntry || function () {};
+        this.onClose = options.onClose || function () {};
 
         assertSearchApi(this.search);
 
@@ -239,6 +254,8 @@
         this._closing = false;
         /** Suppresses it for a whole signup flight; see `holdFieldOpener()`. */
         this._openerHeld = false;
+        /** Answers whether the signup flight is still up, so a window return keeps the hold. */
+        this._openerFlight = null;
         /** A window-level focus is in hand, so the field focus beside it is that window's. */
         this._openerReturnPending = false;
         /** The `focus` half of that pair seen, waiting on the `focusin` that ends it. */
@@ -260,12 +277,15 @@
         /** @see _announce */
         this._live = null;
         this._liveTimerId = null;
+        /** @see showSignupPanel */
+        this._signup = null;
+        this._signupMode = null;
     }
 
     // ----------------------------------------------------------- announcing
 
     /**
-     * The panel's live region, built on first use and parked on `<body>`.
+     * The panel's live region, built when the panel first attaches and parked on `<body>`.
      *
      * Outside the panel because the panel carries `hidden` between opens, and a
      * live region inside a hidden subtree is not in the accessibility tree to
@@ -512,6 +532,9 @@
         }
         this._field = field;
         this._buildPanel(this._ensureWrap(field));
+        // Empty, ahead of its first sentence: a screen reader can miss a change
+        // to a region that arrived with it.
+        this._liveRegion();
         this.syncChips();
 
         // Manual entry owns the field: it is a plain text input holding what
@@ -820,6 +843,12 @@
         this._bindEvent(field, 'focusin', function () {
             if (!self._openerHeld) return;
             if (self._openerReturnFocusSeen) {
+                // One return of many while the flight is up: the next is the same pair again.
+                if (self._openerFlight && self._openerFlight()) {
+                    self._openerReturnPending = false;
+                    self._openerReturnFocusSeen = false;
+                    return;
+                }
                 self.holdFieldOpener(false);
                 return;
             }
@@ -1031,7 +1060,80 @@
         this._items = [];
         this._activeIndex = -1;
         this._syncExpanded();
+        this.hideSignupPanel();
         if (!options || options.returnFocus !== false) this.restoreFieldFocus();
+        this.onClose();
+    };
+
+    /**
+     * Cover the popover with one centred button: the route on when the signup
+     * popup was blocked (TWO-26775). Its click is a fresh gesture, which a
+     * blocker allows. Opens the popover first where it is closed, and moves
+     * focus to the button.
+     *
+     * The rest of the popover is `inert` underneath it, so Tab cannot reach a
+     * chip the panel is drawn over; Escape and focus leaving still close the
+     * popover, and the panel with it.
+     *
+     * @param {string} caption the button's text, already translated
+     * @param {function()} onActivate
+     */
+    CompanySearchPanel.prototype.showSignupPanel = function (caption, onActivate) {
+        const self = this;
+        if (!this._panel) return;
+        if (!this._open) this.open();
+        this.hideSignupPanel();
+        const cover = document.createElement('div');
+        // A plain container, with no role or name of its own: the focus move
+        // says the caption once, as the button's name, and the status region
+        // stays empty, so nothing says it twice.
+        cover.className = SIGNUP_PANEL_CLASS;
+        cover.style.cssText = SIGNUP_PANEL_STYLE;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.style.cssText = SIGNUP_BUTTON_STYLE;
+        // The selected chip's look, so the button reads as part of the popover.
+        button.className = `${CHIP_CLASS} ${CHIP_SELECTED_CLASS}`;
+        button.textContent = caption;
+        this._bindEvent(button, 'click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            onActivate();
+        });
+        cover.appendChild(button);
+        Array.prototype.forEach.call(this._panel.children, function (child) {
+            child.setAttribute('inert', '');
+        });
+        // The popover is the containing block the cover is drawn against. Both
+        // stylesheets position it already; a theme that does not gets one here.
+        const view = this._panel.ownerDocument.defaultView;
+        if (view && view.getComputedStyle(this._panel).position === 'static') {
+            this._panel.style.position = 'relative';
+            cover.setAttribute('data-two-positioned', 'true');
+        }
+        this._panel.appendChild(cover);
+        this._signup = cover;
+        this._signupMode = this.getSelectedMode();
+        button.focus();
+    };
+
+    /** Take the signup panel down, giving the popover back. */
+    CompanySearchPanel.prototype.hideSignupPanel = function () {
+        const cover = this._signup;
+        if (!cover) return;
+        this._signup = null;
+        this._signupMode = null;
+        const panel = cover.parentNode;
+        const hadFocus = cover.contains(document.activeElement);
+        this._unbind(cover);
+        cover.remove();
+        if (!panel) return;
+        Array.prototype.forEach.call(panel.children, function (child) {
+            child.removeAttribute('inert');
+        });
+        if (cover.getAttribute('data-two-positioned')) panel.style.position = '';
+        // The button went from under the caret, and an open popover keeps it.
+        if (hadFocus && this._open) this._focusOnOpen();
     };
 
     /**
@@ -1043,11 +1145,19 @@
      * measured a second to a minute after it, however long the buyer stays away
      * — so the hold is unbounded in time and ends on the pair itself.
      *
+     * A hold given a `flight` outlasts every window return while that flight
+     * is up: the buyer can move between the popup and the checkout any number
+     * of times, and only the return after it has ended releases the hold
+     * (TWO-26775).
+     *
      * @param {boolean} held
+     * @param {object} [options] `{ flight: function(): boolean }`, whether the
+     *        signup the hold stands for is still up
      */
-    CompanySearchPanel.prototype.holdFieldOpener = function (held) {
+    CompanySearchPanel.prototype.holdFieldOpener = function (held, options) {
         if (!held && !this._openerHeld) return;
         this._openerHeld = !!held;
+        this._openerFlight = (held && options && typeof options.flight === 'function') ? options.flight : null;
         this._openerReturnPending = false;
         this._openerReturnFocusSeen = false;
         this._openerArrivalFocusSeen = false;
@@ -1303,6 +1413,9 @@
         const self = this;
         if (!this._chips) return;
         const selected = this.getSelectedMode();
+        // The signup panel answers for the mode it was raised in, and any
+        // other mode, from a chip or a country reset, takes it down.
+        if (this._signup && selected !== this._signupMode) this.hideSignupPanel();
         // The node, read before the sync that takes it away.
         const heldFocus = this._holdsFocus() ? document.activeElement : null;
         this._syncQueryVisibility(selected);
@@ -1332,7 +1445,8 @@
                 // Propagation stops here because one-page checkouts bind
                 // collapse handlers above this node.
                 event.stopPropagation();
-                chip.onActivate();
+                self.hideSignupPanel();
+                chip.onActivate(button);
             });
             self._chips.appendChild(button);
         });

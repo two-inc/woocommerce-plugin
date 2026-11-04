@@ -84,19 +84,50 @@ re-rendered chip reads as another role's and the rule inverts on it: returning t
 very chip that launched the popup closes it, and on a two-role page a descendant search
 can answer with the other role's popover outright.
 
-## Where a hand-closed signup popup leaves focus
+## A press on content that takes no focus
 
-A popup the buyer closes themselves decided nothing, so the launcher still owns
-the focus it gave up and gets it back — as long as that launcher survived the
-close. The Sole trader chip does not: it lives inside the dropdown the settle
-closes. Focus then goes to whichever launcher is still standing, which once a
-sole trader is adopted is the "select a different sole trader" link, and that
-link reopens the same chooser. Where nothing was adopted, focus goes to the
-company name field instead, whose own opener reopens the search popover and
-takes the focus into its query.
+A press that moves no focus never reaches the three rules above, yet the buyer
+has come back to the checkout. Which presses those are is the browser's call,
+not the target's: page text, the popover's own padding, a button, checkbox or
+radio that macOS Safari and Firefox do not focus on click, or a press inside a
+`tabindex="-1"` container. So a capture-phase `mousedown` notes where focus was,
+and once the press's click has run (a 0 ms timeout after `mouseup`) it checks
+whether focus moved to another element. If it did, the rules above have already
+decided. If it did not, the popups that were up when the press began close, and
+the popover closes too unless the press was inside it (the company field counts
+as inside). A press on this role's own Sole trader chip is left to the chip's
+click, which raises the popup (TWO-26775).
 
-One consistent target — always the company name field — would read better than
-a target that depends on which control the buyer launched from. It is not done:
-the field's opener would have to be revised to guarantee the popover opens when
-that is wanted and stays closed when it is not, and getting that right is hard
-enough that the inconsistency is the safer state to be in.
+## What a hand-closed signup popup leaves behind
+
+A popup the buyer closes themselves decided nothing, so nothing on the form
+changes: the name, the number and the address stay as the chip click found
+them, and the mode goes back to what that stored capture describes (a picked
+company to Registered, a typed name to manual entry). Only a sole trader the
+detour itself adopted is cleared on the way out (TWO-26775).
+
+The popover closes, and the launcher gets its focus back as long as it survived
+the close. The Sole trader chip does not: it lives inside the popover. Focus then
+goes to whichever launcher is still standing, which once a sole trader is adopted
+is the "select a different sole trader" link. Where nothing was adopted, focus goes
+to the company name field through the panel's `restoreFieldFocus()`, which holds
+the field's own opener off, so the popover the settle just closed stays closed.
+
+## A signup window the browser refuses
+
+The autofill prefetch keeps `window.open` out of the click's own gesture, so a
+popup blocker can refuse it. The shared panel then draws its signup cover over
+the popover, opening the popover first where the launch came from outside it:
+one button, "Sign up or log in as a sole trader", whose click is a gesture of
+its own. Focus moves to the button, so a screen reader says the caption once, as
+the button's name: the cover has no role or name of its own, and the status
+region stays empty. The panel takes the cover down on any chip or
+mode change and when the popover closes, and a window opening takes it down
+too. A popover closing over a detour that adopted nothing, with nothing left in
+flight, hands the mode back to the stored capture through the panel's
+`onClose` (TWO-26775).
+
+A completed signup whose buyer lookup finds nobody offers the signup again, as
+a second window, with the cover as its fallback. A lookup that fails, or stays
+unanswered past `BUYER_LOOKUP_TIMEOUT_MS`, shows the error and leaves no Sole
+trader mode behind.

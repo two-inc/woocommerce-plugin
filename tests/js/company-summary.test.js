@@ -579,22 +579,34 @@ describe("read-only captured-company summary", () => {
   });
 
   describe("a company that is no longer captured stays off screen", () => {
-    test("the sole-trader round trip does not resurrect the picked company", () => {
-      // After search → sole trader → back to business both posted fields are
-      // empty, and the field the buyer reads has to be empty with them: a
-      // display still carrying the company is one the order does not carry.
+    test.each([
+      {
+        adopted: false,
+        kept: true,
+        description: "a detour that adopted nothing keeps the picked company (TWO-26775)"
+      },
+      {
+        adopted: true,
+        kept: false,
+        description: "leaving an adopted sole trader takes it off screen"
+      }
+    ])("$description", ({ adopted, kept }) => {
+      // The field the buyer reads always agrees with the posted fields: both
+      // keep the pick, or both are empty.
       const ajax = harness.stubAjax($);
       pickCompany("ACME Widgets Ltd", "12345678");
       expect(isShown()).toBe(true);
 
       ctx.soleTrader.setMode("sole_trader");
+      if (adopted) ctx.soleTrader.setCompany("TWO:ST1", "A Sole Trader");
       ctx.soleTrader.setMode("business");
 
-      expect($("#billing_company").val()).toBe("");
-      expect($("#company_id").val()).toBe("");
-      expect($("#billing_company_display").val()).toBe("");
-      expect(renderedName()).toBe("");
-      expect(isShown()).toBe(false);
+      const name = kept ? "ACME Widgets Ltd" : "";
+      expect($("#billing_company").val()).toBe(name);
+      expect($("#company_id").val()).toBe(kept ? "12345678" : "");
+      expect($("#billing_company_display").val()).toBe(name);
+      expect(renderedName()).toBe(name);
+      expect(isShown()).toBe(kept);
       ajax.restore();
     });
 

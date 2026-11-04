@@ -205,6 +205,8 @@ function baseGlobals(location, billing, shipping) {
     numberField: (role) => ({ val: () => valuesFor(role).company_id }),
     nameField: (role) => ({ val: () => valuesFor(role).company }),
     modeFor: () => captureValues.mode,
+    MANUAL_ENTRY_KEY: "company_manual_entry",
+    manualEntryFlag: () => (captureValues.mode === "manual" ? "1" : ""),
     numberFieldSelector: (role) =>
       role === twoincAddressRoles.invoice() ? "#company_id" : "#" + role + "_company_id",
     nameFieldSelector: (role) =>
@@ -611,7 +613,8 @@ describe("blocks-checkout.js reuses the classic controller", () => {
         company_id: "12345678",
         company_name: "EXAMPLE TRADING LIMITED",
         shipping_company_id: "",
-        shipping_company: ""
+        shipping_company: "",
+        company_manual_entry: ""
       },
       description: "the invoice capture travels in the tile's own carriers"
     },
@@ -623,7 +626,8 @@ describe("blocks-checkout.js reuses the classic controller", () => {
         company_id: "",
         billing_company: "",
         shipping_company_id: "87654321",
-        shipping_company: "DELIVERY DEPOT LIMITED"
+        shipping_company: "DELIVERY DEPOT LIMITED",
+        company_manual_entry: ""
       },
       description: "a delivery-only capture, all a same-address checkout ever has, still travels"
     },
@@ -635,7 +639,8 @@ describe("blocks-checkout.js reuses the classic controller", () => {
         company_id: "12345678",
         billing_company: "INVOICE HOLDINGS LIMITED",
         shipping_company_id: "87654321",
-        shipping_company: "DELIVERY DEPOT LIMITED"
+        shipping_company: "DELIVERY DEPOT LIMITED",
+        company_manual_entry: ""
       },
       description: "both roles travel unresolved, for the server to prefer the invoice one"
     },
@@ -647,9 +652,24 @@ describe("blocks-checkout.js reuses the classic controller", () => {
         company_id: "",
         billing_company: "",
         shipping_company_id: "",
-        shipping_company: ""
+        shipping_company: "",
+        company_manual_entry: ""
       },
       description: "no capture at all leaves the server's own guard to refuse the order"
+    },
+    {
+      location: "address_area",
+      billing: { company: "TYPED BY HAND", company_id: "", mode: "manual" },
+      shipping: { company: "DELIVERY DEPOT LIMITED", company_id: "87654321" },
+      expected: {
+        company_id: "",
+        billing_company: "TYPED BY HAND",
+        shipping_company_id: "87654321",
+        shipping_company: "DELIVERY DEPOT LIMITED",
+        company_manual_entry: "1"
+      },
+      description:
+        "billing's manual entry travels as a flag, so the server sends no delivery number under it (TWO-26775)"
     }
   ])("$description", ({ location, billing, shipping, expected }) => {
     const base = baseGlobals(location);

@@ -94,16 +94,48 @@ describe("TWO-40 — billing-first, shipping-fallback company resolution", () =>
     expect(customerCompany().company_name).toBe("Acme Ltd");
   });
 
-  test("billing retyped away after shipping already had a capture: falls back to shipping", () => {
-    capture.write("Acme Ltd", "11111111", { role: roles.invoice() });
-    capture.write("Ship Co", "22222222", { role: roles.delivery() });
-    expect(customerCompany().organization_number).toBe("11111111");
+  // Under billing's manual entry the delivery role's number must not go out with the typed name
+  // (TWO-26775); a billing name with no number outside manual entry (a mirrored delivery address)
+  // still falls back.
+  test.each([
+    { manual: true, expectedId: "", expectedName: "", description: "billing in manual entry" },
+    {
+      manual: false,
+      expectedId: "22222222",
+      expectedName: "Ship Co",
+      description: "billing keeping a name outside manual entry"
+    }
+  ])(
+    "billing number dropped after shipping had a capture, $description",
+    ({ manual, expectedId, expectedName, description }) => {
+      capture.write("Acme Ltd", "11111111", { role: roles.invoice() });
+      capture.write("Ship Co", "22222222", { role: roles.delivery() });
+      expect(customerCompany().organization_number).toBe("11111111");
 
-    // Clears billing's own number (the retype guard's own shape: name kept,
-    // number dropped).
-    capture.write("Acme Ltd", "", { role: roles.invoice() });
-    expect(customerCompany().organization_number).toBe("22222222");
-    expect(customerCompany().company_name).toBe("Ship Co");
+      if (manual) capture.setModeFor(roles.invoice(), "manual");
+      capture.write("Acme Ltd", "", { role: roles.invoice() });
+
+      expect({
+        description,
+        id: customerCompany().organization_number,
+        name: customerCompany().company_name,
+        posted: document.querySelector('input[name="company_manual_entry"]')
+          ? document.querySelector('input[name="company_manual_entry"]').value
+          : ""
+      }).toEqual({ description, id: expectedId, name: expectedName, posted: manual ? "1" : "" });
+    }
+  );
+
+  test("the plain mode setter keeps the manual-entry flag current through a sole-trader detour", () => {
+    const posted = () => document.querySelector('input[name="company_manual_entry"]').value;
+    capture.setModeFor(roles.invoice(), "manual");
+    expect(posted()).toBe("1");
+
+    capture.mode = "sole_trader";
+    expect(posted()).toBe("");
+
+    capture.mode = "manual";
+    expect(posted()).toBe("1");
   });
 
   test("shipping manual entry (name, no number): does not count as captured on either side", () => {

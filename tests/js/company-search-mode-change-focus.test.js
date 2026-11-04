@@ -124,15 +124,32 @@ describe("a mode change and a dead-space press both leave the buyer somewhere", 
     expect(document.querySelector(PANEL).contains(document.activeElement)).toBe(true);
   });
 
-  test("the company-name field where the mode leaves nothing in the popover to focus", () => {
+  test("a blocked launch puts focus on the signup button even where the mode leaves nothing else to focus (TWO-26775)", () => {
     open();
     // Only the mode the buyer is in is offered, so the chip row is withheld and
-    // the withdrawn query row leaves the open panel with nothing in it.
+    // the withdrawn query row leaves the open panel with nothing in it but the
+    // panel the refused window draws.
     helper.panel.isChipVisible = (mode) => mode === "soletrader";
 
     clickChip("soletrader");
 
-    expect(document.activeElement).toBe(document.querySelector("#billing_company_display"));
+    expect(document.activeElement).toBe(
+      document.querySelector(".two-company-dropdown__signup button")
+    );
+  });
+
+  test("a blocked launch says the caption once, as the focused button's name (TWO-26775)", () => {
+    open();
+
+    clickChip("soletrader");
+
+    const cover = document.querySelector(".two-company-dropdown__signup");
+    const button = cover.querySelector("button");
+    expect(document.activeElement).toBe(button);
+    expect(button.textContent).toBe("Sign up or log in as a sole trader");
+    expect(cover.hasAttribute("role")).toBe(false);
+    expect(cover.hasAttribute("aria-label")).toBe(false);
+    expect(document.querySelector(".two-company-dropdown__status").textContent).toBe("");
   });
 
   test("the registered-company chip puts the caret back in the query field", () => {

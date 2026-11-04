@@ -116,6 +116,61 @@ describe("the captured company lives in the WC session", () => {
     }
   });
 
+  /** Enter manually keeps the name and gives up the number, so a reload can only replay the name (TWO-26775). */
+  test("Enter manually hands the session the name with no number", () => {
+    load();
+    const ajax = harness.stubAjax(ctx.$);
+
+    try {
+      ctx.capture.write(NAME, NUMBER);
+      jest.runAllTimers();
+
+      ctx.helper.enterManualCompanyEntry();
+      jest.runAllTimers();
+
+      const sent = harness.requestParams(ajax.calls[ajax.calls.length - 1]);
+      expect(ajax.calls[ajax.calls.length - 1].url).toBe(harness.REMEMBER_COMPANY_URL);
+      expect(sent.get("company_id")).toBe("");
+      expect(sent.get("company_name")).toBe(NAME);
+    } finally {
+      ajax.restore();
+    }
+  });
+
+  /** A reload inside the debounce would otherwise replay the number the buyer had just let go (TWO-26775). */
+  test.each([
+    { beacon: true, description: "by beacon" },
+    { beacon: false, description: "by request where the browser has no beacon" }
+  ])("a write still held by the debounce is sent as the page goes, $description", ({ beacon }) => {
+    load();
+    const ajax = harness.stubAjax(ctx.$);
+    const sendBeacon = jest.fn(() => true);
+    const original = navigator.sendBeacon;
+    navigator.sendBeacon = beacon ? sendBeacon : undefined;
+
+    try {
+      ctx.capture.write(NAME, NUMBER);
+      jest.runAllTimers();
+      const before = ajax.calls.length;
+      ctx.capture.write(NAME, "");
+
+      window.dispatchEvent(new window.Event("pagehide"));
+      jest.runAllTimers();
+
+      // The last one: a module an earlier test loaded holds its own listener on this window.
+      const sent = beacon
+        ? sendBeacon.mock.calls[sendBeacon.mock.calls.length - 1][1]
+        : harness.requestParams(ajax.calls[ajax.calls.length - 1]);
+      expect(sent.get("company_id")).toBe("");
+      expect(sent.get("company_name")).toBe(NAME);
+      // Sent once: the debounce does not fire it a second time.
+      expect(ajax.calls.length - before).toBe(beacon ? 0 : 1);
+    } finally {
+      navigator.sendBeacon = original;
+      ajax.restore();
+    }
+  });
+
   test("a capture made on the pay-for-order page is handed to no cart", () => {
     load({ order_pay: true });
     const ajax = harness.stubAjax(ctx.$);
