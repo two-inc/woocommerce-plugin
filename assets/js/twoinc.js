@@ -4884,12 +4884,11 @@ function createSoleTraderController(companySearch) {
         const target = event && event.target;
         controller.pendingPress = null;
         // Only a primary-button press on content is a click: a right press opens the context menu,
-        // and one on the page's own scrollbar (target `html`) or an element's scrollbar scrolls.
+        // and one on the page's own scrollbar or an element's scrollbar scrolls.
         if (
           !target ||
           typeof target.closest !== "function" ||
           event.button !== 0 ||
-          target === document.documentElement ||
           controller.pressIsOnScrollbar(event)
         ) {
           return;
@@ -4922,7 +4921,9 @@ function createSoleTraderController(companySearch) {
     },
 
     /**
-     * A press on a native scrollbar lands outside the target's client box (TWO-26775).
+     * A press on a native scrollbar lands outside the target's client box. For the page's own
+     * scrollbar (target `html`) that box is the viewport, measured in client coordinates because
+     * `html`'s offsets are page-relative (TWO-26775).
      *
      * @param {MouseEvent} event the mousedown
      * @returns {boolean}
@@ -4932,6 +4933,9 @@ function createSoleTraderController(companySearch) {
       const width = target.clientWidth;
       const height = target.clientHeight;
       if (!width && !height) return false;
+      if (target === document.documentElement) {
+        return event.clientX >= width || event.clientY >= height;
+      }
       return event.offsetX >= width || event.offsetY >= height;
     },
 
@@ -6816,7 +6820,8 @@ class Twoinc {
    *
    * @param {string} role
    * @param {*} region
-   * @param {{appendToCity?: boolean}} [options] `appendToCity: false` drops a region with no state control instead
+   * @param {{appendToCity?: boolean}} [options] `appendToCity: false` drops a region it cannot put in
+   *   the state control instead (no state control, or a select with no matching option), leaving the city untouched
    * @returns {boolean} whether the region went into the state control
    */
   setRegion(role, region, options) {

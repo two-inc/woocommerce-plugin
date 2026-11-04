@@ -78,6 +78,8 @@ describe("TWO-26775 sole-trader rulings", () => {
     harness.releasePanel(ctx.helper);
     $(document.body).off();
     document.body.innerHTML = "";
+    delete document.documentElement.clientWidth;
+    delete document.documentElement.clientHeight;
   });
 
   function fakePopup() {
@@ -236,6 +238,22 @@ describe("TWO-26775 sole-trader rulings", () => {
         },
         description:
           "a region with no state control to take it never lands in the city the buyer typed"
+      },
+      {
+        buyer: FULL,
+        typed: { city: "Typed City" },
+        arrange: () => $("#billing_state").attr("type", "hidden"),
+        expected: {
+          name: "Trader Name",
+          id: "TWO:ST1",
+          address_1: "1 New Street",
+          address_2: "",
+          city: "Newtown, Kent",
+          postcode: "NT1 1AA",
+          state: "",
+          phone: "+441234"
+        },
+        description: "a region with no state control to take it joins the city the record wrote"
       }
     ])("$description", ({ buyer, typed, registry, arrange, expected, description }) => {
       if (arrange) arrange();
@@ -371,6 +389,13 @@ describe("TWO-26775 sole-trader rulings", () => {
    * A trusted press as the browser sends it, with no focus moved: jsdom performs no default action.
    * `init` adds MouseEvent fields; `offsetX` is set on the event itself, jsdom having no layout.
    */
+  /** A 1000x800 viewport: jsdom has no layout, so the page's client box is otherwise empty. */
+  function stubViewport() {
+    const html = document.documentElement;
+    Object.defineProperty(html, "clientWidth", { configurable: true, value: 1000 });
+    Object.defineProperty(html, "clientHeight", { configurable: true, value: 800 });
+  }
+
   function pressAndRelease(node, init) {
     const opts = Object.assign({ bubbles: true, cancelable: true }, init);
     ["mousedown", "mouseup", "click"].forEach(function (type) {
@@ -414,12 +439,19 @@ describe("TWO-26775 sole-trader rulings", () => {
       target: () => document.getElementById("page_button"),
       popover: false,
       description: "a button inside a tabindex=-1 container"
+    },
+    {
+      arrange: stubViewport,
+      target: () => document.documentElement,
+      init: { clientX: 500, clientY: 300 },
+      popover: false,
+      description: "empty page space inside the viewport (target html)"
     }
-  ])("a press on $description closes the popup", ({ arrange, target, popover }) => {
+  ])("a press on $description closes the popup", ({ arrange, target, init, popover }) => {
     if (arrange) arrange();
     const win = launchWithPopup();
 
-    pressAndRelease(target());
+    pressAndRelease(target(), init);
     jest.advanceTimersByTime(300);
 
     expect(win.close).toHaveBeenCalled();
@@ -434,9 +466,10 @@ describe("TWO-26775 sole-trader rulings", () => {
       description: "a right-button press on page text"
     },
     {
+      arrange: stubViewport,
       target: () => document.documentElement,
-      init: {},
-      description: "a press on the page's own scrollbar (target html)"
+      init: { clientX: 1005, clientY: 300 },
+      description: "a press on the page's own scrollbar, in the gutter beside the viewport"
     },
     {
       arrange: () => {
