@@ -2073,3 +2073,9 @@ msgstr "Comprobar estado con %s"
 #, php-format
 msgid "We are still confirming your order with %s."
 msgstr "Todavía estamos confirmando tu pedido con %s."
+
+#. translators: %s: the payment method's product name
+#: class/WC_Twoinc_Payment_Terms.php:223
+#, php-format
+msgid "%s has no payment term available for this order. Please choose another payment method."
+msgstr "%s no tiene ningún plazo de pago disponible para este pedido. Elija otro método de pago."

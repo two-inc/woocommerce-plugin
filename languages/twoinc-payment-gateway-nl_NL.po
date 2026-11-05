@@ -2073,3 +2073,9 @@ msgstr "Status controleren bij %s"
 #, php-format
 msgid "We are still confirming your order with %s."
 msgstr "We zijn je bestelling nog aan het bevestigen bij %s."
+
+#. translators: %s: the payment method's product name
+#: class/WC_Twoinc_Payment_Terms.php:223
+#, php-format
+msgid "%s has no payment term available for this order. Please choose another payment method."
+msgstr "%s heeft geen betalingstermijn beschikbaar voor deze bestelling. Kies een andere betaalmethode."

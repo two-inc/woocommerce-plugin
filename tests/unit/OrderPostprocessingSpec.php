@@ -330,10 +330,19 @@ final class OrderPostprocessingSpec
             /** @var array options read before the defaults below */
             public $options = [];
 
+            /** An order is only placed while a term is offered. */
+            public function get_merchant_available_terms(): array
+            {
+                return [30];
+            }
+
             public function get_option($key, $empty_value = null)
             {
                 if (array_key_exists($key, $this->options)) {
                     return $this->options[$key];
+                }
+                if ($key === 'payment_terms_days') {
+                    return [30];
                 }
                 if ($key === 'tax_code_map') {
                     return $this->tax_code_map;

@@ -2128,3 +2128,9 @@ msgstr ""
 #, php-format
 msgid "We are still confirming your order with %s."
 msgstr ""
+
+#. translators: %s: the payment method's product name
+#: class/WC_Twoinc_Payment_Terms.php:223
+#, php-format
+msgid "%s has no payment term available for this order. Please choose another payment method."
+msgstr ""

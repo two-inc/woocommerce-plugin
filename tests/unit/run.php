@@ -820,8 +820,16 @@ final class BrandConfigSpec
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
             }
 
+            public function get_merchant_available_terms(): array
+            {
+                return [30];
+            }
+
             public function get_option($key, $empty_value = null)
             {
+                if ($key === 'payment_terms_days') {
+                    return [30];
+                }
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
@@ -2776,6 +2784,8 @@ final class BrandConfigSpec
             public $calls = [];
             /** Canned make_request() reply; null keeps the bare 200 below. */
             public $response = null;
+            /** The terms the account offers and the admin ticks; empty offers none. */
+            public $offered = [30];
             private $allowlist;
 
             public function __construct($allowlist)
@@ -2789,8 +2799,16 @@ final class BrandConfigSpec
                 return 'mid';
             }
 
+            public function get_merchant_available_terms(): array
+            {
+                return $this->offered;
+            }
+
             public function get_option($key, $empty_value = null)
             {
+                if ($key === 'payment_terms_days') {
+                    return $this->offered;
+                }
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
@@ -2899,6 +2917,7 @@ final class BrandConfigSpec
             ['not_two', [], null, 'cannot be paid with Two', 'order is not a Two order'],
             ['veto', $consent + ['company_id' => '923456789'], null, 'Brand says no.', 'brand overlay vetoed payment'],
             ['plain', ['company_id' => '923456789'], null, 'must accept payment terms', 'the terms consent was not given'],
+            ['no_terms', $consent + ['company_id' => '923456789'], null, 'has no payment term available', 'no payment term is offered, so no term anyone chose could be booked'],
             ['plain', $consent + ['company_id' => ''], null, 'select your company', 'no company captured'],
             ['country', $consent + ['company_id' => '923456789', 'billing_country' => 'DE'], null, 'not available for this order', 'buyer country off the allowlist'],
             ['declined', $consent + ['company_id' => '923456789'], null, 'not available for this order', 'order intent declined this company'],
@@ -2953,6 +2972,9 @@ final class BrandConfigSpec
 
             $gateway = self::buyerCountryGateway($mode === 'country' ? ['NL'] : null);
             $gateway->response = $response;
+            if ($mode === 'no_terms') {
+                $gateway->offered = [];
+            }
             $result = $gateway->process_payment(42);
 
             if ($mode === 'veto') {
@@ -3238,8 +3260,16 @@ final class BrandConfigSpec
                 return 'mid';
             }
 
+            public function get_merchant_available_terms(): array
+            {
+                return [30];
+            }
+
             public function get_option($key, $empty_value = null)
             {
+                if ($key === 'payment_terms_days') {
+                    return [30];
+                }
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
@@ -17667,8 +17697,16 @@ final class CaptureMemorySpec
                 return 'mid';
             }
 
+            public function get_merchant_available_terms(): array
+            {
+                return [30];
+            }
+
             public function get_option($key, $empty_value = null)
             {
+                if ($key === 'payment_terms_days') {
+                    return [30];
+                }
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 

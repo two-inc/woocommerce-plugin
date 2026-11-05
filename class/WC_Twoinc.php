@@ -1666,9 +1666,8 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * The merchant's offerable payment terms (net days, ascending) from the merchant record's
-         * `available_terms`, the authoritative set the admin narrows from (TWO-24812). Empty is
-         * offered as empty: the method stays available, no term is sent, and the
-         * merchant account's own default applies. A cache read, except on a cold or >24h clock,
+         * `available_terms`, the authoritative set the admin narrows from (TWO-24812). Empty
+         * leaves nothing to offer, and an order is refused at create (TWO-27109). A cache read, except on a cold or >24h clock,
          * where one request pays one 10s-capped fetch; a failed fetch leaves that clock unmoved,
          * so one request every 60s pays it again until one succeeds.
          *
@@ -3639,7 +3638,7 @@ if (!class_exists('WC_Twoinc')) {
          * unique int day counts, restricted to the merchant's available terms.
          *
          * A selection is mandatory on save. "No selection" is well-defined
-         * internally (an empty offer falls through to the account default), but
+         * internally (an empty offer refuses every order at create), but
          * it gives the merchant no feedback on the resulting behaviour, so we
          * insist on a selection every time they save. The custom-days sibling
          * field (posted in the same form) also satisfies it, so a single
@@ -4588,8 +4587,8 @@ if (!class_exists('WC_Twoinc')) {
          * The api-key verdict is the only upstream failure that may withhold
          * the Two payment method, and only when it is a definitive rejection
          * (TWO-25326 follow-up). An unresolvable offerable-term set
-         * does not withhold: the tile is offered with no term chips, no term
-         * is sent on the order and the account default applies.
+         * does not withhold: the tile is offered with no term chips, and the
+         * order is refused at create (TWO-27109).
          *
          * @return bool
          */
@@ -6313,13 +6312,14 @@ if (!class_exists('WC_Twoinc')) {
             // withdrawn must re-confirm against the current set — silently
             // falling back to the default term could charge a different
             // (potentially higher) surcharge than the total they approved.
-            // The count($offered) > 0 exemption is deliberate fail-open: an
-            // EMPTY set at submit (mid-session cache invalidation, backend
-            // explicit []) sends no term block and drops the surcharge —
-            // the order proceeds on pre-feature behaviour rather than
-            // hard-blocking every checkout on a cold cache. Do not "tighten"
-            // this to abort on an empty set.
             if (class_exists('WC_Twoinc_Payment_Terms')) {
+                // No offered term means no term anyone chose: the order is
+                // refused rather than booked on the account default (TWO-27109).
+                if (!WC_Twoinc_Payment_Terms::is_enabled($this)) {
+                    $no_term_error = WC_Twoinc_Payment_Terms::no_offered_term_message();
+                    WC_Twoinc_Helper::display_ajax_error($no_term_error);
+                    return self::payment_failure($no_term_error);
+                }
                 // The choice may be the posted field or one already recorded in
                 // the session (a term withdrawn since it was selected): either
                 // is refused, and only a buyer who never chose gets the default.
