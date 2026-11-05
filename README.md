@@ -929,50 +929,70 @@ in response to the same events.
 
 ## Orders the buyer verified but never returned from
 
-An order placed with Two waits in Pending payment until it is confirmed. The
-buyer's return from Two's checkout used to be the only thing that confirmed it,
-so a buyer who verified and then closed the tab left an order Two would honour
+An order placed with Two waits for payment until it is confirmed. The buyer's
+return from Two's checkout used to be the only thing that confirmed it, so a
+buyer who verified and then closed the tab left an order Two would honour
 sitting unpaid in the shop. The plugin now checks waiting orders with Two
 itself, through one resolver (`WC_Twoinc_Pending_Recovery::resolve()`) that
-four triggers share:
+four triggers share. An order is waiting while it is Pending payment or Failed:
+WooCommerce's classic checkout resumes a failed order without setting it back to
+pending, so a buyer can pay a failed order with Two.
 
-| Trigger                 | When                                                                                                                                                |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `confirmation_redirect` | The buyer returns from Two's checkout                                                                                                               |
-| `scheduled_check`       | The Action Scheduler action `twoinc_check_pending_orders`, every 15 minutes (WooCommerce > Status > Scheduled Actions)                              |
-| `admin_check`           | The order screen's Order actions box: **Check status with Two**, offered for a Two order in Pending payment, at any age                             |
-| `unpaid_order_cancel`   | WooCommerce's unpaid-order time limit (Hold stock) is about to cancel the order: the cancel goes through only while Two still reports it UNVERIFIED |
+| Trigger                 | When                                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `confirmation_redirect` | The buyer returns from Two's checkout                                                                                  |
+| `scheduled_check`       | The Action Scheduler action `twoinc_check_pending_orders`, every 15 minutes (WooCommerce > Status > Scheduled Actions) |
+| `admin_check`           | The order screen's Order actions box: **Check status with Two**, offered for a waiting Two order, at any age           |
+| `unpaid_order_cancel`   | WooCommerce's unpaid-order time limit (Hold stock) would cancel the order; see below                                   |
 
 The resolver reads the order from Two (`GET /v1/order/<id>`) and acts on its
 state:
 
 | Two reports                                                                                           | The shop                                                                                                                                      |
 | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| UNVERIFIED                                                                                            | Nothing changes. The admin action adds a note; the buyer's return goes to the cancel page, as before                                          |
+| UNVERIFIED                                                                                            | Nothing changes, except at the unpaid-order time limit (below). The buyer's return goes to the cancel page, as before                         |
 | VERIFIED                                                                                              | Confirms with Two, then marks the order paid exactly as the return does (`payment_complete()`)                                                |
 | CONFIRMED, FULFILLING, FULFILLED, DELIVERED, FULFILMENT_NEEDS_MANUAL_RESOLUTION                       | Marks the order paid without confirming again                                                                                                 |
 | CANCELLED (including Two's own cancellation of an unverified order), or a REJECTED or DECLINED status | Cancels the order here without sending a cancel to Two: the order state is stored as CANCELLED first, so the cancel handler treats it as done |
-| Anything else, or a failed read                                                                       | Nothing changes; logged, and noted once per state; the next run retries                                                                       |
+| Any other state                                                                                       | Nothing changes; logged, and noted on the order once per state                                                                                |
+| A failed read                                                                                         | Nothing changes, except at the unpaid-order time limit (below); logged, and the next run retries                                              |
 
-Every change adds a merchant-only order note naming the trigger, and every check
-logs one line (shop order, Two order, trigger, state, action) to the
-`twoinc-payment-gateway` log. The admin action also shows its outcome as a
-notice on the order screen.
+At the unpaid-order time limit the resolver takes WooCommerce's place, under the
+order's lock and on the order as stored at that moment. It cancels the order,
+with the cancel sent to Two as before, while Two still reports it UNVERIFIED.
+It cancels it without a cancel sent to Two when Two has no record of it (HTTP
+404). When Two cannot be read for any other reason, it holds the cancel while
+the order is under 7 days old and cancels it as WooCommerce would after that.
+An order with no Two order id was never created at Two (refused or failed at
+checkout), so WooCommerce cancels it as it would any other unpaid order.
 
-The scheduled check takes Pending payment Two orders created between 30 minutes
-and 7 days ago (UTC), skips any checked in the last 15 minutes (order meta
-`_twoinc_pending_checked_at`) and checks at most 50 a run, oldest check first.
-Seven days covers Two's own cancellation of unverified orders (2 days by
-default, set per merchant). Action Scheduler runs off site traffic, so a
-low-traffic shop should run WP-Cron from a system cron.
+Order notes are merchant-only. The scheduled check, the admin action and the
+unpaid-order time limit each add one naming what they found when they change an
+order; the admin action also notes a check that changed nothing or failed, and
+shows its outcome as a notice on the order screen. The buyer's return keeps the
+notes it always added. Every check logs one line (shop order, Two order,
+trigger, state, action) to the `twoinc-payment-gateway` log. A read that keeps
+failing for an order is logged as an error once a day, and at debug level in
+between.
+
+The scheduled check takes waiting Two orders with a Two order id, created
+between 30 minutes and 7 days ago (UTC), and skips any checked in the last 15
+minutes (order meta `_twoinc_pending_checked_at`). It asks WooCommerce for order
+ids only: up to 50 never checked, newest first, then up to 50 checked before,
+oldest check first, and checks at most 50 a run in that order. It starts no new
+check once 60 seconds have passed; the rest wait for the next run. Seven days
+covers Two's own cancellation of unverified orders (2 days by default, set per
+merchant). Action Scheduler runs off site traffic, so a low-traffic shop should
+run WP-Cron from a system cron.
 
 All four triggers take one MySQL named lock per order (`GET_LOCK`) and re-read
 the order once they hold it, so whichever arrives second finds it no longer
-waiting: a buyer returning after the scheduled check confirmed their order lands
-on the order-received page and nothing is sent. The scheduled check and the
-unpaid-order hook never wait for a held lock; the return and the admin action
-wait up to 10 seconds. A confirm sends the same `confirm_<Two order id>` key
-whichever trigger sends it.
+waiting. A buyer returning after the scheduled check confirmed their order lands
+on the order-received page and nothing is sent; one returning while another
+check still holds the lock lands there too, told the order is still being
+checked. The scheduled check and the unpaid-order time limit never wait for a
+held lock; the return and the admin action wait up to 10 seconds. A confirm
+sends the same `confirm_<Two order id>` key whichever trigger sends it.
 
 ## Idempotency keys
 
