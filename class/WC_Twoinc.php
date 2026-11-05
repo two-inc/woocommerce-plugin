@@ -5011,17 +5011,6 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Render (and clear) the one-shot invoice-download notice parked by
-         * ajax_download_invoice for the current user.
-         *
-         * Static and registered on admin_notices in load_twoinc_classes()
-         * (plugins_loaded), not in the gateway constructor: on the order
-         * edit screen the gateway is only constructed during the order-data
-         * metabox render, after admin_notices has fired, so a
-         * constructor-registered callback never runs on the very request
-         * that should display the notice.
-         */
-        /**
          * Parks a one-shot notice for this user on this order's edit screen, where
          * render_invoice_download_notice() shows it: for an action that redirects
          * back there, an invoice download or a "Check status" order action.
@@ -5034,6 +5023,17 @@ if (!class_exists('WC_Twoinc')) {
             ], 60);
         }
 
+        /**
+         * Render (and clear) the one-shot invoice-download notice parked by
+         * ajax_download_invoice for the current user.
+         *
+         * Static and registered on admin_notices in load_twoinc_classes()
+         * (plugins_loaded), not in the gateway constructor: on the order
+         * edit screen the gateway is only constructed during the order-data
+         * metabox render, after admin_notices has fired, so a
+         * constructor-registered callback never runs on the very request
+         * that should display the notice.
+         */
         public static function render_invoice_download_notice()
         {
             // admin_notices fires on every wp-admin page, but the transient
@@ -6866,9 +6866,9 @@ if (!class_exists('WC_Twoinc')) {
                     return;
                 case WC_Twoinc_Pending_Recovery::OUTCOME_NOT_WAITING:
                     // A late return: the scheduled check or an admin got there first.
-                    $order = wc_get_order($order->get_id());
-                    if ($order && $order->is_paid()) {
-                        return wp_specialchars_decode($order->get_checkout_order_received_url());
+                    $current = wc_get_order($order->get_id());
+                    if ($current && $current->is_paid()) {
+                        return wp_specialchars_decode($current->get_checkout_order_received_url());
                     }
                     break;
             }
