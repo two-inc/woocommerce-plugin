@@ -4960,10 +4960,7 @@ if (!class_exists('WC_Twoinc')) {
             // Keyed by user AND order: two order tabs downloading close
             // together must not overwrite each other's notice (and a notice
             // for order A must never render on order B's screen).
-            set_transient('twoinc_invoice_notice_' . get_current_user_id() . '_' . $order_id, [
-                'level' => $result['level'],
-                'message' => $result['message'],
-            ], 60);
+            self::park_order_notice((int) $order_id, $result['level'], $result['message']);
 
             // get_edit_order_url() is HPOS-aware, unlike get_edit_post_link
             // (which also HTML-encodes ampersands — wrong for a Location
@@ -5011,6 +5008,19 @@ if (!class_exists('WC_Twoinc')) {
                 'message' => __('Merchant profile refreshed.', 'twoinc-payment-gateway'),
                 'merchant' => trim($short_name === '' ? $merchant_id : $short_name . ' - ' . $merchant_id),
             ]);
+        }
+
+        /**
+         * Parks a one-shot notice for this user on this order's edit screen, where
+         * render_invoice_download_notice() shows it: for an action that redirects
+         * back there, an invoice download or a "Check status" order action.
+         */
+        public static function park_order_notice(int $order_id, string $level, string $message): void
+        {
+            set_transient('twoinc_invoice_notice_' . get_current_user_id() . '_' . $order_id, [
+                'level' => $level,
+                'message' => $message,
+            ], 60);
         }
 
         /**
@@ -6844,32 +6854,43 @@ if (!class_exists('WC_Twoinc')) {
                 wp_die($error_message);
             }
 
-            // Sent with no body whatever the postprocessing hook does, so it never refuses (TWO-26340).
-            $response = $this->make_order_request('order_confirm', 'confirmation_redirect', "/v1/order/{$twoinc_order_id}/confirm", [], 'POST', $order);
-
-            // Stop if request error or $response['response']['code'] < 400
-            if (is_wp_error($response)) {
-                $error_message = sprintf(__('Unable to retrieve %s order information.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
-                $order->add_order_note($error_message);
-                wp_die($error_message);
+            // The same resolver as the scheduled check and the admin action, under the same lock (TWO-26300).
+            $result = WC_Twoinc_Pending_Recovery::resolve($this, (int) $order->get_id(), WC_Twoinc_Pending_Recovery::TRIGGER_BUYER_RETURN);
+            switch ($result['outcome']) {
+                case WC_Twoinc_Pending_Recovery::OUTCOME_CONFIRMED:
+                case WC_Twoinc_Pending_Recovery::OUTCOME_PROCESSED:
+                    return wp_specialchars_decode($order->get_checkout_order_received_url());
+                case WC_Twoinc_Pending_Recovery::OUTCOME_READ_FAILED:
+                    wp_die(sprintf(__('Unable to retrieve %s order information.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')));
+                    return;
+                case WC_Twoinc_Pending_Recovery::OUTCOME_BUSY:
+                case WC_Twoinc_Pending_Recovery::OUTCOME_NOT_WAITING:
+                    return $this->settled_return_url((int) $order->get_id());
             }
+            return wp_specialchars_decode($order->get_cancel_order_url());
+        }
 
-            $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
-            if ($twoinc_err) {
-                $error_message = sprintf(__('Unable to confirm the order with %s.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
-                $order->add_order_note($error_message);
-
-                return wp_specialchars_decode($order->get_cancel_order_url());
+        /**
+         * Where a returning buyer goes when another check holds the order or has already settled it (TWO-26300),
+         * judged on the order as stored now. A cancelled order goes to the cart with WooCommerce's own
+         * cancellation notice, as the cancel URL showed it. Any other order goes to the order-received page, which
+         * also empties the cart, so a buyer whose order is still being confirmed cannot check out a second one;
+         * until it is paid they are told it is still being confirmed.
+         */
+        private function settled_return_url(int $order_id): string
+        {
+            $order = WC_Twoinc_Pending_Recovery::fresh_order($order_id);
+            if (!$order || $order->has_status('cancelled')) {
+                wc_add_notice(
+                    apply_filters('woocommerce_order_cancelled_notice', __('Your order was cancelled.', 'woocommerce')),
+                    apply_filters('woocommerce_order_cancelled_notice_type', 'notice')
+                );
+                return wc_get_cart_url();
             }
-            // After get_twoinc_error_msg, we can assume $response['response']['code'] < 400
-
-            $order_note = sprintf(__('Order ID %s has been placed with %s.', 'twoinc-payment-gateway'), $twoinc_order_id, WC_Twoinc_Brand::get('product_name'));
-            $order->add_order_note($order_note);
-            $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_state'), 'CONFIRMED');
-            $order->save();
-
-            $order->payment_complete();
-
+            if (!$order->is_paid() && $order->needs_payment()) {
+                /* translators: %s is the brand product name (e.g. "Two") */
+                wc_add_notice(sprintf(__('We are still confirming your order with %s.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')), 'notice');
+            }
             return wp_specialchars_decode($order->get_checkout_order_received_url());
         }
 
@@ -8172,7 +8193,7 @@ if (!class_exists('WC_Twoinc')) {
             return true;
         }
 
-        private function get_twoinc_order_id($order)
+        public function get_twoinc_order_id($order)
         {
 
             $twoinc_order_id = $order->get_meta(WC_Twoinc_Brand::prefixed_name('order_id'));
@@ -8678,6 +8699,7 @@ if (!class_exists('WC_Twoinc')) {
             // a merchant who deactivates to troubleshoot must not lose their config.
             if (class_exists('WC_Twoinc_FX') && function_exists('as_unschedule_all_actions')) {
                 as_unschedule_all_actions(WC_Twoinc_FX::refresh_hook());
+                as_unschedule_all_actions(WC_Twoinc_Pending_Recovery::hook());
             }
             wp_clear_scheduled_hook(self::merchant_record_refresh_hook());
         }

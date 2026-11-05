@@ -1049,8 +1049,11 @@ final class OrderPostprocessingSpec
                 $gateway->process_payment(42);
             }, 'order_create', 'checkout', '/v1/order', 'create'],
             [$call('process_update_twoinc_order', 'ORDER', $meta, false, 'admin_edit'), 'order_update', 'admin_edit', '/v1/order/two-1', 'update'],
-            [static function ($gateway) use ($call) {
+            [static function ($gateway, $order) use ($call) {
                 $_REQUEST = ['order_id' => '42', WC_Twoinc_Brand::prefixed_name('order_reference') => 'ref', WC_Twoinc_Brand::prefixed_name('csrf_token') => wp_create_nonce(WC_Twoinc_Brand::prefixed_name('confirm_42'))];
+                // The return reads the order from Two first and confirms only a verified one (TWO-26300).
+                $order->status = 'pending';
+                $gateway->two_order['state'] = 'VERIFIED';
                 $call('process_confirmation')($gateway, null);
             }, 'order_confirm', 'confirmation_redirect', '/v1/order/two-1/confirm', 'confirm'],
             [static function ($gateway) {

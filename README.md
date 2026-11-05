@@ -283,13 +283,14 @@ export MERCHANT_API_KEY=$(python3 -c "import json; print(json.load(open('docker/
 
 ### Tests
 
-| Test                               | What it does                                                                                       |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `order-flow.spec.ts`               | Place order → verify CONFIRMED → fulfil via WP admin → verify FULFILLED → refund → verify REFUNDED |
-| `cancel-order.spec.ts`             | Place order → cancel via WP admin → verify CANCELLED                                               |
-| `max-limit.spec.ts`                | Add "Expensive Product" → expect rejection on checkout                                             |
-| `sole-trader-availability.spec.ts` | Sole-trader chooser appears only where the registry supports it (GB yes, NO no)                    |
-| `checkout-renderer.spec.ts`        | `/checkout/` renders the configured renderer and only it, and offers Two there                     |
+| Test                               | What it does                                                                                                                                                           |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `order-flow.spec.ts`               | Place order → verify CONFIRMED → fulfil via WP admin → verify FULFILLED → refund → verify REFUNDED                                                                     |
+| `cancel-order.spec.ts`             | Place order → cancel via WP admin → verify CANCELLED                                                                                                                   |
+| `max-limit.spec.ts`                | Add "Expensive Product" → expect rejection on checkout                                                                                                                 |
+| `sole-trader-availability.spec.ts` | Sole-trader chooser appears only where the registry supports it (GB yes, NO no)                                                                                        |
+| `checkout-renderer.spec.ts`        | `/checkout/` renders the configured renderer and only it, and offers Two there                                                                                         |
+| `pending-recovery.spec.ts`         | A buyer who verifies but never returns: the scheduled check and the admin order action confirm it; an order Two cancelled is cancelled here without a cancel sent back |
 
 ### Clean restart
 
@@ -596,7 +597,7 @@ add_filter('twoinc_order_postprocessing', function (array $payload, array $conte
   | Key                          | Type                      | Meaning                                                                                                                                                                                                                                                                                                |
   | ---------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
   | `request_type`               | string                    | `order_intent`, `order_create`, `order_update`, `order_confirm`, `capture`, `refund` or `cancel`                                                                                                                                                                                                       |
-  | `trigger`                    | string                    | What caused it, for diagnosis: `checkout`, `change_hash`, `admin_edit`, `tracking_number`, `confirmation_redirect`, `status_change`, `order_refund`                                                                                                                                                    |
+  | `trigger`                    | string                    | What caused it, for diagnosis: `checkout`, `change_hash`, `admin_edit`, `tracking_number`, `confirmation_redirect`, `scheduled_check`, `admin_check`, `unpaid_order_cancel`, `status_change`, `order_refund`                                                                                           |
   | `endpoint`                   | string                    | The API path, e.g. `/v1/order/<id>/refund`                                                                                                                                                                                                                                                             |
   | `order`                      | `WC_Order`                | The order; for `order_intent` an unsaved order built from the cart                                                                                                                                                                                                                                     |
   | `refund`                     | `WC_Order_Refund` or null | The refund being sent, for `refund`                                                                                                                                                                                                                                                                    |
@@ -629,7 +630,7 @@ it was thrown, and the request is sent.
 | `order_intent`  | Every availability check at checkout. The plugin composes the intent itself from the cart, with the same line builder as the order; the browser supplies only the buyer                  |
 | `order_create`  | Placing the order; also, with `trigger` `change_hash`, whenever the plugin recomposes the order to detect an edit (nothing is sent then)                                                 |
 | `order_update`  | An admin edit or a tracking number reaching the order. An admin edit Two would refuse (the order is cancelled, refunded or otherwise closed) is built and runs the hook, but is not sent |
-| `order_confirm` | The buyer returning from Two's checkout                                                                                                                                                  |
+| `order_confirm` | Two reporting the order VERIFIED: on the buyer's return, or when the buyer never returned (see "Orders the buyer verified but never returned from")                                      |
 | `capture`       | The fulfilment trigger status                                                                                                                                                            |
 | `refund`        | A refund                                                                                                                                                                                 |
 | `cancel`        | Cancellation                                                                                                                                                                             |
@@ -925,6 +926,95 @@ in response to the same events.
 - An incompatible version 2 would be a new hook name, with this one still
   firing alongside it. Any contract change is recorded in the changelog, and the
   CI fixture pins version 1.
+
+## Orders the buyer verified but never returned from
+
+An order placed with Two waits for payment until it is confirmed. The buyer's
+return from Two's checkout used to be the only thing that confirmed it, so a
+buyer who verified and then closed the tab left an order Two would honour
+sitting unpaid in the shop. The plugin now checks waiting orders with Two
+itself, through one resolver (`WC_Twoinc_Pending_Recovery::resolve()`) that
+four triggers share. An order is waiting while it is Pending payment. The
+buyer's return and the admin action also take a Failed order as waiting:
+WooCommerce's classic checkout resumes a failed order without setting it back
+to pending, so a buyer can pay a failed order with Two. The scheduled check and
+the unpaid-order time limit leave a Failed order alone, since a merchant may
+have set that status by hand.
+
+| Trigger                 | When                                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `confirmation_redirect` | The buyer returns from Two's checkout                                                                                  |
+| `scheduled_check`       | The Action Scheduler action `twoinc_check_pending_orders`, every 15 minutes (WooCommerce > Status > Scheduled Actions) |
+| `admin_check`           | The order screen's Order actions box: **Check status with Two**, offered for a Pending payment or Failed Two order     |
+| `unpaid_order_cancel`   | WooCommerce's unpaid-order time limit (Hold stock) would cancel the order; see below                                   |
+
+The resolver reads the order from Two (`GET /v1/order/<id>`) and acts on its
+state:
+
+| Two reports                                                                                           | The shop                                                                                                                                      |
+| ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| UNVERIFIED                                                                                            | Nothing changes, except at the unpaid-order time limit (below). The buyer's return goes to the cancel page, as before                         |
+| VERIFIED                                                                                              | Confirms with Two, then marks the order paid exactly as the return does (`payment_complete()`)                                                |
+| CONFIRMED, FULFILLING, FULFILLED, DELIVERED, FULFILMENT_NEEDS_MANUAL_RESOLUTION                       | Marks the order paid without confirming again                                                                                                 |
+| CANCELLED (including Two's own cancellation of an unverified order), or a REJECTED or DECLINED status | Cancels the order here without sending a cancel to Two: the order state is stored as CANCELLED first, so the cancel handler treats it as done |
+| Any other state                                                                                       | Nothing changes; logged, and noted on the order once per state                                                                                |
+| A failed read                                                                                         | Nothing changes, except at the unpaid-order time limit (below); logged, and the next run retries                                              |
+
+At the unpaid-order time limit the resolver takes WooCommerce's place, under the
+order's lock and on the order as stored at that moment. It cancels the order,
+with the cancel sent to Two as before, while Two still reports it UNVERIFIED.
+It cancels it without a cancel sent to Two when Two answers that it does not
+hold the order (HTTP 404 with its `ORDER_NOT_FOUND` error code) on two checks
+at least 15 minutes apart; the first is kept in order meta
+`_twoinc_pending_not_found_at`, and any other answer clears it. When Two cannot
+be read for any other reason, it holds the cancel while the order is under 7
+days old and cancels it as WooCommerce would after that. An order with no Two
+order id was never created at Two (refused or failed at checkout), so
+WooCommerce cancels it as it would any other unpaid order.
+
+WooCommerce picks unpaid orders by when they were last modified, and on HPOS
+the scheduled check's own save counts as a change, so WooCommerce would never
+reach an order the check keeps reading. The scheduled check therefore applies
+the time limit itself, counted from when the order was created, with
+WooCommerce's own conditions: stock management on, a Hold stock time set (60
+minutes when none is stored), and `woocommerce_cancel_unpaid_order` agreeing,
+which by default means an order made by the checkout. The plugin's own handler
+for that filter runs last, so a shop whose filter turns the automatic cancel
+off keeps it off for Two orders on both paths. On every run, the scheduled
+check runs the shop's `woocommerce_cancel_unpaid_order` filters once for each
+order it checks that is past the hold time, before reading it from Two, so a
+filter there should be quick and free of side effects.
+
+Order notes are merchant-only. The scheduled check, the admin action and the
+unpaid-order time limit each add one naming what they found when they change an
+order; the admin action also notes a check that changed nothing or failed, and
+shows its outcome as a notice on the order screen. The buyer's return keeps the
+notes it always added. Every check logs one line (shop order, Two order,
+trigger, state, action) to the `twoinc-payment-gateway` log. A read that keeps
+failing for an order is logged as an error once a day, and at debug level in
+between.
+
+The scheduled check takes Pending payment Two orders with a Two order id, created
+between 30 minutes and 7 days ago (UTC), and skips any checked in the last 15
+minutes (order meta `_twoinc_pending_checked_at`). It asks WooCommerce for order
+ids only: up to 50 never checked, newest first, then up to 50 checked before,
+oldest check first, and checks at most 50 a run in that order. It starts no new
+check once 60 seconds have passed; the rest wait for the next run. Seven days
+covers Two's own cancellation of unverified orders (2 days by default, set per
+merchant). Action Scheduler runs off site traffic, so a low-traffic shop should
+run WP-Cron from a system cron.
+
+All four triggers take one MySQL named lock per order (`GET_LOCK`) and re-read
+the order once they hold it, so whichever arrives second finds it no longer
+waiting. A buyer returning after the scheduled check confirmed their order lands
+on the order-received page and nothing is sent. One returning to an order that
+has been cancelled meanwhile lands on the cart with WooCommerce's own "Your
+order was cancelled." notice. One returning while another check still holds the
+lock lands on the order-received page, which empties the cart so a second order
+cannot be placed by mistake, told the order is still being confirmed until it
+is paid. The scheduled check and the unpaid-order time limit never wait for a
+held lock; the return and the admin action wait up to 10 seconds. A confirm
+sends the same `confirm_<Two order id>` key whichever trigger sends it.
 
 ## Idempotency keys
 

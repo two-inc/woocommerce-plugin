@@ -106,6 +106,7 @@ function load_twoinc_classes()
     WC_Twoinc_Product_Promo::init();
     WC_Twoinc_Product_Button::init();
     require_once __DIR__ . '/class/WC_Twoinc.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Pending_Recovery.php';
 
     // The option name is resolved inside the callback: reading the brand here would cache it
     // before an overlay loading at this same priority has registered its own.
@@ -164,6 +165,16 @@ function load_twoinc_classes()
         add_action(WC_Twoinc::merchant_record_refresh_hook(), ['WC_Twoinc', 'run_scheduled_merchant_record_refresh']);
         WC_Twoinc::schedule_merchant_record_refresh();
     });
+
+    // Orders the buyer verified but never returned from (TWO-26300): a check every 15 minutes, an order action
+    // and a check before WooCommerce's unpaid-order time limit cancels one. Deferred to init like the FX refresh.
+    add_action('init', static function () {
+        add_action(WC_Twoinc_Pending_Recovery::hook(), ['WC_Twoinc_Pending_Recovery', 'run_scheduled_check']);
+        add_action('woocommerce_order_action_' . WC_Twoinc_Pending_Recovery::order_action_key(), ['WC_Twoinc_Pending_Recovery', 'handle_order_action']);
+        WC_Twoinc_Pending_Recovery::maybe_schedule();
+    });
+    add_filter('woocommerce_order_actions', ['WC_Twoinc_Pending_Recovery', 'add_order_action'], 10, 2);
+    add_filter('woocommerce_cancel_unpaid_order', ['WC_Twoinc_Pending_Recovery', 'filter_cancel_unpaid'], WC_Twoinc_Pending_Recovery::UNPAID_FILTER_PRIORITY, 2);
     add_action('wc_ajax_two_term_fees', ['WC_Twoinc_Payment_Terms', 'ajax_term_fees']);
     add_action('wc_ajax_two_select_term', ['WC_Twoinc_Payment_Terms', 'ajax_select_term']);
     add_action('wc_ajax_two_sole_trader_availability', ['WC_Twoinc_Sole_Trader', 'ajax_availability']);

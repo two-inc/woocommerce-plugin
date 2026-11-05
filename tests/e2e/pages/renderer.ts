@@ -23,6 +23,8 @@ export type CheckoutDriver = {
   modeChips(page: Page): Locator;
   setBillingCountry(page: Page, countryName: string): Promise<void>;
   placeOrder(page: Page): Promise<string>;
+  /** Places the order without waiting for the order-received page. */
+  submitOrder(page: Page): Promise<void>;
   expectRejection(page: Page): Promise<void>;
 };
 
@@ -47,6 +49,7 @@ const classicDriver: CheckoutDriver = {
   modeChips: (page) => page.locator(classic.SOLE_TRADER_TOGGLE),
   setBillingCountry: classic.setBillingCountry,
   placeOrder: classic.placeOrder,
+  submitOrder: classic.submitOrder,
   expectRejection: classic.expectRejection
 };
 
@@ -70,6 +73,7 @@ const blocksDriver: CheckoutDriver = {
   modeChips: blocks.modeChips,
   setBillingCountry: blocks.setBillingCountry,
   placeOrder: blocks.placeOrder,
+  submitOrder: blocks.submitOrder,
   // The pay box error is the gateway's own description markup, which the Blocks tile renders whole.
   expectRejection: classic.expectRejection
 };
