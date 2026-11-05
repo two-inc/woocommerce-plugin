@@ -1945,11 +1945,12 @@ function wc_get_order($order_id)
     return $GLOBALS['__twoinc_test_wc_orders'][$order_id] ?? false;
 }
 
-/** Records the query arguments; answers with $GLOBALS['__twoinc_test_wc_get_orders'] (ids). */
+/** Records the query arguments; answers each call in turn from $GLOBALS['__twoinc_test_wc_get_orders'] (lists of ids). */
 function wc_get_orders($args)
 {
     $GLOBALS['__twoinc_test_wc_get_orders_args'][] = $args;
-    return $GLOBALS['__twoinc_test_wc_get_orders'] ?? [];
+    $GLOBALS['__twoinc_test_wc_get_orders'] = $GLOBALS['__twoinc_test_wc_get_orders'] ?? [];
+    return array_shift($GLOBALS['__twoinc_test_wc_get_orders']) ?? [];
 }
 
 function clean_post_cache($post)

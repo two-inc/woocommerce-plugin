@@ -23,10 +23,17 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
         public const MAX_AGE = 7 * 86400;
         public const RECHECK_AFTER = 900;
         public const BATCH_SIZE = 50;
-        /** Newest first, so a shop with a backlog of abandoned checkouts still reaches this week's orders. */
-        public const CANDIDATE_LIMIT = 500;
+        /** Seconds after which a scheduled run starts no new check, well inside Action Scheduler's own timeout. */
+        public const RUN_BUDGET = 60;
+        /** A check that keeps failing for an order is logged as an error at most this often. */
+        public const ERROR_LOG_INTERVAL = 86400;
         /** Seconds the buyer's return and the admin action wait for a held lock; the scheduled check never waits. */
         public const INTERACTIVE_LOCK_WAIT = 10;
+        /**
+         * The statuses an order waits for payment in. WooCommerce's classic checkout resumes a failed order
+         * without setting it back to pending, so a buyer can pay a failed order with Two.
+         */
+        public const WAITING_STATUSES = ['pending', 'failed'];
 
         public const ACTION_WAIT = 'wait';
         public const ACTION_CONFIRM = 'confirm';
@@ -45,6 +52,7 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
         public const OUTCOME_READ_FAILED = 'read_failed';
         public const OUTCOME_BUSY = 'busy';
         public const OUTCOME_NOT_WAITING = 'not_waiting';
+        public const OUTCOME_NOT_FOUND = 'not_found';
 
         private const PROCESS_STATES = ['CONFIRMED', 'FULFILLING', 'FULFILLED', 'DELIVERED', 'FULFILMENT_NEEDS_MANUAL_RESOLUTION'];
 
@@ -97,37 +105,49 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
             return self::ACTION_UNKNOWN;
         }
 
-        /** wc_get_orders() arguments for the scheduled check's candidates, at UTC time $now. */
-        public static function candidate_query(string $gateway_id, int $now): array
+        /**
+         * wc_get_orders() arguments for the scheduled check, at UTC time $now: waiting Two orders with a Two order
+         * id, created between MIN_AGE and MAX_AGE ago. The first query takes those never checked, newest first; the
+         * second those last checked at least RECHECK_AFTER ago, oldest check first. Both return ids only.
+         *
+         * @return array{0: array, 1: array}
+         */
+        public static function candidate_queries(string $gateway_id, int $now): array
         {
-            return [
-                'status' => ['pending'],
+            $base = [
+                'status' => self::WAITING_STATUSES,
                 'payment_method' => $gateway_id,
                 'date_created' => ($now - self::MAX_AGE) . '...' . ($now - self::MIN_AGE),
-                'orderby' => 'date',
-                'order' => 'DESC',
-                'limit' => self::CANDIDATE_LIMIT,
+                'limit' => self::BATCH_SIZE,
                 'return' => 'ids',
+            ];
+            $has_two_id = ['key' => WC_Twoinc_Brand::prefixed_name('order_id'), 'compare' => 'EXISTS'];
+            return [
+                $base + [
+                    'meta_query' => [$has_two_id, ['key' => self::last_checked_key(), 'compare' => 'NOT EXISTS']],
+                    'orderby' => 'date',
+                    'order' => 'DESC',
+                ],
+                $base + [
+                    'meta_query' => [
+                        $has_two_id,
+                        'checked' => ['key' => self::last_checked_key(), 'value' => $now - self::RECHECK_AFTER, 'compare' => '<=', 'type' => 'NUMERIC'],
+                    ],
+                    'orderby' => ['checked' => 'ASC'],
+                ],
             ];
         }
 
         /**
-         * The orders this run checks: not checked in the last RECHECK_AFTER seconds, oldest check first (never
-         * checked first of all), at most BATCH_SIZE.
+         * The orders a run checks: the never-checked ones first, at most BATCH_SIZE.
          *
-         * @param array<int,int> $last_checked order id => last check (UTC seconds, 0 for never)
+         * @param int[] $never_checked
+         * @param int[] $stale
          * @return int[]
          */
-        public static function select_due(array $last_checked, int $now): array
+        public static function due_ids(array $never_checked, array $stale): array
         {
-            $due = array_filter($last_checked, static function ($checked) use ($now) {
-                return $now - (int) $checked >= self::RECHECK_AFTER;
-            });
-            // Ties broken on the order id, so a run is deterministic.
-            uksort($due, static function ($a, $b) use ($due) {
-                return [$due[$a], $a] <=> [$due[$b], $b];
-            });
-            return array_slice(array_map('intval', array_keys($due)), 0, self::BATCH_SIZE);
+            return array_slice(array_values(array_unique(array_map('intval', array_merge($never_checked, $stale)))), 0, self::BATCH_SIZE);
         }
 
         /** The Action Scheduler callback. Static and self-bootstrapping, as it runs outside any gateway context. */
@@ -137,26 +157,41 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
             if (!$gateway->get_option('api_key') || !$gateway->get_merchant_id()) {
                 return;
             }
-            $now = time();
-            $last_checked = [];
-            /** @var int[] $candidates the query asks for ids */
-            $candidates = wc_get_orders(self::candidate_query($gateway->id, $now));
-            foreach ($candidates as $order_id) {
-                $order = wc_get_order($order_id);
-                if ($order && $gateway->get_twoinc_order_id($order)) {
-                    $last_checked[(int) $order_id] = (int) $order->get_meta(self::last_checked_key(), true);
-                }
-            }
-            $summary = [];
-            foreach (self::select_due($last_checked, $now) as $order_id) {
-                $outcome = self::resolve($gateway, $order_id, self::TRIGGER_SCHEDULED, 0)['outcome'];
-                $summary[$outcome] = ($summary[$outcome] ?? 0) + 1;
-            }
-            self::log('debug', sprintf('Scheduled pending-order check: %d candidates, results %s', count($last_checked), wp_json_encode((object) $summary)));
+            self::run_check($gateway, 'time');
         }
 
         /**
-         * Reads the order from Two and acts on its state. Never sends a cancel to Two.
+         * One scheduled run. Starts no new check once RUN_BUDGET seconds have passed by $clock; what is left
+         * waits for the next run.
+         *
+         * @return array<string,int> outcome => count, plus `deferred`
+         */
+        public static function run_check(WC_Twoinc $gateway, callable $clock): array
+        {
+            $start = (int) $clock();
+            [$never_query, $stale_query] = self::candidate_queries($gateway->id, $start);
+            /** @var int[] $never_checked the query asks for ids */
+            $never_checked = wc_get_orders($never_query);
+            /** @var int[] $stale the query asks for ids */
+            $stale = wc_get_orders($stale_query);
+            $ids = self::due_ids($never_checked, $stale);
+            $summary = [];
+            foreach ($ids as $i => $order_id) {
+                if ((int) $clock() - $start >= self::RUN_BUDGET) {
+                    $summary['deferred'] = count($ids) - $i;
+                    break;
+                }
+                $outcome = self::resolve($gateway, $order_id, self::TRIGGER_SCHEDULED, 0)['outcome'];
+                $summary[$outcome] = ($summary[$outcome] ?? 0) + 1;
+            }
+            self::log('debug', sprintf('Scheduled pending-order check: %d due, results %s', count($ids), wp_json_encode((object) $summary)));
+            return $summary;
+        }
+
+        /**
+         * Reads the order from Two and acts on its state. A cancel reaches Two only from WooCommerce's
+         * unpaid-order time limit, for an order Two still reports UNVERIFIED or one past the 7-day window that
+         * Two cannot be read for, as it did before.
          *
          * @return array{outcome: string, state: string, message: string}
          */
@@ -176,7 +211,7 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
         private static function resolve_locked(WC_Twoinc $gateway, int $order_id, string $trigger): array
         {
             $order = self::fresh_order($order_id);
-            if (!$order || !WC_Twoinc_Helper::is_twoinc_order($order) || $order->get_status() !== 'pending') {
+            if (!$order || !WC_Twoinc_Helper::is_twoinc_order($order) || !in_array($order->get_status(), self::WAITING_STATUSES, true)) {
                 return self::result(self::OUTCOME_NOT_WAITING);
             }
             $two_order_id = (string) $gateway->get_twoinc_order_id($order);
@@ -189,13 +224,7 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
             $http = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
             $body = $http >= 200 && $http < 300 ? json_decode((string) wp_remote_retrieve_body($response), true) : null;
             if (!is_array($body) || !isset($body['state'])) {
-                $reason = is_wp_error($response) ? $response->get_error_message() : 'HTTP ' . $http;
-                self::log('error', sprintf('Pending check for order %d, %s order %s (%s): could not read the order: %s', $order_id, self::product(), $two_order_id, $trigger, $reason));
-                if ($trigger === self::TRIGGER_BUYER_RETURN) {
-                    $order->add_order_note(sprintf(__('Unable to retrieve %s order information.', 'twoinc-payment-gateway'), self::product()));
-                }
-                $order->save();
-                return self::result(self::OUTCOME_READ_FAILED, '', $reason);
+                return self::read_failed($order, $trigger, $two_order_id, $http, is_wp_error($response) ? $response->get_error_message() : 'HTTP ' . $http);
             }
 
             $state = strtoupper((string) $body['state']);
@@ -205,7 +234,12 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
             switch ($action) {
                 case self::ACTION_WAIT:
                     $outcome = self::OUTCOME_UNVERIFIED;
-                    if ($trigger === self::TRIGGER_ADMIN) {
+                    if ($trigger === self::TRIGGER_UNPAID_CANCEL) {
+                        // WooCommerce's time limit applies, under the lock and to the order as stored now. The
+                        // cancel goes to Two too, as it always has for an order the buyer never verified.
+                        $order->add_order_note(self::note($outcome, $state, $trigger));
+                        $order->update_status('cancelled');
+                    } elseif ($trigger === self::TRIGGER_ADMIN) {
                         $order->add_order_note(self::note($outcome, $state, $trigger));
                     } elseif ($trigger === self::TRIGGER_BUYER_RETURN) {
                         // As before: a return Two has not verified fails, and the buyer is sent to the cancel page.
@@ -268,6 +302,46 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
             return self::result($outcome, $state);
         }
 
+        /**
+         * The order could not be read from Two. Nothing changes, except at WooCommerce's unpaid-order time limit:
+         * an order Two has no record of (404) is cancelled here without a cancel sent to Two, and one past the
+         * scheduled check's 7-day window is cancelled as WooCommerce always did. A check that keeps failing is
+         * logged as an error once a day, not on every run.
+         */
+        private static function read_failed($order, string $trigger, string $two_order_id, int $http, string $reason): array
+        {
+            $interactive = in_array($trigger, [self::TRIGGER_BUYER_RETURN, self::TRIGGER_ADMIN], true);
+            $logged_key = WC_Twoinc_Brand::meta_key('pending_error_logged_at');
+            $message = sprintf('Pending check for order %d, %s order %s (%s): could not read the order: %s', $order->get_id(), self::product(), $two_order_id, $trigger, $reason);
+            if ($interactive || time() - (int) $order->get_meta($logged_key, true) >= self::ERROR_LOG_INTERVAL) {
+                self::log('error', $message);
+                if (!$interactive) {
+                    $order->update_meta_data($logged_key, time());
+                }
+            } else {
+                self::log('debug', $message);
+            }
+
+            if ($trigger === self::TRIGGER_BUYER_RETURN) {
+                $order->add_order_note(sprintf(__('Unable to retrieve %s order information.', 'twoinc-payment-gateway'), self::product()));
+            } elseif ($trigger === self::TRIGGER_UNPAID_CANCEL && $http === 404) {
+                $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_state'), 'CANCELLED');
+                $order->add_order_note(self::note(self::OUTCOME_NOT_FOUND, '', $trigger));
+                $order->update_status('cancelled');
+                return self::result(self::OUTCOME_NOT_FOUND, '', $reason);
+            } elseif ($trigger === self::TRIGGER_UNPAID_CANCEL && self::is_past_window($order)) {
+                $order->update_status('cancelled');
+            }
+            $order->save();
+            return self::result(self::OUTCOME_READ_FAILED, '', $reason);
+        }
+
+        private static function is_past_window($order): bool
+        {
+            $created = $order->get_date_created();
+            return $created && time() - $created->getTimestamp() > self::MAX_AGE;
+        }
+
         /** The merchant-only order note: what Two reported and what changed, then which check found it. */
         public static function note(string $outcome, string $state, string $trigger): string
         {
@@ -279,6 +353,7 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
             $product = self::product();
             switch ($outcome) {
                 case self::OUTCOME_UNVERIFIED:
+                    /* translators: %s is the brand product name (e.g. "Two") */
                     return sprintf(__('Checked with %s: the buyer has not finished verification.', 'twoinc-payment-gateway'), $product);
                 case self::OUTCOME_CONFIRMED:
                     /* translators: %1$s is the brand product name (e.g. "Two") */
@@ -287,9 +362,14 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
                     /* translators: %1$s is the brand product name (e.g. "Two") */
                     return sprintf(__('The buyer verified this order with %1$s but did not return to the shop. %1$s had already confirmed it.', 'twoinc-payment-gateway'), $product);
                 case self::OUTCOME_CANCELLED:
+                    /* translators: %s is the brand product name (e.g. "Two") */
                     return sprintf(__('%s reports this order as cancelled. Cancelled here to match.', 'twoinc-payment-gateway'), $product);
                 case self::OUTCOME_DECLINED:
+                    /* translators: %s is the brand product name (e.g. "Two") */
                     return sprintf(__('%s declined this order. Cancelled here to match.', 'twoinc-payment-gateway'), $product);
+                case self::OUTCOME_NOT_FOUND:
+                    /* translators: %s is the brand product name (e.g. "Two") */
+                    return sprintf(__('%s has no record of this order. Cancelled here without a cancel sent to it.', 'twoinc-payment-gateway'), $product);
                 case self::OUTCOME_UNKNOWN:
                     /* translators: %1$s is the brand product name (e.g. "Two"), %2$s the order state it reports */
                     return sprintf(__('%1$s reports state %2$s; not changed. Check the order in the %1$s portal.', 'twoinc-payment-gateway'), $product, $state);
@@ -299,6 +379,7 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
                     /* translators: %1$s is the brand product name (e.g. "Two"), %2$s the reason the read failed */
                     return sprintf(__('Could not read the order from %1$s: %2$s', 'twoinc-payment-gateway'), $product, $detail);
                 case self::OUTCOME_BUSY:
+                    /* translators: %s is the brand product name (e.g. "Two") */
                     return sprintf(__('This order is being checked with %s already. Reload the page in a moment.', 'twoinc-payment-gateway'), $product);
             }
             return __('This order is no longer waiting for payment, so it was not checked.', 'twoinc-payment-gateway');
@@ -313,9 +394,12 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
                     return __('Found when the unpaid order time limit was reached.', 'twoinc-payment-gateway');
                 case self::TRIGGER_ADMIN:
                     $user = wp_get_current_user();
-                    /* translators: %s is the name of the admin user who ran the check */
                     $name = $user && isset($user->display_name) ? (string) $user->display_name : '';
-                    return sprintf(__('Checked by %s.', 'twoinc-payment-gateway'), $name !== '' ? $name : __('an administrator', 'twoinc-payment-gateway'));
+                    if ($name === '') {
+                        $name = __('an administrator', 'twoinc-payment-gateway');
+                    }
+                    /* translators: %s is the name of the admin user who ran the check */
+                    return sprintf(__('Checked by %s.', 'twoinc-payment-gateway'), $name);
             }
             return '';
         }
@@ -327,7 +411,7 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
                 global $theorder;
                 $order = $theorder;
             }
-            if (!is_array($actions) || !$order || !WC_Twoinc_Helper::is_twoinc_order($order) || $order->get_status() !== 'pending') {
+            if (!is_array($actions) || !$order || !WC_Twoinc_Helper::is_twoinc_order($order) || !in_array($order->get_status(), self::WAITING_STATUSES, true)) {
                 return $actions;
             }
             $gateway = WC_Twoinc::get_instance();
@@ -356,8 +440,9 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
 
         /**
          * `woocommerce_cancel_unpaid_order`: WooCommerce's hold-stock time limit would cancel a pending order, and
-         * the cancel would reach Two even when the buyer had verified. The resolver runs first; the cancel goes
-         * through only while Two still reports the order UNVERIFIED.
+         * the cancel would reach Two even when the buyer had verified. The resolver runs instead and cancels the
+         * order only while Two still reports it UNVERIFIED, when Two has no record of it, or when Two cannot be
+         * read and the order is past the 7-day window.
          */
         public static function filter_cancel_unpaid($cancel, $order)
         {
@@ -368,8 +453,15 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
             if (!$gateway->get_option('api_key') || !$gateway->get_merchant_id()) {
                 return $cancel;
             }
-            $outcome = self::resolve($gateway, (int) $order->get_id(), self::TRIGGER_UNPAID_CANCEL, 0)['outcome'];
-            return $outcome === self::OUTCOME_UNVERIFIED;
+            // No Two order id: the order was never created at Two (refused or failed at checkout), so there is
+            // nothing to ask and WooCommerce cancels it as it would any other unpaid order.
+            if (!$gateway->get_twoinc_order_id($order)) {
+                return $cancel;
+            }
+            // The resolver cancels the order itself when it should go, under the lock and on the order as stored
+            // now. WooCommerce's copy was read before the lock and must not be cancelled from here.
+            self::resolve($gateway, (int) $order->get_id(), self::TRIGGER_UNPAID_CANCEL, 0);
+            return false;
         }
 
         private static function result(string $outcome, string $state = '', string $message = ''): array

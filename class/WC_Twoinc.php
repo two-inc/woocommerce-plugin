@@ -6861,16 +6861,20 @@ if (!class_exists('WC_Twoinc')) {
                 case WC_Twoinc_Pending_Recovery::OUTCOME_PROCESSED:
                     return wp_specialchars_decode($order->get_checkout_order_received_url());
                 case WC_Twoinc_Pending_Recovery::OUTCOME_READ_FAILED:
-                case WC_Twoinc_Pending_Recovery::OUTCOME_BUSY:
                     wp_die(sprintf(__('Unable to retrieve %s order information.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')));
                     return;
-                case WC_Twoinc_Pending_Recovery::OUTCOME_NOT_WAITING:
-                    // A late return: the scheduled check or an admin got there first.
+                case WC_Twoinc_Pending_Recovery::OUTCOME_BUSY:
+                    // Another check is confirming the order now. The order-received page shows it either way;
+                    // until it is paid, the buyer is told it is still being checked.
                     $current = wc_get_order($order->get_id());
-                    if ($current && $current->is_paid()) {
-                        return wp_specialchars_decode($current->get_checkout_order_received_url());
+                    if (!$current || !$current->is_paid()) {
+                        wc_add_notice(WC_Twoinc_Pending_Recovery::outcome_message($result['outcome']), 'notice');
                     }
-                    break;
+                    return wp_specialchars_decode($order->get_checkout_order_received_url());
+                case WC_Twoinc_Pending_Recovery::OUTCOME_NOT_WAITING:
+                    // A late return: the scheduled check or an admin got there first, or the order was closed.
+                    // The order-received page shows it as it is; nothing is cancelled.
+                    return wp_specialchars_decode($order->get_checkout_order_received_url());
             }
             return wp_specialchars_decode($order->get_cancel_order_url());
         }
