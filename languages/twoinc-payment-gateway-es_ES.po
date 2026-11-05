@@ -1985,3 +1985,85 @@ msgstr "Días de plazo para pagar su factura"
 #: tillit-payment-gateway.php:305
 msgid "Settings"
 msgstr "Ajustes"
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:357
+#, php-format
+msgid "Checked with %s: the buyer has not finished verification."
+msgstr "Comprobado con %s: el comprador no ha terminado la verificación."
+
+#. translators: %1$s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:360
+#, php-format
+msgid "The buyer verified this order with %1$s but did not return to the shop. Confirmed with %1$s."
+msgstr "El comprador verificó este pedido con %1$s pero no volvió a la tienda. Confirmado con %1$s."
+
+#. translators: %1$s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:363
+#, php-format
+msgid "The buyer verified this order with %1$s but did not return to the shop. %1$s had already confirmed it."
+msgstr "El comprador verificó este pedido con %1$s pero no volvió a la tienda. %1$s ya lo había confirmado."
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:366
+#, php-format
+msgid "%s reports this order as cancelled. Cancelled here to match."
+msgstr "%s indica que este pedido está cancelado. Se ha cancelado aquí también."
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:369
+#, php-format
+msgid "%s declined this order. Cancelled here to match."
+msgstr "%s rechazó este pedido. Se ha cancelado aquí también."
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:372
+#, php-format
+msgid "%s has no record of this order. Cancelled here without a cancel sent to it."
+msgstr "%s no tiene constancia de este pedido. Se ha cancelado aquí sin enviarle una cancelación."
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$s the order state it reports
+#: class/WC_Twoinc_Pending_Recovery.php:375
+#, php-format
+msgid "%1$s reports state %2$s; not changed. Check the order in the %1$s portal."
+msgstr "%1$s indica el estado %2$s; no se ha cambiado nada. Revisa el pedido en el portal de %1$s."
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$s the reason the read failed
+#: class/WC_Twoinc_Pending_Recovery.php:380
+#, php-format
+msgid "Could not read the order from %1$s: %2$s"
+msgstr "No se ha podido leer el pedido de %1$s: %2$s"
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:383
+#, php-format
+msgid "This order is being checked with %s already. Reload the page in a moment."
+msgstr "Este pedido ya se está comprobando con %s. Vuelve a cargar la página en un momento."
+
+#: class/WC_Twoinc_Pending_Recovery.php:385
+msgid "This order is no longer waiting for payment, so it was not checked."
+msgstr "Este pedido ya no está pendiente de pago, así que no se ha comprobado."
+
+#: class/WC_Twoinc_Pending_Recovery.php:392
+msgid "Found by the scheduled check."
+msgstr "Detectado por la comprobación programada."
+
+#: class/WC_Twoinc_Pending_Recovery.php:394
+msgid "Found when the unpaid order time limit was reached."
+msgstr "Detectado al alcanzarse el límite de tiempo para pedidos no pagados."
+
+#: class/WC_Twoinc_Pending_Recovery.php:399
+msgid "an administrator"
+msgstr "un administrador"
+
+#. translators: %s is the name of the admin user who ran the check
+#: class/WC_Twoinc_Pending_Recovery.php:402
+#, php-format
+msgid "Checked by %s."
+msgstr "Comprobado por %s."
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:422
+#, php-format
+msgid "Check status with %s"
+msgstr "Comprobar estado con %s"

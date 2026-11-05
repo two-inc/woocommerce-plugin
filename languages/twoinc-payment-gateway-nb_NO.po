@@ -1986,3 +1986,85 @@ msgstr "Dager du må betale fakturaen"
 #: tillit-payment-gateway.php:305
 msgid "Settings"
 msgstr "Innstillinger"
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:357
+#, php-format
+msgid "Checked with %s: the buyer has not finished verification."
+msgstr "Sjekket med %s: kjøperen har ikke fullført verifiseringen."
+
+#. translators: %1$s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:360
+#, php-format
+msgid "The buyer verified this order with %1$s but did not return to the shop. Confirmed with %1$s."
+msgstr "Kjøperen verifiserte denne bestillingen med %1$s, men kom ikke tilbake til butikken. Bekreftet med %1$s."
+
+#. translators: %1$s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:363
+#, php-format
+msgid "The buyer verified this order with %1$s but did not return to the shop. %1$s had already confirmed it."
+msgstr "Kjøperen verifiserte denne bestillingen med %1$s, men kom ikke tilbake til butikken. %1$s hadde allerede bekreftet den."
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:366
+#, php-format
+msgid "%s reports this order as cancelled. Cancelled here to match."
+msgstr "%s oppgir at denne bestillingen er kansellert. Kansellert her også."
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:369
+#, php-format
+msgid "%s declined this order. Cancelled here to match."
+msgstr "%s avslo denne bestillingen. Kansellert her også."
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:372
+#, php-format
+msgid "%s has no record of this order. Cancelled here without a cancel sent to it."
+msgstr "%s har ingen oppføring av denne bestillingen. Kansellert her uten at en kansellering ble sendt dit."
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$s the order state it reports
+#: class/WC_Twoinc_Pending_Recovery.php:375
+#, php-format
+msgid "%1$s reports state %2$s; not changed. Check the order in the %1$s portal."
+msgstr "%1$s oppgir status %2$s; ingenting er endret. Sjekk bestillingen i %1$s-portalen."
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$s the reason the read failed
+#: class/WC_Twoinc_Pending_Recovery.php:380
+#, php-format
+msgid "Could not read the order from %1$s: %2$s"
+msgstr "Kunne ikke lese bestillingen fra %1$s: %2$s"
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:383
+#, php-format
+msgid "This order is being checked with %s already. Reload the page in a moment."
+msgstr "Denne bestillingen sjekkes allerede med %s. Last inn siden på nytt om et øyeblikk."
+
+#: class/WC_Twoinc_Pending_Recovery.php:385
+msgid "This order is no longer waiting for payment, so it was not checked."
+msgstr "Denne bestillingen venter ikke lenger på betaling, så den ble ikke sjekket."
+
+#: class/WC_Twoinc_Pending_Recovery.php:392
+msgid "Found by the scheduled check."
+msgstr "Funnet av den planlagte sjekken."
+
+#: class/WC_Twoinc_Pending_Recovery.php:394
+msgid "Found when the unpaid order time limit was reached."
+msgstr "Funnet da tidsgrensen for ubetalte bestillinger ble nådd."
+
+#: class/WC_Twoinc_Pending_Recovery.php:399
+msgid "an administrator"
+msgstr "en administrator"
+
+#. translators: %s is the name of the admin user who ran the check
+#: class/WC_Twoinc_Pending_Recovery.php:402
+#, php-format
+msgid "Checked by %s."
+msgstr "Sjekket av %s."
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:422
+#, php-format
+msgid "Check status with %s"
+msgstr "Sjekk status med %s"
