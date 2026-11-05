@@ -1,7 +1,7 @@
 import { type Page, test, expect } from "@playwright/test";
 
 import { STORE_URL } from "../config.js";
-import { cancelOrder, getOrderState, verifyOrder, waitForOrderState } from "../two-api.js";
+import { cancelOrder, getOrderState, waitForOrderState } from "../two-api.js";
 import { checkout } from "../pages/renderer.js";
 import * as store from "../pages/store.js";
 import * as wpAdmin from "../pages/wp-admin.js";
@@ -10,33 +10,52 @@ import { wp } from "../wp-cli.js";
 /**
  * An order the buyer verified with Two but never returned from is recovered by the scheduled check, by the
  * admin "Check status with Two" order action, and is cancelled here when Two has cancelled it (TWO-26300).
- * The order is placed with the browser held back from Two's payment page, so the shop never hears from the
- * buyer, and backdated past the scheduled check's 30-minute threshold so the real selection runs.
+ * The browser is held back first from Two's payment page (unverified), then from Two's redirect back to the
+ * shop (verified), so the shop never hears from the buyer. The order is backdated past the scheduled check's
+ * 30-minute threshold so the real selection runs.
  */
 
 const HOOK = "twoinc_check_pending_orders";
 
-type Placed = { wcOrderId: number; twoOrderId: string };
+type Placed = { wcOrderId: number; twoOrderId: string; paymentUrl: string };
 
-/** Places a Two order and stops the browser at Two's payment page, as a buyer closing the tab would. */
-async function placeWithoutReturning(page: Page, lastName: string): Promise<Placed> {
+/**
+ * Aborts every main-frame navigation `blocked` matches while `act` runs, and returns the first URL it
+ * aborted.
+ */
+async function abortNavigation(
+  page: Page,
+  blocked: (url: string) => boolean,
+  act: () => Promise<unknown>
+): Promise<string> {
   await page.route("**/*", (route) => {
     const request = route.request();
-    if (request.isNavigationRequest() && !request.url().startsWith(STORE_URL)) {
-      return route.abort();
-    }
-    return route.continue();
+    return request.isNavigationRequest() && blocked(request.url())
+      ? route.abort()
+      : route.continue();
   });
+  try {
+    const aborted = page.waitForEvent(
+      "requestfailed",
+      (request) => request.isNavigationRequest() && blocked(request.url())
+    );
+    await act().catch(() => undefined);
+    return (await aborted).url();
+  } finally {
+    await page.unroute("**/*");
+  }
+}
+
+/** Places a Two order and stops the browser before Two's payment page: the buyer has not verified. */
+async function placeWithoutReturning(page: Page, lastName: string): Promise<Placed> {
   await store.addProductToCart(page, "Product 1");
   await checkout.goto(page);
   await checkout.completeCheckoutForm(page, "Test", lastName);
-  const leftForTwo = page.waitForEvent(
-    "requestfailed",
-    (request) => request.isNavigationRequest() && !request.url().startsWith(STORE_URL)
+  const paymentUrl = await abortNavigation(
+    page,
+    (url) => !url.startsWith(STORE_URL),
+    () => checkout.submitOrder(page)
   );
-  await checkout.submitOrder(page);
-  await leftForTwo;
-  await page.unroute("**/*");
 
   const wcOrderId = Number(
     wp(
@@ -51,7 +70,22 @@ async function placeWithoutReturning(page: Page, lastName: string): Promise<Plac
   ).trim();
   expect(twoOrderId, "the order was created at Two").toBeTruthy();
   expect(orderStatus(wcOrderId), "waiting for the buyer").toBe("pending");
-  return { wcOrderId, twoOrderId };
+  return { wcOrderId, twoOrderId, paymentUrl };
+}
+
+/**
+ * The buyer opens Two's payment page, which verifies the e2e buyer straight away, and closes the tab before
+ * Two's redirect reaches the shop. Returns the confirmation link that redirect carried.
+ */
+async function verifyWithoutReturning(page: Page, placed: Placed): Promise<string> {
+  const confirmationUrl = await abortNavigation(
+    page,
+    (url) => url.startsWith(STORE_URL),
+    () => page.goto(placed.paymentUrl)
+  );
+  await waitForOrderState(placed.twoOrderId, "VERIFIED");
+  expect(orderStatus(placed.wcOrderId), "the shop has not heard from the buyer").toBe("pending");
+  return confirmationUrl;
 }
 
 function orderStatus(wcOrderId: number): string {
@@ -88,7 +122,8 @@ test("scheduled check: waits while unverified, confirms once verified, late retu
   page
 }) => {
   const lastName = `E2ERecover${Date.now().toString(36)}`;
-  const { wcOrderId, twoOrderId } = await placeWithoutReturning(page, lastName);
+  const placed = await placeWithoutReturning(page, lastName);
+  const { wcOrderId, twoOrderId } = placed;
 
   // The recurring action is registered every 15 minutes.
   expect(
@@ -101,7 +136,7 @@ test("scheduled check: waits while unverified, confirms once verified, late retu
   runScheduledCheck();
   expect(orderStatus(wcOrderId), "unverified: still waiting").toBe("pending");
 
-  const confirmationUrl = await verifyOrder(twoOrderId);
+  const confirmationUrl = await verifyWithoutReturning(page, placed);
   backdate(wcOrderId);
   runScheduledCheck();
   expect(orderStatus(wcOrderId), "verified: processed").toBe("processing");
@@ -131,8 +166,9 @@ test("admin order action: Check status with Two confirms a verified order straig
   page
 }) => {
   const lastName = `E2ERecoverAdmin${Date.now().toString(36)}`;
-  const { wcOrderId, twoOrderId } = await placeWithoutReturning(page, lastName);
-  await verifyOrder(twoOrderId);
+  const placed = await placeWithoutReturning(page, lastName);
+  const { wcOrderId, twoOrderId } = placed;
+  await verifyWithoutReturning(page, placed);
 
   await wpAdmin.login(page);
   await wpAdmin.navigateToOrders(page);
