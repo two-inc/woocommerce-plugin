@@ -1945,6 +1945,53 @@ function wc_get_order($order_id)
     return $GLOBALS['__twoinc_test_wc_orders'][$order_id] ?? false;
 }
 
+/** Records the query arguments; answers with $GLOBALS['__twoinc_test_wc_get_orders'] (ids). */
+function wc_get_orders($args)
+{
+    $GLOBALS['__twoinc_test_wc_get_orders_args'][] = $args;
+    return $GLOBALS['__twoinc_test_wc_get_orders'] ?? [];
+}
+
+function clean_post_cache($post)
+{
+}
+
+/**
+ * The MySQL named locks the pending-order resolver takes (TWO-26300): GET_LOCK answers 1 unless the name is in
+ * $held, and every query is recorded.
+ */
+class StubWpdb
+{
+    public $dbname = 'wordpress';
+    public $prefix = 'wp_';
+    public $queries = [];
+    public $held = [];
+
+    public function prepare($query, ...$args)
+    {
+        return vsprintf(str_replace(['%s', '%d'], ["'%s'", '%d'], $query), $args);
+    }
+
+    public function get_var($query)
+    {
+        $this->queries[] = $query;
+        foreach ($this->held as $name) {
+            if (strpos($query, "GET_LOCK('$name'") !== false) {
+                return '0';
+            }
+        }
+        return '1';
+    }
+
+    public function query($query)
+    {
+        $this->queries[] = $query;
+        return 1;
+    }
+}
+
+$GLOBALS['wpdb'] = new StubWpdb();
+
 // A minimal but representative status list — enough for the fulfilment-
 // trigger multiselect options builder (TWO-25386) to run during
 // init_form_fields() without a full WC install.
@@ -2135,6 +2182,7 @@ require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Storefront_Gate.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Product_Promo.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Product_Button.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Pending_Recovery.php';
 
 // Snapshotted before any spec resets the hook registry: loading
 // WC_Twoinc_Checkout is what registers the cart-ending hooks, and that is the
