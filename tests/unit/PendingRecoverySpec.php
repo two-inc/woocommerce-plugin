@@ -16,6 +16,7 @@ final class PendingRecoverySpec
             'testTheBuyerReturnRedirects',
             'testACancelledOrderIsNotCancelledAtTwoAgain',
             'testTheUnpaidOrderTimeLimit',
+            'testANotFoundOrderIsCancelledOnlyOnceConfirmed',
             'testSelection',
             'testTheLockIsSharedAndReleased',
             'testTheOrderActionIsOfferedOnlyForAWaitingTwoOrder',
@@ -81,6 +82,29 @@ final class PendingRecoverySpec
             public function is_paid()
             {
                 return in_array($this->status, ['processing', 'completed'], true);
+            }
+
+            public function has_status($status)
+            {
+                return in_array($this->status, (array) $status, true);
+            }
+
+            /** As WooCommerce's: pending or failed, with something to pay. */
+            public function needs_payment()
+            {
+                return $this->has_status(['pending', 'failed']) && $this->get_total() > 0;
+            }
+
+            public $created_via = 'checkout';
+
+            public function get_created_via()
+            {
+                return $this->created_via;
+            }
+
+            public function delete_meta_data($key)
+            {
+                unset($this->meta[$key]);
             }
 
             public function get_checkout_order_received_url()
@@ -233,14 +257,50 @@ final class PendingRecoverySpec
         // The confirm carries the same key whichever trigger sends it, so a late return cannot confirm twice.
         TinyAssert::same('confirm_two-1', $gateway->sent[1]['idempotency_key'], 'confirm key');
 
-        // A failed order is waiting too: WooCommerce's classic checkout resumes one without setting it back to
-        // pending, so a buyer can pay it with Two.
-        foreach ([$return, $scheduled, $admin] as $trigger) {
+        // A failed order waits for the buyer's return only: WooCommerce's classic checkout resumes one without
+        // setting it back to pending, so a buyer can pay it with Two. Every other check leaves a failed status,
+        // which a merchant may have set by hand, alone.
+        // [trigger, outcome, local status after, paid, reads Two]
+        $failed_cases = [
+            [$return, 'confirmed', 'processing', 1, true],
+            [$scheduled, 'not_waiting', 'failed', 0, false],
+            [$admin, 'not_waiting', 'failed', 0, false],
+            [$unpaid, 'not_waiting', 'failed', 0, false],
+        ];
+        foreach ($failed_cases as [$trigger, $outcome, $local, $paid, $reads]) {
             self::reset();
             $order = self::order('failed');
             $gateway = self::gateway(['id' => 'two-1', 'state' => 'VERIFIED']);
-            TinyAssert::same('confirmed', WC_Twoinc_Pending_Recovery::resolve($gateway, 42, $trigger, 0)['outcome'], "$trigger, failed order: confirmed");
-            TinyAssert::same(['processing', 1], [$order->status, $order->paid], "$trigger, failed order: paid once");
+            TinyAssert::same($outcome, WC_Twoinc_Pending_Recovery::resolve($gateway, 42, $trigger, 0)['outcome'], "$trigger, failed order: outcome");
+            TinyAssert::same([$local, $paid], [$order->status, $order->paid], "$trigger, failed order: status and paid");
+            TinyAssert::same($reads, $gateway->calls() !== [], "$trigger, failed order: reads Two");
+        }
+
+        // The scheduled check applies WooCommerce's unpaid-order time limit itself, counted from creation: on HPOS
+        // its own save keeps the order too recent for WooCommerce's query to ever pick it up.
+        // [manage stock, hold minutes, created via, age in minutes, local status after, note fragment, description]
+        $hold_cases = [
+            ['yes', 60, 'checkout', 59, 'pending', null, 'under the hold-stock limit: left waiting'],
+            ['yes', 60, 'checkout', 61, 'cancelled', 'unpaid order time limit', 'over the limit: cancelled as WooCommerce would, and at Two'],
+            ['yes', 0, 'checkout', 61, 'pending', null, 'hold stock off: left waiting'],
+            ['no', 60, 'checkout', 61, 'pending', null, 'stock not managed: left waiting'],
+            ['yes', 60, 'store-api', 61, 'pending', null, 'not made by the classic checkout: left, as WooCommerce would'],
+        ];
+        foreach ($hold_cases as [$manage, $minutes, $via, $age, $local, $note, $description]) {
+            self::reset();
+            $GLOBALS['__twoinc_test_options']['woocommerce_manage_stock'] = $manage;
+            $GLOBALS['__twoinc_test_options']['woocommerce_hold_stock_minutes'] = (string) $minutes;
+            $order = self::order();
+            $order->created_via = $via;
+            $order->created = time() - $age * 60;
+            $gateway = self::gateway(['id' => 'two-1', 'state' => 'UNVERIFIED']);
+            WC_Twoinc_Pending_Recovery::resolve($gateway, 42, $scheduled, 0);
+            unset($GLOBALS['__twoinc_test_options']['woocommerce_manage_stock'], $GLOBALS['__twoinc_test_options']['woocommerce_hold_stock_minutes']);
+            TinyAssert::same($local, $order->status, "$description: local status");
+            TinyAssert::same('', $order->get_meta(WC_Twoinc_Brand::meta_key('order_state')), "$description: a normal cancel, sent to Two");
+            TinyAssert::same($note === null ? [] : [true], array_map(static function ($n) use ($note) {
+                return strpos($n, (string) $note) !== false;
+            }, $order->notes), "$description: notes " . json_encode($order->notes));
         }
 
         // A check that keeps failing is logged as an error once a day, not on every run.
@@ -271,20 +331,24 @@ final class PendingRecoverySpec
         $method = new ReflectionMethod(WC_Twoinc::class, 'process_confirmation');
         $method->setAccessible(true);
         $lock = 'twoinc_order_' . substr(md5('wordpress|wp_'), 0, 12) . '_42';
-        // [order status, Two state, read HTTP, lock held, expected URL or wp_die text, reads Two, notices, description]
+        $cart = 'https://shop.example/cart';
+        $thanks = 'https://shop.example/thanks';
+        // [order status, Two state, read HTTP, lock held, expected URL or wp_die text, reads Two, notice (null: none), description]
         $cases = [
-            ['pending', 'VERIFIED', 200, false, 'https://shop.example/thanks', true, 0, 'verified: placed'],
-            ['failed', 'VERIFIED', 200, false, 'https://shop.example/thanks', true, 0, 'verified, on a resumed failed order: placed'],
-            ['pending', 'CONFIRMED', 200, false, 'https://shop.example/thanks', true, 0, 'already confirmed: placed'],
-            ['pending', 'UNVERIFIED', 200, false, 'https://shop.example/cancel', true, 0, 'unverified: cancel page, as before'],
-            ['pending', 'CANCELLED', 200, false, 'https://shop.example/cancel', true, 0, 'cancelled at Two: cancel page'],
-            ['pending', 'VERIFIED', 0, false, 'wp_die: Unable to retrieve', true, 0, 'no response: error page, as before'],
-            ['processing', 'CONFIRMED', 200, false, 'https://shop.example/thanks', false, 0, 'a late return after the scheduled check: placed, nothing sent'],
-            ['cancelled', 'CANCELLED', 200, false, 'https://shop.example/thanks', false, 0, 'a late return to a cancelled order: shown as it is, never the cancel URL'],
-            ['pending', 'VERIFIED', 200, true, 'https://shop.example/thanks', false, 1, 'another check holds the lock: order-received, told it is being checked'],
-            ['processing', 'CONFIRMED', 200, true, 'https://shop.example/thanks', false, 0, 'the other check has just paid it: order-received, no notice'],
+            ['pending', 'VERIFIED', 200, false, $thanks, true, null, 'verified: placed'],
+            ['failed', 'VERIFIED', 200, false, $thanks, true, null, 'verified, on a resumed failed order: placed'],
+            ['pending', 'CONFIRMED', 200, false, $thanks, true, null, 'already confirmed: placed'],
+            ['pending', 'UNVERIFIED', 200, false, 'https://shop.example/cancel', true, null, 'unverified: cancel page, as before'],
+            ['pending', 'CANCELLED', 200, false, 'https://shop.example/cancel', true, null, 'cancelled at Two: cancel page'],
+            ['pending', 'VERIFIED', 0, false, 'wp_die: Unable to retrieve', true, null, 'no response: error page, as before'],
+            ['processing', 'CONFIRMED', 200, false, $thanks, false, null, 'a late return after the scheduled check: placed, nothing sent'],
+            ['completed', 'FULFILLED', 200, false, $thanks, false, null, 'a late return to a completed order: placed'],
+            ['cancelled', 'CANCELLED', 200, false, $cart, false, 'Your order was cancelled.', 'a late return to a cancelled order: the cart, told it was cancelled'],
+            ['pending', 'VERIFIED', 200, true, $cart, false, 'We are still confirming your order with Two.', 'another check holds the lock: the cart, told it is still being confirmed'],
+            ['processing', 'CONFIRMED', 200, true, $thanks, false, null, 'the other check has just paid it: order-received'],
+            ['cancelled', 'CANCELLED', 200, true, $cart, false, 'Your order was cancelled.', 'the other check has just cancelled it: the cart, told so'],
         ];
-        foreach ($cases as [$status, $state, $read, $held, $expected, $reads, $notices, $description]) {
+        foreach ($cases as [$status, $state, $read, $held, $expected, $reads, $notice, $description]) {
             self::reset();
             $GLOBALS['__twoinc_test_notices'] = [];
             if ($held) {
@@ -305,10 +369,7 @@ final class PendingRecoverySpec
             TinyAssert::true(strpos((string) $url, $expected) === 0, "$description: got $url");
             TinyAssert::same($reads, $gateway->calls() !== [], "$description: reads Two");
             TinyAssert::true($order->paid <= 1, "$description: paid at most once");
-            TinyAssert::same($notices, count($GLOBALS['__twoinc_test_notices']), "$description: notices");
-            if ($notices) {
-                TinyAssert::true(strpos($GLOBALS['__twoinc_test_notices'][0]['message'], 'being checked with Two') !== false, "$description: notice text");
-            }
+            TinyAssert::same($notice === null ? [] : [$notice], array_column($GLOBALS['__twoinc_test_notices'], 'message'), "$description: notices");
         }
     }
 
@@ -335,7 +396,7 @@ final class PendingRecoverySpec
             [true, true, 'two-1', 'VERIFIED', 200, $days, false, 'processing', 'CONFIRMED', true, 'verified: confirmed instead'],
             [true, true, 'two-1', 'CONFIRMED', 200, $days, false, 'processing', 'CONFIRMED', true, 'confirmed at Two: processed instead'],
             [true, true, 'two-1', 'CANCELLED', 200, $days, false, 'cancelled', 'CANCELLED', true, 'cancelled at Two: cancelled here, without echoing'],
-            [true, true, 'two-1', 'VERIFIED', 404, $days, false, 'cancelled', 'CANCELLED', true, 'no such order at Two: cancelled here, without echoing'],
+            [true, true, 'two-1', 'VERIFIED', 404, $days, false, 'pending', '', true, 'a 404 that is not Two\'s not-found answer: held'],
             [true, true, 'two-1', 'VERIFIED', 0, $days, false, 'pending', '', true, 'no response, inside 7 days: held for the next run'],
             [true, true, 'two-1', 'VERIFIED', 500, $days, false, 'pending', '', true, 'Two refused the read, inside 7 days: held'],
             [true, true, 'two-1', 'VERIFIED', 500, 8 * $days, false, 'cancelled', '', true, 'Two refused the read, past 7 days: cancelled as WooCommerce would'],
@@ -361,6 +422,49 @@ final class PendingRecoverySpec
         self::setInstance(null);
     }
 
+    /**
+     * At the unpaid-order time limit, an order Two says it does not hold is cancelled without a cancel sent to Two,
+     * but only once a second check at least 15 minutes after the first also gets Two's own not-found answer.
+     */
+    private static function testANotFoundOrderIsCancelledOnlyOnceConfirmed(): void
+    {
+        $not_found = ['error_code' => 'ORDER_NOT_FOUND', 'error_message' => 'Order Not Found'];
+        $key = WC_Twoinc_Brand::meta_key('pending_not_found_at');
+        // [trigger, read HTTP, answer, first not-found seconds ago (null: none), outcome, local status, order_state, not-found time kept, description]
+        $cases = [
+            [WC_Twoinc_Pending_Recovery::TRIGGER_UNPAID_CANCEL, 404, $not_found, null, 'read_failed', 'pending', '', true, 'first not-found: recorded, held'],
+            [WC_Twoinc_Pending_Recovery::TRIGGER_UNPAID_CANCEL, 404, $not_found, 600, 'read_failed', 'pending', '', true, 'second, 10 minutes later: held'],
+            [WC_Twoinc_Pending_Recovery::TRIGGER_UNPAID_CANCEL, 404, $not_found, 900, 'not_found', 'cancelled', 'CANCELLED', true, 'second, 15 minutes later: cancelled, nothing sent'],
+            [WC_Twoinc_Pending_Recovery::TRIGGER_UNPAID_CANCEL, 404, ['detail' => 'Not Found'], 900, 'read_failed', 'pending', '', false, 'a 404 without Two\'s code: held, and the earlier one forgotten'],
+            [WC_Twoinc_Pending_Recovery::TRIGGER_UNPAID_CANCEL, 500, $not_found, 900, 'read_failed', 'pending', '', false, 'another failure in between: the earlier not-found is forgotten'],
+            [WC_Twoinc_Pending_Recovery::TRIGGER_SCHEDULED, 404, $not_found, 900, 'read_failed', 'pending', '', true, 'scheduled, inside the hold-stock limit: held'],
+            [WC_Twoinc_Pending_Recovery::TRIGGER_UNPAID_CANCEL, 200, ['id' => 'two-1', 'state' => 'UNVERIFIED'], 900, 'unverified', 'cancelled', '', false, 'Two answers after all: the not-found is forgotten, and an unverified order cancelled as usual'],
+        ];
+        foreach ($cases as [$trigger, $read, $answer, $ago, $outcome, $local, $order_state, $kept, $description]) {
+            self::reset();
+            $order = self::order();
+            if ($ago !== null) {
+                $order->meta[$key] = time() - $ago;
+            }
+            $gateway = self::gateway($answer, $read);
+            TinyAssert::same($outcome, WC_Twoinc_Pending_Recovery::resolve($gateway, 42, $trigger, 0)['outcome'], "$description: outcome");
+            TinyAssert::same($local, $order->status, "$description: local status");
+            TinyAssert::same($order_state, $order->get_meta(WC_Twoinc_Brand::meta_key('order_state')), "$description: order_state");
+            TinyAssert::same($kept, (int) $order->get_meta($key) > 0, "$description: not-found time kept");
+        }
+
+        // Past the hold-stock limit the scheduled check applies the same rule.
+        self::reset();
+        $GLOBALS['__twoinc_test_options']['woocommerce_manage_stock'] = 'yes';
+        $GLOBALS['__twoinc_test_options']['woocommerce_hold_stock_minutes'] = '60';
+        $order = self::order();
+        $order->created = time() - 2 * 3600;
+        $order->meta[$key] = time() - 900;
+        $outcome = WC_Twoinc_Pending_Recovery::resolve(self::gateway($not_found, 404), 42, WC_Twoinc_Pending_Recovery::TRIGGER_SCHEDULED, 0)['outcome'];
+        unset($GLOBALS['__twoinc_test_options']['woocommerce_manage_stock'], $GLOBALS['__twoinc_test_options']['woocommerce_hold_stock_minutes']);
+        TinyAssert::same(['not_found', 'cancelled', 'CANCELLED'], [$outcome, $order->status, $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'))], 'scheduled, past the hold-stock limit: cancelled, nothing sent');
+    }
+
     private static function testSelection(): void
     {
         $now = 1_800_000_000;
@@ -369,10 +473,10 @@ final class PendingRecoverySpec
         [$never, $stale] = WC_Twoinc_Pending_Recovery::candidate_queries('gw', $now);
         // [query, expected subset, description]
         $cases = [
-            [$never, ['status' => ['pending', 'failed'], 'payment_method' => 'gw', 'return' => 'ids', 'limit' => 50], 'waiting Two orders, ids only, 50 at most'],
+            [$never, ['status' => ['pending'], 'payment_method' => 'gw', 'return' => 'ids', 'limit' => 50], 'waiting Two orders, ids only, 50 at most'],
             [$never, ['date_created' => ($now - 7 * 86400) . '...' . ($now - 1800)], 'between 7 days and 30 minutes old'],
             [$never, ['meta_query' => [$has_two_id, ['key' => $checked, 'compare' => 'NOT EXISTS']], 'orderby' => 'date', 'order' => 'DESC'], 'never checked, newest first'],
-            [$stale, ['status' => ['pending', 'failed'], 'payment_method' => 'gw', 'return' => 'ids', 'limit' => 50], 'the same orders'],
+            [$stale, ['status' => ['pending'], 'payment_method' => 'gw', 'return' => 'ids', 'limit' => 50], 'the same orders'],
             [$stale, ['meta_query' => [$has_two_id, 'checked' => ['key' => $checked, 'value' => $now - 900, 'compare' => '<=', 'type' => 'NUMERIC']], 'orderby' => ['checked' => 'ASC']], 'checked 15 minutes ago or more, oldest check first'],
         ];
         foreach ($cases as [$query, $expected, $description]) {
@@ -462,7 +566,7 @@ final class PendingRecoverySpec
         // [status, payment method, Two order id, offered, description]
         $cases = [
             ['pending', WC_Twoinc_Brand::get('gateway_id'), 'two-1', true, 'a waiting Two order'],
-            ['failed', WC_Twoinc_Brand::get('gateway_id'), 'two-1', true, 'a resumed failed Two order'],
+            ['failed', WC_Twoinc_Brand::get('gateway_id'), 'two-1', false, 'a failed Two order, which a merchant may have set by hand'],
             ['processing', WC_Twoinc_Brand::get('gateway_id'), 'two-1', false, 'already paid'],
             ['pending', 'cod', 'two-1', false, 'another gateway'],
             ['pending', WC_Twoinc_Brand::get('gateway_id'), '', false, 'no Two order id'],

@@ -6864,19 +6864,34 @@ if (!class_exists('WC_Twoinc')) {
                     wp_die(sprintf(__('Unable to retrieve %s order information.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')));
                     return;
                 case WC_Twoinc_Pending_Recovery::OUTCOME_BUSY:
-                    // Another check is confirming the order now. The order-received page shows it either way;
-                    // until it is paid, the buyer is told it is still being checked.
-                    $current = wc_get_order($order->get_id());
-                    if (!$current || !$current->is_paid()) {
-                        wc_add_notice(WC_Twoinc_Pending_Recovery::outcome_message($result['outcome']), 'notice');
-                    }
-                    return wp_specialchars_decode($order->get_checkout_order_received_url());
                 case WC_Twoinc_Pending_Recovery::OUTCOME_NOT_WAITING:
-                    // A late return: the scheduled check or an admin got there first, or the order was closed.
-                    // The order-received page shows it as it is; nothing is cancelled.
-                    return wp_specialchars_decode($order->get_checkout_order_received_url());
+                    return $this->settled_return_url((int) $order->get_id());
             }
             return wp_specialchars_decode($order->get_cancel_order_url());
+        }
+
+        /**
+         * Where a returning buyer goes when another check holds the order or has already settled it (TWO-26300):
+         * the order-received page only once it is paid. A cancelled order goes to the cart with WooCommerce's own
+         * cancellation notice, as the cancel URL showed it; one still being confirmed goes to the cart, told so.
+         */
+        private function settled_return_url(int $order_id): string
+        {
+            $order = wc_get_order($order_id);
+            $cancelled = !$order || $order->has_status('cancelled');
+            if (!$cancelled && ($order->is_paid() || !$order->needs_payment())) {
+                return wp_specialchars_decode($order->get_checkout_order_received_url());
+            }
+            if ($cancelled) {
+                wc_add_notice(
+                    apply_filters('woocommerce_order_cancelled_notice', __('Your order was cancelled.', 'woocommerce')),
+                    apply_filters('woocommerce_order_cancelled_notice_type', 'notice')
+                );
+            } else {
+                /* translators: %s is the brand product name (e.g. "Two") */
+                wc_add_notice(sprintf(__('We are still confirming your order with %s.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')), 'notice');
+            }
+            return wc_get_cart_url();
         }
 
         /**

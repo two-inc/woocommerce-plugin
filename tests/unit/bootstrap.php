@@ -1957,6 +1957,11 @@ function clean_post_cache($post)
 {
 }
 
+function wc_get_cart_url()
+{
+    return 'https://shop.example/cart';
+}
+
 /**
  * The MySQL named locks the pending-order resolver takes (TWO-26300): GET_LOCK answers 1 unless the name is in
  * $held, and every query is recorded.
