@@ -980,7 +980,10 @@ WooCommerce's own conditions: stock management on, a Hold stock time set (60
 minutes when none is stored), and `woocommerce_cancel_unpaid_order` agreeing,
 which by default means an order made by the checkout. The plugin's own handler
 for that filter runs last, so a shop whose filter turns the automatic cancel
-off keeps it off for Two orders on both paths.
+off keeps it off for Two orders on both paths. On every run, the scheduled
+check runs the shop's `woocommerce_cancel_unpaid_order` filters once for each
+order it checks that is past the hold time, before reading it from Two, so a
+filter there should be quick and free of side effects.
 
 Order notes are merchant-only. The scheduled check, the admin action and the
 unpaid-order time limit each add one naming what they found when they change an

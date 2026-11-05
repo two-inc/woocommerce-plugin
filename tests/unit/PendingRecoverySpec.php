@@ -323,6 +323,29 @@ final class PendingRecoverySpec
             }, $order->notes), "$description: notes " . json_encode($order->notes));
         }
 
+        // A merchant filter that throws inside the chain: the plugin's own handler is put back all the same.
+        self::reset();
+        add_filter('woocommerce_cancel_unpaid_order', $own, WC_Twoinc_Pending_Recovery::UNPAID_FILTER_PRIORITY, 2);
+        add_filter('woocommerce_cancel_unpaid_order', static function () {
+            throw new LogicException('merchant filter failed');
+        }, 20);
+        $GLOBALS['__twoinc_test_options']['woocommerce_manage_stock'] = 'yes';
+        $thrower = self::order();
+        $thrower->created = time() - 61 * 60;
+        $thrown = '';
+        try {
+            WC_Twoinc_Pending_Recovery::resolve(self::gateway(['id' => 'two-1', 'state' => 'UNVERIFIED']), 42, $scheduled, 0);
+        } catch (LogicException $e) {
+            $thrown = $e->getMessage();
+        }
+        unset($GLOBALS['__twoinc_test_options']['woocommerce_manage_stock']);
+        TinyAssert::same('merchant filter failed', $thrown, 'a throwing merchant filter: the failure is not hidden');
+        TinyAssert::same([$own], array_column(array_filter($GLOBALS['__twoinc_test_filters']['woocommerce_cancel_unpaid_order'], static function ($entry) {
+            return $entry['priority'] === WC_Twoinc_Pending_Recovery::UNPAID_FILTER_PRIORITY;
+        }), 'cb'), 'a throwing merchant filter: the plugin\'s own filter is still registered, once');
+        TinyAssert::same('pending', $thrower->status, 'a throwing merchant filter: the order is left waiting');
+        remove_all_filters('woocommerce_cancel_unpaid_order');
+
         // A check that keeps failing is logged as an error once a day, not on every run.
         self::reset();
         $order = self::order();
