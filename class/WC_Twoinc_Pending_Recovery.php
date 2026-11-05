@@ -9,6 +9,7 @@
  * acts on its state, under a per-order lock all four share, re-reading the local order once it holds the lock
  * so whichever arrives second finds the work done.
  */
+
 if (!class_exists('WC_Twoinc_Pending_Recovery')) {
     class WC_Twoinc_Pending_Recovery
     {
