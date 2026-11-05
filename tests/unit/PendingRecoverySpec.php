@@ -257,14 +257,14 @@ final class PendingRecoverySpec
         // The confirm carries the same key whichever trigger sends it, so a late return cannot confirm twice.
         TinyAssert::same('confirm_two-1', $gateway->sent[1]['idempotency_key'], 'confirm key');
 
-        // A failed order waits for the buyer's return only: WooCommerce's classic checkout resumes one without
-        // setting it back to pending, so a buyer can pay it with Two. Every other check leaves a failed status,
-        // which a merchant may have set by hand, alone.
+        // A failed order waits for the buyer's return and the admin action only: WooCommerce's classic checkout
+        // resumes one without setting it back to pending, so a buyer can pay it with Two. The scheduled check and
+        // the unpaid-order limit leave a failed status, which a merchant may have set by hand, alone.
         // [trigger, outcome, local status after, paid, reads Two]
         $failed_cases = [
             [$return, 'confirmed', 'processing', 1, true],
             [$scheduled, 'not_waiting', 'failed', 0, false],
-            [$admin, 'not_waiting', 'failed', 0, false],
+            [$admin, 'confirmed', 'processing', 1, true],
             [$unpaid, 'not_waiting', 'failed', 0, false],
         ];
         foreach ($failed_cases as [$trigger, $outcome, $local, $paid, $reads]) {
@@ -279,23 +279,43 @@ final class PendingRecoverySpec
         // The scheduled check applies WooCommerce's unpaid-order time limit itself, counted from creation: on HPOS
         // its own save keeps the order too recent for WooCommerce's query to ever pick it up.
         // [manage stock, hold minutes, created via, age in minutes, local status after, note fragment, description]
+        $own = ['WC_Twoinc_Pending_Recovery', 'filter_cancel_unpaid'];
+        // [manage stock, hold minutes (null: never stored), created via, merchant filter says, age in minutes, local status after, note fragment, description]
         $hold_cases = [
-            ['yes', 60, 'checkout', 59, 'pending', null, 'under the hold-stock limit: left waiting'],
-            ['yes', 60, 'checkout', 61, 'cancelled', 'unpaid order time limit', 'over the limit: cancelled as WooCommerce would, and at Two'],
-            ['yes', 0, 'checkout', 61, 'pending', null, 'hold stock off: left waiting'],
-            ['no', 60, 'checkout', 61, 'pending', null, 'stock not managed: left waiting'],
-            ['yes', 60, 'store-api', 61, 'pending', null, 'not made by the classic checkout: left, as WooCommerce would'],
+            ['yes', '60', 'checkout', null, 59, 'pending', null, 'under the hold-stock limit: left waiting'],
+            ['yes', '60', 'checkout', null, 61, 'cancelled', 'unpaid order time limit', 'over the limit: cancelled as WooCommerce would, and at Two'],
+            ['yes', null, 'checkout', null, 61, 'cancelled', 'unpaid order time limit', 'hold time never stored: WooCommerce\'s 60 minutes'],
+            ['yes', '0', 'checkout', null, 61, 'pending', null, 'hold stock off: left waiting'],
+            ['no', '60', 'checkout', null, 61, 'pending', null, 'stock not managed: left waiting'],
+            ['yes', '60', 'store-api', null, 61, 'pending', null, 'not made by the classic checkout: left, as WooCommerce would'],
+            ['yes', '60', 'checkout', false, 61, 'pending', null, 'a merchant filter turned the automatic cancel off: left waiting'],
+            ['yes', '60', 'store-api', true, 61, 'cancelled', 'unpaid order time limit', 'a merchant filter turned it on for other orders: cancelled'],
         ];
-        foreach ($hold_cases as [$manage, $minutes, $via, $age, $local, $note, $description]) {
+        foreach ($hold_cases as [$manage, $minutes, $via, $merchant, $age, $local, $note, $description]) {
             self::reset();
+            remove_all_filters('woocommerce_cancel_unpaid_order');
+            add_filter('woocommerce_cancel_unpaid_order', $own, WC_Twoinc_Pending_Recovery::UNPAID_FILTER_PRIORITY, 2);
+            if ($merchant !== null) {
+                add_filter('woocommerce_cancel_unpaid_order', static function () use ($merchant) {
+                    return $merchant;
+                }, 20);
+            }
             $GLOBALS['__twoinc_test_options']['woocommerce_manage_stock'] = $manage;
-            $GLOBALS['__twoinc_test_options']['woocommerce_hold_stock_minutes'] = (string) $minutes;
+            if ($minutes !== null) {
+                $GLOBALS['__twoinc_test_options']['woocommerce_hold_stock_minutes'] = $minutes;
+            }
             $order = self::order();
             $order->created_via = $via;
             $order->created = time() - $age * 60;
             $gateway = self::gateway(['id' => 'two-1', 'state' => 'UNVERIFIED']);
+            self::setInstance($gateway);
             WC_Twoinc_Pending_Recovery::resolve($gateway, 42, $scheduled, 0);
+            self::setInstance(null);
             unset($GLOBALS['__twoinc_test_options']['woocommerce_manage_stock'], $GLOBALS['__twoinc_test_options']['woocommerce_hold_stock_minutes']);
+            TinyAssert::same([$own], array_column(array_filter($GLOBALS['__twoinc_test_filters']['woocommerce_cancel_unpaid_order'], static function ($entry) {
+                return $entry['priority'] === WC_Twoinc_Pending_Recovery::UNPAID_FILTER_PRIORITY;
+            }), 'cb'), "$description: the plugin's own filter is still registered, once");
+            remove_all_filters('woocommerce_cancel_unpaid_order');
             TinyAssert::same($local, $order->status, "$description: local status");
             TinyAssert::same('', $order->get_meta(WC_Twoinc_Brand::meta_key('order_state')), "$description: a normal cancel, sent to Two");
             TinyAssert::same($note === null ? [] : [true], array_map(static function ($n) use ($note) {
@@ -344,7 +364,7 @@ final class PendingRecoverySpec
             ['processing', 'CONFIRMED', 200, false, $thanks, false, null, 'a late return after the scheduled check: placed, nothing sent'],
             ['completed', 'FULFILLED', 200, false, $thanks, false, null, 'a late return to a completed order: placed'],
             ['cancelled', 'CANCELLED', 200, false, $cart, false, 'Your order was cancelled.', 'a late return to a cancelled order: the cart, told it was cancelled'],
-            ['pending', 'VERIFIED', 200, true, $cart, false, 'We are still confirming your order with Two.', 'another check holds the lock: the cart, told it is still being confirmed'],
+            ['pending', 'VERIFIED', 200, true, $thanks, false, 'We are still confirming your order with Two.', 'another check holds the lock: order-received, which empties the cart, told it is still being confirmed'],
             ['processing', 'CONFIRMED', 200, true, $thanks, false, null, 'the other check has just paid it: order-received'],
             ['cancelled', 'CANCELLED', 200, true, $cart, false, 'Your order was cancelled.', 'the other check has just cancelled it: the cart, told so'],
         ];
@@ -419,6 +439,21 @@ final class PendingRecoverySpec
             TinyAssert::same($order_state, $order->get_meta(WC_Twoinc_Brand::meta_key('order_state')), "$description: order_state");
             TinyAssert::same($reads, $gateway->calls() !== [], "$description: reads Two");
         }
+
+        // Registered last, the plugin's filter receives a merchant's verdict: a shop that turned the automatic
+        // cancel off keeps its Two orders, and Two is not even read.
+        self::reset();
+        remove_all_filters('woocommerce_cancel_unpaid_order');
+        add_filter('woocommerce_cancel_unpaid_order', ['WC_Twoinc_Pending_Recovery', 'filter_cancel_unpaid'], WC_Twoinc_Pending_Recovery::UNPAID_FILTER_PRIORITY, 2);
+        add_filter('woocommerce_cancel_unpaid_order', static function () {
+            return false;
+        }, 10);
+        $order = self::order();
+        $gateway = self::gateway(['id' => 'two-1', 'state' => 'UNVERIFIED']);
+        self::setInstance($gateway);
+        TinyAssert::same(false, apply_filters('woocommerce_cancel_unpaid_order', true, $order), 'merchant filter off: not cancelled');
+        TinyAssert::same(['pending', []], [$order->status, $gateway->calls()], 'merchant filter off: untouched, nothing read');
+        remove_all_filters('woocommerce_cancel_unpaid_order');
         self::setInstance(null);
     }
 
@@ -566,7 +601,7 @@ final class PendingRecoverySpec
         // [status, payment method, Two order id, offered, description]
         $cases = [
             ['pending', WC_Twoinc_Brand::get('gateway_id'), 'two-1', true, 'a waiting Two order'],
-            ['failed', WC_Twoinc_Brand::get('gateway_id'), 'two-1', false, 'a failed Two order, which a merchant may have set by hand'],
+            ['failed', WC_Twoinc_Brand::get('gateway_id'), 'two-1', true, 'a failed Two order: the merchant asks, so it is offered'],
             ['processing', WC_Twoinc_Brand::get('gateway_id'), 'two-1', false, 'already paid'],
             ['pending', 'cod', 'two-1', false, 'another gateway'],
             ['pending', WC_Twoinc_Brand::get('gateway_id'), '', false, 'no Two order id'],

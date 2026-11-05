@@ -29,10 +29,13 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
         public const ERROR_LOG_INTERVAL = 86400;
         /** Seconds the buyer's return and the admin action wait for a held lock; the scheduled check never waits. */
         public const INTERACTIVE_LOCK_WAIT = 10;
+        /** Last, so the `$cancel` it receives is every other filter's verdict, a merchant's included. */
+        public const UNPAID_FILTER_PRIORITY = PHP_INT_MAX;
         /**
-         * The statuses the buyer's return finds an order waiting in. WooCommerce's classic checkout resumes a
-         * failed order without setting it back to pending, so a buyer can pay a failed order with Two. Everything
-         * else acts on pending orders only, leaving a failed status a merchant set by hand alone.
+         * The statuses the buyer's return and the admin action find an order waiting in. WooCommerce's classic
+         * checkout resumes a failed order without setting it back to pending, so a buyer can pay a failed order
+         * with Two. The scheduled check and the unpaid-order limit act on pending orders only, leaving a failed
+         * status a merchant set by hand alone unless the merchant asks.
          */
         public const RETURN_WAITING_STATUSES = ['pending', 'failed'];
 
@@ -370,7 +373,7 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
         /** The statuses an order waits for payment in, for this trigger. */
         public static function waiting_statuses(string $trigger): array
         {
-            return $trigger === self::TRIGGER_BUYER_RETURN ? self::RETURN_WAITING_STATUSES : ['pending'];
+            return in_array($trigger, [self::TRIGGER_BUYER_RETURN, self::TRIGGER_ADMIN], true) ? self::RETURN_WAITING_STATUSES : ['pending'];
         }
 
         private static function is_past_window($order): bool
@@ -381,16 +384,25 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
 
         /**
          * Whether WooCommerce's unpaid-order time limit would cancel this order by now, counted from its creation:
-         * hold stock on, the order older than the hold time, and made by the checkout, as WooCommerce's own default.
+         * hold stock on, the order older than the hold time, and `woocommerce_cancel_unpaid_order` saying yes, as
+         * every filter but this plugin's own decides it. A shop that turned the automatic cancel off keeps it off.
          */
         private static function is_past_hold_stock_limit($order): bool
         {
-            $minutes = (int) get_option('woocommerce_hold_stock_minutes');
-            if ($minutes < 1 || get_option('woocommerce_manage_stock') !== 'yes' || $order->get_created_via() !== 'checkout') {
+            $minutes = (int) get_option('woocommerce_hold_stock_minutes', '60');
+            $created = $order->get_date_created();
+            if ($minutes < 1 || get_option('woocommerce_manage_stock') !== 'yes' || !$created || time() - $created->getTimestamp() < $minutes * 60) {
                 return false;
             }
-            $created = $order->get_date_created();
-            return $created && time() - $created->getTimestamp() >= $minutes * 60;
+            $own = [self::class, 'filter_cancel_unpaid'];
+            $registered = remove_filter('woocommerce_cancel_unpaid_order', $own, self::UNPAID_FILTER_PRIORITY);
+            try {
+                return (bool) apply_filters('woocommerce_cancel_unpaid_order', 'checkout' === $order->get_created_via(), $order);
+            } finally {
+                if ($registered) {
+                    add_filter('woocommerce_cancel_unpaid_order', $own, self::UNPAID_FILTER_PRIORITY, 2);
+                }
+            }
         }
 
         /** The merchant-only order note: what Two reported and what changed, then which check found it. */
@@ -550,7 +562,7 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
         }
 
         /** The order as stored now: another request may have changed it since this one first read it. */
-        private static function fresh_order(int $order_id)
+        public static function fresh_order(int $order_id)
         {
             clean_post_cache($order_id);
             $order_cache = 'Automattic\WooCommerce\Caches\OrderCache';
