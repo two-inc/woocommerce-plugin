@@ -139,7 +139,9 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
             }
             $now = time();
             $last_checked = [];
-            foreach (wc_get_orders(self::candidate_query($gateway->id, $now)) as $order_id) {
+            /** @var int[] $candidates the query asks for ids */
+            $candidates = wc_get_orders(self::candidate_query($gateway->id, $now));
+            foreach ($candidates as $order_id) {
                 $order = wc_get_order($order_id);
                 if ($order && $gateway->get_twoinc_order_id($order)) {
                     $last_checked[(int) $order_id] = (int) $order->get_meta(self::last_checked_key(), true);
