@@ -2068,3 +2068,9 @@ msgstr "Kontrollerad av %s."
 #, php-format
 msgid "Check status with %s"
 msgstr "Kontrollera status med %s"
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:6892
+#, php-format
+msgid "We are still confirming your order with %s."
+msgstr "Vi bekräftar fortfarande din beställning med %s."

@@ -2067,3 +2067,9 @@ msgstr "Comprobado por %s."
 #, php-format
 msgid "Check status with %s"
 msgstr "Comprobar estado con %s"
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:6892
+#, php-format
+msgid "We are still confirming your order with %s."
+msgstr "Todavía estamos confirmando tu pedido con %s."
