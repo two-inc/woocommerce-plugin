@@ -88,6 +88,16 @@ async function verifyWithoutReturning(page: Page, placed: Placed): Promise<strin
   return confirmationUrl;
 }
 
+/** When the resolver last read the order from Two (UTC seconds), 0 if never. */
+function lastChecked(wcOrderId: number): number {
+  return Number(
+    wp(
+      "eval",
+      `echo (int) wc_get_order(${wcOrderId})->get_meta('_twoinc_pending_checked_at');`
+    ).trim()
+  );
+}
+
 function orderStatus(wcOrderId: number): string {
   return wp("eval", `echo wc_get_order(${wcOrderId})->get_status();`).trim();
 }
@@ -132,8 +142,11 @@ test("scheduled check: waits while unverified, confirms once verified, late retu
   ).toBe("1");
 
   expect(await getOrderState(twoOrderId)).toBe("UNVERIFIED");
+  expect(lastChecked(wcOrderId), "not checked yet").toBe(0);
   backdate(wcOrderId);
   runScheduledCheck();
+  // The order would stay pending had the check never run, so prove it ran.
+  expect(lastChecked(wcOrderId), "the scheduled check read the order").toBeGreaterThan(0);
   expect(orderStatus(wcOrderId), "unverified: still waiting").toBe("pending");
 
   const confirmationUrl = await verifyWithoutReturning(page, placed);
