@@ -151,13 +151,18 @@ export async function acceptTerms(page: Page) {
   await expect(checkbox).toBeChecked();
 }
 
-export async function placeOrder(page: Page): Promise<string> {
+/** Places the order and leaves the browser to follow wherever the shop sends it. */
+export async function submitOrder(page: Page) {
   await acceptTerms(page);
   // A click while the pay box is still resolving the order intent is dropped.
   await page
     .locator(".twoinc-pay-box.twoinc-loader")
     .waitFor({ state: "hidden", timeout: LONG_TIMEOUT });
   await page.locator(PLACE_ORDER_BUTTON).click();
+}
+
+export async function placeOrder(page: Page): Promise<string> {
+  await submitOrder(page);
 
   await expect(page).toHaveURL(/\/checkout\/order-received\/(\d+)\//, { timeout: LONG_TIMEOUT });
 

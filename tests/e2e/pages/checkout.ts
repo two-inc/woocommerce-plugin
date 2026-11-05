@@ -130,9 +130,14 @@ export async function fillBillingDetails(page: Page, firstName: string, lastName
   await page.locator("#billing_phone").fill(PHONE_NUMBER);
 }
 
-export async function placeOrder(page: Page): Promise<string> {
+/** Places the order and leaves the browser to follow wherever the shop sends it. */
+export async function submitOrder(page: Page) {
   await acceptTerms(page);
   await page.locator("#place_order").click();
+}
+
+export async function placeOrder(page: Page): Promise<string> {
+  await submitOrder(page);
 
   await expect(page).toHaveURL(/\/checkout\/order-received\/(\d+)\//, {
     timeout: LONG_TIMEOUT
