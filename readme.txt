@@ -65,6 +65,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 
 = 3.0.0 =
 
+* Every fulfil and cancel outcome is written to the order notes: a cancel Two accepted, an order that was already fulfilled or cancelled, Two's own reason when it refused, and a separate note when Two could not be reached. Cancelling an order Two holds as fulfilled is not sent to Two: the note says a fulfilled order is refunded, not cancelled.
 * The payment method title is no longer stored at install. An empty title shows "Business invoice" in the shop's language (Spanish, Norwegian, Dutch and Swedish are included). On update, a title that is exactly one of the English titles earlier versions stored at install ("Pay with Tillit", "Pay in 15 days with invoice", "Business invoice 30 days", "Business invoice %s days", "Business invoice - %s days" or "Business invoice") is cleared once, so the shop shows the default in its own language. A title you edited is kept, and the subtitle is never changed.
 * The checkout subtitle is plain text: a link or other markup is refused on save, and the subtitle is shown escaped, exactly as typed. A subtitle saved with a link before this release keeps saving unchanged and is shown as its words, without the link.
 * The vendor name must be at most 255 characters of unaccented letters, digits, spaces and punctuation, with no line breaks. Any other name is refused on save with a message, the saved name is kept, and the other settings still save. A name saved before this release keeps working until it is changed.

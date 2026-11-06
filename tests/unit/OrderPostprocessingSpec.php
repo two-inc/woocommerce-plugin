@@ -46,6 +46,7 @@ final class OrderPostprocessingSpec
             'testTheOlderFiltersOutputIsSentAsBefore',
             'testEveryRequestTypeFiresOnce',
             'testEveryWriteSendsItsIdempotencyKey',
+            'testFulfilAndCancelOutcomesAreWrittenToTheOrderNotes',
             'testARetryReusesItsKeyAndAnotherOperationDoesNot',
             'testAnEditSequenceNeverRepeatsAKey',
             'testAnEditWithAnUnknownOutcomeNeverHidesTheNextOne',
@@ -1191,6 +1192,41 @@ final class OrderPostprocessingSpec
         }));
     }
 
+    /**
+     * Every fulfil and cancel outcome lands in the order notes, and a note
+     * says Two refused only when Two answered (TWO-27109).
+     */
+    private static function testFulfilAndCancelOutcomesAreWrittenToTheOrderNotes(): void
+    {
+        $refusal = '{"error_details":"Order is not in a valid state"}';
+        // [action, Two state recorded on the order, HTTP status (0: no answer), body, note, sent to Two, why]
+        $cases = [
+            ['fulfil', 'CONFIRMED', 200, null, 'Two has acknowledged the request to fulfil the order', true, 'a fulfil Two accepts'],
+            ['fulfil', 'CONFIRMED', 0, null, 'Two could not be reached, so Two order two-1 was not fulfilled. Set the order to Completed again to retry.', true, 'a fulfil with no answer does not say Two refused'],
+            ['fulfil', 'CONFIRMED', 400, $refusal, 'Two refused to fulfil order two-1: ', true, 'a fulfil Two refused gives its answer'],
+            ['fulfil', 'CANCELLED', 200, null, 'Two order two-1 is cancelled, so it was not fulfilled.', false, 'a cancelled order is not fulfilled'],
+            ['fulfil', 'FULFILLED', 200, null, 'Two order two-1 was already sent for fulfilment, so it was not sent again.', false, 'a fulfilled order is not fulfilled again'],
+            ['cancel', 'CONFIRMED', 200, '{}', 'Two order two-1 cancelled.', true, 'a cancel Two accepts'],
+            ['cancel', 'CONFIRMED', 0, null, 'Two could not be reached, so Two order two-1 was not cancelled. Set the order to Cancelled again to retry.', true, 'a cancel with no answer does not say Two refused'],
+            ['cancel', 'CONFIRMED', 409, $refusal, 'Two refused to cancel order two-1: ', true, 'a cancel Two refused gives its answer'],
+            ['cancel', 'FULFILLED', 200, '{}', 'Two order two-1 has been fulfilled, so it was not cancelled. A fulfilled order is refunded, not cancelled.', false, 'a fulfilled order is refunded, not cancelled'],
+            ['cancel', 'DELIVERED', 200, '{}', 'A fulfilled order is refunded, not cancelled.', false, 'so is a delivered one'],
+        ];
+        foreach ($cases as [$action, $state, $status, $body, $note, $sent, $description]) {
+            self::reset();
+            $gateway = self::recordingGateway($status, $body);
+            $order = self::exampleOrder();
+            $order->meta[WC_Twoinc_Brand::meta_key('order_state')] = $state;
+            $order->notes = [];
+            $action === 'fulfil' ? $gateway->on_order_completed(42) : $gateway->on_order_cancelled(42);
+            $notes = implode("\n", $order->notes);
+            TinyAssert::true(strpos($notes, $note) !== false, "$description: notes [$notes]");
+            TinyAssert::same($status !== 0 || !$sent, strpos($notes, 'could not be reached') === false, "$description: says unreachable only when Two did not answer");
+            TinyAssert::same($status >= 400 && $sent, strpos($notes, 'refused') !== false, "$description: says refused only when Two answered with a refusal");
+            TinyAssert::same($sent, $gateway->sent !== [], "$description: sent to Two");
+        }
+    }
+
     private static function testEveryWriteSendsItsIdempotencyKey(): void
     {
         $paths = [];
@@ -1314,7 +1350,8 @@ final class OrderPostprocessingSpec
             [$intent('NO'), $intent('SE'), '/v1/order_intent', false, 'an intent for another buyer'],
             [$intent('NO'), $intent('NO', 'session-b'), '/v1/order_intent', false, 'the same intent from another shopper'],
             [$session('session-a'), $session('session-b'), '/autofill/v1/delegation', false, 'another shopper\'s mint'],
-            [$paths['capture'], $paths['cancel'], null, false, 'two operations on one Two order'],
+            // The fulfil's recorded state is cleared first: a cancel is not sent for a fulfilled order (TWO-27109).
+            [$paths['capture'], $retry($paths['cancel']), null, false, 'two operations on one Two order'],
         ];
         foreach ($cases as [$first, $second, $endpoint, $same, $description]) {
             self::reset();

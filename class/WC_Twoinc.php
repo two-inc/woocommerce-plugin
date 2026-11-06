@@ -5671,7 +5671,19 @@ if (!class_exists('WC_Twoinc')) {
 
             $state = $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
             if (in_array($state, self::TERMINAL_ORDER_STATES)) {
-                // $order->add_order_note(sprintf(__('Order is already fulfilled with Two.', 'twoinc-payment-gateway'), $twoinc_order_id));
+                $order->add_order_note($state === 'CANCELLED'
+                    ? sprintf(
+                        /* translators: 1: the payment method's product name, 2: its order id */
+                        __('%1$s order %2$s is cancelled, so it was not fulfilled.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name'),
+                        $twoinc_order_id
+                    )
+                    : sprintf(
+                        /* translators: 1: the payment method's product name, 2: its order id */
+                        __('%1$s order %2$s was already sent for fulfilment, so it was not sent again.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name'),
+                        $twoinc_order_id
+                    ));
                 return;
             }
 
@@ -5707,27 +5719,7 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
 
-            if (is_wp_error($response)) {
-                $error_message = sprintf(
-                    __('Could not update order status to "Fulfilled" with %s.', 'twoinc-payment-gateway'),
-                    WC_Twoinc_Brand::get('product_name'),
-                    $twoinc_order_id
-                );
-                $contact_message = sprintf(__('Please contact %s support with order ID: %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), $twoinc_order_id);
-                $order->add_order_note($error_message . " " . $contact_message);
-                return false;
-            }
-
-            $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
-            if ($twoinc_err) {
-                $error_message = sprintf(
-                    __('Could not update order status to "Fulfilled" with %s.', 'twoinc-payment-gateway'),
-                    WC_Twoinc_Brand::get('product_name'),
-                    $twoinc_order_id
-                );
-                $contact_message = sprintf(__('Please contact %s support with order ID: %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), $twoinc_order_id);
-                $response_message = sprintf(__('Response: %s', 'twoinc-payment-gateway'), $twoinc_err);
-                $order->add_order_note($error_message . " " . $contact_message . " " . $response_message);
+            if ($this->note_status_change_failure($order, 'fulfil', $response, $twoinc_order_id)) {
                 return false;
             }
 
@@ -5775,29 +5767,78 @@ if (!class_exists('WC_Twoinc')) {
                 $order->add_order_note($order_note);
                 return;
             }
+            // Every other terminal state follows a fulfilment, which Two refunds rather than cancels (TWO-27109).
+            if (in_array($state, self::TERMINAL_ORDER_STATES, true)) {
+                $order->add_order_note(sprintf(
+                    /* translators: 1: the payment method's product name, 2: its order id */
+                    __('%1$s order %2$s has been fulfilled, so it was not cancelled. A fulfilled order is refunded, not cancelled.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name'),
+                    $twoinc_order_id
+                ));
+                return false;
+            }
 
             // Sent with no body whatever the postprocessing hook does, so it never refuses (TWO-26340).
             $response = $this->make_order_request('cancel', 'status_change', "/v1/order/{$twoinc_order_id}/cancel", [], 'POST', $order);
 
-            if (is_wp_error($response)) {
-                $error_message = __('Could not update status to "Cancelled".', 'twoinc-payment-gateway');
-                $contact_message = sprintf(__('Please contact %s support with order ID: %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), $twoinc_order_id);
-                $order->add_order_note($error_message . " " . $contact_message);
+            if ($this->note_status_change_failure($order, 'cancel', $response, $twoinc_order_id)) {
                 return false;
             }
 
-            $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
-            if ($twoinc_err) {
-                $error_message = __('Could not update status to "Cancelled".', 'twoinc-payment-gateway');
-                $contact_message = sprintf(__('Please contact %s support with order ID: %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), $twoinc_order_id);
-                $response_message = sprintf(__('Response: %s', 'twoinc-payment-gateway'), $twoinc_err);
-                $order->add_order_note($error_message . " " . $contact_message . " " . $response_message);
-                return false;
-            }
-
+            $order->add_order_note(sprintf(
+                /* translators: 1: the payment method's product name, 2: its order id */
+                __('%1$s order %2$s cancelled.', 'twoinc-payment-gateway'),
+                WC_Twoinc_Brand::get('product_name'),
+                $twoinc_order_id
+            ));
             $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_state'), "CANCELLED");
             $order->save();
             do_action('twoinc_order_cancelled', $order, $response);
+            return true;
+        }
+
+        /**
+         * Write the order note for a fulfil or cancel Two did not carry out
+         * (TWO-27109). It says Two refused only when Two answered; no answer
+         * says Two could not be reached.
+         *
+         * @param WC_Order        $order
+         * @param string          $action 'fulfil' or 'cancel'
+         * @param array|WP_Error  $response
+         * @param string          $twoinc_order_id
+         *
+         * @return bool whether the change failed
+         */
+        private function note_status_change_failure($order, string $action, $response, $twoinc_order_id): bool
+        {
+            $product_name = WC_Twoinc_Brand::get('product_name');
+            $answered = !is_wp_error($response) && is_array($response) && (int) ($response['response']['code'] ?? 0) > 0;
+            if (!$answered) {
+                $order->add_order_note(sprintf(
+                    $action === 'fulfil'
+                        /* translators: 1: the payment method's product name, 2: its order id */
+                        ? __('%1$s could not be reached, so %1$s order %2$s was not fulfilled. Set the order to Completed again to retry.', 'twoinc-payment-gateway')
+                        /* translators: 1: the payment method's product name, 2: its order id */
+                        : __('%1$s could not be reached, so %1$s order %2$s was not cancelled. Set the order to Cancelled again to retry.', 'twoinc-payment-gateway'),
+                    $product_name,
+                    $twoinc_order_id
+                ));
+                return true;
+            }
+            $reason = WC_Twoinc_Helper::get_twoinc_error_msg($response);
+            if (!$reason) {
+                return false;
+            }
+            $order->add_order_note(sprintf(
+                $action === 'fulfil'
+                    /* translators: 1: the payment method's product name, 2: its order id, 3: the reason it gave */
+                    ? __('%1$s refused to fulfil order %2$s: %3$s', 'twoinc-payment-gateway')
+                    /* translators: 1: the payment method's product name, 2: its order id, 3: the reason it gave */
+                    : __('%1$s refused to cancel order %2$s: %3$s', 'twoinc-payment-gateway'),
+                $product_name,
+                $twoinc_order_id,
+                $reason
+            ));
             return true;
         }
 

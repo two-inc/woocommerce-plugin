@@ -877,12 +877,6 @@ msgstr ""
 msgid "The tracking number could not be attached to the %s order. The invoice will be sent without it."
 msgstr ""
 
-#: class/WC_Twoinc.php:5627
-#: class/WC_Twoinc.php:5639
-#, php-format
-msgid "Could not update order status to \"Fulfilled\" with %s."
-msgstr ""
-
 #: class/WC_Twoinc.php:5631
 #: class/WC_Twoinc.php:5643
 #: class/WC_Twoinc.php:5699
@@ -907,12 +901,6 @@ msgstr ""
 #: class/WC_Twoinc.php:5649
 #, php-format
 msgid "%s has acknowledged the request to fulfil the order. An invoice will be sent to the buyer when the fulfilment is complete."
-msgstr ""
-
-#: class/WC_Twoinc.php:5681
-#: class/WC_Twoinc.php:5698
-#: class/WC_Twoinc.php:5706
-msgid "Could not update status to \"Cancelled\"."
 msgstr ""
 
 #: class/WC_Twoinc.php:5689
@@ -2158,4 +2146,52 @@ msgstr ""
 
 #: class/WC_Twoinc.php:4298
 msgid "Business invoice"
+msgstr ""
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5677
+#, php-format
+msgid "%1$s order %2$s is cancelled, so it was not fulfilled."
+msgstr ""
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5683
+#, php-format
+msgid "%1$s order %2$s was already sent for fulfilment, so it was not sent again."
+msgstr ""
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5774
+#, php-format
+msgid "%1$s order %2$s has been fulfilled, so it was not cancelled. A fulfilled order is refunded, not cancelled."
+msgstr ""
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5790
+#, php-format
+msgid "%1$s order %2$s cancelled."
+msgstr ""
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5820
+#, php-format
+msgid "%1$s could not be reached, so %1$s order %2$s was not fulfilled. Set the order to Completed again to retry."
+msgstr ""
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5822
+#, php-format
+msgid "%1$s could not be reached, so %1$s order %2$s was not cancelled. Set the order to Cancelled again to retry."
+msgstr ""
+
+#. translators: 1: the payment method's product name, 2: its order id, 3: the reason it gave
+#: class/WC_Twoinc.php:5835
+#, php-format
+msgid "%1$s refused to fulfil order %2$s: %3$s"
+msgstr ""
+
+#. translators: 1: the payment method's product name, 2: its order id, 3: the reason it gave
+#: class/WC_Twoinc.php:5837
+#, php-format
+msgid "%1$s refused to cancel order %2$s: %3$s"
 msgstr ""
