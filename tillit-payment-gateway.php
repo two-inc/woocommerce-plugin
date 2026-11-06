@@ -427,7 +427,11 @@ function twoinc_ajax_verify_api_key()
         return;
     }
 
-    $api_key = sanitize_text_field($_POST['api_key']);
+    $twoinc_instance = WC_Twoinc::get_instance();
+    // The settings page never holds the saved key, so it asks for that one by reference (TWO-27109).
+    $api_key = empty($_POST['stored'])
+        ? trim(sanitize_text_field($_POST['api_key']))
+        : trim((string) $twoinc_instance->get_option('api_key'));
 
     if (empty($api_key)) {
         wp_send_json_error('API key is required');
@@ -440,7 +444,6 @@ function twoinc_ajax_verify_api_key()
     // this key has had, so a merchant who just fixed it here shouldn't have to
     // wait out the checkout cache's TTL to see it take effect (TWO-25326
     // follow-up).
-    $twoinc_instance = WC_Twoinc::get_instance();
     $result = $twoinc_instance->verify_api_key($api_key);
     $category = $twoinc_instance->cache_verification_result($api_key, $result);
 

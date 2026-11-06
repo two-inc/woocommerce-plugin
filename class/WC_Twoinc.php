@@ -64,6 +64,9 @@ if (!class_exists('WC_Twoinc')) {
         // process_update_twoinc_order — their identity guarantees the
         // tracking-failure note in on_order_completed can never be
         // triggered by the state gate itself.
+        /** The currencies Two invoices in, the same list every Two plugin gates on (TWO-27109). */
+        public const SUPPORTED_CURRENCIES = ['NOK', 'GBP', 'SEK', 'USD', 'DKK', 'EUR'];
+
         private const TERMINAL_ORDER_STATES = ["FULFILLING", "FULFILLED", "DELIVERED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"];
 
         // Backstop only — refreshed by event, not by expiry.
@@ -132,10 +135,13 @@ if (!class_exists('WC_Twoinc')) {
             $this->migrate_legacy_company_search_key();
             $this->drop_removed_settings();
             $this->migrate_checkout_env();
+            $this->clear_english_install_title();
             $this->drop_renamed_option_rows();
             $this->drop_fabricated_due_in_days();
             $this->migrate_se_tax_subtotals();
             $this->migrate_tax_code_map_to_rows();
+            // After drop_fabricated_due_in_days(), so it judges the record's own default.
+            $this->seed_default_term_selection();
 
             $this->title = $this->get_pay_title();
             /**
@@ -233,7 +239,7 @@ if (!class_exists('WC_Twoinc')) {
         {
             // The stored environment mode decides the host (TWO-26604); the
             // hostname plays no part. Local/dev tooling that needs the API on
-            // an arbitrary host reads TWOINC_DEV_API_HOST, a server env var,
+            // an arbitrary host reads TWO_API_BASE_URL, a server env var,
             // never a wp-admin field (TWO-25386), gated in
             // get_environment_host() alongside the sibling overrides (TWO-40).
             return WC_Twoinc_Helper::get_environment_host('api', $this);
@@ -538,8 +544,105 @@ if (!class_exists('WC_Twoinc')) {
             self::store_merchant_country($record);
             update_option($checked_option, time(), false);
             delete_option(WC_Twoinc_Brand::prefixed_name('merchant_record_last_error'));
+            $this->seed_default_term_selection();
 
             return true;
+        }
+
+        /** Whether a settings row holds a term selection: a non-empty list of terms, or a custom term. */
+        private static function has_term_selection($row): bool
+        {
+            if (!is_array($row)) {
+                return false;
+            }
+            $days = $row['payment_terms_days'] ?? null;
+            if (is_array($days) && array_filter(array_map('intval', $days)) !== []) {
+                return true;
+            }
+            return trim((string) ($row['payment_terms_custom_days'] ?? '')) !== '';
+        }
+
+        /**
+         * A shop that never saved a term selection offers the merchant
+         * account's own default term (TWO-27109). Such a shop's orders were
+         * booked on that term without a term block; an empty offered set now
+         * refuses the order, so the term it already used is ticked instead.
+         *
+         * Runs at construction (the upgrade step) and after each merchant
+         * record read, on the cached record only. A selection the merchant
+         * saved is never touched. The settings form refuses an empty one, so
+         * an empty or blank stored value is not a choice: a first save made
+         * before the record was read stores [], and a stored blank can come
+         * from WooCommerce's own read of the unset field. When the default is
+         * not among the terms Two offers, nothing is ticked, the shop's
+         * orders are refused, and the log says why once per change.
+         *
+         * @return void
+         */
+        public function seed_default_term_selection(): void
+        {
+            if (self::has_term_selection(get_option($this->get_option_key(), null))) {
+                return;
+            }
+            if (!get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on'))) {
+                return;
+            }
+            $stored_default = get_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'), null);
+            if ($stored_default === null) {
+                // The upgrade drops a default earlier versions made up. The record is read again
+                // in the background, never in this request (it may be a buyer's), and that read
+                // seeds the selection; a record with no default stores 0, so this does not repeat.
+                $hook = self::merchant_record_refresh_hook();
+                $attempted = (int) get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on'));
+                // With no key the read cannot run (refresh_merchant_record_caches), so it is not queued.
+                if (
+                    function_exists('as_enqueue_async_action')
+                    && trim((string) $this->get_option('api_key')) !== ''
+                    && $attempted + self::MERCHANT_RECORD_ATTEMPT_INTERVAL <= time()
+                    && !as_has_scheduled_action($hook)
+                ) {
+                    as_enqueue_async_action($hook, [], '', true);
+                }
+                return;
+            }
+            $default = (int) $stored_default;
+            $offered = json_decode((string) get_option(WC_Twoinc_Brand::prefixed_name('merchant_available_terms')), true);
+            $offered = is_array($offered) ? array_map('intval', $offered) : [];
+            if ($default > 0 && in_array($default, $offered, true)) {
+                // Re-read uncached just before writing, so a save made meanwhile is neither undone nor overridden.
+                if (function_exists('wp_cache_delete')) {
+                    wp_cache_delete('alloptions', 'options');
+                    wp_cache_delete($this->get_option_key(), 'options');
+                }
+                $row = get_option($this->get_option_key(), null);
+                if (self::has_term_selection($row)) {
+                    return;
+                }
+                $row = is_array($row) ? $row : [];
+                $row['payment_terms_days'] = [$default];
+                update_option($this->get_option_key(), $row);
+                if (is_array($this->settings)) {
+                    $this->settings['payment_terms_days'] = [$default];
+                }
+                delete_option(WC_Twoinc_Brand::prefixed_name('term_seed_skipped'));
+                return;
+            }
+            $state = $default . '|' . implode(',', $offered);
+            if (get_option(WC_Twoinc_Brand::prefixed_name('term_seed_skipped')) === $state) {
+                return;
+            }
+            update_option(WC_Twoinc_Brand::prefixed_name('term_seed_skipped'), $state, false);
+            if (function_exists('wc_get_logger')) {
+                wc_get_logger()->warning(
+                    sprintf(
+                        'No payment term is ticked and the account default term (%s) is not one %s offers (%s), so none was ticked: orders are refused until a term is ticked under Payment terms.',
+                        $default > 0 ? $default . ' days' : 'none',
+                        WC_Twoinc_Brand::get('product_name'),
+                        $offered === [] ? 'none' : implode(', ', $offered)
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
         }
 
         /** Brand-prefixed like the FX hook, and read late for the same reason. */
@@ -1666,9 +1769,8 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * The merchant's offerable payment terms (net days, ascending) from the merchant record's
-         * `available_terms`, the authoritative set the admin narrows from (TWO-24812). Empty is
-         * offered as empty: the method stays available, no term is sent, and the
-         * merchant account's own default applies. A cache read, except on a cold or >24h clock,
+         * `available_terms`, the authoritative set the admin narrows from (TWO-24812). Empty
+         * leaves nothing to offer, and an order is refused at create (TWO-27109). A cache read, except on a cold or >24h clock,
          * where one request pays one 10s-capped fetch; a failed fetch leaves that clock unmoved,
          * so one request every 60s pays it again until one succeeds.
          *
@@ -3639,7 +3741,7 @@ if (!class_exists('WC_Twoinc')) {
          * unique int day counts, restricted to the merchant's available terms.
          *
          * A selection is mandatory on save. "No selection" is well-defined
-         * internally (an empty offer falls through to the account default), but
+         * internally (an empty offer refuses every order at create), but
          * it gives the merchant no feedback on the resulting behaviour, so we
          * insist on a selection every time they save. The custom-days sibling
          * field (posted in the same form) also satisfies it, so a single
@@ -4141,13 +4243,12 @@ if (!class_exists('WC_Twoinc')) {
             // merchant needing per-language copy should use a string-
             // translation plugin (WPML, Loco Translate) the same way the
             // rest of this plugin's __() strings are made translatable.
-            // Tested after escaping, not before: copy that is only markup the
-            // escaper drops would otherwise emit an empty subtitle element.
-            $custom_subtitle = trim(WC_Twoinc_Helper::escape_anchor_only_html(
-                (string) $this->get_option('payment_subtitle')
-            ));
+            // Plain escaped text with no link (TWO-27109): markup saved before
+            // that rule shows as its words. Tested after stripping, so copy
+            // that is only markup emits no empty subtitle element.
+            $custom_subtitle = trim(wp_strip_all_tags((string) $this->get_option('payment_subtitle')));
             if ($custom_subtitle !== '') {
-                return sprintf('<div class="twoinc-payment-subtitle">%s</div>', $custom_subtitle);
+                return sprintf('<div class="twoinc-payment-subtitle">%s</div>', esc_html($custom_subtitle));
             }
 
             // Escape first, then test: esc_url returns '' for a disallowed
@@ -4272,15 +4373,65 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * The configured Title verbatim - no term suffix, no placeholder
-         * substitution - or the brand product name when it is blank.
+         * substitution - or the default title when it is blank.
          */
         public function get_pay_title()
         {
             $configured = trim((string) $this->get_option('title'));
 
             return $configured === ''
-                ? WC_Twoinc_Brand::get('product_name')
+                ? self::default_pay_title()
                 : __($configured, 'twoinc-payment-gateway');
+        }
+
+        /**
+         * The title shown while none is saved: the brand's default in the
+         * shop's language, never stored (TWO-27109). The Two default is a
+         * literal msgid so it reaches the catalogues; a variable one is not
+         * extracted.
+         */
+        public static function default_pay_title(): string
+        {
+            $default = (string) WC_Twoinc_Brand::get('title_default');
+            if ($default === 'Business invoice') {
+                return __('Business invoice', 'twoinc-payment-gateway');
+            }
+            return $default !== '' ? __($default, 'twoinc-payment-gateway') : (string) WC_Twoinc_Brand::get('product_name');
+        }
+
+        /** Every English title earlier versions stored at install, exactly as stored. */
+        private const ENGLISH_INSTALL_TITLES = [
+            'Pay with Tillit',
+            'Pay in 15 days with invoice',
+            'Business invoice 30 days',
+            'Business invoice %s days',
+            'Business invoice - %s days',
+            'Business invoice',
+        ];
+
+        /**
+         * Once per shop: clear a saved title that is exactly one of the
+         * English titles earlier versions stored at install, so the shop shows
+         * the default in its own language (TWO-27109). The subtitle is never
+         * touched. Marked done even with nothing stored, so a title typed
+         * later is never cleared.
+         *
+         * @return void
+         */
+        private function clear_english_install_title()
+        {
+            $done = WC_Twoinc_Brand::prefixed_name('english_install_title_cleared');
+            if (get_option($done)) {
+                return;
+            }
+            if (is_array(get_option($this->get_option_key(), null)) && is_array($this->settings)) {
+                $title = $this->settings['title'] ?? null;
+                if (is_string($title) && in_array($title, self::ENGLISH_INSTALL_TITLES, true)) {
+                    $this->settings['title'] = '';
+                    update_option($this->get_option_key(), $this->settings);
+                }
+            }
+            update_option($done, '1');
         }
 
         /**
@@ -4560,10 +4711,17 @@ if (!class_exists('WC_Twoinc')) {
         {
             $status = self::categorize_verification_result($result);
             $status['body'] = ($status['status'] === 'ok' && isset($result['body'])) ? $result['body'] : null;
-            if ($api_key) {
+            // Checkout's cache is per key and speaks for the saved environment, so a
+            // verdict from another environment, judged on a save, stays out of it.
+            $saved_environment = $this->environment_under_judgement === null
+                || $this->environment_under_judgement === WC_Twoinc_Helper::normalise_environment_mode($this->get_stored_checkout_env());
+            if ($api_key && $saved_environment) {
                 set_transient(self::verification_cache_key($api_key), $status, self::API_KEY_VERIFICATION_TTL);
             }
-            if ($api_key === $this->get_option('api_key')) {
+            if ($api_key) {
+                $this->record_definitive_key_verdict((string) $api_key, $status['status']);
+            }
+            if ($api_key === $this->get_option('api_key') && $saved_environment) {
                 $this->api_key_verification_memo = $status;
             }
             return $status;
@@ -4588,8 +4746,8 @@ if (!class_exists('WC_Twoinc')) {
          * The api-key verdict is the only upstream failure that may withhold
          * the Two payment method, and only when it is a definitive rejection
          * (TWO-25326 follow-up). An unresolvable offerable-term set
-         * does not withhold: the tile is offered with no term chips, no term
-         * is sent on the order and the account default applies.
+         * does not withhold: the tile is offered with no term chips, and the
+         * order is refused at create (TWO-27109).
          *
          * @return bool
          */
@@ -4602,6 +4760,14 @@ if (!class_exists('WC_Twoinc')) {
                     sprintf('"Turn on/off" is "%s"', (string) $this->enabled),
                     null,
                     'debug'
+                );
+                return false;
+            }
+            $currency = (string) get_woocommerce_currency();
+            if (!self::is_supported_currency($currency)) {
+                $this->log_withheld_from_checkout(
+                    sprintf('the basket currency %s is not one %s invoices in', $currency, WC_Twoinc_Brand::get('product_name')),
+                    'currency'
                 );
                 return false;
             }
@@ -4620,6 +4786,12 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
             return true;
+        }
+
+        /** Whether Two invoices in this currency. */
+        public static function is_supported_currency(string $currency): bool
+        {
+            return in_array(strtoupper(trim($currency)), self::SUPPORTED_CURRENCIES, true);
         }
 
         /** @var array<string, true> */
@@ -5083,6 +5255,8 @@ if (!class_exists('WC_Twoinc')) {
             wp_localize_script('twoinc.admin', 'twoinc_admin', [
                 'gateway_id' => $this->id,
                 'csrf_token' => wp_create_nonce('twoinc_admin_csrf_token'),
+                // The key field renders empty, so the saved key is checked by reference.
+                'has_saved_key' => (string) $this->get_option('api_key') !== '',
                 'ajax_url' => admin_url('admin-ajax.php'),
                 // %s days label for the live Default Payment Term rebuild.
                 'days_label' => __('%s days', 'twoinc-payment-gateway'),
@@ -5596,7 +5770,19 @@ if (!class_exists('WC_Twoinc')) {
 
             $state = $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
             if (in_array($state, self::TERMINAL_ORDER_STATES)) {
-                // $order->add_order_note(sprintf(__('Order is already fulfilled with Two.', 'twoinc-payment-gateway'), $twoinc_order_id));
+                $order->add_order_note($state === 'CANCELLED'
+                    ? sprintf(
+                        /* translators: 1: the payment method's product name, 2: its order id */
+                        __('%1$s order %2$s is cancelled, so it was not fulfilled.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name'),
+                        $twoinc_order_id
+                    )
+                    : sprintf(
+                        /* translators: 1: the payment method's product name, 2: its order id */
+                        __('%1$s order %2$s was already sent for fulfilment, so it was not sent again.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name'),
+                        $twoinc_order_id
+                    ));
                 return;
             }
 
@@ -5632,27 +5818,7 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
 
-            if (is_wp_error($response)) {
-                $error_message = sprintf(
-                    __('Could not update order status to "Fulfilled" with %s.', 'twoinc-payment-gateway'),
-                    WC_Twoinc_Brand::get('product_name'),
-                    $twoinc_order_id
-                );
-                $contact_message = sprintf(__('Please contact %s support with order ID: %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), $twoinc_order_id);
-                $order->add_order_note($error_message . " " . $contact_message);
-                return false;
-            }
-
-            $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
-            if ($twoinc_err) {
-                $error_message = sprintf(
-                    __('Could not update order status to "Fulfilled" with %s.', 'twoinc-payment-gateway'),
-                    WC_Twoinc_Brand::get('product_name'),
-                    $twoinc_order_id
-                );
-                $contact_message = sprintf(__('Please contact %s support with order ID: %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), $twoinc_order_id);
-                $response_message = sprintf(__('Response: %s', 'twoinc-payment-gateway'), $twoinc_err);
-                $order->add_order_note($error_message . " " . $contact_message . " " . $response_message);
+            if ($this->note_status_change_failure($order, 'fulfil', $response, $twoinc_order_id)) {
                 return false;
             }
 
@@ -5700,29 +5866,78 @@ if (!class_exists('WC_Twoinc')) {
                 $order->add_order_note($order_note);
                 return;
             }
+            // Every other terminal state follows a fulfilment, which Two refunds rather than cancels (TWO-27109).
+            if (in_array($state, self::TERMINAL_ORDER_STATES, true)) {
+                $order->add_order_note(sprintf(
+                    /* translators: 1: the payment method's product name, 2: its order id */
+                    __('%1$s order %2$s has been fulfilled, so it was not cancelled. A fulfilled order is refunded, not cancelled.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name'),
+                    $twoinc_order_id
+                ));
+                return false;
+            }
 
             // Sent with no body whatever the postprocessing hook does, so it never refuses (TWO-26340).
             $response = $this->make_order_request('cancel', 'status_change', "/v1/order/{$twoinc_order_id}/cancel", [], 'POST', $order);
 
-            if (is_wp_error($response)) {
-                $error_message = __('Could not update status to "Cancelled".', 'twoinc-payment-gateway');
-                $contact_message = sprintf(__('Please contact %s support with order ID: %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), $twoinc_order_id);
-                $order->add_order_note($error_message . " " . $contact_message);
+            if ($this->note_status_change_failure($order, 'cancel', $response, $twoinc_order_id)) {
                 return false;
             }
 
-            $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
-            if ($twoinc_err) {
-                $error_message = __('Could not update status to "Cancelled".', 'twoinc-payment-gateway');
-                $contact_message = sprintf(__('Please contact %s support with order ID: %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), $twoinc_order_id);
-                $response_message = sprintf(__('Response: %s', 'twoinc-payment-gateway'), $twoinc_err);
-                $order->add_order_note($error_message . " " . $contact_message . " " . $response_message);
-                return false;
-            }
-
+            $order->add_order_note(sprintf(
+                /* translators: 1: the payment method's product name, 2: its order id */
+                __('%1$s order %2$s cancelled.', 'twoinc-payment-gateway'),
+                WC_Twoinc_Brand::get('product_name'),
+                $twoinc_order_id
+            ));
             $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_state'), "CANCELLED");
             $order->save();
             do_action('twoinc_order_cancelled', $order, $response);
+            return true;
+        }
+
+        /**
+         * Write the order note for a fulfil or cancel Two did not carry out
+         * (TWO-27109). It says Two refused only when Two answered; no answer
+         * says Two could not be reached.
+         *
+         * @param WC_Order        $order
+         * @param string          $action 'fulfil' or 'cancel'
+         * @param array|WP_Error  $response
+         * @param string          $twoinc_order_id
+         *
+         * @return bool whether the change failed
+         */
+        private function note_status_change_failure($order, string $action, $response, $twoinc_order_id): bool
+        {
+            $product_name = WC_Twoinc_Brand::get('product_name');
+            $answered = !is_wp_error($response) && is_array($response) && (int) ($response['response']['code'] ?? 0) > 0;
+            if (!$answered) {
+                $order->add_order_note(sprintf(
+                    $action === 'fulfil'
+                        /* translators: 1: the payment method's product name, 2: its order id */
+                        ? __('%1$s could not be reached, so %1$s order %2$s was not fulfilled. Set the order to Completed again to retry.', 'twoinc-payment-gateway')
+                        /* translators: 1: the payment method's product name, 2: its order id */
+                        : __('%1$s could not be reached, so %1$s order %2$s was not cancelled. Set the order to Cancelled again to retry.', 'twoinc-payment-gateway'),
+                    $product_name,
+                    $twoinc_order_id
+                ));
+                return true;
+            }
+            $reason = WC_Twoinc_Helper::get_twoinc_error_msg($response);
+            if (!$reason) {
+                return false;
+            }
+            $order->add_order_note(sprintf(
+                $action === 'fulfil'
+                    /* translators: 1: the payment method's product name, 2: its order id, 3: the reason it gave */
+                    ? __('%1$s refused to fulfil order %2$s: %3$s', 'twoinc-payment-gateway')
+                    /* translators: 1: the payment method's product name, 2: its order id, 3: the reason it gave */
+                    : __('%1$s refused to cancel order %2$s: %3$s', 'twoinc-payment-gateway'),
+                $product_name,
+                $twoinc_order_id,
+                $reason
+            ));
             return true;
         }
 
@@ -6069,11 +6284,10 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Refuse a subtitle the checkout tile would not render as typed.
-         *
-         * The tile emits it through WC_Twoinc_Helper::escape_anchor_only_html,
-         * so anything that escaper drops used to disappear with no merchant
-         * feedback.
+         * Refuse a subtitle carrying markup: the tile shows it as plain
+         * escaped text with no link (TWO-27109). A saved subtitle posted back
+         * unchanged is let through, so one saved with a link before this rule
+         * does not refuse every later save; the tile shows its words.
          *
          * @param string $key
          * @param string $value
@@ -6084,16 +6298,52 @@ if (!class_exists('WC_Twoinc')) {
         public function validate_payment_subtitle_field($key, $value)
         {
             $value = trim(stripslashes((string) $value));
-            if (!WC_Twoinc_Helper::renders_unchanged($value)) {
-                throw new Exception(sprintf(
-                    /* translators: 1: the subtitle as typed, 2: what the checkout tile would render */
-                    __('Subtitle accepts plain text and a single link only; "%1$s" would be shown as "%2$s".', 'twoinc-payment-gateway'),
-                    esc_html($value),
-                    esc_html(WC_Twoinc_Helper::escape_anchor_only_html($value))
-                ));
+            $plain = trim(wp_strip_all_tags($value));
+            if ($value === $plain) {
+                return $value;
             }
+            $saved = (string) $this->get_option($key);
+            if ($value === trim($saved)) {
+                return $saved;
+            }
+            throw new Exception(sprintf(
+                /* translators: 1: the subtitle as typed, 2: what the checkout tile would show */
+                __('Subtitle accepts plain text only, with no links or other markup; "%1$s" would be shown as "%2$s".', 'twoinc-payment-gateway'),
+                esc_html($value),
+                esc_html($plain)
+            ));
+        }
 
-            return $value;
+        /** Printable ASCII, at most 255 characters: what every Two plugin accepts as a vendor name (TWO-27109). */
+        public static function is_sendable_vendor_name(string $name): bool
+        {
+            return preg_match('/^[\x20-\x7E]{1,255}$/', $name) === 1;
+        }
+
+        /**
+         * Refuse a vendor name that is not printable ASCII or is over 255
+         * characters, keeping the saved one; the other fields still save. A
+         * saved name posted back unchanged is let through, so a name stored
+         * before the rule does not refuse every later save.
+         *
+         * @param string $key
+         * @param mixed  $value
+         *
+         * @return string
+         * @throws Exception
+         */
+        public function validate_vendor_name_field($key, $value)
+        {
+            $value = trim(stripslashes(is_scalar($value) ? (string) $value : ''));
+            if ($value === '' || self::is_sendable_vendor_name($value)) {
+                return wp_kses_post($value);
+            }
+            // A saved name went through wp_kses_post, so "&" is stored as "&amp;" and posted back as "&".
+            $saved = (string) $this->get_option($key);
+            if ($value === trim($saved) || $value === trim(html_entity_decode($saved, ENT_QUOTES, 'UTF-8'))) {
+                return $saved;
+            }
+            throw new Exception(__('Enter a vendor name of at most 255 characters, using unaccented letters, digits, spaces and punctuation only, with no line breaks. The previously saved vendor name was kept.', 'twoinc-payment-gateway'));
         }
 
         /**
@@ -6293,6 +6543,20 @@ if (!class_exists('WC_Twoinc')) {
                 ));
             }
 
+            // Repeated at placement: the buyer may have switched currency
+            // after the method was offered.
+            $order_currency = (string) $order->get_currency();
+            if (!self::is_supported_currency($order_currency)) {
+                $currency_error = sprintf(
+                    /* translators: 1: the payment method's product name, 2: the order's currency code */
+                    __('%1$s is not available for orders in %2$s. Please choose another currency or payment method.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name'),
+                    $order_currency
+                );
+                WC_Twoinc_Helper::display_ajax_error($currency_error);
+                return self::payment_failure($currency_error);
+            }
+
             $brand_validation_error = $this->get_brand_payment_validation_error($order_id);
             if ($brand_validation_error) {
                 WC_Twoinc_Helper::display_ajax_error($brand_validation_error);
@@ -6313,13 +6577,14 @@ if (!class_exists('WC_Twoinc')) {
             // withdrawn must re-confirm against the current set — silently
             // falling back to the default term could charge a different
             // (potentially higher) surcharge than the total they approved.
-            // The count($offered) > 0 exemption is deliberate fail-open: an
-            // EMPTY set at submit (mid-session cache invalidation, backend
-            // explicit []) sends no term block and drops the surcharge —
-            // the order proceeds on pre-feature behaviour rather than
-            // hard-blocking every checkout on a cold cache. Do not "tighten"
-            // this to abort on an empty set.
             if (class_exists('WC_Twoinc_Payment_Terms')) {
+                // No offered term means no term anyone chose: the order is
+                // refused rather than booked on the account default (TWO-27109).
+                if (!WC_Twoinc_Payment_Terms::is_enabled($this)) {
+                    $no_term_error = WC_Twoinc_Payment_Terms::no_offered_term_message();
+                    WC_Twoinc_Helper::display_ajax_error($no_term_error);
+                    return self::payment_failure($no_term_error);
+                }
                 // The choice may be the posted field or one already recorded in
                 // the session (a term withdrawn since it was selected): either
                 // is refused, and only a buyer who never chose gets the default.
@@ -6947,9 +7212,10 @@ if (!class_exists('WC_Twoinc')) {
                 'title' => [
                     'title'       => __('Title', 'twoinc-payment-gateway'),
                     'type'        => 'text',
-                    // Brand-specific default: a fresh install must show the
-                    // brand's payment-method title, not the Two phrasing.
-                    'default'     => __(WC_Twoinc_Brand::get('title_default'), 'twoinc-payment-gateway')
+                    // Nothing stored at install (TWO-27109): an empty title shows
+                    // the brand's default in the shop's language.
+                    'default'     => '',
+                    'placeholder' => self::default_pay_title(),
                 ],
                 'payment_subtitle' => [
                     'title'       => __('Subtitle', 'twoinc-payment-gateway'),
@@ -7413,6 +7679,9 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function get_option($key, $empty_value = null)
         {
+            if ($key === 'checkout_env' && $this->environment_under_judgement !== null) {
+                return $this->environment_under_judgement;
+            }
             if (isset($this->withheld_form_fields[$key])) {
                 if (empty($this->settings)) {
                     $this->init_settings();
@@ -7456,7 +7725,7 @@ if (!class_exists('WC_Twoinc')) {
                     <fieldset>
                         <legend class="screen-reader-text"><span><?php echo wp_kses_post($data['title']); ?></span></legend>
                         <div style="position: relative; display: inline-block;">
-                            <input class="input-text regular-input <?php echo esc_attr($data['class']); ?>" type="password" name="<?php echo esc_attr($field_key); ?>" id="<?php echo esc_attr($field_key); ?>" style="<?php echo esc_attr($data['css']); ?> padding-right: 35px;" value="<?php echo esc_attr($this->get_option($key)); ?>" placeholder="<?php echo esc_attr($data['placeholder']); ?>" <?php disabled($data['disabled'], true); ?> <?php echo $this->get_custom_attribute_html($data); // WPCS: XSS ok.
+                            <input class="input-text regular-input <?php echo esc_attr($data['class']); ?>" type="password" name="<?php echo esc_attr($field_key); ?>" id="<?php echo esc_attr($field_key); ?>" style="<?php echo esc_attr($data['css']); ?> padding-right: 35px;" value="" autocomplete="new-password" placeholder="<?php echo esc_attr($data['placeholder']); ?>" <?php disabled($data['disabled'], true); ?> <?php echo $this->get_custom_attribute_html($data); // WPCS: XSS ok.
                             ?> />
                             <span id="api-key-verification-icon" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: none; pointer-events: none; z-index: 10;">
                                 <span class="dashicons dashicons-yes-alt" style="color: #46b450; display: none; font-size: 18px;" id="api-key-valid"></span>
@@ -7464,6 +7733,10 @@ if (!class_exists('WC_Twoinc')) {
                                 <span class="dashicons dashicons-update" style="color: #0073aa; display: none; animation: rotation 1s infinite linear; font-size: 18px;" id="api-key-loading"></span>
                             </span>
                         </div>
+                        <?php // The saved key is never sent back to the browser (TWO-27109). ?>
+                        <?php if ((string) $this->get_option($key) !== '') : ?>
+                            <p class="description twoinc-api-key-saved"><?php esc_html_e('A key is saved. Leave this blank to keep it.', 'twoinc-payment-gateway'); ?></p>
+                        <?php endif; ?>
                         <?php
                             $merchant_id = $this->get_option('api_key') ? $this->get_merchant_id() : '';
                             $merchant_short_name = $merchant_id ? (string) $this->get_option('merchant_short_name') : '';
@@ -8725,6 +8998,7 @@ if (!class_exists('WC_Twoinc')) {
             }
             delete_option($settings_option);
             delete_option(WC_Twoinc_Brand::prefixed_name(self::SHIPPING_TAX_FROM_SHOP_RATES_OPTION));
+            delete_option(self::key_verdicts_option());
             // The merchant-record caches (terms, days-on-invoice, platform
             // minimum) live outside the settings blob in dedicated
             // wp_options — clear them too, or "clear settings on uninstall"
@@ -8919,32 +9193,12 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Admin_Settings::add_error($refusal);
                 return;
             }
-            $api_key_field = 'woocommerce_' . $this->id . '_api_key';
-            $api_key_in_post = array_key_exists($api_key_field, $post_data);
-            $api_key = $api_key_in_post ? $post_data[$api_key_field] : '';
             $this->identity_before_save = [
                 'api_key' => (string) $this->get_option('api_key'),
                 'checkout_env' => (string) $this->get_option('checkout_env'),
             ];
-
-            if ($api_key_in_post && $api_key) {
-                $verification = self::categorize_verification_result($this->verify_api_key($api_key));
-                $product_name = WC_Twoinc_Brand::get('product_name');
-                if ($verification['status'] === 'ok') {
-                    WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'twoinc-payment-gateway'), $product_name));
-                } elseif ($verification['status'] === 'invalid_key') {
-                    $post_data[$api_key_field] = $this->get_option('api_key');
-                    WC_Admin_Settings::add_error(sprintf(__('%s rejected that API key, so the previously saved key was kept.', 'twoinc-payment-gateway'), $product_name));
-                } elseif ($verification['status'] === 'unreachable') {
-                    // A fresh install's stored key is empty, so reverting an unverifiable key locks the merchant out of saving the one that would work.
-                    WC_Admin_Settings::add_message(sprintf(__('API key saved, but %s could not be reached to verify it.', 'twoinc-payment-gateway'), $product_name));
-                } elseif ($verification['status'] === 'not_configured') {
-                    WC_Admin_Settings::add_message(__('API key saved, but it could not be verified because no environment is configured.', 'twoinc-payment-gateway'));
-                } else {
-                    WC_Admin_Settings::add_message(sprintf(__('API key saved, but %s returned an error while verifying it.', 'twoinc-payment-gateway'), $product_name));
-                }
-            }
-            // Save all settings (with the API key reverted only on a rejection)
+            $post_data = $this->judge_key_and_environment($post_data);
+            // Save all settings, with the key and environment kept as a pair when the judgement says so.
             $_POST = $post_data;
             parent::process_admin_options();
             // WooCommerce re-instantiates every gateway after the save action, so this object's own
@@ -8956,6 +9210,149 @@ if (!class_exists('WC_Twoinc')) {
             $this->refetch_merchant_record_on_identity_save();
         }
 
+        /**
+         * The API key and environment are saved as one pair or not at all
+         * (TWO-27109). An empty key field keeps the saved key. A changed pair
+         * is checked against the environment it would be saved with: a pair
+         * Two accepts is saved, one Two rejects keeps both saved halves, and
+         * one Two could not judge never replaces a saved pair whose last
+         * definitive answer was ok. Other fields save either way.
+         *
+         * @param array $post_data the posted settings
+         *
+         * @return array the posted settings, with the pair to save
+         */
+        private function judge_key_and_environment(array $post_data): array
+        {
+            $key_field = $this->get_field_key('api_key');
+            $env_field = $this->get_field_key('checkout_env');
+            $stored_key = trim((string) $this->get_option('api_key'));
+            $stored_env = WC_Twoinc_Helper::normalise_environment_mode($this->get_option('checkout_env'));
+            $typed = isset($post_data[$key_field]) && is_scalar($post_data[$key_field])
+                ? trim(wp_unslash((string) $post_data[$key_field]))
+                : '';
+            $key = $typed !== '' ? $typed : $stored_key;
+            $post_data[$key_field] = $key;
+            $posted_env = $post_data[$env_field] ?? null;
+            // A refused environment is never stored, so it is not part of the pair (TWO-26604).
+            $env = WC_Twoinc_Helper::is_environment_mode_save_allowed($posted_env, $this->get_stored_checkout_env())
+                ? WC_Twoinc_Helper::normalise_environment_mode($posted_env)
+                : $stored_env;
+
+            if ($key === '' || ($key === $stored_key && $env === $stored_env)) {
+                return $post_data;
+            }
+
+            $status = $this->verify_key_for_environment($key, $env)['status'];
+            $product_name = WC_Twoinc_Brand::get('product_name');
+            $keep = false;
+            if ($status === 'ok') {
+                WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'twoinc-payment-gateway'), $product_name));
+            } elseif ($status === 'invalid_key') {
+                $keep = true;
+                WC_Admin_Settings::add_error(sprintf(
+                    /* translators: %s: the payment method's product name */
+                    __('%s rejected that API key for the selected environment, so the previously saved API key and environment were kept.', 'twoinc-payment-gateway'),
+                    $product_name
+                ));
+            } elseif ($stored_key !== '' && $this->last_definitive_key_verdict($stored_key, $stored_env) === 'ok') {
+                $keep = true;
+                WC_Admin_Settings::add_error(sprintf(
+                    /* translators: %s: the payment method's product name */
+                    __('%s could not check the new API key and environment, so the previously saved ones, which it last accepted, were kept. Save again once it can be reached.', 'twoinc-payment-gateway'),
+                    $product_name
+                ));
+            } elseif ($status === 'unreachable') {
+                // A fresh install has no saved pair, so refusing an unverifiable one locks the merchant out of saving the one that would work.
+                WC_Admin_Settings::add_message(sprintf(__('API key saved, but %s could not be reached to verify it.', 'twoinc-payment-gateway'), $product_name));
+            } elseif ($status === 'not_configured') {
+                WC_Admin_Settings::add_message(__('API key saved, but it could not be verified because no environment is configured.', 'twoinc-payment-gateway'));
+            } else {
+                WC_Admin_Settings::add_message(sprintf(__('API key saved, but %s returned an error while verifying it.', 'twoinc-payment-gateway'), $product_name));
+            }
+
+            if ($keep) {
+                $post_data[$key_field] = (string) $this->get_option('api_key');
+                // An environment not posted is left as stored by its own validator.
+                unset($post_data[$env_field]);
+            }
+            return $post_data;
+        }
+
+        /** The environment a verification is judged against, while one is judged; null otherwise. */
+        private ?string $environment_under_judgement = null;
+
+        /**
+         * Verify a key against an environment that may not be the saved one,
+         * recording the verdict for that pair.
+         *
+         * @return array{status: string, code: int|null, body: array|null}
+         */
+        private function verify_key_for_environment(string $key, string $env): array
+        {
+            $this->environment_under_judgement = $env;
+            try {
+                return $this->cache_verification_result($key, $this->verify_api_key($key));
+            } finally {
+                $this->environment_under_judgement = null;
+            }
+        }
+
+        /** Option holding the last definitive verdict ('ok' or 'invalid') per key and environment. */
+        private static function key_verdicts_option(): string
+        {
+            return WC_Twoinc_Brand::prefixed_name('api_key_verdicts');
+        }
+
+        /** A pair's slot: the key with the environment it resolves to, so a legacy spelling shares its canonical slot. */
+        private static function key_verdict_slot(string $key, $env): string
+        {
+            return md5(trim($key) . '|' . WC_Twoinc_Helper::normalise_environment_mode($env));
+        }
+
+        /** Verdicts kept, newest last; enough for the saved pair and a few attempts at replacing it. */
+        private const KEY_VERDICTS_KEPT = 8;
+
+        private function record_definitive_key_verdict(string $key, string $status): void
+        {
+            if ($status !== 'ok' && $status !== 'invalid_key') {
+                return;
+            }
+            $verdicts = get_option(self::key_verdicts_option(), []);
+            $verdicts = is_array($verdicts) ? $verdicts : [];
+            $slot = self::key_verdict_slot($key, $this->get_option('checkout_env'));
+            unset($verdicts[$slot]);
+            $verdicts[$slot] = $status === 'ok' ? 'ok' : 'invalid';
+            $kept = array_slice($verdicts, -self::KEY_VERDICTS_KEPT, null, true);
+            // The saved pair's verdict is what an outage save relies on, so other keys never push it out.
+            $saved = self::key_verdict_slot((string) $this->get_option('api_key'), $this->get_stored_checkout_env());
+            if (isset($verdicts[$saved]) && !isset($kept[$saved])) {
+                $kept = [$saved => $verdicts[$saved]] + $kept;
+            }
+            update_option(self::key_verdicts_option(), $kept, false);
+        }
+
+        /**
+         * The last answer Two gave that judged this key in this environment:
+         * 'ok', 'invalid' or null. A shop upgraded from a build without the
+         * per-pair record, until its first verdict is recorded, falls back to
+         * the key's cached verification, which was taken against the saved
+         * environment.
+         */
+        private function last_definitive_key_verdict(string $key, string $env): ?string
+        {
+            $verdicts = get_option(self::key_verdicts_option(), null);
+            if (is_array($verdicts)) {
+                return $verdicts[self::key_verdict_slot($key, $env)] ?? null;
+            }
+            $cached = get_transient(self::verification_cache_key($key));
+            $status = is_array($cached) ? ($cached['status'] ?? null) : null;
+            if ($status === 'ok') {
+                return 'ok';
+            }
+            return $status === 'invalid_key' ? 'invalid' : null;
+        }
+
         /** After the save, so the refetch authenticates with the persisted key and a re-resolved merchant_id. */
         private function refetch_merchant_record_on_identity_save(): void
         {
@@ -8965,8 +9362,9 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
             self::invalidate_merchant_record_caches();
-            // Capped: three calls run in series in one admin POST.
-            $this->verify_api_key(null, 10);
+            // Capped: three calls run in series in one admin POST. Cached, so checkout
+            // judges the saved pair rather than the key in its previous environment.
+            $this->cache_verification_result((string) $this->get_option('api_key'), $this->verify_api_key(null, 10));
             $this->refresh_merchant_record_caches(true);
         }
 

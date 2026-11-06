@@ -217,6 +217,12 @@ function wp_parse_args($args, $defaults = [])
     return is_array($args) ? array_merge($defaults, $args) : $defaults;
 }
 
+/** WordPress's default is production; a spec sets the global for a developer's site. */
+function wp_get_environment_type()
+{
+    return $GLOBALS['__twoinc_test_wp_environment_type'] ?? 'production';
+}
+
 function get_home_url()
 {
     return $GLOBALS['test_home_url'] ?? 'https://shop.example';
@@ -2087,6 +2093,13 @@ function as_schedule_recurring_action($timestamp, $interval, $hook, $args = [], 
         'timestamp' => $timestamp,
         'interval' => $interval,
     ];
+    $GLOBALS['__twoinc_test_as_scheduled'][$hook] = true;
+    return 1;
+}
+
+function as_enqueue_async_action($hook, $args = [], $group = '', $unique = false)
+{
+    $GLOBALS['__twoinc_test_as_schedule_calls'][] = ['hook' => $hook, 'unique' => $unique, 'async' => true];
     $GLOBALS['__twoinc_test_as_scheduled'][$hook] = true;
     return 1;
 }

@@ -9,6 +9,7 @@
   "api_key": "${MERCHANT_API_KEY}",
   "section_checkout_options": "",
   "enable_order_intent": "yes",
+  "payment_terms_days": [14, 30, 60, 90],
   "add_field_invoice_email": "yes",
   "add_field_purchase_order_number": "yes",
   "add_field_project": "yes",

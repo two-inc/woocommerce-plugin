@@ -2998,7 +2998,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function was_sniffed_to_staging()
         {
-            $dev_api_host = getenv(self::DEV_HOST_ENV_VARS['api']);
+            // The name released builds read.
+            $dev_api_host = getenv(self::LEGACY_DEV_HOST_ENV_VARS['api']);
             return self::is_twoinc_development() && !(is_string($dev_api_host) && $dev_api_host !== '');
         }
 
@@ -3034,7 +3035,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Classifies an arbitrary API host (from TWOINC_DEV_API_HOST) so
+         * Classifies an arbitrary API host (from TWO_API_BASE_URL) so
          * every other host the gateway emits (checkout, signup) lands in the
          * same environment (TWO-25170). Production API host -> 'production';
          * `api.<mode>` labels -> that mode; anything else (localhost, a
@@ -3092,8 +3093,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Developer env var backing each service host (TWO-40). Three
-         * independent overrides:
+         * Developer env var backing each service host (TWO-40), named as on
+         * the other Two plugins (TWO-27109). Three independent overrides:
          *
          *   - 'api'      the checkout/merchant API
          *   - 'checkout' Two's hosted checkout page — loaded by the BROWSER,
@@ -3105,18 +3106,40 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * Server env vars, never wp-admin fields.
          */
         public const DEV_HOST_ENV_VARS = [
+            'api' => 'TWO_API_BASE_URL',
+            'checkout' => 'TWO_CHECKOUT_BASE_URL',
+            'portal' => 'TWO_PORTAL_BASE_URL',
+        ];
+
+        /** The names before TWO-27109, still read for one release with a deprecation log line. */
+        public const LEGACY_DEV_HOST_ENV_VARS = [
             'api' => 'TWOINC_DEV_API_HOST',
             'checkout' => 'TWOINC_DEV_CHECKOUT_HOST',
             'portal' => 'TWOINC_DEV_PORTAL_HOST',
         ];
 
+        /** @var array<string, true> legacy names already logged this request */
+        private static $legacy_dev_host_logged = [];
+
+        /**
+         * Whether WordPress says this is a developer's site: an environment
+         * type of local or development. Production is WordPress's default, so
+         * a shop that never set one is not.
+         *
+         * @return bool
+         */
+        public static function is_developer_environment()
+        {
+            return function_exists('wp_get_environment_type')
+                && in_array(wp_get_environment_type(), ['local', 'development'], true);
+        }
+
         /**
          * A developer's override for one service host, or '' (TWO-40).
          *
-         * Gated so a production instance can never honour one even if the
-         * variable leaks into its process environment: the shop must BOTH
-         * sniff as a development site AND have production stored (the
-         * developer stack's seeded mode).
+         * Gated on the WordPress environment type (TWO-27109), so a
+         * production instance never honours one even if the variable leaks
+         * into its process environment.
          *
          * @param string             $service key of DEV_HOST_ENV_VARS
          * @param WC_Payment_Gateway $gateway
@@ -3125,17 +3148,29 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function get_dev_host_override($service, $gateway)
         {
-            if (!array_key_exists($service, self::DEV_HOST_ENV_VARS)) {
-                return '';
-            }
-            if (
-                self::get_environment_mode($gateway) !== 'production'
-                || !self::is_twoinc_development()
-            ) {
+            if (!array_key_exists($service, self::DEV_HOST_ENV_VARS) || !self::is_developer_environment()) {
                 return '';
             }
             $host = getenv(self::DEV_HOST_ENV_VARS[$service]);
-            return is_string($host) && $host !== '' ? $host : '';
+            if (is_string($host) && $host !== '') {
+                return $host;
+            }
+            $legacy = getenv(self::LEGACY_DEV_HOST_ENV_VARS[$service]);
+            if (!is_string($legacy) || $legacy === '') {
+                return '';
+            }
+            if (!isset(self::$legacy_dev_host_logged[$service]) && function_exists('wc_get_logger')) {
+                self::$legacy_dev_host_logged[$service] = true;
+                wc_get_logger()->warning(
+                    sprintf(
+                        '%s is deprecated and will no longer be read after the next release: set %s instead.',
+                        self::LEGACY_DEV_HOST_ENV_VARS[$service],
+                        self::DEV_HOST_ENV_VARS[$service]
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
+            return $legacy;
         }
 
         /**

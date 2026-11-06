@@ -29,7 +29,7 @@ description: "When the merchant record is fetched and refreshed, what a failed f
   because a call to Two failed.
 - **An unresolved offerable term set does NOT withhold Two**: the tile is
   offered with an EMPTY term set, aligning every platform on Magento. No term chip
-  renders, no term is sent on the order and the account default applies; a preset
+  renders, and placing the order is refused, as on the other platforms (TWO-27109); a preset
   term set must never be composed for a buyer. Empty whether the fetch never
   succeeded or the account offers nothing; the read is the same cached list every
   other consumer uses, so it adds no fetch of its own.

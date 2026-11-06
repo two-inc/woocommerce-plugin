@@ -38,6 +38,8 @@ final class BrandConfigSpec
         $tests = [
             'testBrandLoaderReturnsTwoDefaults',
             'testCheckoutTitleRendersConfiguredValueVerbatim',
+            'testTheEnglishInstallTitleIsClearedOnce',
+            'testAShopThatNeverChoseTermsOffersItsDefaultTerm',
             'testGatewayIdAndMetaIdentityUnchanged',
             'testConstantsMatchBrandConfig',
             'testBrandFileFilterMergesOverDefaults',
@@ -317,6 +319,9 @@ final class BrandConfigSpec
             'testCategorizeVerificationResultDistinguishesFailureReasons',
             'testVerifyApiKeyDistinguishesUnreachableFromNotConfigured',
             'testOnlyARejectedApiKeyRevertsOnSave',
+            'testTheKeyAndEnvironmentSaveAsOnePair',
+            'testTheSavedKeyNeverReachesTheSettingsPage',
+            'testTheVendorNameIsPrintableAsciiOfAtMost255',
             'testApiKeyVerificationStatusCachedAcrossCallsWithinTtl',
             'testOnlyADefinitiveKeyRejectionWithholdsPaymentMethod',
             'testIsAvailableTrueOnlyWhenEnabledAndVerified',
@@ -418,6 +423,7 @@ final class BrandConfigSpec
             'testRateLimitRefusesEveryWcAjaxHandlerBeforeItReachesTheApi',
             'testRateLimitRefusesTheNonProxyHandlersToo',
             'testEveryWithholdingBranchNamesItsReasonInTheLog',
+            'testTheBasketCurrencyDecidesWhetherTwoIsOffered',
             'testTheGateLogNamesWhichConditionRefused',
             'testTheHealthChecklistNamesWhyTheMethodIsAbsent',
             'testTheHealthChecklistNamesTheBrandBillingCountryGate',
@@ -438,6 +444,44 @@ final class BrandConfigSpec
      * the reason: the merchant has no other way to tell a switched-off
      * gateway from a rejected key.
      */
+    /** Given a basket in some currency; When checkout asks for methods; Then Two is offered only in a currency it invoices in. */
+    private static function testTheBasketCurrencyDecidesWhetherTwoIsOffered(): void
+    {
+        // [basket currency, offered, why]
+        $cases = [
+            ['NOK', true, 'Norwegian krone is invoiced'],
+            ['GBP', true, 'pound sterling is invoiced'],
+            ['SEK', true, 'Swedish krona is invoiced'],
+            ['USD', true, 'US dollar is invoiced'],
+            ['DKK', true, 'Danish krone is invoiced'],
+            ['EUR', true, 'euro is invoiced'],
+            ['CHF', false, 'Swiss franc is not'],
+            ['PLN', false, 'Polish zloty is not'],
+        ];
+        foreach ($cases as [$currency, $offered, $description]) {
+            $GLOBALS['__twoinc_test_currency'] = $currency;
+            $GLOBALS['__twoinc_test_logs'] = [];
+            WC_Twoinc::reset_withhold_log_guard();
+            $gateway = new class () extends WC_Twoinc {
+                public $enabled = 'yes';
+
+                public function __construct()
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                }
+
+                public function get_api_key_verification_status()
+                {
+                    return ['status' => 'ok', 'code' => 200, 'body' => null];
+                }
+            };
+            TinyAssert::same($offered, $gateway->is_available(), $description);
+            $logged = implode("\n", array_column($GLOBALS['__twoinc_test_logs'], 'message'));
+            TinyAssert::same(!$offered, strpos($logged, "basket currency $currency") !== false, $description . ": logged [$logged]");
+        }
+        unset($GLOBALS['__twoinc_test_currency']);
+    }
+
     private static function testEveryWithholdingBranchNamesItsReasonInTheLog(): void
     {
         $make_gateway = static function (array $options, $verify_code, $record) {
@@ -820,8 +864,16 @@ final class BrandConfigSpec
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
             }
 
+            public function get_merchant_available_terms(): array
+            {
+                return [30];
+            }
+
             public function get_option($key, $empty_value = null)
             {
+                if ($key === 'payment_terms_days') {
+                    return [30];
+                }
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
@@ -1193,12 +1245,15 @@ final class BrandConfigSpec
             ['Business invoice - %s days', 'Business invoice - %s days', 'a placeholder is literal text, not a substitution site'],
             ['5% on invoice', '5% on invoice', 'a literal percent survives'],
             ['Faktura & "kredit" <30 dagar>', 'Faktura & "kredit" <30 dagar>', 'quotes, ampersands and angle brackets reach core unaltered'],
-            ['   ', 'Two', 'a whitespace-only title falls back to the brand product name'],
-            ['', 'Two', 'an empty title falls back to the brand product name'],
-            [null, 'Business invoice', 'a shop that never saved the setting gets the shipped default, which carries no placeholder'],
+            ['   ', 'Business invoice', 'a whitespace-only title falls back to the default title'],
+            ['', 'Business invoice', 'an empty title falls back to the default title'],
+            [null, 'Business invoice', 'a shop that never saved the setting gets the default title'],
+            ['', 'Bedriftsfaktura', 'the default title is in the shop\'s language', ['Business invoice' => 'Bedriftsfaktura']],
         ];
 
-        foreach ($cases as [$stored, $expected, $description]) {
+        foreach ($cases as $case) {
+            [$stored, $expected, $description] = $case;
+            $GLOBALS['__twoinc_test_translations'] = $case[3] ?? [];
             $gateway = self::save_gateway(true);
             $gateway->init_form_fields();
             $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()] = $stored === null
@@ -1208,6 +1263,156 @@ final class BrandConfigSpec
 
             TinyAssert::same($expected, $gateway->get_pay_title(), $description);
         }
+        $GLOBALS['__twoinc_test_translations'] = [];
+        $fresh = self::save_gateway(true);
+        $fresh->init_form_fields();
+        TinyAssert::same(['', 'Business invoice'], [$fresh->form_fields['title']['default'], $fresh->form_fields['title']['placeholder']], 'nothing is stored as the title at install; the field shows the default as its placeholder');
+    }
+
+    /**
+     * Given a title an earlier version stored at install in English; When the
+     * plugin loads once; Then it is cleared so the default shows in the shop's
+     * language, and nothing else is touched (TWO-27109).
+     */
+    private static function testTheEnglishInstallTitleIsClearedOnce(): void
+    {
+        $option_key = 'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings';
+        $done = WC_Twoinc_Brand::prefixed_name('english_install_title_cleared');
+        // [saved title (null: no settings row), already done, title after, why]
+        $cases = [
+            ['Pay with Tillit', false, '', 'the oldest install title'],
+            ['Pay in 15 days with invoice', false, '', 'the 15-day install title'],
+            ['Business invoice 30 days', false, '', 'the 30-day install title'],
+            ['Business invoice %s days', false, '', 'the placeholder install title'],
+            ['Business invoice - %s days', false, '', 'the dashed placeholder install title'],
+            ['Business invoice', false, '', 'the latest install title'],
+            ['Business invoice ', false, 'Business invoice ', 'only an exact match: a trailing space is an edit'],
+            ['business invoice', false, 'business invoice', 'only an exact match: case is an edit'],
+            ['Faktura', false, 'Faktura', 'a merchant title is kept'],
+            ['Business invoice', true, 'Business invoice', 'once done, a default title typed later is kept'],
+            [null, false, null, 'a fresh install has nothing to clear and gains no settings row'],
+        ];
+        foreach ($cases as [$title, $already, $want, $description]) {
+            $GLOBALS['__twoinc_test_options'] = $already ? [$done => '1'] : [];
+            if ($title !== null) {
+                $GLOBALS['__twoinc_test_options'][$option_key] = ['title' => $title, 'payment_subtitle' => 'Receive the invoice via EHF and PDF'];
+            }
+            new WC_Twoinc();
+            new WC_Twoinc();
+            $row = get_option($option_key, null);
+            TinyAssert::same($want, is_array($row) ? ($row['title'] ?? null) : null, $description);
+            if ($title !== null) {
+                TinyAssert::same('Receive the invoice via EHF and PDF', $row['payment_subtitle'] ?? null, $description . ': the subtitle is never touched');
+            }
+            TinyAssert::same('1', get_option($done), $description . ': marked done');
+        }
+        $GLOBALS['__twoinc_test_options'] = [];
+    }
+
+    /**
+     * A shop that never saved a term selection offers the account's default
+     * term, the one its orders were booked on, so the refusal of an empty
+     * offered set does not turn it away (TWO-27109).
+     */
+    private static function testAShopThatNeverChoseTermsOffersItsDefaultTerm(): void
+    {
+        $option_key = 'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings';
+        $absent = 'absent';
+        // [settings row (null: none), record read, account default, offered, selection after, logged, why]
+        $cases = [
+            [['title' => 'Faktura'], true, 30, [14, 30, 60], [30], false, 'never saved: the default term is ticked'],
+            [null, true, 30, [14, 30], [30], false, 'a fresh install that never opened the settings: the same'],
+            [['api_key' => 'key', 'payment_terms_days' => []], true, 30, [14, 30], [30], false, 'the [] a first key save stores before the record is read is not a choice'],
+            [['merchant_id' => 'mid', 'payment_terms_days' => ''], true, 30, [14, 30], [30], false, 'nor is the blank WooCommerce persists from its own read of the unset field'],
+            [['payment_terms_days' => [60]], true, 30, [30, 60], [60], false, 'an existing selection is kept'],
+            [['payment_terms_custom_days' => '45'], true, 30, [30, 45], $absent, false, 'a custom term is a selection too'],
+            [['title' => 'Faktura'], true, 45, [14, 30], $absent, true, 'a default Two does not offer: nothing ticked, and the log says so'],
+            [['title' => 'Faktura'], true, 0, [14, 30], $absent, true, 'no account default: nothing ticked, and the log says so'],
+            [['title' => 'Faktura'], false, 30, [14, 30], $absent, false, 'the record not read yet: nothing judged'],
+        ];
+        foreach ($cases as [$row, $read, $default, $offered, $want, $logged, $description]) {
+            $GLOBALS['__twoinc_test_options'] = [
+                // Past the upgrade's one-time drop of a made-up default, covered by the row below.
+                WC_Twoinc_Brand::prefixed_name('merchant_due_in_days_dropped') => 'yes',
+                WC_Twoinc_Brand::prefixed_name('merchant_due_in_days') => $default,
+                WC_Twoinc_Brand::prefixed_name('merchant_available_terms') => json_encode($offered),
+            ];
+            if ($read) {
+                $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on')] = time();
+            }
+            if ($row !== null) {
+                $GLOBALS['__twoinc_test_options'][$option_key] = $row;
+            }
+            $GLOBALS['__twoinc_test_logs'] = [];
+            new WC_Twoinc();
+            new WC_Twoinc();
+            $after = get_option($option_key, null);
+            $selection = is_array($after) && array_key_exists('payment_terms_days', $after) ? $after['payment_terms_days'] : $absent;
+            TinyAssert::same($want, $selection, $description);
+            $warnings = array_values(array_filter(array_column($GLOBALS['__twoinc_test_logs'], 'message'), static function ($m) {
+                return strpos($m, 'No payment term is ticked') !== false;
+            }));
+            TinyAssert::same($logged ? 1 : 0, count($warnings), $description . ': logged once at most');
+        }
+
+        // With no API key saved the read cannot run, so nothing is queued, on any request.
+        $GLOBALS['__twoinc_test_options'] = [
+            $option_key => ['title' => 'Faktura'],
+            WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on') => time(),
+            WC_Twoinc_Brand::prefixed_name('merchant_due_in_days_dropped') => 'yes',
+        ];
+        $GLOBALS['__twoinc_test_as_schedule_calls'] = [];
+        $GLOBALS['__twoinc_test_as_scheduled'] = [];
+        new WC_Twoinc();
+        TinyAssert::same([], $GLOBALS['__twoinc_test_as_schedule_calls'], 'no key: no background read is queued');
+
+        // The upgrade itself: its one-time drop leaves no default, so the record is read again at once.
+        $GLOBALS['__twoinc_test_options'] = [
+            $option_key => ['api_key' => 'key', 'merchant_id' => 'mid'],
+            WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on') => time(),
+            WC_Twoinc_Brand::prefixed_name('merchant_due_in_days') => 14,
+            WC_Twoinc_Brand::prefixed_name('merchant_available_terms') => json_encode([14, 30]),
+        ];
+        $GLOBALS['__twoinc_test_http_response'] = ['response' => ['code' => 200], 'body' => json_encode(['id' => 'mid', 'due_in_days' => 30, 'available_terms' => [14, 30]])];
+        $GLOBALS['__twoinc_test_http_calls'] = [];
+        $GLOBALS['__twoinc_test_as_schedule_calls'] = [];
+        $GLOBALS['__twoinc_test_as_scheduled'] = [];
+        WC_Twoinc::reset_merchant_record_memo();
+        new WC_Twoinc();
+        new WC_Twoinc();
+        TinyAssert::same([], $GLOBALS['__twoinc_test_http_calls'], 'the request that builds the gateway, perhaps a buyer\'s, fetches nothing');
+        TinyAssert::same(
+            [['hook' => WC_Twoinc::merchant_record_refresh_hook(), 'unique' => true, 'async' => true]],
+            $GLOBALS['__twoinc_test_as_schedule_calls'],
+            'the record is read again in the background, queued once'
+        );
+        TinyAssert::same(null, get_option($option_key)['payment_terms_days'] ?? null, 'nothing is ticked on the dropped default');
+        WC_Twoinc::reset_merchant_record_memo();
+        (new WC_Twoinc())->refresh_merchant_record_caches(true);
+        TinyAssert::same([30], get_option($option_key)['payment_terms_days'] ?? null, 'the background read ticks the default the record gives, not the one dropped');
+        unset($GLOBALS['__twoinc_test_http_response']);
+        $GLOBALS['__twoinc_test_as_scheduled'] = [];
+
+        // The lazy path: the first merchant record read seeds the shop that has none.
+        $GLOBALS['__twoinc_test_options'] = [$option_key => ['api_key' => 'key', 'merchant_id' => 'mid']];
+        WC_Twoinc::reset_merchant_record_memo();
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->init_settings();
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
+            {
+                return ['response' => ['code' => 200], 'body' => json_encode(['id' => 'mid', 'due_in_days' => 30, 'available_terms' => [14, 30]])];
+            }
+        };
+        TinyAssert::same(true, $gateway->refresh_merchant_record_caches(true), 'the record is read');
+        TinyAssert::same([30], get_option($option_key)['payment_terms_days'] ?? null, 'the first record read ticks the default term');
+        TinyAssert::same([30], WC_Twoinc_Payment_Terms::get_available_terms($gateway), 'and it is offered at once');
+        WC_Twoinc::reset_merchant_record_memo();
+        $GLOBALS['__twoinc_test_options'] = [];
     }
 
     private static function testBrandLoaderReturnsTwoDefaults(): void
@@ -2776,6 +2981,8 @@ final class BrandConfigSpec
             public $calls = [];
             /** Canned make_request() reply; null keeps the bare 200 below. */
             public $response = null;
+            /** The terms the account offers and the admin ticks; empty offers none. */
+            public $offered = [30];
             private $allowlist;
 
             public function __construct($allowlist)
@@ -2789,8 +2996,16 @@ final class BrandConfigSpec
                 return 'mid';
             }
 
+            public function get_merchant_available_terms(): array
+            {
+                return $this->offered;
+            }
+
             public function get_option($key, $empty_value = null)
             {
+                if ($key === 'payment_terms_days') {
+                    return $this->offered;
+                }
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
@@ -2899,6 +3114,8 @@ final class BrandConfigSpec
             ['not_two', [], null, 'cannot be paid with Two', 'order is not a Two order'],
             ['veto', $consent + ['company_id' => '923456789'], null, 'Brand says no.', 'brand overlay vetoed payment'],
             ['plain', ['company_id' => '923456789'], null, 'must accept payment terms', 'the terms consent was not given'],
+            ['currency', $consent + ['company_id' => '923456789'], null, 'not available for orders in CHF', 'the order is in a currency Two does not invoice in'],
+            ['no_terms', $consent + ['company_id' => '923456789'], null, 'has no payment term available', 'no payment term is offered, so no term anyone chose could be booked'],
             ['plain', $consent + ['company_id' => ''], null, 'select your company', 'no company captured'],
             ['country', $consent + ['company_id' => '923456789', 'billing_country' => 'DE'], null, 'not available for this order', 'buyer country off the allowlist'],
             ['declined', $consent + ['company_id' => '923456789'], null, 'not available for this order', 'order intent declined this company'],
@@ -2913,6 +3130,12 @@ final class BrandConfigSpec
 
             $order = new class extends StubOrder {
                 public $saved_meta = [];
+                public $currency = 'NOK';
+
+                public function get_currency()
+                {
+                    return $this->currency;
+                }
 
                 public function update_meta_data($key, $value)
                 {
@@ -2936,6 +3159,7 @@ final class BrandConfigSpec
                 }
             };
             $order->payment_method = $mode === 'not_two' ? 'cod' : WC_Twoinc_Brand::get('gateway_id');
+            $order->currency = $mode === 'currency' ? 'CHF' : 'NOK';
 
             $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
             $GLOBALS['__twoinc_test_notices'] = [];
@@ -2953,6 +3177,9 @@ final class BrandConfigSpec
 
             $gateway = self::buyerCountryGateway($mode === 'country' ? ['NL'] : null);
             $gateway->response = $response;
+            if ($mode === 'no_terms') {
+                $gateway->offered = [];
+            }
             $result = $gateway->process_payment(42);
 
             if ($mode === 'veto') {
@@ -3238,8 +3465,16 @@ final class BrandConfigSpec
                 return 'mid';
             }
 
+            public function get_merchant_available_terms(): array
+            {
+                return [30];
+            }
+
             public function get_option($key, $empty_value = null)
             {
+                if ($key === 'payment_terms_days') {
+                    return [30];
+                }
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
@@ -8612,8 +8847,9 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-40. Three service hosts, three INDEPENDENT developer overrides,
-     * every one of them refused on anything that could be a production shop.
+     * TWO-40, TWO-27109. Three service hosts, three INDEPENDENT developer
+     * overrides under the names the other Two plugins use, honoured only
+     * where WordPress says the site is a developer's.
      *
      * The checkout-page override matters on its own rather than riding on the
      * API one: that host is loaded by the BUYER'S BROWSER (sole-trader signup,
@@ -8622,90 +8858,80 @@ final class BrandConfigSpec
      */
     private static function testDevHostOverridesAreIndependentAndProductionSafe(): void
     {
-        $make = static function (array $options) {
-            return new class ($options) extends WC_Twoinc {
-                private $options;
-                public function __construct($options)
+        $make = static function (string $mode) {
+            return new class ($mode) extends WC_Twoinc {
+                private $mode;
+                public function __construct($mode)
                 {
                     $this->id = WC_Twoinc_Brand::get('gateway_id');
-                    $this->options = $options;
+                    $this->mode = $mode;
                 }
                 public function get_option($key, $empty_value = null)
                 {
-                    return $this->options[$key] ?? $empty_value ?? '';
+                    return $key === 'checkout_env' ? $this->mode : ($empty_value ?? '');
                 }
             };
         };
+        $vars = ['TWO_API_BASE_URL', 'TWO_CHECKOUT_BASE_URL', 'TWO_PORTAL_BASE_URL', 'TWOINC_DEV_API_HOST', 'TWOINC_DEV_CHECKOUT_HOST', 'TWOINC_DEV_PORTAL_HOST'];
+        $prod = ['https://api.two.inc', 'https://checkout.two.inc', 'https://portal.two.inc/auth/merchant/signup'];
 
-        // Given: a dev-sniffed shop with production stored
-        $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
-        putenv('TWOINC_DEV_API_HOST=http://portal.localhost/api');
-        $gateway = $make(['checkout_env' => 'production']);
+        // [WordPress environment type, stored mode, variables set, API host, checkout host, signup URL, why]
+        $cases = [
+            ['local', 'production', ['TWO_API_BASE_URL' => 'http://portal.localhost/api'],
+                'http://portal.localhost/api', 'https://checkout.staging.two.inc', 'https://portal.two.inc/auth/merchant/signup',
+                'only the API host moves; the others follow its environment or fall back on their own'],
+            ['development', 'production', ['TWO_API_BASE_URL' => 'http://portal.localhost/api', 'TWO_CHECKOUT_BASE_URL' => 'https://checkout.tunnel.example'],
+                'http://portal.localhost/api', 'https://checkout.tunnel.example', 'https://portal.two.inc/auth/merchant/signup',
+                'the checkout page moves on its own variable'],
+            ['local', 'production', ['TWO_PORTAL_BASE_URL' => 'http://portal.localhost/'],
+                'https://api.two.inc', 'https://checkout.two.inc', 'http://portal.localhost/auth/merchant/signup',
+                'the portal override replaces the origin and keeps the brand\'s signup path'],
+            ['local', 'sandbox', ['TWO_API_BASE_URL' => 'https://api.staging.two.inc'],
+                'https://api.staging.two.inc', 'https://checkout.staging.two.inc', 'https://portal.two.inc/auth/merchant/signup',
+                'on a developer\'s site the override applies whatever environment is stored, as on Magento'],
+            ['local', 'production', ['TWOINC_DEV_API_HOST' => 'http://legacy.localhost/api'],
+                'http://legacy.localhost/api', 'https://checkout.staging.two.inc', 'https://portal.two.inc/auth/merchant/signup',
+                'the old name is still read for one release'],
+            ['local', 'production', ['TWOINC_DEV_API_HOST' => 'http://legacy.localhost/api', 'TWO_API_BASE_URL' => 'http://portal.localhost/api'],
+                'http://portal.localhost/api', 'https://checkout.staging.two.inc', 'https://portal.two.inc/auth/merchant/signup',
+                'the shared name wins over the old one'],
+            ['production', 'production', array_fill_keys($vars, 'http://leaked.example'),
+                $prod[0], $prod[1], $prod[2], 'a production site honours none, even when every variable leaks in'],
+            ['staging', 'production', array_fill_keys($vars, 'http://leaked.example'),
+                $prod[0], $prod[1], $prod[2], 'a staging site is not a developer\'s site'],
+        ];
+        foreach ($cases as [$type, $mode, $set, $api, $checkout, $signup, $description]) {
+            $GLOBALS['__twoinc_test_wp_environment_type'] = $type;
+            $GLOBALS['__twoinc_test_logs'] = [];
+            foreach ($vars as $var) {
+                putenv(isset($set[$var]) ? "$var={$set[$var]}" : $var);
+            }
+            $gateway = $make($mode);
+            TinyAssert::same(
+                [$api, $checkout, $signup],
+                [$gateway->get_twoinc_checkout_host(), WC_Twoinc_Helper::get_environment_host('checkout', $gateway), WC_Twoinc_Helper::get_merchant_portal_signup_url($gateway)],
+                $description
+            );
+        }
 
-        // When: only the API override is set
-        // Then: only the API host moves. The other two fall back on their own
-        // rather than inheriting it — the whole point of them being separate.
-        TinyAssert::same('http://portal.localhost/api', $gateway->get_twoinc_checkout_host());
-        TinyAssert::same(
-            'https://checkout.staging.two.inc',
-            WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
-        );
-        TinyAssert::same(
-            'https://portal.two.inc/auth/merchant/signup',
-            WC_Twoinc_Helper::get_merchant_portal_signup_url($gateway)
-        );
+        // The old name says what replaces it, once per request.
+        $GLOBALS['__twoinc_test_wp_environment_type'] = 'local';
+        foreach ($vars as $var) {
+            putenv($var);
+        }
+        putenv('TWOINC_DEV_CHECKOUT_HOST=https://checkout.legacy.example');
+        $GLOBALS['__twoinc_test_logs'] = [];
+        WC_Twoinc_Helper::get_dev_host_override('checkout', $make('production'));
+        WC_Twoinc_Helper::get_dev_host_override('checkout', $make('production'));
+        $logged = array_values(array_filter(array_column($GLOBALS['__twoinc_test_logs'], 'message'), static function ($m) {
+            return strpos($m, 'TWOINC_DEV_CHECKOUT_HOST is deprecated') !== false && strpos($m, 'set TWO_CHECKOUT_BASE_URL instead') !== false;
+        }));
+        TinyAssert::same(1, count($logged), 'the deprecation is logged once, naming the replacement');
+        putenv('TWOINC_DEV_CHECKOUT_HOST');
 
-        // When: the checkout-page override is set too
-        putenv('TWOINC_DEV_CHECKOUT_HOST=https://checkout.tunnel.example');
-        TinyAssert::same(
-            'https://checkout.tunnel.example',
-            WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
-        );
-        // And the sole-trader signup page follows it, because it is built from
-        // that same host rather than from a second resolution of its own.
-        TinyAssert::same(
-            'https://checkout.tunnel.example/soletrader/signup',
-            WC_Twoinc_Sole_Trader::get_signup_page_url($gateway)
-        );
-        // The API host is unmoved by it.
-        TinyAssert::same('http://portal.localhost/api', $gateway->get_twoinc_checkout_host());
-
-        // When: the portal override is set
-        // Then: the ORIGIN is replaced and the brand's own signup path kept.
-        putenv('TWOINC_DEV_PORTAL_HOST=http://portal.localhost/');
-        TinyAssert::same(
-            'http://portal.localhost/auth/merchant/signup',
-            WC_Twoinc_Helper::get_merchant_portal_signup_url($gateway)
-        );
-
-        // When: the same variables leak into a real merchant shop's process
-        // Then: not one of them is honoured. This is the gate that has to hold
-        // even if a deployment accidentally inherits a developer's env.
-        $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
-        $production = $make(['checkout_env' => 'production']);
-        TinyAssert::same('https://api.two.inc', $production->get_twoinc_checkout_host());
-        TinyAssert::same(
-            'https://checkout.two.inc',
-            WC_Twoinc_Helper::get_environment_host('checkout', $production)
-        );
-        TinyAssert::same(
-            'https://portal.two.inc/auth/merchant/signup',
-            WC_Twoinc_Helper::get_merchant_portal_signup_url($production)
-        );
-
-        // And: a merchant who has explicitly chosen an environment has said
-        // which one they want, so an env var does not get to overrule that
-        // either — even back on the dev-sniffed hostname.
-        $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
-        $explicit = $make(['checkout_env' => 'sandbox']);
-        TinyAssert::same('https://api.sandbox.two.inc', $explicit->get_twoinc_checkout_host());
-        TinyAssert::same(
-            'https://checkout.sandbox.two.inc',
-            WC_Twoinc_Helper::get_environment_host('checkout', $explicit)
-        );
-
-        // And: an unknown service name never resolves to an override.
-        TinyAssert::same('', WC_Twoinc_Helper::get_dev_host_override('nonexistent', $gateway));
+        // An unknown service name never resolves to an override.
+        TinyAssert::same('', WC_Twoinc_Helper::get_dev_host_override('nonexistent', $make('production')));
+        unset($GLOBALS['__twoinc_test_wp_environment_type']);
     }
 
     /**
@@ -13168,6 +13394,158 @@ final class BrandConfigSpec
     }
 
     /**
+     * The key and environment are saved as one pair or not at all, and a pair
+     * Two could not judge never replaces one it last accepted (TWO-27109).
+     */
+    private static function testTheKeyAndEnvironmentSaveAsOnePair(): void
+    {
+        $down = new WP_Error('http_request_failed', 'could not resolve host');
+        $ok = ['response' => ['code' => 200], 'body' => '{"id":"merchant-1","short_name":"shop"}'];
+        $no = ['response' => ['code' => 401], 'body' => '{}'];
+        $sandbox = 'https://api.sandbox.two.inc';
+        $production = 'https://api.two.inc';
+        // [saved key, saved env, last verdict, typed key, posted env, Two's answer,
+        //  saved key after, saved env after, notice (null: the pair is not judged), blocking, host judged against, why]
+        $cases = [
+            ['old-key', 'sandbox', null, '', 'sandbox', $ok, 'old-key', 'sandbox', null, false, null, 'an empty key field keeps the saved key and judges nothing'],
+            ['old-key ', 'sandbox', null, '', 'sandbox', $ok, 'old-key', 'sandbox', null, false, null, 'a saved key with stray spaces is the same key'],
+            ['old-key', 'sandbox', null, '', 'production', $ok, 'old-key', 'production', 'API key verified', false, $production, 'a new environment is checked with the saved key against that environment'],
+            ['old-key', 'sandbox', null, '', 'production', $no, 'old-key', 'sandbox', 'rejected that API key', true, $production, 'a key the new environment rejects keeps the environment too'],
+            ['old-key', 'sandbox', null, ' new-key ', 'sandbox', $ok, 'new-key', 'sandbox', 'API key verified', false, $sandbox, 'a typed key is trimmed and checked against its environment'],
+            ['old-key', 'sandbox', 'ok', 'new-key', 'production', $down, 'old-key', 'sandbox', 'could not check', true, $production, 'an unjudged pair never replaces one Two last accepted'],
+            ['old-key', 'sandbox', 'legacy-ok', 'new-key', 'sandbox', $down, 'old-key', 'sandbox', 'could not check', true, $sandbox, 'a shop mid-upgrade keeps the verdict from the old cache'],
+            ['old-key', 'sandbox', 'invalid', 'new-key', 'sandbox', $down, 'new-key', 'sandbox', 'could not be reached', false, $sandbox, 'a pair Two last rejected may be replaced while Two is down'],
+            ['old-key', 'sandbox', null, 'new-key', 'sandbox', $down, 'new-key', 'sandbox', 'could not be reached', false, $sandbox, 'with no verdict at all the merchant can still save'],
+            ['old-key', 'SANDBOX ', 'ok', 'new-key', 'sandbox', $down, 'old-key', 'SANDBOX ', 'could not check', true, $sandbox, 'a legacy spelling of the environment finds its own verdict'],
+            ['', 'sandbox', null, 'new-key', 'production', $down, 'new-key', 'production', 'could not be reached', false, $production, 'a fresh install saves a pair Two could not judge'],
+        ];
+
+        foreach ($cases as [$key, $env, $verdict, $typed, $posted_env, $response, $want_key, $want_env, $notice, $blocking, $host, $description]) {
+            $GLOBALS['__twoinc_test_options'] = [];
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $GLOBALS['__twoinc_test_http_calls'] = [];
+            if ($verdict === 'legacy-ok') {
+                set_transient(WC_Twoinc::verification_cache_key($key), ['status' => 'ok', 'code' => 200]);
+            } elseif ($verdict !== null) {
+                update_option(WC_Twoinc_Brand::prefixed_name('api_key_verdicts'), [md5($key . '|sandbox') => $verdict]);
+            }
+            $gateway = self::save_gateway(true);
+            $gateway->init_form_fields();
+            $option_key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$option_key] = ['api_key' => $key, 'checkout_env' => $env, 'title' => 'stored title'];
+            $gateway->init_settings();
+            $GLOBALS['__twoinc_test_http_response'] = $response;
+            $GLOBALS['__twoinc_test_admin_messages'] = [];
+            $GLOBALS['__twoinc_test_admin_errors'] = [];
+            $gateway->test_post_data = [
+                $gateway->get_field_key('api_key') => $typed,
+                $gateway->get_field_key('checkout_env') => $posted_env,
+                $gateway->get_field_key('title') => 'edited title',
+                $gateway->get_field_key('payment_terms_days') => ['30'],
+            ];
+            $gateway->process_admin_options();
+            $saved = get_option($option_key, []);
+
+            TinyAssert::same([$want_key, $want_env], [$saved['api_key'] ?? null, $saved['checkout_env'] ?? null], $description);
+            TinyAssert::same('edited title', $saved['title'] ?? null, $description . ': other fields still save');
+            $verifies = array_values(array_filter(array_column($GLOBALS['__twoinc_test_http_calls'], 'url'), static function ($url) {
+                return strpos($url, '/v1/merchant/verify_api_key') !== false;
+            }));
+            // An unjudged save makes no check of its own (no notice says one ran); the tax code section may still read the saved key's profile.
+            if ($host !== null) {
+                TinyAssert::same($host, (string) preg_replace('#^(https://[^/]+).*$#', '$1', (string) ($verifies[0] ?? '')), $description . ': host the key was checked against');
+            }
+            $errors = implode("\n", $GLOBALS['__twoinc_test_admin_errors']);
+            $messages = implode("\n", $GLOBALS['__twoinc_test_admin_messages']);
+            if ($notice === null) {
+                TinyAssert::same(['', ''], [$errors, $messages], $description . ': no notice');
+            } else {
+                TinyAssert::true(strpos($blocking ? $errors : $messages, $notice) !== false, $description . ": notice [$errors|$messages]");
+                TinyAssert::same($blocking ? 1 : 0, count($GLOBALS['__twoinc_test_admin_errors']), $description . ": one error, the pair's [$errors]");
+                TinyAssert::same('', $blocking ? $messages : $errors, $description . ': nothing in the other bucket');
+            }
+        }
+        unset($GLOBALS['__twoinc_test_http_response']);
+
+        // Checks of other keys, however many, never push out the saved pair's verdict.
+        $GLOBALS['__twoinc_test_options'] = [];
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $gateway = self::save_gateway(true);
+        $gateway->init_form_fields();
+        $option_key = $gateway->get_option_key();
+        $GLOBALS['__twoinc_test_options'][$option_key] = ['api_key' => 'old-key', 'checkout_env' => 'sandbox', 'title' => 'stored title'];
+        $gateway->init_settings();
+        $gateway->cache_verification_result('old-key', ['code' => 200, 'body' => ['id' => 'merchant-1']]);
+        for ($i = 1; $i <= 12; $i++) {
+            $gateway->cache_verification_result('typed-key-' . $i, ['code' => 401, 'body' => []]);
+        }
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $GLOBALS['__twoinc_test_http_response'] = $down;
+        $GLOBALS['__twoinc_test_admin_errors'] = [];
+        $gateway->test_post_data = [
+            $gateway->get_field_key('api_key') => 'new-key',
+            $gateway->get_field_key('checkout_env') => 'sandbox',
+            $gateway->get_field_key('payment_terms_days') => ['30'],
+        ];
+        $gateway->process_admin_options();
+        TinyAssert::same('old-key', get_option($option_key, [])['api_key'] ?? null, 'twelve checks of other keys later, an outage save still keeps the pair Two accepted');
+        unset($GLOBALS['__twoinc_test_http_response']);
+    }
+
+    /** A vendor name is printable ASCII of at most 255 characters, refused alone, and a saved one is grandfathered (TWO-27109). */
+    private static function testTheVendorNameIsPrintableAsciiOfAtMost255(): void
+    {
+        // [saved, posted, saved after, refused, why]
+        $cases = [
+            ['', 'North Warehouse', 'North Warehouse', false, 'plain ASCII saves'],
+            ['', '  North Warehouse  ', 'North Warehouse', false, 'surrounding spaces are trimmed'],
+            ['Old', '', '', false, 'blank clears it'],
+            ['Old', str_repeat('a', 255), str_repeat('a', 255), false, '255 characters is the limit'],
+            ['Old', str_repeat('a', 256), 'Old', true, 'one more is refused'],
+            ['', 'Caf' . "\u{e9}" . ' Nord', '', true, 'an accented letter is refused'],
+            ['Old', "North\nWarehouse", 'Old', true, 'a line break is refused'],
+            ['Caf' . "\u{e9}" . ' Nord', 'Caf' . "\u{e9}" . ' Nord', 'Caf' . "\u{e9}" . ' Nord', false, 'a name saved before the rule, posted back unchanged, is let through'],
+            ['Caf' . "\u{e9}" . ' &amp; Co', 'Caf' . "\u{e9}" . ' & Co', 'Caf' . "\u{e9}" . ' &amp; Co', false, 'so is one with an ampersand, stored encoded and posted back decoded'],
+        ];
+        foreach ($cases as [$saved, $posted, $want, $refused, $description]) {
+            $GLOBALS['__twoinc_test_options'] = [];
+            $gateway = self::save_gateway(true);
+            $gateway->init_form_fields();
+            $option_key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$option_key] = ['vendor_name' => $saved, 'title' => 'stored title'];
+            $gateway->init_settings();
+            $GLOBALS['__twoinc_test_admin_messages'] = [];
+            $GLOBALS['__twoinc_test_admin_errors'] = [];
+            $gateway->test_post_data = [
+                $gateway->get_field_key('vendor_name') => $posted,
+                $gateway->get_field_key('title') => 'edited title',
+                $gateway->get_field_key('payment_terms_days') => ['30'],
+            ];
+            $gateway->process_admin_options();
+            $after = get_option($option_key, []);
+            TinyAssert::same($want, $after['vendor_name'] ?? null, $description);
+            TinyAssert::same('edited title', $after['title'] ?? null, $description . ': other fields still save');
+            $errors = implode("\n", $GLOBALS['__twoinc_test_admin_errors']);
+            TinyAssert::same($refused, strpos($errors, 'Enter a vendor name of at most 255 characters') !== false, $description . ": errors [$errors]");
+        }
+    }
+
+    /** The key field renders empty, with a note while a key is saved (TWO-27109). */
+    private static function testTheSavedKeyNeverReachesTheSettingsPage(): void
+    {
+        foreach ([['secret-key-1234', true, 'a saved key is noted, not shown'], ['', false, 'no key, no note']] as [$key, $noted, $description]) {
+            $GLOBALS['__twoinc_test_options'] = [];
+            $gateway = self::save_gateway(true);
+            $gateway->init_form_fields();
+            $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()] = ['api_key' => $key];
+            $gateway->init_settings();
+            $html = (string) $gateway->generate_api_key_with_verification_html('api_key', $gateway->form_fields['api_key']);
+            TinyAssert::true($key === '' || strpos($html, $key) === false, $description . ': the key is not in the page');
+            TinyAssert::same($noted, strpos($html, 'A key is saved. Leave this blank to keep it.') !== false, $description);
+        }
+    }
+
+    /**
      * is_available() / the checkout bootstrap must not fire a live
      * verify_api_key() HTTP call on every evaluation — get_api_key_verification_status()
      * is expected to serve the second call from its transient cache
@@ -16902,7 +17280,7 @@ final class AnchorOnlyHtmlSpec
  */
 final class SubtitleSaveValidationSpec
 {
-    private const REJECTION = 'Subtitle accepts plain text and a single link only; "%s" would be shown as "%s".';
+    private const REJECTION = 'Subtitle accepts plain text only, with no links or other markup; "%s" would be shown as "%s".';
 
     public static function runAll(): void
     {
@@ -16910,6 +17288,7 @@ final class SubtitleSaveValidationSpec
             'testTheValidatorAcceptsOnlyWhatTheTileRendersUnchanged',
             'testARejectedSubtitleKeepsTheStoredValueAndReportsWhy',
             'testTheRejectionIsTranslated',
+            'testASavedSubtitleIsGrandfatheredAndShownAsPlainText',
         ];
         foreach ($tests as $test) {
             self::$test();
@@ -16936,13 +17315,9 @@ final class SubtitleSaveValidationSpec
             ['Pay later, interest free', 'Pay later, interest free', 'plain copy saves unchanged'],
             ['  Pay later  ', 'Pay later', 'surrounding whitespace is trimmed, as every other text field is'],
             ["Don't wait & save", "Don't wait & save", 'an apostrophe and an ampersand are plain text, not markup'],
-            [
-                '<a href="https://faq.example.test/x">read more</a>',
-                '<a href="https://faq.example.test/x">read more</a>',
-                'the one link the tile allows saves unchanged',
-            ],
-            ['<b>Pay</b> later', null, 'a dropped tag is refused'],
-            ['<a href="javascript:alert(1)">go</a>', null, 'so is a link the escaper would strip of its anchor'],
+            ['<a href="https://faq.example.test/x">read more</a>', null, 'a link is refused: the subtitle is plain text'],
+            ['<b>Pay</b> later', null, 'so is any other tag'],
+            ['<a href="javascript:alert(1)">go</a>', null, 'and a script link'],
         ];
 
         foreach ($cases as list($posted, $expected, $description)) {
@@ -16959,7 +17334,7 @@ final class SubtitleSaveValidationSpec
                     sprintf(
                         self::REJECTION,
                         esc_html($posted),
-                        esc_html(WC_Twoinc_Helper::escape_anchor_only_html($posted))
+                        esc_html(trim(strip_tags($posted)))
                     ),
                     $refusal,
                     $description
@@ -17004,11 +17379,45 @@ final class SubtitleSaveValidationSpec
         }
     }
 
+    /** A subtitle saved with a link before the rule saves again unchanged, and the tile shows its words escaped (TWO-27109). */
+    private static function testASavedSubtitleIsGrandfatheredAndShownAsPlainText(): void
+    {
+        $linked = 'Terms & <a href="https://faq.example.test/x">FAQ</a>';
+        // [saved, posted, saved after, refused, tile shows, why]
+        $cases = [
+            [$linked, $linked, $linked, false, 'Terms &amp; FAQ', 'a linked subtitle saved earlier is let through and shown as its words'],
+            [$linked, 'Terms & <b>FAQ</b>', $linked, true, 'Terms &amp; FAQ', 'an edit that still carries markup is refused'],
+            ['', "Pay later <script>x</script>", '', true, null, 'new markup is refused'],
+            ['', 'Pay later & save', 'Pay later & save', false, 'Pay later &amp; save', 'plain text is escaped, not interpreted'],
+        ];
+        foreach ($cases as [$saved, $posted, $want, $refused, $shown, $description]) {
+            $gateway = self::gateway();
+            $gateway->init_form_fields();
+            $key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$key] = ['payment_subtitle' => $saved];
+            $gateway->init_settings();
+            $gateway->test_post_data = [$gateway->get_field_key('payment_subtitle') => $posted];
+            $GLOBALS['__twoinc_test_admin_errors'] = [];
+            try {
+                $gateway->process_admin_options();
+                TinyAssert::same($want, $GLOBALS['__twoinc_test_options'][$key]['payment_subtitle'] ?? null, $description);
+                TinyAssert::same($refused, $GLOBALS['__twoinc_test_admin_errors'] !== [], $description . ': refusal');
+                if ($shown !== null) {
+                    $tile = self::gateway();
+                    $tile->init_settings();
+                    TinyAssert::same('<div class="twoinc-payment-subtitle">' . $shown . '</div>', $tile->get_pay_subtitle(), $description . ': tile');
+                }
+            } finally {
+                unset($GLOBALS['__twoinc_test_options'][$key]);
+            }
+        }
+    }
+
     /** A refusal the merchant cannot read is no better than the silent strip it replaces. */
     private static function testTheRejectionIsTranslated(): void
     {
         $languages = dirname(__DIR__, 2) . '/languages/';
-        $msgid = 'Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\".';
+        $msgid = 'Subtitle accepts plain text only, with no links or other markup; \"%1$s\" would be shown as \"%2$s\".';
 
         TinyAssert::true(
             strpos((string) file_get_contents($languages . 'twoinc-payment-gateway.pot'), $msgid) !== false,
@@ -17667,8 +18076,16 @@ final class CaptureMemorySpec
                 return 'mid';
             }
 
+            public function get_merchant_available_terms(): array
+            {
+                return [30];
+            }
+
             public function get_option($key, $empty_value = null)
             {
+                if ($key === 'payment_terms_days') {
+                    return [30];
+                }
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 

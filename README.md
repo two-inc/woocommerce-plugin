@@ -146,18 +146,22 @@ internal environments for the use of Two employees only. The stored mode is the
 environment the gateway talks to; the shop's hostname plays no part.
 
 `docker/config/local.json` seeds `checkout_env` as `sandbox`, so a bare
-`docker compose up` talks to sandbox. The wpcli bootstrap and `make configure`
-store `production` whenever `TWO_API_BASE_URL` is set, and on a shop with
-production stored the developer overrides apply:
-`get_effective_environment_mode()` resolves the environment from
-`TWOINC_DEV_API_HOST`, so `https://api.staging.two.inc` gives `staging`. Use
-the merchant key for whichever environment that resolves to.
+`docker compose up` talks to sandbox. The developer overrides
+`TWO_API_BASE_URL`, `TWO_CHECKOUT_BASE_URL` and `TWO_PORTAL_BASE_URL`, the
+names the other Two plugins use, apply only on a site whose WordPress
+environment type (`WP_ENVIRONMENT_TYPE`) is `local` or `development`;
+docker-compose sets `local` (TWO-27109). `get_effective_environment_mode()`
+then resolves the environment from `TWO_API_BASE_URL`, so
+`https://api.staging.two.inc` gives `staging`. Use the merchant key for
+whichever environment that resolves to. The old `TWOINC_DEV_API_HOST`,
+`TWOINC_DEV_CHECKOUT_HOST` and `TWOINC_DEV_PORTAL_HOST` names are still read
+for this release, with a deprecation line in the log.
 
 `make run` exports `TWO_API_BASE_URL` (staging for an `@two.inc` gcloud
-account, sandbox otherwise) and docker-compose threads it through as
-`TWOINC_DEV_API_HOST`. A bare `docker compose up -d` does not, which leaves
-that variable empty in the container — harmless on localhost, but check it with
-`docker compose exec -T wordpress env | grep TWOINC_DEV` before concluding the key is
+account, sandbox otherwise) and docker-compose passes it to the wordpress
+container. A bare `docker compose up -d` does not, which leaves that variable
+empty in the container. That is harmless on localhost, but check it with
+`docker compose exec -T wordpress env | grep TWO_` before concluding the key is
 wrong.
 
 ### Clearing a cached API-key verdict
@@ -183,6 +187,16 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 
 `200` is a good key for that environment; `401` means the key and the resolved
 environment disagree.
+
+Saving the settings treats the API key and the Environment as one pair
+(TWO-27109). The key field always renders empty, and leaving it empty keeps the
+saved key. A changed pair is checked against the environment it would be saved
+with: a pair Two accepts is saved, and one Two rejects keeps both saved values.
+When Two cannot judge the new pair, it replaces the saved one only if Two's last
+definitive answer about the saved pair was not ok. That answer is kept per key
+and environment in the `twoinc_api_key_verdicts` option, which is not cleared by
+`wp transient delete`. A shop upgraded from an earlier build reads the transient
+above until its first answer is recorded there. Other fields save either way.
 
 If you wish to use the staging site,
 
@@ -1042,6 +1056,21 @@ no response), whatever the debug setting, so a request can be matched with
 Two's records. With debug logging on, every request's log line names its key
 too. `Idempotency-Key` and `X-Idempotency-Key` are reserved in any case: a
 Diagnostics custom header row cannot set either.
+
+## Payment terms offered at checkout
+
+An order is refused at create when no payment term is offered (TWO-27109), as on
+Two's other plugins. The offered terms are the ones ticked under Payment terms
+that Two also offers the merchant. A shop with no selection has the merchant account's
+default term ticked for it, once its record has been read: at construction,
+which is the upgrade step, and after every merchant record read. That is the
+term such a shop's orders were booked on before. A selection is a non-empty
+`payment_terms_days` or a custom term; the settings form refuses an empty one,
+so a stored `[]` or blank is not a choice. A selection is never changed. When
+the upgrade has dropped the stored default, the record is read again by a
+queued Action Scheduler action, never inline in the request that builds the
+gateway. When the account default is not among the terms Two offers, nothing is
+ticked and a warning is logged once per change.
 
 ## Post installation optional steps
 

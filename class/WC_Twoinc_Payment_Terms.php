@@ -10,8 +10,8 @@
  * Term availability: `get_available_terms()` is the single seam — the
  * merchant's ticked presets intersected with the backend's offered set
  * (TWO-24812) plus an optional custom term, which that same set must also
- * offer. An empty result means "offer nothing": no term is sent and
- * the backend applies the account default. The merchant cannot save into that
+ * offer. An empty result means "offer nothing", and an order placed then is
+ * refused (TWO-27109). The merchant cannot save into that
  * empty state once terms are configured (see
  * WC_Twoinc::validate_two_payment_terms_field). Do not read term lists
  * anywhere else.
@@ -100,8 +100,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         /**
          * Whether the term feature is active: at least one term is offered. When
          * true a term is sent on the order and any configured surcharge applies.
-         * There is no merchant on/off toggle — the offered-term set is the single
-         * switch, and an empty set falls through to the account default.
+         * There is no merchant on/off toggle: the offered-term set is the single
+         * switch, and an order is refused at create while it is empty.
          */
         public static function is_enabled($gateway): bool
         {
@@ -115,9 +115,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * The merchant's ticked presets intersected with the backend's
          * `available_terms` (so a term the backend withdrew drops out even
          * while a stale admin subset still lists it), plus an optional
-         * custom term the backend must also offer. An empty result is
-         * meaningful: no term is offered, so none is sent and the backend
-         * applies the account default.
+         * custom term the backend must also offer. An empty result means
+         * no term is offered, and process_payment() refuses the order.
          *
          * @return int[]
          */
@@ -215,12 +214,23 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
+         * Buyer-facing refusal of an order placed while no term is offered.
+         */
+        public static function no_offered_term_message(): string
+        {
+            return sprintf(
+                /* translators: %s: the payment method's product name */
+                __('%s has no payment term available for this order. Please choose another payment method.', 'twoinc-payment-gateway'),
+                WC_Twoinc_Brand::get('product_name')
+            );
+        }
+
+        /**
          * The term the buyer chose when the merchant does not offer it: the
          * posted selection (the hidden checkout field) else the session's.
          * Such a choice must be refused, never turned into the default. 0 when
          * the buyer never chose a term, when the choice is offered, or when
-         * nothing is offered at all (the submit's deliberate fail-open on an
-         * empty set).
+         * nothing is offered at all (the submit refuses that case first).
          */
         public static function get_unoffered_chosen_term($gateway): int
         {

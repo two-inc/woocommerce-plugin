@@ -858,11 +858,6 @@ msgstr "Motivo: no se ha podido encontrar el ID de pedido de %s."
 msgid "The tracking number could not be attached to the %s order. The invoice will be sent without it."
 msgstr "No se ha podido adjuntar el número de seguimiento al pedido de %s. La factura se enviará sin él."
 
-#: class/WC_Twoinc.php:5627 class/WC_Twoinc.php:5639
-#, php-format
-msgid "Could not update order status to \"Fulfilled\" with %s."
-msgstr "No se ha podido actualizar el estado del pedido a \"Cumplido\" con %s."
-
 #: class/WC_Twoinc.php:5631 class/WC_Twoinc.php:5643 class/WC_Twoinc.php:5699
 #: class/WC_Twoinc.php:5707 class/WC_Twoinc.php:6684 class/WC_Twoinc.php:6697
 #: class/WC_Twoinc.php:7906 class/WC_Twoinc.php:8147
@@ -880,10 +875,6 @@ msgstr "Respuesta: %s"
 #, php-format
 msgid "%s has acknowledged the request to fulfil the order. An invoice will be sent to the buyer when the fulfilment is complete."
 msgstr "%s ha recibido la solicitud de cumplir el pedido. Se enviará una factura al comprador cuando se complete el cumplimiento."
-
-#: class/WC_Twoinc.php:5681 class/WC_Twoinc.php:5698 class/WC_Twoinc.php:5706
-msgid "Could not update status to \"Cancelled\"."
-msgstr "No se ha podido actualizar el estado a \"Cancelado\"."
 
 #: class/WC_Twoinc.php:5689
 #, php-format
@@ -946,12 +937,6 @@ msgstr "Mínimo de la plataforma %1$s, %2$s impuestos. Un valor aquí se interpr
 #: class/WC_Twoinc.php:6030
 msgid "Hide the payment method below this order value (store currency, on the tax basis selected below). Leave empty for no minimum."
 msgstr "Oculta el método de pago por debajo de este valor de pedido (moneda de la tienda, sobre la base imponible seleccionada abajo). Déjalo vacío para no aplicar ningún mínimo."
-
-#. translators: 1: the subtitle as typed, 2: what the checkout tile would render
-#: class/WC_Twoinc.php:6080
-#, php-format
-msgid "Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\"."
-msgstr "El subtítulo solo admite texto sin formato y un único enlace; \"%1$s\" se mostraría como \"%2$s\"."
 
 #: class/WC_Twoinc.php:6113
 msgid "Minimum order value must be a non-negative number."
@@ -1691,11 +1676,6 @@ msgstr "desplegado %s UTC"
 msgid "%s API key verified."
 msgstr "Clave API de %s verificada."
 
-#: class/WC_Twoinc.php:8914
-#, php-format
-msgid "%s rejected that API key, so the previously saved key was kept."
-msgstr "%s ha rechazado esa clave API, por lo que se ha conservado la clave guardada anteriormente."
-
 #: class/WC_Twoinc.php:8917
 #, php-format
 msgid "API key saved, but %s could not be reached to verify it."
@@ -2073,3 +2053,93 @@ msgstr "Comprobar estado con %s"
 #, php-format
 msgid "We are still confirming your order with %s."
 msgstr "Todavía estamos confirmando tu pedido con %s."
+
+#. translators: %s: the payment method's product name
+#: class/WC_Twoinc_Payment_Terms.php:223
+#, php-format
+msgid "%s has no payment term available for this order. Please choose another payment method."
+msgstr "%s no tiene ningún plazo de pago disponible para este pedido. Elija otro método de pago."
+
+#. translators: 1: the payment method's product name, 2: the order's currency code
+#: class/WC_Twoinc.php:6318
+#, php-format
+msgid "%1$s is not available for orders in %2$s. Please choose another currency or payment method."
+msgstr "%1$s no está disponible para pedidos en %2$s. Elija otra moneda u otro método de pago."
+
+#. translators: %s: the payment method's product name
+#: class/WC_Twoinc.php:9028
+#, php-format
+msgid "%s rejected that API key for the selected environment, so the previously saved API key and environment were kept."
+msgstr "%s rechazó esa clave de API para el entorno seleccionado, por lo que se conservaron la clave de API y el entorno guardados anteriormente."
+
+#. translators: %s: the payment method's product name
+#: class/WC_Twoinc.php:9035
+#, php-format
+msgid "%s could not check the new API key and environment, so the previously saved ones, which it last accepted, were kept. Save again once it can be reached."
+msgstr "%s no pudo comprobar la nueva clave de API y el nuevo entorno, por lo que se conservaron los guardados anteriormente, que aceptó la última vez. Guarde de nuevo cuando se pueda acceder."
+
+#: class/WC_Twoinc.php:7512
+msgid "A key is saved. Leave this blank to keep it."
+msgstr "Hay una clave guardada. Deje este campo en blanco para conservarla."
+
+#: class/WC_Twoinc.php:6152
+msgid "Enter a vendor name of at most 255 characters, using unaccented letters, digits, spaces and punctuation only, with no line breaks. The previously saved vendor name was kept."
+msgstr "Introduzca un nombre de proveedor de 255 caracteres como máximo, usando solo letras sin acentos, dígitos, espacios y signos de puntuación, sin saltos de línea. Se conservó el nombre de proveedor guardado anteriormente."
+
+#. translators: 1: the subtitle as typed, 2: what the checkout tile would show
+#: class/WC_Twoinc.php:6120
+#, php-format
+msgid "Subtitle accepts plain text only, with no links or other markup; \"%1$s\" would be shown as \"%2$s\"."
+msgstr "El subtítulo solo admite texto sin formato, sin enlaces ni otras etiquetas; \"%1$s\" se mostraría como \"%2$s\"."
+
+#: class/WC_Twoinc.php:4298
+msgid "Business invoice"
+msgstr "Factura de empresa"
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5677
+#, php-format
+msgid "%1$s order %2$s is cancelled, so it was not fulfilled."
+msgstr "El pedido de %1$s %2$s está cancelado, por lo que no se completó."
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5683
+#, php-format
+msgid "%1$s order %2$s was already sent for fulfilment, so it was not sent again."
+msgstr "El pedido de %1$s %2$s ya se envió para completarse, por lo que no se volvió a enviar."
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5774
+#, php-format
+msgid "%1$s order %2$s has been fulfilled, so it was not cancelled. A fulfilled order is refunded, not cancelled."
+msgstr "El pedido de %1$s %2$s ya se ha completado, por lo que no se canceló. Un pedido completado se reembolsa, no se cancela."
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5790
+#, php-format
+msgid "%1$s order %2$s cancelled."
+msgstr "Pedido de %1$s %2$s cancelado."
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5820
+#, php-format
+msgid "%1$s could not be reached, so %1$s order %2$s was not fulfilled. Set the order to Completed again to retry."
+msgstr "No se pudo contactar con %1$s, por lo que el pedido de %1$s %2$s no se completó. Vuelva a poner el pedido en Completado para reintentarlo."
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5822
+#, php-format
+msgid "%1$s could not be reached, so %1$s order %2$s was not cancelled. Set the order to Cancelled again to retry."
+msgstr "No se pudo contactar con %1$s, por lo que el pedido de %1$s %2$s no se canceló. Vuelva a poner el pedido en Cancelado para reintentarlo."
+
+#. translators: 1: the payment method's product name, 2: its order id, 3: the reason it gave
+#: class/WC_Twoinc.php:5835
+#, php-format
+msgid "%1$s refused to fulfil order %2$s: %3$s"
+msgstr "%1$s rechazó completar el pedido %2$s: %3$s"
+
+#. translators: 1: the payment method's product name, 2: its order id, 3: the reason it gave
+#: class/WC_Twoinc.php:5837
+#, php-format
+msgid "%1$s refused to cancel order %2$s: %3$s"
+msgstr "%1$s rechazó cancelar el pedido %2$s: %3$s"

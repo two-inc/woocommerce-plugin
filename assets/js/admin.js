@@ -251,8 +251,9 @@ jQuery(function ($) {
       .show();
   }
 
-  function verifyApiKey(apiKey) {
-    if (!apiKey || apiKey.length < 10) {
+  // useStored checks the saved key, which the page never holds.
+  function verifyApiKey(apiKey, useStored) {
+    if (!useStored && (!apiKey || apiKey.length < 10)) {
       $verificationIcon.hide();
       return;
     }
@@ -264,7 +265,8 @@ jQuery(function ($) {
       type: "POST",
       data: {
         action: "twoinc_verify_api_key",
-        api_key: apiKey,
+        api_key: useStored ? "" : apiKey,
+        stored: useStored ? 1 : 0,
         csrf_token: twoinc_admin.csrf_token
       },
       success: function (response) {
@@ -315,6 +317,8 @@ jQuery(function ($) {
 
   if ($apiKeyField.val()) {
     verifyApiKey($apiKeyField.val());
+  } else if (twoinc_admin.has_saved_key) {
+    verifyApiKey("", true);
   }
 
   // ── Payment terms config ────────────────────────────────────────────────
