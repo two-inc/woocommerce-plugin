@@ -9320,7 +9320,13 @@ if (!class_exists('WC_Twoinc')) {
             $slot = self::key_verdict_slot($key, $this->get_option('checkout_env'));
             unset($verdicts[$slot]);
             $verdicts[$slot] = $status === 'ok' ? 'ok' : 'invalid';
-            update_option(self::key_verdicts_option(), array_slice($verdicts, -self::KEY_VERDICTS_KEPT, null, true), false);
+            $kept = array_slice($verdicts, -self::KEY_VERDICTS_KEPT, null, true);
+            // The saved pair's verdict is what an outage save relies on, so other keys never push it out.
+            $saved = self::key_verdict_slot((string) $this->get_option('api_key'), $this->get_stored_checkout_env());
+            if (isset($verdicts[$saved]) && !isset($kept[$saved])) {
+                $kept = [$saved => $verdicts[$saved]] + $kept;
+            }
+            update_option(self::key_verdicts_option(), $kept, false);
         }
 
         /**

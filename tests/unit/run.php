@@ -13455,6 +13455,30 @@ final class BrandConfigSpec
             }
         }
         unset($GLOBALS['__twoinc_test_http_response']);
+
+        // Checks of other keys, however many, never push out the saved pair's verdict.
+        $GLOBALS['__twoinc_test_options'] = [];
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $gateway = self::save_gateway(true);
+        $gateway->init_form_fields();
+        $option_key = $gateway->get_option_key();
+        $GLOBALS['__twoinc_test_options'][$option_key] = ['api_key' => 'old-key', 'checkout_env' => 'sandbox', 'title' => 'stored title'];
+        $gateway->init_settings();
+        $gateway->cache_verification_result('old-key', ['code' => 200, 'body' => ['id' => 'merchant-1']]);
+        for ($i = 1; $i <= 12; $i++) {
+            $gateway->cache_verification_result('typed-key-' . $i, ['code' => 401, 'body' => []]);
+        }
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $GLOBALS['__twoinc_test_http_response'] = $down;
+        $GLOBALS['__twoinc_test_admin_errors'] = [];
+        $gateway->test_post_data = [
+            $gateway->get_field_key('api_key') => 'new-key',
+            $gateway->get_field_key('checkout_env') => 'sandbox',
+            $gateway->get_field_key('payment_terms_days') => ['30'],
+        ];
+        $gateway->process_admin_options();
+        TinyAssert::same('old-key', get_option($option_key, [])['api_key'] ?? null, 'twelve checks of other keys later, an outage save still keeps the pair Two accepted');
+        unset($GLOBALS['__twoinc_test_http_response']);
     }
 
     /** A vendor name is printable ASCII of at most 255 characters, refused alone, and a saved one is grandfathered (TWO-27109). */
