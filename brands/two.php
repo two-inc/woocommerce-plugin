@@ -45,9 +45,9 @@ return [
     // basket (total minus tax) — matches the funding partner's risk rule.
     // null = no gate.
     'availability_gate' => null,
-    // Default for the payment-method Title setting on fresh installs
-    // (merchant-saved titles always win). Rendered verbatim at checkout, so
-    // a placeholder here would reach the buyer as literal text.
+    // Title shown while the merchant has saved none, in the shop's language.
+    // Never stored (TWO-27109); a saved title always wins. Rendered verbatim
+    // at checkout, so a placeholder here would reach the buyer as literal text.
     'title_default' => 'Business invoice',
     // NOTE: the offerable payment-term list is sourced per merchant from
     // the merchant record Two's API returns (TWO-24812) — an overlay
