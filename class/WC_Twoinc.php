@@ -6121,6 +6121,37 @@ if (!class_exists('WC_Twoinc')) {
             return $value;
         }
 
+        /** Printable ASCII, at most 255 characters: what every Two plugin accepts as a vendor name (TWO-27109). */
+        public static function is_sendable_vendor_name(string $name): bool
+        {
+            return preg_match('/^[\x20-\x7E]{1,255}$/', $name) === 1;
+        }
+
+        /**
+         * Refuse a vendor name that is not printable ASCII or is over 255
+         * characters, keeping the saved one; the other fields still save. A
+         * saved name posted back unchanged is let through, so a name stored
+         * before the rule does not refuse every later save.
+         *
+         * @param string $key
+         * @param mixed  $value
+         *
+         * @return string
+         * @throws Exception
+         */
+        public function validate_vendor_name_field($key, $value)
+        {
+            $value = trim(stripslashes(is_scalar($value) ? (string) $value : ''));
+            if ($value === '' || self::is_sendable_vendor_name($value)) {
+                return wp_kses_post($value);
+            }
+            $saved = (string) $this->get_option($key);
+            if ($value === trim($saved)) {
+                return $saved;
+            }
+            throw new Exception(__('Enter a vendor name of at most 255 characters, using unaccented letters, digits, spaces and punctuation only, with no line breaks. The previously saved vendor name was kept.', 'twoinc-payment-gateway'));
+        }
+
         /**
          * Validate the merchant minimum on settings save: numeric and
          * non-negative always; strictly above the platform minimum when

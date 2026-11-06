@@ -2151,3 +2151,7 @@ msgstr ""
 #: class/WC_Twoinc.php:7512
 msgid "A key is saved. Leave this blank to keep it."
 msgstr ""
+
+#: class/WC_Twoinc.php:6152
+msgid "Enter a vendor name of at most 255 characters, using unaccented letters, digits, spaces and punctuation only, with no line breaks. The previously saved vendor name was kept."
+msgstr ""

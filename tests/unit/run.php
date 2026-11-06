@@ -319,6 +319,7 @@ final class BrandConfigSpec
             'testOnlyARejectedApiKeyRevertsOnSave',
             'testTheKeyAndEnvironmentSaveAsOnePair',
             'testTheSavedKeyNeverReachesTheSettingsPage',
+            'testTheVendorNameIsPrintableAsciiOfAtMost255',
             'testApiKeyVerificationStatusCachedAcrossCallsWithinTtl',
             'testOnlyADefinitiveKeyRejectionWithholdsPaymentMethod',
             'testIsAvailableTrueOnlyWhenEnabledAndVerified',
@@ -13309,6 +13310,43 @@ final class BrandConfigSpec
             }
         }
         unset($GLOBALS['__twoinc_test_http_response']);
+    }
+
+    /** A vendor name is printable ASCII of at most 255 characters, refused alone, and a saved one is grandfathered (TWO-27109). */
+    private static function testTheVendorNameIsPrintableAsciiOfAtMost255(): void
+    {
+        // [saved, posted, saved after, refused, why]
+        $cases = [
+            ['', 'North Warehouse', 'North Warehouse', false, 'plain ASCII saves'],
+            ['', '  North Warehouse  ', 'North Warehouse', false, 'surrounding spaces are trimmed'],
+            ['Old', '', '', false, 'blank clears it'],
+            ['Old', str_repeat('a', 255), str_repeat('a', 255), false, '255 characters is the limit'],
+            ['Old', str_repeat('a', 256), 'Old', true, 'one more is refused'],
+            ['', 'Caf' . "\u{e9}" . ' Nord', '', true, 'an accented letter is refused'],
+            ['Old', "North\nWarehouse", 'Old', true, 'a line break is refused'],
+            ['Caf' . "\u{e9}" . ' Nord', 'Caf' . "\u{e9}" . ' Nord', 'Caf' . "\u{e9}" . ' Nord', false, 'a name saved before the rule, posted back unchanged, is let through'],
+        ];
+        foreach ($cases as [$saved, $posted, $want, $refused, $description]) {
+            $GLOBALS['__twoinc_test_options'] = [];
+            $gateway = self::save_gateway(true);
+            $gateway->init_form_fields();
+            $option_key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$option_key] = ['vendor_name' => $saved, 'title' => 'stored title'];
+            $gateway->init_settings();
+            $GLOBALS['__twoinc_test_admin_messages'] = [];
+            $GLOBALS['__twoinc_test_admin_errors'] = [];
+            $gateway->test_post_data = [
+                $gateway->get_field_key('vendor_name') => $posted,
+                $gateway->get_field_key('title') => 'edited title',
+                $gateway->get_field_key('payment_terms_days') => ['30'],
+            ];
+            $gateway->process_admin_options();
+            $after = get_option($option_key, []);
+            TinyAssert::same($want, $after['vendor_name'] ?? null, $description);
+            TinyAssert::same('edited title', $after['title'] ?? null, $description . ': other fields still save');
+            $errors = implode("\n", $GLOBALS['__twoinc_test_admin_errors']);
+            TinyAssert::same($refused, strpos($errors, 'Enter a vendor name of at most 255 characters') !== false, $description . ": errors [$errors]");
+        }
     }
 
     /** The key field renders empty, with a note while a key is saved (TWO-27109). */

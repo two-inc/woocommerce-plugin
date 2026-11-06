@@ -2097,3 +2097,7 @@ msgstr "%s kunde inte kontrollera den nya API-nyckeln och miljön, så de tidiga
 #: class/WC_Twoinc.php:7512
 msgid "A key is saved. Leave this blank to keep it."
 msgstr "En nyckel är sparad. Lämna fältet tomt för att behålla den."
+
+#: class/WC_Twoinc.php:6152
+msgid "Enter a vendor name of at most 255 characters, using unaccented letters, digits, spaces and punctuation only, with no line breaks. The previously saved vendor name was kept."
+msgstr "Ange ett leverantörsnamn på högst 255 tecken, med endast bokstäver utan accenter, siffror, mellanslag och skiljetecken, utan radbrytningar. Det tidigare sparade leverantörsnamnet behölls."

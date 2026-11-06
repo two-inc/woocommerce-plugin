@@ -2096,3 +2096,7 @@ msgstr "%s no pudo comprobar la nueva clave de API y el nuevo entorno, por lo qu
 #: class/WC_Twoinc.php:7512
 msgid "A key is saved. Leave this blank to keep it."
 msgstr "Hay una clave guardada. Deje este campo en blanco para conservarla."
+
+#: class/WC_Twoinc.php:6152
+msgid "Enter a vendor name of at most 255 characters, using unaccented letters, digits, spaces and punctuation only, with no line breaks. The previously saved vendor name was kept."
+msgstr "Introduzca un nombre de proveedor de 255 caracteres como máximo, usando solo letras sin acentos, dígitos, espacios y signos de puntuación, sin saltos de línea. Se conservó el nombre de proveedor guardado anteriormente."

@@ -2096,3 +2096,7 @@ msgstr "%s kon de nieuwe API-sleutel en omgeving niet controleren, dus de eerder
 #: class/WC_Twoinc.php:7512
 msgid "A key is saved. Leave this blank to keep it."
 msgstr "Er is een sleutel opgeslagen. Laat dit veld leeg om deze te behouden."
+
+#: class/WC_Twoinc.php:6152
+msgid "Enter a vendor name of at most 255 characters, using unaccented letters, digits, spaces and punctuation only, with no line breaks. The previously saved vendor name was kept."
+msgstr "Voer een leveranciersnaam in van maximaal 255 tekens, met alleen letters zonder accenten, cijfers, spaties en leestekens, zonder regeleinden. De eerder opgeslagen leveranciersnaam is behouden."
