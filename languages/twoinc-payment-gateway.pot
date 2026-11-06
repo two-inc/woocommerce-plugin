@@ -983,12 +983,6 @@ msgstr ""
 msgid "Hide the payment method below this order value (store currency, on the tax basis selected below). Leave empty for no minimum."
 msgstr ""
 
-#. translators: 1: the subtitle as typed, 2: what the checkout tile would render
-#: class/WC_Twoinc.php:6080
-#, php-format
-msgid "Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\"."
-msgstr ""
-
 #: class/WC_Twoinc.php:6113
 msgid "Minimum order value must be a non-negative number."
 msgstr ""
@@ -2154,4 +2148,10 @@ msgstr ""
 
 #: class/WC_Twoinc.php:6152
 msgid "Enter a vendor name of at most 255 characters, using unaccented letters, digits, spaces and punctuation only, with no line breaks. The previously saved vendor name was kept."
+msgstr ""
+
+#. translators: 1: the subtitle as typed, 2: what the checkout tile would show
+#: class/WC_Twoinc.php:6120
+#, php-format
+msgid "Subtitle accepts plain text only, with no links or other markup; \"%1$s\" would be shown as \"%2$s\"."
 msgstr ""

@@ -17099,7 +17099,7 @@ final class AnchorOnlyHtmlSpec
  */
 final class SubtitleSaveValidationSpec
 {
-    private const REJECTION = 'Subtitle accepts plain text and a single link only; "%s" would be shown as "%s".';
+    private const REJECTION = 'Subtitle accepts plain text only, with no links or other markup; "%s" would be shown as "%s".';
 
     public static function runAll(): void
     {
@@ -17107,6 +17107,7 @@ final class SubtitleSaveValidationSpec
             'testTheValidatorAcceptsOnlyWhatTheTileRendersUnchanged',
             'testARejectedSubtitleKeepsTheStoredValueAndReportsWhy',
             'testTheRejectionIsTranslated',
+            'testASavedSubtitleIsGrandfatheredAndShownAsPlainText',
         ];
         foreach ($tests as $test) {
             self::$test();
@@ -17133,13 +17134,9 @@ final class SubtitleSaveValidationSpec
             ['Pay later, interest free', 'Pay later, interest free', 'plain copy saves unchanged'],
             ['  Pay later  ', 'Pay later', 'surrounding whitespace is trimmed, as every other text field is'],
             ["Don't wait & save", "Don't wait & save", 'an apostrophe and an ampersand are plain text, not markup'],
-            [
-                '<a href="https://faq.example.test/x">read more</a>',
-                '<a href="https://faq.example.test/x">read more</a>',
-                'the one link the tile allows saves unchanged',
-            ],
-            ['<b>Pay</b> later', null, 'a dropped tag is refused'],
-            ['<a href="javascript:alert(1)">go</a>', null, 'so is a link the escaper would strip of its anchor'],
+            ['<a href="https://faq.example.test/x">read more</a>', null, 'a link is refused: the subtitle is plain text'],
+            ['<b>Pay</b> later', null, 'so is any other tag'],
+            ['<a href="javascript:alert(1)">go</a>', null, 'and a script link'],
         ];
 
         foreach ($cases as list($posted, $expected, $description)) {
@@ -17156,7 +17153,7 @@ final class SubtitleSaveValidationSpec
                     sprintf(
                         self::REJECTION,
                         esc_html($posted),
-                        esc_html(WC_Twoinc_Helper::escape_anchor_only_html($posted))
+                        esc_html(trim(strip_tags($posted)))
                     ),
                     $refusal,
                     $description
@@ -17201,11 +17198,45 @@ final class SubtitleSaveValidationSpec
         }
     }
 
+    /** A subtitle saved with a link before the rule saves again unchanged, and the tile shows its words escaped (TWO-27109). */
+    private static function testASavedSubtitleIsGrandfatheredAndShownAsPlainText(): void
+    {
+        $linked = 'Terms & <a href="https://faq.example.test/x">FAQ</a>';
+        // [saved, posted, saved after, refused, tile shows, why]
+        $cases = [
+            [$linked, $linked, $linked, false, 'Terms &amp; FAQ', 'a linked subtitle saved earlier is let through and shown as its words'],
+            [$linked, 'Terms & <b>FAQ</b>', $linked, true, 'Terms &amp; FAQ', 'an edit that still carries markup is refused'],
+            ['', "Pay later <script>x</script>", '', true, null, 'new markup is refused'],
+            ['', 'Pay later & save', 'Pay later & save', false, 'Pay later &amp; save', 'plain text is escaped, not interpreted'],
+        ];
+        foreach ($cases as [$saved, $posted, $want, $refused, $shown, $description]) {
+            $gateway = self::gateway();
+            $gateway->init_form_fields();
+            $key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$key] = ['payment_subtitle' => $saved];
+            $gateway->init_settings();
+            $gateway->test_post_data = [$gateway->get_field_key('payment_subtitle') => $posted];
+            $GLOBALS['__twoinc_test_admin_errors'] = [];
+            try {
+                $gateway->process_admin_options();
+                TinyAssert::same($want, $GLOBALS['__twoinc_test_options'][$key]['payment_subtitle'] ?? null, $description);
+                TinyAssert::same($refused, $GLOBALS['__twoinc_test_admin_errors'] !== [], $description . ': refusal');
+                if ($shown !== null) {
+                    $tile = self::gateway();
+                    $tile->init_settings();
+                    TinyAssert::same('<div class="twoinc-payment-subtitle">' . $shown . '</div>', $tile->get_pay_subtitle(), $description . ': tile');
+                }
+            } finally {
+                unset($GLOBALS['__twoinc_test_options'][$key]);
+            }
+        }
+    }
+
     /** A refusal the merchant cannot read is no better than the silent strip it replaces. */
     private static function testTheRejectionIsTranslated(): void
     {
         $languages = dirname(__DIR__, 2) . '/languages/';
-        $msgid = 'Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\".';
+        $msgid = 'Subtitle accepts plain text only, with no links or other markup; \"%1$s\" would be shown as \"%2$s\".';
 
         TinyAssert::true(
             strpos((string) file_get_contents($languages . 'twoinc-payment-gateway.pot'), $msgid) !== false,

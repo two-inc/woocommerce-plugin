@@ -4143,13 +4143,12 @@ if (!class_exists('WC_Twoinc')) {
             // merchant needing per-language copy should use a string-
             // translation plugin (WPML, Loco Translate) the same way the
             // rest of this plugin's __() strings are made translatable.
-            // Tested after escaping, not before: copy that is only markup the
-            // escaper drops would otherwise emit an empty subtitle element.
-            $custom_subtitle = trim(WC_Twoinc_Helper::escape_anchor_only_html(
-                (string) $this->get_option('payment_subtitle')
-            ));
+            // Plain escaped text with no link (TWO-27109): markup saved before
+            // that rule shows as its words. Tested after stripping, so copy
+            // that is only markup emits no empty subtitle element.
+            $custom_subtitle = trim(wp_strip_all_tags((string) $this->get_option('payment_subtitle')));
             if ($custom_subtitle !== '') {
-                return sprintf('<div class="twoinc-payment-subtitle">%s</div>', $custom_subtitle);
+                return sprintf('<div class="twoinc-payment-subtitle">%s</div>', esc_html($custom_subtitle));
             }
 
             // Escape first, then test: esc_url returns '' for a disallowed
@@ -6094,11 +6093,10 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Refuse a subtitle the checkout tile would not render as typed.
-         *
-         * The tile emits it through WC_Twoinc_Helper::escape_anchor_only_html,
-         * so anything that escaper drops used to disappear with no merchant
-         * feedback.
+         * Refuse a subtitle carrying markup: the tile shows it as plain
+         * escaped text with no link (TWO-27109). A saved subtitle posted back
+         * unchanged is let through, so one saved with a link before this rule
+         * does not refuse every later save; the tile shows its words.
          *
          * @param string $key
          * @param string $value
@@ -6109,16 +6107,20 @@ if (!class_exists('WC_Twoinc')) {
         public function validate_payment_subtitle_field($key, $value)
         {
             $value = trim(stripslashes((string) $value));
-            if (!WC_Twoinc_Helper::renders_unchanged($value)) {
-                throw new Exception(sprintf(
-                    /* translators: 1: the subtitle as typed, 2: what the checkout tile would render */
-                    __('Subtitle accepts plain text and a single link only; "%1$s" would be shown as "%2$s".', 'twoinc-payment-gateway'),
-                    esc_html($value),
-                    esc_html(WC_Twoinc_Helper::escape_anchor_only_html($value))
-                ));
+            $plain = trim(wp_strip_all_tags($value));
+            if ($value === $plain) {
+                return $value;
             }
-
-            return $value;
+            $saved = (string) $this->get_option($key);
+            if ($value === trim($saved)) {
+                return $saved;
+            }
+            throw new Exception(sprintf(
+                /* translators: 1: the subtitle as typed, 2: what the checkout tile would show */
+                __('Subtitle accepts plain text only, with no links or other markup; "%1$s" would be shown as "%2$s".', 'twoinc-payment-gateway'),
+                esc_html($value),
+                esc_html($plain)
+            ));
         }
 
         /** Printable ASCII, at most 255 characters: what every Two plugin accepts as a vendor name (TWO-27109). */

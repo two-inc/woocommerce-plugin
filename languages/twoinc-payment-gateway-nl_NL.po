@@ -947,12 +947,6 @@ msgstr "Platformminimum %1$s, %2$s btw. Een waarde hier wordt geïnterpreteerd i
 msgid "Hide the payment method below this order value (store currency, on the tax basis selected below). Leave empty for no minimum."
 msgstr "Verberg de betaalmethode onder deze orderwaarde (winkelvaluta, op de hieronder gekozen btw-grondslag). Laat leeg voor geen minimum."
 
-#. translators: 1: the subtitle as typed, 2: what the checkout tile would render
-#: class/WC_Twoinc.php:6080
-#, php-format
-msgid "Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\"."
-msgstr "De ondertitel accepteert alleen platte tekst en één link; \"%1$s\" wordt weergegeven als \"%2$s\"."
-
 #: class/WC_Twoinc.php:6113
 msgid "Minimum order value must be a non-negative number."
 msgstr "Minimale orderwaarde moet een niet-negatief getal zijn."
@@ -2100,3 +2094,9 @@ msgstr "Er is een sleutel opgeslagen. Laat dit veld leeg om deze te behouden."
 #: class/WC_Twoinc.php:6152
 msgid "Enter a vendor name of at most 255 characters, using unaccented letters, digits, spaces and punctuation only, with no line breaks. The previously saved vendor name was kept."
 msgstr "Voer een leveranciersnaam in van maximaal 255 tekens, met alleen letters zonder accenten, cijfers, spaties en leestekens, zonder regeleinden. De eerder opgeslagen leveranciersnaam is behouden."
+
+#. translators: 1: the subtitle as typed, 2: what the checkout tile would show
+#: class/WC_Twoinc.php:6120
+#, php-format
+msgid "Subtitle accepts plain text only, with no links or other markup; \"%1$s\" would be shown as \"%2$s\"."
+msgstr "De ondertitel accepteert alleen platte tekst, zonder links of andere opmaak; \"%1$s\" zou worden weergegeven als \"%2$s\"."

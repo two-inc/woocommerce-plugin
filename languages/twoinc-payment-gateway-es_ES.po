@@ -947,12 +947,6 @@ msgstr "Mínimo de la plataforma %1$s, %2$s impuestos. Un valor aquí se interpr
 msgid "Hide the payment method below this order value (store currency, on the tax basis selected below). Leave empty for no minimum."
 msgstr "Oculta el método de pago por debajo de este valor de pedido (moneda de la tienda, sobre la base imponible seleccionada abajo). Déjalo vacío para no aplicar ningún mínimo."
 
-#. translators: 1: the subtitle as typed, 2: what the checkout tile would render
-#: class/WC_Twoinc.php:6080
-#, php-format
-msgid "Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\"."
-msgstr "El subtítulo solo admite texto sin formato y un único enlace; \"%1$s\" se mostraría como \"%2$s\"."
-
 #: class/WC_Twoinc.php:6113
 msgid "Minimum order value must be a non-negative number."
 msgstr "El valor mínimo del pedido debe ser un número no negativo."
@@ -2100,3 +2094,9 @@ msgstr "Hay una clave guardada. Deje este campo en blanco para conservarla."
 #: class/WC_Twoinc.php:6152
 msgid "Enter a vendor name of at most 255 characters, using unaccented letters, digits, spaces and punctuation only, with no line breaks. The previously saved vendor name was kept."
 msgstr "Introduzca un nombre de proveedor de 255 caracteres como máximo, usando solo letras sin acentos, dígitos, espacios y signos de puntuación, sin saltos de línea. Se conservó el nombre de proveedor guardado anteriormente."
+
+#. translators: 1: the subtitle as typed, 2: what the checkout tile would show
+#: class/WC_Twoinc.php:6120
+#, php-format
+msgid "Subtitle accepts plain text only, with no links or other markup; \"%1$s\" would be shown as \"%2$s\"."
+msgstr "El subtítulo solo admite texto sin formato, sin enlaces ni otras etiquetas; \"%1$s\" se mostraría como \"%2$s\"."

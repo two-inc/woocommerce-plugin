@@ -948,12 +948,6 @@ msgstr "Plattformsminimum %1$s, %2$s skatt. Ett värde här tolkas i butiksvalut
 msgid "Hide the payment method below this order value (store currency, on the tax basis selected below). Leave empty for no minimum."
 msgstr "Dölj betalningsmetoden under detta ordervärde (butiksvaluta, på det skatteunderlag som valts nedan). Lämna tomt för inget minimum."
 
-#. translators: 1: the subtitle as typed, 2: what the checkout tile would render
-#: class/WC_Twoinc.php:6080
-#, php-format
-msgid "Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\"."
-msgstr "Underrubriken accepterar endast oformaterad text och en länk; \"%1$s\" visas som \"%2$s\"."
-
 #: class/WC_Twoinc.php:6113
 msgid "Minimum order value must be a non-negative number."
 msgstr "Minsta beställningsvärde måste vara ett icke-negativt tal."
@@ -2101,3 +2095,9 @@ msgstr "En nyckel är sparad. Lämna fältet tomt för att behålla den."
 #: class/WC_Twoinc.php:6152
 msgid "Enter a vendor name of at most 255 characters, using unaccented letters, digits, spaces and punctuation only, with no line breaks. The previously saved vendor name was kept."
 msgstr "Ange ett leverantörsnamn på högst 255 tecken, med endast bokstäver utan accenter, siffror, mellanslag och skiljetecken, utan radbrytningar. Det tidigare sparade leverantörsnamnet behölls."
+
+#. translators: 1: the subtitle as typed, 2: what the checkout tile would show
+#: class/WC_Twoinc.php:6120
+#, php-format
+msgid "Subtitle accepts plain text only, with no links or other markup; \"%1$s\" would be shown as \"%2$s\"."
+msgstr "Underrubriken accepterar endast ren text, utan länkar eller annan märkning; ”%1$s” skulle visas som ”%2$s”."
