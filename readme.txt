@@ -65,6 +65,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 
 = 3.0.0 =
 
+* Two is offered only when the basket is in a currency Two invoices in: NOK, GBP, SEK, USD, DKK or EUR. An order placed in any other currency, for example after the buyer switched currency, is refused with a message naming the currency.
 * An order placed while your account offers no payment term is refused at checkout with a message asking the buyer to choose another payment method, as on Two's other plugins. It was previously booked on your account's default term, which nobody chose.
 * Checkout company search, sole traders: closing the sole-trader sign-up window without signing up no longer clears the company, its number or the address the buyer already had. Sole-trader details from Two fill only the fields they have a value for, so they never blank what the buyer typed or replace a state or county the buyer chose, and they are applied without the sign-up window only when the registration is under the email entered at checkout. Where a browser blocks the sign-up window, the company search shows a "Sign up or log in as a sole trader" button that opens it.
 * Checkout company search, sole traders: clicking back on the checkout page now closes the sole-trader sign-up window wherever the click lands, including on text or a button, as moving to another field already did.

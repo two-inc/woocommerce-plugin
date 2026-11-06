@@ -418,6 +418,7 @@ final class BrandConfigSpec
             'testRateLimitRefusesEveryWcAjaxHandlerBeforeItReachesTheApi',
             'testRateLimitRefusesTheNonProxyHandlersToo',
             'testEveryWithholdingBranchNamesItsReasonInTheLog',
+            'testTheBasketCurrencyDecidesWhetherTwoIsOffered',
             'testTheGateLogNamesWhichConditionRefused',
             'testTheHealthChecklistNamesWhyTheMethodIsAbsent',
             'testTheHealthChecklistNamesTheBrandBillingCountryGate',
@@ -438,6 +439,44 @@ final class BrandConfigSpec
      * the reason: the merchant has no other way to tell a switched-off
      * gateway from a rejected key.
      */
+    /** Given a basket in some currency; When checkout asks for methods; Then Two is offered only in a currency it invoices in. */
+    private static function testTheBasketCurrencyDecidesWhetherTwoIsOffered(): void
+    {
+        // [basket currency, offered, why]
+        $cases = [
+            ['NOK', true, 'Norwegian krone is invoiced'],
+            ['GBP', true, 'pound sterling is invoiced'],
+            ['SEK', true, 'Swedish krona is invoiced'],
+            ['USD', true, 'US dollar is invoiced'],
+            ['DKK', true, 'Danish krone is invoiced'],
+            ['EUR', true, 'euro is invoiced'],
+            ['CHF', false, 'Swiss franc is not'],
+            ['PLN', false, 'Polish zloty is not'],
+        ];
+        foreach ($cases as [$currency, $offered, $description]) {
+            $GLOBALS['__twoinc_test_currency'] = $currency;
+            $GLOBALS['__twoinc_test_logs'] = [];
+            WC_Twoinc::reset_withhold_log_guard();
+            $gateway = new class () extends WC_Twoinc {
+                public $enabled = 'yes';
+
+                public function __construct()
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                }
+
+                public function get_api_key_verification_status()
+                {
+                    return ['status' => 'ok', 'code' => 200, 'body' => null];
+                }
+            };
+            TinyAssert::same($offered, $gateway->is_available(), $description);
+            $logged = implode("\n", array_column($GLOBALS['__twoinc_test_logs'], 'message'));
+            TinyAssert::same(!$offered, strpos($logged, "basket currency $currency") !== false, $description . ": logged [$logged]");
+        }
+        unset($GLOBALS['__twoinc_test_currency']);
+    }
+
     private static function testEveryWithholdingBranchNamesItsReasonInTheLog(): void
     {
         $make_gateway = static function (array $options, $verify_code, $record) {
@@ -2917,6 +2956,7 @@ final class BrandConfigSpec
             ['not_two', [], null, 'cannot be paid with Two', 'order is not a Two order'],
             ['veto', $consent + ['company_id' => '923456789'], null, 'Brand says no.', 'brand overlay vetoed payment'],
             ['plain', ['company_id' => '923456789'], null, 'must accept payment terms', 'the terms consent was not given'],
+            ['currency', $consent + ['company_id' => '923456789'], null, 'not available for orders in CHF', 'the order is in a currency Two does not invoice in'],
             ['no_terms', $consent + ['company_id' => '923456789'], null, 'has no payment term available', 'no payment term is offered, so no term anyone chose could be booked'],
             ['plain', $consent + ['company_id' => ''], null, 'select your company', 'no company captured'],
             ['country', $consent + ['company_id' => '923456789', 'billing_country' => 'DE'], null, 'not available for this order', 'buyer country off the allowlist'],
@@ -2932,6 +2972,12 @@ final class BrandConfigSpec
 
             $order = new class extends StubOrder {
                 public $saved_meta = [];
+                public $currency = 'NOK';
+
+                public function get_currency()
+                {
+                    return $this->currency;
+                }
 
                 public function update_meta_data($key, $value)
                 {
@@ -2955,6 +3001,7 @@ final class BrandConfigSpec
                 }
             };
             $order->payment_method = $mode === 'not_two' ? 'cod' : WC_Twoinc_Brand::get('gateway_id');
+            $order->currency = $mode === 'currency' ? 'CHF' : 'NOK';
 
             $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
             $GLOBALS['__twoinc_test_notices'] = [];

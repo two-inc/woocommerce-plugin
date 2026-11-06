@@ -2080,3 +2080,9 @@ msgstr "Vi bekräftar fortfarande din beställning med %s."
 #, php-format
 msgid "%s has no payment term available for this order. Please choose another payment method."
 msgstr "%s har inga betalningsvillkor tillgängliga för den här beställningen. Välj ett annat betalningssätt."
+
+#. translators: 1: the payment method's product name, 2: the order's currency code
+#: class/WC_Twoinc.php:6318
+#, php-format
+msgid "%1$s is not available for orders in %2$s. Please choose another currency or payment method."
+msgstr "%1$s är inte tillgängligt för beställningar i %2$s. Välj en annan valuta eller ett annat betalningssätt."

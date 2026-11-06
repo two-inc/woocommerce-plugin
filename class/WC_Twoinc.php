@@ -64,6 +64,9 @@ if (!class_exists('WC_Twoinc')) {
         // process_update_twoinc_order — their identity guarantees the
         // tracking-failure note in on_order_completed can never be
         // triggered by the state gate itself.
+        /** The currencies Two invoices in, the same list every Two plugin gates on (TWO-27109). */
+        public const SUPPORTED_CURRENCIES = ['NOK', 'GBP', 'SEK', 'USD', 'DKK', 'EUR'];
+
         private const TERMINAL_ORDER_STATES = ["FULFILLING", "FULFILLED", "DELIVERED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"];
 
         // Backstop only — refreshed by event, not by expiry.
@@ -4604,6 +4607,14 @@ if (!class_exists('WC_Twoinc')) {
                 );
                 return false;
             }
+            $currency = (string) get_woocommerce_currency();
+            if (!self::is_supported_currency($currency)) {
+                $this->log_withheld_from_checkout(
+                    sprintf('the basket currency %s is not one %s invoices in', $currency, WC_Twoinc_Brand::get('product_name')),
+                    'currency'
+                );
+                return false;
+            }
             $status = $this->get_api_key_verification_status();
             if (self::is_definitive_key_failure($status['status'])) {
                 $this->log_withheld_from_checkout(sprintf(
@@ -4619,6 +4630,12 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
             return true;
+        }
+
+        /** Whether Two invoices in this currency. */
+        public static function is_supported_currency(string $currency): bool
+        {
+            return in_array(strtoupper(trim($currency)), self::SUPPORTED_CURRENCIES, true);
         }
 
         /** @var array<string, true> */
@@ -6290,6 +6307,20 @@ if (!class_exists('WC_Twoinc')) {
                     __('This order cannot be paid with %s.', 'twoinc-payment-gateway'),
                     WC_Twoinc_Brand::get('product_name')
                 ));
+            }
+
+            // Repeated at placement: the buyer may have switched currency
+            // after the method was offered.
+            $order_currency = (string) $order->get_currency();
+            if (!self::is_supported_currency($order_currency)) {
+                $currency_error = sprintf(
+                    /* translators: 1: the payment method's product name, 2: the order's currency code */
+                    __('%1$s is not available for orders in %2$s. Please choose another currency or payment method.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name'),
+                    $order_currency
+                );
+                WC_Twoinc_Helper::display_ajax_error($currency_error);
+                return self::payment_failure($currency_error);
             }
 
             $brand_validation_error = $this->get_brand_payment_validation_error($order_id);
