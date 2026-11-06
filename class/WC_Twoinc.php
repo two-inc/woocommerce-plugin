@@ -135,6 +135,7 @@ if (!class_exists('WC_Twoinc')) {
             $this->migrate_legacy_company_search_key();
             $this->drop_removed_settings();
             $this->migrate_checkout_env();
+            $this->clear_english_install_title();
             $this->drop_renamed_option_rows();
             $this->drop_fabricated_due_in_days();
             $this->migrate_se_tax_subtotals();
@@ -4273,15 +4274,65 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * The configured Title verbatim - no term suffix, no placeholder
-         * substitution - or the brand product name when it is blank.
+         * substitution - or the default title when it is blank.
          */
         public function get_pay_title()
         {
             $configured = trim((string) $this->get_option('title'));
 
             return $configured === ''
-                ? WC_Twoinc_Brand::get('product_name')
+                ? self::default_pay_title()
                 : __($configured, 'twoinc-payment-gateway');
+        }
+
+        /**
+         * The title shown while none is saved: the brand's default in the
+         * shop's language, never stored (TWO-27109). The Two default is a
+         * literal msgid so it reaches the catalogues; a variable one is not
+         * extracted.
+         */
+        public static function default_pay_title(): string
+        {
+            $default = (string) WC_Twoinc_Brand::get('title_default');
+            if ($default === 'Business invoice') {
+                return __('Business invoice', 'twoinc-payment-gateway');
+            }
+            return $default !== '' ? __($default, 'twoinc-payment-gateway') : (string) WC_Twoinc_Brand::get('product_name');
+        }
+
+        /** Every English title earlier versions stored at install, exactly as stored. */
+        private const ENGLISH_INSTALL_TITLES = [
+            'Pay with Tillit',
+            'Pay in 15 days with invoice',
+            'Business invoice 30 days',
+            'Business invoice %s days',
+            'Business invoice - %s days',
+            'Business invoice',
+        ];
+
+        /**
+         * Once per shop: clear a saved title that is exactly one of the
+         * English titles earlier versions stored at install, so the shop shows
+         * the default in its own language (TWO-27109). The subtitle is never
+         * touched. Marked done even with nothing stored, so a title typed
+         * later is never cleared.
+         *
+         * @return void
+         */
+        private function clear_english_install_title()
+        {
+            $done = WC_Twoinc_Brand::prefixed_name('english_install_title_cleared');
+            if (get_option($done)) {
+                return;
+            }
+            if (is_array(get_option($this->get_option_key(), null)) && is_array($this->settings)) {
+                $title = $this->settings['title'] ?? null;
+                if (is_string($title) && in_array($title, self::ENGLISH_INSTALL_TITLES, true)) {
+                    $this->settings['title'] = '';
+                    update_option($this->get_option_key(), $this->settings);
+                }
+            }
+            update_option($done, '1');
         }
 
         /**
@@ -7020,9 +7071,10 @@ if (!class_exists('WC_Twoinc')) {
                 'title' => [
                     'title'       => __('Title', 'twoinc-payment-gateway'),
                     'type'        => 'text',
-                    // Brand-specific default: a fresh install must show the
-                    // brand's payment-method title, not the Two phrasing.
-                    'default'     => __(WC_Twoinc_Brand::get('title_default'), 'twoinc-payment-gateway')
+                    // Nothing stored at install (TWO-27109): an empty title shows
+                    // the brand's default in the shop's language.
+                    'default'     => '',
+                    'placeholder' => self::default_pay_title(),
                 ],
                 'payment_subtitle' => [
                     'title'       => __('Subtitle', 'twoinc-payment-gateway'),

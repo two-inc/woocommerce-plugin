@@ -38,6 +38,7 @@ final class BrandConfigSpec
         $tests = [
             'testBrandLoaderReturnsTwoDefaults',
             'testCheckoutTitleRendersConfiguredValueVerbatim',
+            'testTheEnglishInstallTitleIsClearedOnce',
             'testGatewayIdAndMetaIdentityUnchanged',
             'testConstantsMatchBrandConfig',
             'testBrandFileFilterMergesOverDefaults',
@@ -1243,12 +1244,15 @@ final class BrandConfigSpec
             ['Business invoice - %s days', 'Business invoice - %s days', 'a placeholder is literal text, not a substitution site'],
             ['5% on invoice', '5% on invoice', 'a literal percent survives'],
             ['Faktura & "kredit" <30 dagar>', 'Faktura & "kredit" <30 dagar>', 'quotes, ampersands and angle brackets reach core unaltered'],
-            ['   ', 'Two', 'a whitespace-only title falls back to the brand product name'],
-            ['', 'Two', 'an empty title falls back to the brand product name'],
-            [null, 'Business invoice', 'a shop that never saved the setting gets the shipped default, which carries no placeholder'],
+            ['   ', 'Business invoice', 'a whitespace-only title falls back to the default title'],
+            ['', 'Business invoice', 'an empty title falls back to the default title'],
+            [null, 'Business invoice', 'a shop that never saved the setting gets the default title'],
+            ['', 'Bedriftsfaktura', 'the default title is in the shop\'s language', ['Business invoice' => 'Bedriftsfaktura']],
         ];
 
-        foreach ($cases as [$stored, $expected, $description]) {
+        foreach ($cases as $case) {
+            [$stored, $expected, $description] = $case;
+            $GLOBALS['__twoinc_test_translations'] = $case[3] ?? [];
             $gateway = self::save_gateway(true);
             $gateway->init_form_fields();
             $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()] = $stored === null
@@ -1258,6 +1262,50 @@ final class BrandConfigSpec
 
             TinyAssert::same($expected, $gateway->get_pay_title(), $description);
         }
+        $GLOBALS['__twoinc_test_translations'] = [];
+        $fresh = self::save_gateway(true);
+        $fresh->init_form_fields();
+        TinyAssert::same(['', 'Business invoice'], [$fresh->form_fields['title']['default'], $fresh->form_fields['title']['placeholder']], 'nothing is stored as the title at install; the field shows the default as its placeholder');
+    }
+
+    /**
+     * Given a title an earlier version stored at install in English; When the
+     * plugin loads once; Then it is cleared so the default shows in the shop's
+     * language, and nothing else is touched (TWO-27109).
+     */
+    private static function testTheEnglishInstallTitleIsClearedOnce(): void
+    {
+        $option_key = 'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings';
+        $done = WC_Twoinc_Brand::prefixed_name('english_install_title_cleared');
+        // [saved title (null: no settings row), already done, title after, why]
+        $cases = [
+            ['Pay with Tillit', false, '', 'the oldest install title'],
+            ['Pay in 15 days with invoice', false, '', 'the 15-day install title'],
+            ['Business invoice 30 days', false, '', 'the 30-day install title'],
+            ['Business invoice %s days', false, '', 'the placeholder install title'],
+            ['Business invoice - %s days', false, '', 'the dashed placeholder install title'],
+            ['Business invoice', false, '', 'the latest install title'],
+            ['Business invoice ', false, 'Business invoice ', 'only an exact match: a trailing space is an edit'],
+            ['business invoice', false, 'business invoice', 'only an exact match: case is an edit'],
+            ['Faktura', false, 'Faktura', 'a merchant title is kept'],
+            ['Business invoice', true, 'Business invoice', 'once done, a default title typed later is kept'],
+            [null, false, null, 'a fresh install has nothing to clear and gains no settings row'],
+        ];
+        foreach ($cases as [$title, $already, $want, $description]) {
+            $GLOBALS['__twoinc_test_options'] = $already ? [$done => '1'] : [];
+            if ($title !== null) {
+                $GLOBALS['__twoinc_test_options'][$option_key] = ['title' => $title, 'payment_subtitle' => 'Receive the invoice via EHF and PDF'];
+            }
+            new WC_Twoinc();
+            new WC_Twoinc();
+            $row = get_option($option_key, null);
+            TinyAssert::same($want, is_array($row) ? ($row['title'] ?? null) : null, $description);
+            if ($title !== null) {
+                TinyAssert::same('Receive the invoice via EHF and PDF', $row['payment_subtitle'] ?? null, $description . ': the subtitle is never touched');
+            }
+            TinyAssert::same('1', get_option($done), $description . ': marked done');
+        }
+        $GLOBALS['__twoinc_test_options'] = [];
     }
 
     private static function testBrandLoaderReturnsTwoDefaults(): void

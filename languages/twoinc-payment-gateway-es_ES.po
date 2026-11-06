@@ -2100,3 +2100,7 @@ msgstr "Introduzca un nombre de proveedor de 255 caracteres como máximo, usando
 #, php-format
 msgid "Subtitle accepts plain text only, with no links or other markup; \"%1$s\" would be shown as \"%2$s\"."
 msgstr "El subtítulo solo admite texto sin formato, sin enlaces ni otras etiquetas; \"%1$s\" se mostraría como \"%2$s\"."
+
+#: class/WC_Twoinc.php:4298
+msgid "Business invoice"
+msgstr "Factura de empresa"

@@ -2101,3 +2101,7 @@ msgstr "Skriv inn et leverandørnavn på høyst 255 tegn, med bare bokstaver ute
 #, php-format
 msgid "Subtitle accepts plain text only, with no links or other markup; \"%1$s\" would be shown as \"%2$s\"."
 msgstr "Undertittelen godtar bare ren tekst, uten lenker eller annen markering; «%1$s» ville blitt vist som «%2$s»."
+
+#: class/WC_Twoinc.php:4298
+msgid "Business invoice"
+msgstr "Bedriftsfaktura"

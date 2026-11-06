@@ -2100,3 +2100,7 @@ msgstr "Voer een leveranciersnaam in van maximaal 255 tekens, met alleen letters
 #, php-format
 msgid "Subtitle accepts plain text only, with no links or other markup; \"%1$s\" would be shown as \"%2$s\"."
 msgstr "De ondertitel accepteert alleen platte tekst, zonder links of andere opmaak; \"%1$s\" zou worden weergegeven als \"%2$s\"."
+
+#: class/WC_Twoinc.php:4298
+msgid "Business invoice"
+msgstr "Zakelijke factuur"

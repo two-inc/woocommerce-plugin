@@ -2101,3 +2101,7 @@ msgstr "Ange ett leverantörsnamn på högst 255 tecken, med endast bokstäver u
 #, php-format
 msgid "Subtitle accepts plain text only, with no links or other markup; \"%1$s\" would be shown as \"%2$s\"."
 msgstr "Underrubriken accepterar endast ren text, utan länkar eller annan märkning; ”%1$s” skulle visas som ”%2$s”."
+
+#: class/WC_Twoinc.php:4298
+msgid "Business invoice"
+msgstr "Företagsfaktura"

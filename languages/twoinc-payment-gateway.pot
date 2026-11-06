@@ -2155,3 +2155,7 @@ msgstr ""
 #, php-format
 msgid "Subtitle accepts plain text only, with no links or other markup; \"%1$s\" would be shown as \"%2$s\"."
 msgstr ""
+
+#: class/WC_Twoinc.php:4298
+msgid "Business invoice"
+msgstr ""
