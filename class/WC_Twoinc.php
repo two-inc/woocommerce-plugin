@@ -140,6 +140,8 @@ if (!class_exists('WC_Twoinc')) {
             $this->drop_fabricated_due_in_days();
             $this->migrate_se_tax_subtotals();
             $this->migrate_tax_code_map_to_rows();
+            // After drop_fabricated_due_in_days(), so it judges the record's own default.
+            $this->seed_default_term_selection();
 
             $this->title = $this->get_pay_title();
             /**
@@ -542,8 +544,75 @@ if (!class_exists('WC_Twoinc')) {
             self::store_merchant_country($record);
             update_option($checked_option, time(), false);
             delete_option(WC_Twoinc_Brand::prefixed_name('merchant_record_last_error'));
+            $this->seed_default_term_selection();
 
             return true;
+        }
+
+        /**
+         * A shop that never saved a term selection offers the merchant
+         * account's own default term (TWO-27109). Such a shop's orders were
+         * booked on that term without a term block; an empty offered set now
+         * refuses the order, so the term it already used is ticked instead.
+         *
+         * Runs at construction (the upgrade step) and after each merchant
+         * record read, on the cached record only. A stored selection is never
+         * touched, an empty one included: only a settings row with no
+         * selection and no custom term counts as never saved. When the
+         * default is not among the terms Two offers, nothing is ticked, the
+         * shop's orders are refused, and the log says why once per change.
+         *
+         * @return void
+         */
+        public function seed_default_term_selection(): void
+        {
+            $row = get_option($this->get_option_key(), null);
+            if (is_array($row) && (array_key_exists('payment_terms_days', $row) || !empty($row['payment_terms_custom_days']))) {
+                return;
+            }
+            if (!get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on'))) {
+                return;
+            }
+            $stored_default = get_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'), null);
+            if ($stored_default === null) {
+                // The upgrade drops a default earlier versions made up, so read the record again
+                // now rather than refuse orders until its clock runs out; a record with no default
+                // stores 0, so this does not repeat. Paced like any other attempt.
+                $attempted = (int) get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on'));
+                if ($attempted + self::MERCHANT_RECORD_ATTEMPT_INTERVAL <= time()) {
+                    $this->refresh_merchant_record_caches(true);
+                }
+                return;
+            }
+            $default = (int) $stored_default;
+            $offered = json_decode((string) get_option(WC_Twoinc_Brand::prefixed_name('merchant_available_terms')), true);
+            $offered = is_array($offered) ? array_map('intval', $offered) : [];
+            if ($default > 0 && in_array($default, $offered, true)) {
+                $row = is_array($row) ? $row : [];
+                $row['payment_terms_days'] = [$default];
+                update_option($this->get_option_key(), $row);
+                if (is_array($this->settings)) {
+                    $this->settings['payment_terms_days'] = [$default];
+                }
+                delete_option(WC_Twoinc_Brand::prefixed_name('term_seed_skipped'));
+                return;
+            }
+            $state = $default . '|' . implode(',', $offered);
+            if (get_option(WC_Twoinc_Brand::prefixed_name('term_seed_skipped')) === $state) {
+                return;
+            }
+            update_option(WC_Twoinc_Brand::prefixed_name('term_seed_skipped'), $state, false);
+            if (function_exists('wc_get_logger')) {
+                wc_get_logger()->warning(
+                    sprintf(
+                        'No payment term is ticked and the account default term (%s) is not one %s offers (%s), so none was ticked: orders are refused until a term is ticked under Payment terms.',
+                        $default > 0 ? $default . ' days' : 'none',
+                        WC_Twoinc_Brand::get('product_name'),
+                        $offered === [] ? 'none' : implode(', ', $offered)
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
         }
 
         /** Brand-prefixed like the FX hook, and read late for the same reason. */

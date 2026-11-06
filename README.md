@@ -1057,6 +1057,18 @@ Two's records. With debug logging on, every request's log line names its key
 too. `Idempotency-Key` and `X-Idempotency-Key` are reserved in any case: a
 Diagnostics custom header row cannot set either.
 
+## Payment terms offered at checkout
+
+An order is refused at create when no payment term is offered (TWO-27109), as on
+Two's other plugins. The offered terms are the ones ticked under Payment terms
+that Two also offers the merchant. A shop that has never saved a selection
+(the `payment_terms_days` key is absent from the settings row) has the merchant
+account's default term ticked for it, once its record has been read: at
+construction, which is the upgrade step, and after every merchant record read.
+That is the term such a shop's orders were booked on before. A saved selection,
+an empty one included, is never changed. When the account default is not among
+the terms Two offers, nothing is ticked and a warning is logged once per change.
+
 ## Post installation optional steps
 
 Once Wordpress has been set up, a recommended plugin theme to install is:
