@@ -1355,6 +1355,17 @@ final class BrandConfigSpec
             TinyAssert::same($logged ? 1 : 0, count($warnings), $description . ': logged once at most');
         }
 
+        // With no API key saved the read cannot run, so nothing is queued, on any request.
+        $GLOBALS['__twoinc_test_options'] = [
+            $option_key => ['title' => 'Faktura'],
+            WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on') => time(),
+            WC_Twoinc_Brand::prefixed_name('merchant_due_in_days_dropped') => 'yes',
+        ];
+        $GLOBALS['__twoinc_test_as_schedule_calls'] = [];
+        $GLOBALS['__twoinc_test_as_scheduled'] = [];
+        new WC_Twoinc();
+        TinyAssert::same([], $GLOBALS['__twoinc_test_as_schedule_calls'], 'no key: no background read is queued');
+
         // The upgrade itself: its one-time drop leaves no default, so the record is read again at once.
         $GLOBALS['__twoinc_test_options'] = [
             $option_key => ['api_key' => 'key', 'merchant_id' => 'mid'],

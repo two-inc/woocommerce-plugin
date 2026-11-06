@@ -594,8 +594,10 @@ if (!class_exists('WC_Twoinc')) {
                 // seeds the selection; a record with no default stores 0, so this does not repeat.
                 $hook = self::merchant_record_refresh_hook();
                 $attempted = (int) get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on'));
+                // With no key the read cannot run (refresh_merchant_record_caches), so it is not queued.
                 if (
                     function_exists('as_enqueue_async_action')
+                    && trim((string) $this->get_option('api_key')) !== ''
                     && $attempted + self::MERCHANT_RECORD_ATTEMPT_INTERVAL <= time()
                     && !as_has_scheduled_action($hook)
                 ) {
