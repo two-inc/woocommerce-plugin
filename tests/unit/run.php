@@ -13354,6 +13354,7 @@ final class BrandConfigSpec
                 TinyAssert::same(['', ''], [$errors, $messages], $description . ': no notice');
             } else {
                 TinyAssert::true(strpos($blocking ? $errors : $messages, $notice) !== false, $description . ": notice [$errors|$messages]");
+                TinyAssert::same($blocking ? 1 : 0, count($GLOBALS['__twoinc_test_admin_errors']), $description . ": one error, the pair's [$errors]");
                 TinyAssert::same('', $blocking ? $messages : $errors, $description . ': nothing in the other bucket');
             }
         }

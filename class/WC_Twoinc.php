@@ -9173,9 +9173,8 @@ if (!class_exists('WC_Twoinc')) {
 
             if ($keep) {
                 $post_data[$key_field] = (string) $this->get_option('api_key');
-                if (array_key_exists($env_field, $post_data)) {
-                    $post_data[$env_field] = (string) $this->get_option('checkout_env');
-                }
+                // An environment not posted is left as stored by its own validator.
+                unset($post_data[$env_field]);
             }
             return $post_data;
         }
