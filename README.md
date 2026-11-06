@@ -1061,13 +1061,16 @@ Diagnostics custom header row cannot set either.
 
 An order is refused at create when no payment term is offered (TWO-27109), as on
 Two's other plugins. The offered terms are the ones ticked under Payment terms
-that Two also offers the merchant. A shop that has never saved a selection
-(the `payment_terms_days` key is absent from the settings row) has the merchant
-account's default term ticked for it, once its record has been read: at
-construction, which is the upgrade step, and after every merchant record read.
-That is the term such a shop's orders were booked on before. A saved selection,
-an empty one included, is never changed. When the account default is not among
-the terms Two offers, nothing is ticked and a warning is logged once per change.
+that Two also offers the merchant. A shop with no selection has the merchant account's
+default term ticked for it, once its record has been read: at construction,
+which is the upgrade step, and after every merchant record read. That is the
+term such a shop's orders were booked on before. A selection is a non-empty
+`payment_terms_days` or a custom term; the settings form refuses an empty one,
+so a stored `[]` or blank is not a choice. A selection is never changed. When
+the upgrade has dropped the stored default, the record is read again by a
+queued Action Scheduler action, never inline in the request that builds the
+gateway. When the account default is not among the terms Two offers, nothing is
+ticked and a warning is logged once per change.
 
 ## Post installation optional steps
 

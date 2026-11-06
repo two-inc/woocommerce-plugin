@@ -1322,7 +1322,8 @@ final class BrandConfigSpec
         $cases = [
             [['title' => 'Faktura'], true, 30, [14, 30, 60], [30], false, 'never saved: the default term is ticked'],
             [null, true, 30, [14, 30], [30], false, 'a fresh install that never opened the settings: the same'],
-            [['payment_terms_days' => []], true, 30, [14, 30], [], false, 'saved empty is a choice and is kept'],
+            [['api_key' => 'key', 'payment_terms_days' => []], true, 30, [14, 30], [30], false, 'the [] a first key save stores before the record is read is not a choice'],
+            [['merchant_id' => 'mid', 'payment_terms_days' => ''], true, 30, [14, 30], [30], false, 'nor is the blank WooCommerce persists from its own read of the unset field'],
             [['payment_terms_days' => [60]], true, 30, [30, 60], [60], false, 'an existing selection is kept'],
             [['payment_terms_custom_days' => '45'], true, 30, [30, 45], $absent, false, 'a custom term is a selection too'],
             [['title' => 'Faktura'], true, 45, [14, 30], $absent, true, 'a default Two does not offer: nothing ticked, and the log says so'],
@@ -1362,10 +1363,24 @@ final class BrandConfigSpec
             WC_Twoinc_Brand::prefixed_name('merchant_available_terms') => json_encode([14, 30]),
         ];
         $GLOBALS['__twoinc_test_http_response'] = ['response' => ['code' => 200], 'body' => json_encode(['id' => 'mid', 'due_in_days' => 30, 'available_terms' => [14, 30]])];
+        $GLOBALS['__twoinc_test_http_calls'] = [];
+        $GLOBALS['__twoinc_test_as_schedule_calls'] = [];
+        $GLOBALS['__twoinc_test_as_scheduled'] = [];
         WC_Twoinc::reset_merchant_record_memo();
         new WC_Twoinc();
-        TinyAssert::same([30], get_option($option_key)['payment_terms_days'] ?? null, 'an upgraded shop ticks the default the record gives, not the one dropped');
+        new WC_Twoinc();
+        TinyAssert::same([], $GLOBALS['__twoinc_test_http_calls'], 'the request that builds the gateway, perhaps a buyer\'s, fetches nothing');
+        TinyAssert::same(
+            [['hook' => WC_Twoinc::merchant_record_refresh_hook(), 'unique' => true, 'async' => true]],
+            $GLOBALS['__twoinc_test_as_schedule_calls'],
+            'the record is read again in the background, queued once'
+        );
+        TinyAssert::same(null, get_option($option_key)['payment_terms_days'] ?? null, 'nothing is ticked on the dropped default');
+        WC_Twoinc::reset_merchant_record_memo();
+        (new WC_Twoinc())->refresh_merchant_record_caches(true);
+        TinyAssert::same([30], get_option($option_key)['payment_terms_days'] ?? null, 'the background read ticks the default the record gives, not the one dropped');
         unset($GLOBALS['__twoinc_test_http_response']);
+        $GLOBALS['__twoinc_test_as_scheduled'] = [];
 
         // The lazy path: the first merchant record read seeds the shop that has none.
         $GLOBALS['__twoinc_test_options'] = [$option_key => ['api_key' => 'key', 'merchant_id' => 'mid']];

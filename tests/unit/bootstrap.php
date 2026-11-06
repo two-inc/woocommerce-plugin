@@ -2097,6 +2097,13 @@ function as_schedule_recurring_action($timestamp, $interval, $hook, $args = [], 
     return 1;
 }
 
+function as_enqueue_async_action($hook, $args = [], $group = '', $unique = false)
+{
+    $GLOBALS['__twoinc_test_as_schedule_calls'][] = ['hook' => $hook, 'unique' => $unique, 'async' => true];
+    $GLOBALS['__twoinc_test_as_scheduled'][$hook] = true;
+    return 1;
+}
+
 function as_unschedule_all_actions($hook, $args = [], $group = '')
 {
     unset($GLOBALS['__twoinc_test_as_scheduled'][$hook]);

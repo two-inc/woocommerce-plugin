@@ -549,6 +549,19 @@ if (!class_exists('WC_Twoinc')) {
             return true;
         }
 
+        /** Whether a settings row holds a term selection: a non-empty list of terms, or a custom term. */
+        private static function has_term_selection($row): bool
+        {
+            if (!is_array($row)) {
+                return false;
+            }
+            $days = $row['payment_terms_days'] ?? null;
+            if (is_array($days) && array_filter(array_map('intval', $days)) !== []) {
+                return true;
+            }
+            return trim((string) ($row['payment_terms_custom_days'] ?? '')) !== '';
+        }
+
         /**
          * A shop that never saved a term selection offers the merchant
          * account's own default term (TWO-27109). Such a shop's orders were
@@ -556,18 +569,19 @@ if (!class_exists('WC_Twoinc')) {
          * refuses the order, so the term it already used is ticked instead.
          *
          * Runs at construction (the upgrade step) and after each merchant
-         * record read, on the cached record only. A stored selection is never
-         * touched, an empty one included: only a settings row with no
-         * selection and no custom term counts as never saved. When the
-         * default is not among the terms Two offers, nothing is ticked, the
-         * shop's orders are refused, and the log says why once per change.
+         * record read, on the cached record only. A selection the merchant
+         * saved is never touched. The settings form refuses an empty one, so
+         * an empty or blank stored value is not a choice: a first save made
+         * before the record was read stores [], and a stored blank can come
+         * from WooCommerce's own read of the unset field. When the default is
+         * not among the terms Two offers, nothing is ticked, the shop's
+         * orders are refused, and the log says why once per change.
          *
          * @return void
          */
         public function seed_default_term_selection(): void
         {
-            $row = get_option($this->get_option_key(), null);
-            if (is_array($row) && (array_key_exists('payment_terms_days', $row) || !empty($row['payment_terms_custom_days']))) {
+            if (self::has_term_selection(get_option($this->get_option_key(), null))) {
                 return;
             }
             if (!get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on'))) {
@@ -575,12 +589,17 @@ if (!class_exists('WC_Twoinc')) {
             }
             $stored_default = get_option(WC_Twoinc_Brand::prefixed_name('merchant_due_in_days'), null);
             if ($stored_default === null) {
-                // The upgrade drops a default earlier versions made up, so read the record again
-                // now rather than refuse orders until its clock runs out; a record with no default
-                // stores 0, so this does not repeat. Paced like any other attempt.
+                // The upgrade drops a default earlier versions made up. The record is read again
+                // in the background, never in this request (it may be a buyer's), and that read
+                // seeds the selection; a record with no default stores 0, so this does not repeat.
+                $hook = self::merchant_record_refresh_hook();
                 $attempted = (int) get_option(WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on'));
-                if ($attempted + self::MERCHANT_RECORD_ATTEMPT_INTERVAL <= time()) {
-                    $this->refresh_merchant_record_caches(true);
+                if (
+                    function_exists('as_enqueue_async_action')
+                    && $attempted + self::MERCHANT_RECORD_ATTEMPT_INTERVAL <= time()
+                    && !as_has_scheduled_action($hook)
+                ) {
+                    as_enqueue_async_action($hook, [], '', true);
                 }
                 return;
             }
@@ -588,6 +607,15 @@ if (!class_exists('WC_Twoinc')) {
             $offered = json_decode((string) get_option(WC_Twoinc_Brand::prefixed_name('merchant_available_terms')), true);
             $offered = is_array($offered) ? array_map('intval', $offered) : [];
             if ($default > 0 && in_array($default, $offered, true)) {
+                // Re-read uncached just before writing, so a save made meanwhile is neither undone nor overridden.
+                if (function_exists('wp_cache_delete')) {
+                    wp_cache_delete('alloptions', 'options');
+                    wp_cache_delete($this->get_option_key(), 'options');
+                }
+                $row = get_option($this->get_option_key(), null);
+                if (self::has_term_selection($row)) {
+                    return;
+                }
                 $row = is_array($row) ? $row : [];
                 $row['payment_terms_days'] = [$default];
                 update_option($this->get_option_key(), $row);
