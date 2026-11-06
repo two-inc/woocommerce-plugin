@@ -8,9 +8,9 @@
 
 # Internal Two devs (@two.inc gcloud account) point at staging; everyone else
 # at sandbox. Mirrors the PrestaShop/Magento plugin convention. Override via
-# .env or `make ... TWO_ENV=...`. These are NOT read directly by the plugin -
-# docker-compose.yaml threads them through as the TWOINC_DEV_{API,CHECKOUT,
-# PORTAL}_HOST env vars that WC_Twoinc_Helper::get_environment_host() reads.
+# .env or `make ... TWO_ENV=...`. docker-compose.yaml passes them to the
+# wordpress container, where WC_Twoinc_Helper::get_environment_host() reads
+# them on a site whose WordPress environment type is local or development.
 TWO_ENV               := $(shell gcloud config get-value account 2>/dev/null | grep -q '@two\.inc$$' && echo staging || echo sandbox)
 TWO_API_BASE_URL      ?= https://api.$(TWO_ENV).two.inc
 TWO_PORTAL_BASE_URL   ?= https://portal.$(TWO_ENV).two.inc

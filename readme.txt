@@ -65,6 +65,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 
 = 3.0.0 =
 
+* For developers: the host overrides are now `TWO_API_BASE_URL`, `TWO_CHECKOUT_BASE_URL` and `TWO_PORTAL_BASE_URL`, as on Two's other plugins, and apply only when the WordPress environment type is `local` or `development`. The old `TWOINC_DEV_API_HOST`, `TWOINC_DEV_CHECKOUT_HOST` and `TWOINC_DEV_PORTAL_HOST` are still read for this release and log a deprecation warning.
 * The API key and the Environment are saved together or not at all. A new key or environment is checked against the environment it would be used with: if Two rejects it, both saved values are kept, and if Two cannot be reached, a key and environment Two last accepted are kept until it can. The API key field no longer shows the saved key: it stays empty with a note that a key is saved, and leaving it empty keeps that key.
 * Two is offered only when the basket is in a currency Two invoices in: NOK, GBP, SEK, USD, DKK or EUR. An order placed in any other currency, for example after the buyer switched currency, is refused with a message naming the currency.
 * An order placed while your account offers no payment term is refused at checkout with a message asking the buyer to choose another payment method, as on Two's other plugins. It was previously booked on your account's default term, which nobody chose.

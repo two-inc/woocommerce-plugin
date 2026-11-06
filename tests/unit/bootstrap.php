@@ -217,6 +217,12 @@ function wp_parse_args($args, $defaults = [])
     return is_array($args) ? array_merge($defaults, $args) : $defaults;
 }
 
+/** WordPress's default is production; a spec sets the global for a developer's site. */
+function wp_get_environment_type()
+{
+    return $GLOBALS['__twoinc_test_wp_environment_type'] ?? 'production';
+}
+
 function get_home_url()
 {
     return $GLOBALS['test_home_url'] ?? 'https://shop.example';

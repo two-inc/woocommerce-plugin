@@ -236,7 +236,7 @@ if (!class_exists('WC_Twoinc')) {
         {
             // The stored environment mode decides the host (TWO-26604); the
             // hostname plays no part. Local/dev tooling that needs the API on
-            // an arbitrary host reads TWOINC_DEV_API_HOST, a server env var,
+            // an arbitrary host reads TWO_API_BASE_URL, a server env var,
             // never a wp-admin field (TWO-25386), gated in
             // get_environment_host() alongside the sibling overrides (TWO-40).
             return WC_Twoinc_Helper::get_environment_host('api', $this);

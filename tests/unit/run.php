@@ -8691,8 +8691,9 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-40. Three service hosts, three INDEPENDENT developer overrides,
-     * every one of them refused on anything that could be a production shop.
+     * TWO-40, TWO-27109. Three service hosts, three INDEPENDENT developer
+     * overrides under the names the other Two plugins use, honoured only
+     * where WordPress says the site is a developer's.
      *
      * The checkout-page override matters on its own rather than riding on the
      * API one: that host is loaded by the BUYER'S BROWSER (sole-trader signup,
@@ -8701,90 +8702,80 @@ final class BrandConfigSpec
      */
     private static function testDevHostOverridesAreIndependentAndProductionSafe(): void
     {
-        $make = static function (array $options) {
-            return new class ($options) extends WC_Twoinc {
-                private $options;
-                public function __construct($options)
+        $make = static function (string $mode) {
+            return new class ($mode) extends WC_Twoinc {
+                private $mode;
+                public function __construct($mode)
                 {
                     $this->id = WC_Twoinc_Brand::get('gateway_id');
-                    $this->options = $options;
+                    $this->mode = $mode;
                 }
                 public function get_option($key, $empty_value = null)
                 {
-                    return $this->options[$key] ?? $empty_value ?? '';
+                    return $key === 'checkout_env' ? $this->mode : ($empty_value ?? '');
                 }
             };
         };
+        $vars = ['TWO_API_BASE_URL', 'TWO_CHECKOUT_BASE_URL', 'TWO_PORTAL_BASE_URL', 'TWOINC_DEV_API_HOST', 'TWOINC_DEV_CHECKOUT_HOST', 'TWOINC_DEV_PORTAL_HOST'];
+        $prod = ['https://api.two.inc', 'https://checkout.two.inc', 'https://portal.two.inc/auth/merchant/signup'];
 
-        // Given: a dev-sniffed shop with production stored
-        $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
-        putenv('TWOINC_DEV_API_HOST=http://portal.localhost/api');
-        $gateway = $make(['checkout_env' => 'production']);
+        // [WordPress environment type, stored mode, variables set, API host, checkout host, signup URL, why]
+        $cases = [
+            ['local', 'production', ['TWO_API_BASE_URL' => 'http://portal.localhost/api'],
+                'http://portal.localhost/api', 'https://checkout.staging.two.inc', 'https://portal.two.inc/auth/merchant/signup',
+                'only the API host moves; the others follow its environment or fall back on their own'],
+            ['development', 'production', ['TWO_API_BASE_URL' => 'http://portal.localhost/api', 'TWO_CHECKOUT_BASE_URL' => 'https://checkout.tunnel.example'],
+                'http://portal.localhost/api', 'https://checkout.tunnel.example', 'https://portal.two.inc/auth/merchant/signup',
+                'the checkout page moves on its own variable'],
+            ['local', 'production', ['TWO_PORTAL_BASE_URL' => 'http://portal.localhost/'],
+                'https://api.two.inc', 'https://checkout.two.inc', 'http://portal.localhost/auth/merchant/signup',
+                'the portal override replaces the origin and keeps the brand\'s signup path'],
+            ['local', 'sandbox', ['TWO_API_BASE_URL' => 'https://api.staging.two.inc'],
+                'https://api.staging.two.inc', 'https://checkout.staging.two.inc', 'https://portal.two.inc/auth/merchant/signup',
+                'on a developer\'s site the override applies whatever environment is stored, as on Magento'],
+            ['local', 'production', ['TWOINC_DEV_API_HOST' => 'http://legacy.localhost/api'],
+                'http://legacy.localhost/api', 'https://checkout.staging.two.inc', 'https://portal.two.inc/auth/merchant/signup',
+                'the old name is still read for one release'],
+            ['local', 'production', ['TWOINC_DEV_API_HOST' => 'http://legacy.localhost/api', 'TWO_API_BASE_URL' => 'http://portal.localhost/api'],
+                'http://portal.localhost/api', 'https://checkout.staging.two.inc', 'https://portal.two.inc/auth/merchant/signup',
+                'the shared name wins over the old one'],
+            ['production', 'production', array_fill_keys($vars, 'http://leaked.example'),
+                $prod[0], $prod[1], $prod[2], 'a production site honours none, even when every variable leaks in'],
+            ['staging', 'production', array_fill_keys($vars, 'http://leaked.example'),
+                $prod[0], $prod[1], $prod[2], 'a staging site is not a developer\'s site'],
+        ];
+        foreach ($cases as [$type, $mode, $set, $api, $checkout, $signup, $description]) {
+            $GLOBALS['__twoinc_test_wp_environment_type'] = $type;
+            $GLOBALS['__twoinc_test_logs'] = [];
+            foreach ($vars as $var) {
+                putenv(isset($set[$var]) ? "$var={$set[$var]}" : $var);
+            }
+            $gateway = $make($mode);
+            TinyAssert::same(
+                [$api, $checkout, $signup],
+                [$gateway->get_twoinc_checkout_host(), WC_Twoinc_Helper::get_environment_host('checkout', $gateway), WC_Twoinc_Helper::get_merchant_portal_signup_url($gateway)],
+                $description
+            );
+        }
 
-        // When: only the API override is set
-        // Then: only the API host moves. The other two fall back on their own
-        // rather than inheriting it — the whole point of them being separate.
-        TinyAssert::same('http://portal.localhost/api', $gateway->get_twoinc_checkout_host());
-        TinyAssert::same(
-            'https://checkout.staging.two.inc',
-            WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
-        );
-        TinyAssert::same(
-            'https://portal.two.inc/auth/merchant/signup',
-            WC_Twoinc_Helper::get_merchant_portal_signup_url($gateway)
-        );
+        // The old name says what replaces it, once per request.
+        $GLOBALS['__twoinc_test_wp_environment_type'] = 'local';
+        foreach ($vars as $var) {
+            putenv($var);
+        }
+        putenv('TWOINC_DEV_CHECKOUT_HOST=https://checkout.legacy.example');
+        $GLOBALS['__twoinc_test_logs'] = [];
+        WC_Twoinc_Helper::get_dev_host_override('checkout', $make('production'));
+        WC_Twoinc_Helper::get_dev_host_override('checkout', $make('production'));
+        $logged = array_values(array_filter(array_column($GLOBALS['__twoinc_test_logs'], 'message'), static function ($m) {
+            return strpos($m, 'TWOINC_DEV_CHECKOUT_HOST is deprecated') !== false && strpos($m, 'set TWO_CHECKOUT_BASE_URL instead') !== false;
+        }));
+        TinyAssert::same(1, count($logged), 'the deprecation is logged once, naming the replacement');
+        putenv('TWOINC_DEV_CHECKOUT_HOST');
 
-        // When: the checkout-page override is set too
-        putenv('TWOINC_DEV_CHECKOUT_HOST=https://checkout.tunnel.example');
-        TinyAssert::same(
-            'https://checkout.tunnel.example',
-            WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
-        );
-        // And the sole-trader signup page follows it, because it is built from
-        // that same host rather than from a second resolution of its own.
-        TinyAssert::same(
-            'https://checkout.tunnel.example/soletrader/signup',
-            WC_Twoinc_Sole_Trader::get_signup_page_url($gateway)
-        );
-        // The API host is unmoved by it.
-        TinyAssert::same('http://portal.localhost/api', $gateway->get_twoinc_checkout_host());
-
-        // When: the portal override is set
-        // Then: the ORIGIN is replaced and the brand's own signup path kept.
-        putenv('TWOINC_DEV_PORTAL_HOST=http://portal.localhost/');
-        TinyAssert::same(
-            'http://portal.localhost/auth/merchant/signup',
-            WC_Twoinc_Helper::get_merchant_portal_signup_url($gateway)
-        );
-
-        // When: the same variables leak into a real merchant shop's process
-        // Then: not one of them is honoured. This is the gate that has to hold
-        // even if a deployment accidentally inherits a developer's env.
-        $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
-        $production = $make(['checkout_env' => 'production']);
-        TinyAssert::same('https://api.two.inc', $production->get_twoinc_checkout_host());
-        TinyAssert::same(
-            'https://checkout.two.inc',
-            WC_Twoinc_Helper::get_environment_host('checkout', $production)
-        );
-        TinyAssert::same(
-            'https://portal.two.inc/auth/merchant/signup',
-            WC_Twoinc_Helper::get_merchant_portal_signup_url($production)
-        );
-
-        // And: a merchant who has explicitly chosen an environment has said
-        // which one they want, so an env var does not get to overrule that
-        // either — even back on the dev-sniffed hostname.
-        $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
-        $explicit = $make(['checkout_env' => 'sandbox']);
-        TinyAssert::same('https://api.sandbox.two.inc', $explicit->get_twoinc_checkout_host());
-        TinyAssert::same(
-            'https://checkout.sandbox.two.inc',
-            WC_Twoinc_Helper::get_environment_host('checkout', $explicit)
-        );
-
-        // And: an unknown service name never resolves to an override.
-        TinyAssert::same('', WC_Twoinc_Helper::get_dev_host_override('nonexistent', $gateway));
+        // An unknown service name never resolves to an override.
+        TinyAssert::same('', WC_Twoinc_Helper::get_dev_host_override('nonexistent', $make('production')));
+        unset($GLOBALS['__twoinc_test_wp_environment_type']);
     }
 
     /**

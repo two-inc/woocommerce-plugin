@@ -9,7 +9,7 @@ declare(strict_types=1);
  */
 final class EnvironmentOptionsSpec
 {
-    private const DEV_VARS = ['TWOINC_DEV_API_HOST', 'TWOINC_DEV_CHECKOUT_HOST', 'TWOINC_DEV_PORTAL_HOST'];
+    private const DEV_VARS = ['TWO_API_BASE_URL', 'TWO_CHECKOUT_BASE_URL', 'TWO_PORTAL_BASE_URL', 'TWOINC_DEV_API_HOST', 'TWOINC_DEV_CHECKOUT_HOST', 'TWOINC_DEV_PORTAL_HOST'];
 
     public static function runAll(): void
     {

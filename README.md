@@ -146,18 +146,22 @@ internal environments for the use of Two employees only. The stored mode is the
 environment the gateway talks to; the shop's hostname plays no part.
 
 `docker/config/local.json` seeds `checkout_env` as `sandbox`, so a bare
-`docker compose up` talks to sandbox. The wpcli bootstrap and `make configure`
-store `production` whenever `TWO_API_BASE_URL` is set, and on a shop with
-production stored the developer overrides apply:
-`get_effective_environment_mode()` resolves the environment from
-`TWOINC_DEV_API_HOST`, so `https://api.staging.two.inc` gives `staging`. Use
-the merchant key for whichever environment that resolves to.
+`docker compose up` talks to sandbox. The developer overrides
+`TWO_API_BASE_URL`, `TWO_CHECKOUT_BASE_URL` and `TWO_PORTAL_BASE_URL`, the
+names the other Two plugins use, apply only on a site whose WordPress
+environment type (`WP_ENVIRONMENT_TYPE`) is `local` or `development`;
+docker-compose sets `local` (TWO-27109). `get_effective_environment_mode()`
+then resolves the environment from `TWO_API_BASE_URL`, so
+`https://api.staging.two.inc` gives `staging`. Use the merchant key for
+whichever environment that resolves to. The old `TWOINC_DEV_API_HOST`,
+`TWOINC_DEV_CHECKOUT_HOST` and `TWOINC_DEV_PORTAL_HOST` names are still read
+for this release, with a deprecation line in the log.
 
 `make run` exports `TWO_API_BASE_URL` (staging for an `@two.inc` gcloud
-account, sandbox otherwise) and docker-compose threads it through as
-`TWOINC_DEV_API_HOST`. A bare `docker compose up -d` does not, which leaves
-that variable empty in the container — harmless on localhost, but check it with
-`docker compose exec -T wordpress env | grep TWOINC_DEV` before concluding the key is
+account, sandbox otherwise) and docker-compose passes it to the wordpress
+container. A bare `docker compose up -d` does not, which leaves that variable
+empty in the container. That is harmless on localhost, but check it with
+`docker compose exec -T wordpress env | grep TWO_` before concluding the key is
 wrong.
 
 ### Clearing a cached API-key verdict

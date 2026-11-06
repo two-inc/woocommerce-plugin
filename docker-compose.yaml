@@ -51,14 +51,16 @@ services:
         }
       # Brand override for the plugin's WC_Twoinc_Brand loader (dev only)
       TWO_BRAND_CODE: "${TWO_BRAND_CODE:-}"
-      # Dev-only API host override (TWO-25386) — read by
-      # WC_Twoinc_Helper::get_effective_environment_mode() /
-      # WC_Twoinc::get_twoinc_checkout_host() on a dev-sniffed shop. Not a
-      # wp-admin field (the merchant-facing test-host control was removed);
-      # this must be an actual PHP-visible env var on the container that
-      # serves checkout requests, not a WP option, so it lives here rather
-      # than only on the wpcli container.
-      TWOINC_DEV_API_HOST: "${TWO_API_BASE_URL:-}"
+      # The developer host overrides below are honoured only on a site whose
+      # WordPress environment type is local or development (TWO-27109).
+      WP_ENVIRONMENT_TYPE: local
+      # Dev-only API host override (TWO-25386), read by
+      # WC_Twoinc_Helper::get_effective_environment_mode() and
+      # WC_Twoinc::get_twoinc_checkout_host(). Not a wp-admin field; this
+      # must be an actual PHP-visible env var on the container that serves
+      # checkout requests, not a WP option, so it lives here rather than only
+      # on the wpcli container.
+      TWO_API_BASE_URL: "${TWO_API_BASE_URL:-}"
       # Sibling overrides for the other two service hosts (TWO-40), each
       # independent and each falling back on its own when unset.
       #
@@ -68,8 +70,8 @@ services:
       # `host.docker.internal` are fine while the shop itself is local and
       # resolve to nothing useful once it is not; a reverse tunnel exposing a
       # local dev instance of that page is what covers the remote-shop case.
-      TWOINC_DEV_CHECKOUT_HOST: "${TWO_CHECKOUT_BASE_URL:-}"
-      TWOINC_DEV_PORTAL_HOST: "${TWO_PORTAL_BASE_URL:-}"
+      TWO_CHECKOUT_BASE_URL: "${TWO_CHECKOUT_BASE_URL:-}"
+      TWO_PORTAL_BASE_URL: "${TWO_PORTAL_BASE_URL:-}"
       TWO_INTERNAL_ENVIRONMENTS: "${TWO_INTERNAL_ENVIRONMENTS:-}"
     volumes:
       - wordpress_data:/var/www/html
