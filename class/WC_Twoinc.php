@@ -4562,10 +4562,17 @@ if (!class_exists('WC_Twoinc')) {
         {
             $status = self::categorize_verification_result($result);
             $status['body'] = ($status['status'] === 'ok' && isset($result['body'])) ? $result['body'] : null;
-            if ($api_key) {
+            // Checkout's cache is per key and speaks for the saved environment, so a
+            // verdict from another environment, judged on a save, stays out of it.
+            $saved_environment = $this->environment_under_judgement === null
+                || $this->environment_under_judgement === WC_Twoinc_Helper::normalise_environment_mode($this->get_stored_checkout_env());
+            if ($api_key && $saved_environment) {
                 set_transient(self::verification_cache_key($api_key), $status, self::API_KEY_VERIFICATION_TTL);
             }
-            if ($api_key === $this->get_option('api_key')) {
+            if ($api_key) {
+                $this->record_definitive_key_verdict((string) $api_key, $status['status']);
+            }
+            if ($api_key === $this->get_option('api_key') && $saved_environment) {
                 $this->api_key_verification_memo = $status;
             }
             return $status;
@@ -5099,6 +5106,8 @@ if (!class_exists('WC_Twoinc')) {
             wp_localize_script('twoinc.admin', 'twoinc_admin', [
                 'gateway_id' => $this->id,
                 'csrf_token' => wp_create_nonce('twoinc_admin_csrf_token'),
+                // The key field renders empty, so the saved key is checked by reference.
+                'has_saved_key' => (string) $this->get_option('api_key') !== '',
                 'ajax_url' => admin_url('admin-ajax.php'),
                 // %s days label for the live Default Payment Term rebuild.
                 'days_label' => __('%s days', 'twoinc-payment-gateway'),
@@ -7444,6 +7453,9 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function get_option($key, $empty_value = null)
         {
+            if ($key === 'checkout_env' && $this->environment_under_judgement !== null) {
+                return $this->environment_under_judgement;
+            }
             if (isset($this->withheld_form_fields[$key])) {
                 if (empty($this->settings)) {
                     $this->init_settings();
@@ -7487,7 +7499,7 @@ if (!class_exists('WC_Twoinc')) {
                     <fieldset>
                         <legend class="screen-reader-text"><span><?php echo wp_kses_post($data['title']); ?></span></legend>
                         <div style="position: relative; display: inline-block;">
-                            <input class="input-text regular-input <?php echo esc_attr($data['class']); ?>" type="password" name="<?php echo esc_attr($field_key); ?>" id="<?php echo esc_attr($field_key); ?>" style="<?php echo esc_attr($data['css']); ?> padding-right: 35px;" value="<?php echo esc_attr($this->get_option($key)); ?>" placeholder="<?php echo esc_attr($data['placeholder']); ?>" <?php disabled($data['disabled'], true); ?> <?php echo $this->get_custom_attribute_html($data); // WPCS: XSS ok.
+                            <input class="input-text regular-input <?php echo esc_attr($data['class']); ?>" type="password" name="<?php echo esc_attr($field_key); ?>" id="<?php echo esc_attr($field_key); ?>" style="<?php echo esc_attr($data['css']); ?> padding-right: 35px;" value="" autocomplete="new-password" placeholder="<?php echo esc_attr($data['placeholder']); ?>" <?php disabled($data['disabled'], true); ?> <?php echo $this->get_custom_attribute_html($data); // WPCS: XSS ok.
                             ?> />
                             <span id="api-key-verification-icon" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: none; pointer-events: none; z-index: 10;">
                                 <span class="dashicons dashicons-yes-alt" style="color: #46b450; display: none; font-size: 18px;" id="api-key-valid"></span>
@@ -7495,6 +7507,10 @@ if (!class_exists('WC_Twoinc')) {
                                 <span class="dashicons dashicons-update" style="color: #0073aa; display: none; animation: rotation 1s infinite linear; font-size: 18px;" id="api-key-loading"></span>
                             </span>
                         </div>
+                        <?php // The saved key is never sent back to the browser (TWO-27109). ?>
+                        <?php if ((string) $this->get_option($key) !== '') : ?>
+                            <p class="description twoinc-api-key-saved"><?php esc_html_e('A key is saved. Leave this blank to keep it.', 'twoinc-payment-gateway'); ?></p>
+                        <?php endif; ?>
                         <?php
                             $merchant_id = $this->get_option('api_key') ? $this->get_merchant_id() : '';
                             $merchant_short_name = $merchant_id ? (string) $this->get_option('merchant_short_name') : '';
@@ -8756,6 +8772,7 @@ if (!class_exists('WC_Twoinc')) {
             }
             delete_option($settings_option);
             delete_option(WC_Twoinc_Brand::prefixed_name(self::SHIPPING_TAX_FROM_SHOP_RATES_OPTION));
+            delete_option(self::key_verdicts_option());
             // The merchant-record caches (terms, days-on-invoice, platform
             // minimum) live outside the settings blob in dedicated
             // wp_options — clear them too, or "clear settings on uninstall"
@@ -8950,32 +8967,12 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Admin_Settings::add_error($refusal);
                 return;
             }
-            $api_key_field = 'woocommerce_' . $this->id . '_api_key';
-            $api_key_in_post = array_key_exists($api_key_field, $post_data);
-            $api_key = $api_key_in_post ? $post_data[$api_key_field] : '';
             $this->identity_before_save = [
                 'api_key' => (string) $this->get_option('api_key'),
                 'checkout_env' => (string) $this->get_option('checkout_env'),
             ];
-
-            if ($api_key_in_post && $api_key) {
-                $verification = self::categorize_verification_result($this->verify_api_key($api_key));
-                $product_name = WC_Twoinc_Brand::get('product_name');
-                if ($verification['status'] === 'ok') {
-                    WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'twoinc-payment-gateway'), $product_name));
-                } elseif ($verification['status'] === 'invalid_key') {
-                    $post_data[$api_key_field] = $this->get_option('api_key');
-                    WC_Admin_Settings::add_error(sprintf(__('%s rejected that API key, so the previously saved key was kept.', 'twoinc-payment-gateway'), $product_name));
-                } elseif ($verification['status'] === 'unreachable') {
-                    // A fresh install's stored key is empty, so reverting an unverifiable key locks the merchant out of saving the one that would work.
-                    WC_Admin_Settings::add_message(sprintf(__('API key saved, but %s could not be reached to verify it.', 'twoinc-payment-gateway'), $product_name));
-                } elseif ($verification['status'] === 'not_configured') {
-                    WC_Admin_Settings::add_message(__('API key saved, but it could not be verified because no environment is configured.', 'twoinc-payment-gateway'));
-                } else {
-                    WC_Admin_Settings::add_message(sprintf(__('API key saved, but %s returned an error while verifying it.', 'twoinc-payment-gateway'), $product_name));
-                }
-            }
-            // Save all settings (with the API key reverted only on a rejection)
+            $post_data = $this->judge_key_and_environment($post_data);
+            // Save all settings, with the key and environment kept as a pair when the judgement says so.
             $_POST = $post_data;
             parent::process_admin_options();
             // WooCommerce re-instantiates every gateway after the save action, so this object's own
@@ -8987,6 +8984,144 @@ if (!class_exists('WC_Twoinc')) {
             $this->refetch_merchant_record_on_identity_save();
         }
 
+        /**
+         * The API key and environment are saved as one pair or not at all
+         * (TWO-27109). An empty key field keeps the saved key. A changed pair
+         * is checked against the environment it would be saved with: a pair
+         * Two accepts is saved, one Two rejects keeps both saved halves, and
+         * one Two could not judge never replaces a saved pair whose last
+         * definitive answer was ok. Other fields save either way.
+         *
+         * @param array $post_data the posted settings
+         *
+         * @return array the posted settings, with the pair to save
+         */
+        private function judge_key_and_environment(array $post_data): array
+        {
+            $key_field = $this->get_field_key('api_key');
+            $env_field = $this->get_field_key('checkout_env');
+            $stored_key = trim((string) $this->get_option('api_key'));
+            $stored_env = WC_Twoinc_Helper::normalise_environment_mode($this->get_option('checkout_env'));
+            $typed = isset($post_data[$key_field]) && is_scalar($post_data[$key_field])
+                ? trim(wp_unslash((string) $post_data[$key_field]))
+                : '';
+            $key = $typed !== '' ? $typed : $stored_key;
+            $post_data[$key_field] = $key;
+            $posted_env = $post_data[$env_field] ?? null;
+            // A refused environment is never stored, so it is not part of the pair (TWO-26604).
+            $env = WC_Twoinc_Helper::is_environment_mode_save_allowed($posted_env, $this->get_stored_checkout_env())
+                ? WC_Twoinc_Helper::normalise_environment_mode($posted_env)
+                : $stored_env;
+
+            if ($key === '' || ($key === $stored_key && $env === $stored_env)) {
+                return $post_data;
+            }
+
+            $status = $this->verify_key_for_environment($key, $env)['status'];
+            $product_name = WC_Twoinc_Brand::get('product_name');
+            $keep = false;
+            if ($status === 'ok') {
+                WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'twoinc-payment-gateway'), $product_name));
+            } elseif ($status === 'invalid_key') {
+                $keep = true;
+                WC_Admin_Settings::add_error(sprintf(
+                    /* translators: %s: the payment method's product name */
+                    __('%s rejected that API key for the selected environment, so the previously saved API key and environment were kept.', 'twoinc-payment-gateway'),
+                    $product_name
+                ));
+            } elseif ($stored_key !== '' && $this->last_definitive_key_verdict($stored_key, $stored_env) === 'ok') {
+                $keep = true;
+                WC_Admin_Settings::add_error(sprintf(
+                    /* translators: %s: the payment method's product name */
+                    __('%s could not check the new API key and environment, so the previously saved ones, which it last accepted, were kept. Save again once it can be reached.', 'twoinc-payment-gateway'),
+                    $product_name
+                ));
+            } elseif ($status === 'unreachable') {
+                // A fresh install has no saved pair, so refusing an unverifiable one locks the merchant out of saving the one that would work.
+                WC_Admin_Settings::add_message(sprintf(__('API key saved, but %s could not be reached to verify it.', 'twoinc-payment-gateway'), $product_name));
+            } elseif ($status === 'not_configured') {
+                WC_Admin_Settings::add_message(__('API key saved, but it could not be verified because no environment is configured.', 'twoinc-payment-gateway'));
+            } else {
+                WC_Admin_Settings::add_message(sprintf(__('API key saved, but %s returned an error while verifying it.', 'twoinc-payment-gateway'), $product_name));
+            }
+
+            if ($keep) {
+                $post_data[$key_field] = (string) $this->get_option('api_key');
+                if (array_key_exists($env_field, $post_data)) {
+                    $post_data[$env_field] = (string) $this->get_option('checkout_env');
+                }
+            }
+            return $post_data;
+        }
+
+        /** The environment a verification is judged against, while one is judged; null otherwise. */
+        private ?string $environment_under_judgement = null;
+
+        /**
+         * Verify a key against an environment that may not be the saved one,
+         * recording the verdict for that pair.
+         *
+         * @return array{status: string, code: int|null, body: array|null}
+         */
+        private function verify_key_for_environment(string $key, string $env): array
+        {
+            $this->environment_under_judgement = $env;
+            try {
+                return $this->cache_verification_result($key, $this->verify_api_key($key));
+            } finally {
+                $this->environment_under_judgement = null;
+            }
+        }
+
+        /** Option holding the last definitive verdict ('ok' or 'invalid') per key and environment. */
+        private static function key_verdicts_option(): string
+        {
+            return WC_Twoinc_Brand::prefixed_name('api_key_verdicts');
+        }
+
+        /** A pair's slot: the key with the environment it resolves to, so a legacy spelling shares its canonical slot. */
+        private static function key_verdict_slot(string $key, $env): string
+        {
+            return md5(trim($key) . '|' . WC_Twoinc_Helper::normalise_environment_mode($env));
+        }
+
+        /** Verdicts kept, newest last; enough for the saved pair and a few attempts at replacing it. */
+        private const KEY_VERDICTS_KEPT = 8;
+
+        private function record_definitive_key_verdict(string $key, string $status): void
+        {
+            if ($status !== 'ok' && $status !== 'invalid_key') {
+                return;
+            }
+            $verdicts = get_option(self::key_verdicts_option(), []);
+            $verdicts = is_array($verdicts) ? $verdicts : [];
+            $slot = self::key_verdict_slot($key, $this->get_option('checkout_env'));
+            unset($verdicts[$slot]);
+            $verdicts[$slot] = $status === 'ok' ? 'ok' : 'invalid';
+            update_option(self::key_verdicts_option(), array_slice($verdicts, -self::KEY_VERDICTS_KEPT, null, true), false);
+        }
+
+        /**
+         * The last answer Two gave that judged this key in this environment:
+         * 'ok', 'invalid' or null. A shop upgraded from a build without the
+         * per-pair record, until its first verdict is recorded, falls back to
+         * the key's cached verification, which was taken against the saved
+         * environment.
+         */
+        private function last_definitive_key_verdict(string $key, string $env): ?string
+        {
+            $verdicts = get_option(self::key_verdicts_option(), null);
+            if (is_array($verdicts)) {
+                return $verdicts[self::key_verdict_slot($key, $env)] ?? null;
+            }
+            $cached = get_transient(self::verification_cache_key($key));
+            $status = is_array($cached) ? ($cached['status'] ?? null) : null;
+            if ($status === 'ok') {
+                return 'ok';
+            }
+            return $status === 'invalid_key' ? 'invalid' : null;
+        }
+
         /** After the save, so the refetch authenticates with the persisted key and a re-resolved merchant_id. */
         private function refetch_merchant_record_on_identity_save(): void
         {
@@ -8996,8 +9131,9 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
             self::invalidate_merchant_record_caches();
-            // Capped: three calls run in series in one admin POST.
-            $this->verify_api_key(null, 10);
+            // Capped: three calls run in series in one admin POST. Cached, so checkout
+            // judges the saved pair rather than the key in its previous environment.
+            $this->cache_verification_result((string) $this->get_option('api_key'), $this->verify_api_key(null, 10));
             $this->refresh_merchant_record_caches(true);
         }
 

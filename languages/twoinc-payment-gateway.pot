@@ -1740,11 +1740,6 @@ msgstr ""
 msgid "%s API key verified."
 msgstr ""
 
-#: class/WC_Twoinc.php:8914
-#, php-format
-msgid "%s rejected that API key, so the previously saved key was kept."
-msgstr ""
-
 #: class/WC_Twoinc.php:8917
 #, php-format
 msgid "API key saved, but %s could not be reached to verify it."
@@ -2139,4 +2134,20 @@ msgstr ""
 #: class/WC_Twoinc.php:6318
 #, php-format
 msgid "%1$s is not available for orders in %2$s. Please choose another currency or payment method."
+msgstr ""
+
+#. translators: %s: the payment method's product name
+#: class/WC_Twoinc.php:9028
+#, php-format
+msgid "%s rejected that API key for the selected environment, so the previously saved API key and environment were kept."
+msgstr ""
+
+#. translators: %s: the payment method's product name
+#: class/WC_Twoinc.php:9035
+#, php-format
+msgid "%s could not check the new API key and environment, so the previously saved ones, which it last accepted, were kept. Save again once it can be reached."
+msgstr ""
+
+#: class/WC_Twoinc.php:7512
+msgid "A key is saved. Leave this blank to keep it."
 msgstr ""

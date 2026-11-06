@@ -317,6 +317,8 @@ final class BrandConfigSpec
             'testCategorizeVerificationResultDistinguishesFailureReasons',
             'testVerifyApiKeyDistinguishesUnreachableFromNotConfigured',
             'testOnlyARejectedApiKeyRevertsOnSave',
+            'testTheKeyAndEnvironmentSaveAsOnePair',
+            'testTheSavedKeyNeverReachesTheSettingsPage',
             'testApiKeyVerificationStatusCachedAcrossCallsWithinTtl',
             'testOnlyADefinitiveKeyRejectionWithholdsPaymentMethod',
             'testIsAvailableTrueOnlyWhenEnabledAndVerified',
@@ -13241,6 +13243,95 @@ final class BrandConfigSpec
                 $description . ' — and say why in the right notice bucket'
             );
             TinyAssert::same([], $other, $description . ' — and nothing in the other bucket');
+        }
+    }
+
+    /**
+     * The key and environment are saved as one pair or not at all, and a pair
+     * Two could not judge never replaces one it last accepted (TWO-27109).
+     */
+    private static function testTheKeyAndEnvironmentSaveAsOnePair(): void
+    {
+        $down = new WP_Error('http_request_failed', 'could not resolve host');
+        $ok = ['response' => ['code' => 200], 'body' => '{"id":"merchant-1","short_name":"shop"}'];
+        $no = ['response' => ['code' => 401], 'body' => '{}'];
+        $sandbox = 'https://api.sandbox.two.inc';
+        $production = 'https://api.two.inc';
+        // [saved key, saved env, last verdict, typed key, posted env, Two's answer,
+        //  saved key after, saved env after, notice (null: the pair is not judged), blocking, host judged against, why]
+        $cases = [
+            ['old-key', 'sandbox', null, '', 'sandbox', $ok, 'old-key', 'sandbox', null, false, null, 'an empty key field keeps the saved key and judges nothing'],
+            ['old-key ', 'sandbox', null, '', 'sandbox', $ok, 'old-key', 'sandbox', null, false, null, 'a saved key with stray spaces is the same key'],
+            ['old-key', 'sandbox', null, '', 'production', $ok, 'old-key', 'production', 'API key verified', false, $production, 'a new environment is checked with the saved key against that environment'],
+            ['old-key', 'sandbox', null, '', 'production', $no, 'old-key', 'sandbox', 'rejected that API key', true, $production, 'a key the new environment rejects keeps the environment too'],
+            ['old-key', 'sandbox', null, ' new-key ', 'sandbox', $ok, 'new-key', 'sandbox', 'API key verified', false, $sandbox, 'a typed key is trimmed and checked against its environment'],
+            ['old-key', 'sandbox', 'ok', 'new-key', 'production', $down, 'old-key', 'sandbox', 'could not check', true, $production, 'an unjudged pair never replaces one Two last accepted'],
+            ['old-key', 'sandbox', 'legacy-ok', 'new-key', 'sandbox', $down, 'old-key', 'sandbox', 'could not check', true, $sandbox, 'a shop mid-upgrade keeps the verdict from the old cache'],
+            ['old-key', 'sandbox', 'invalid', 'new-key', 'sandbox', $down, 'new-key', 'sandbox', 'could not be reached', false, $sandbox, 'a pair Two last rejected may be replaced while Two is down'],
+            ['old-key', 'sandbox', null, 'new-key', 'sandbox', $down, 'new-key', 'sandbox', 'could not be reached', false, $sandbox, 'with no verdict at all the merchant can still save'],
+            ['old-key', 'SANDBOX ', 'ok', 'new-key', 'sandbox', $down, 'old-key', 'SANDBOX ', 'could not check', true, $sandbox, 'a legacy spelling of the environment finds its own verdict'],
+            ['', 'sandbox', null, 'new-key', 'production', $down, 'new-key', 'production', 'could not be reached', false, $production, 'a fresh install saves a pair Two could not judge'],
+        ];
+
+        foreach ($cases as [$key, $env, $verdict, $typed, $posted_env, $response, $want_key, $want_env, $notice, $blocking, $host, $description]) {
+            $GLOBALS['__twoinc_test_options'] = [];
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $GLOBALS['__twoinc_test_http_calls'] = [];
+            if ($verdict === 'legacy-ok') {
+                set_transient(WC_Twoinc::verification_cache_key($key), ['status' => 'ok', 'code' => 200]);
+            } elseif ($verdict !== null) {
+                update_option(WC_Twoinc_Brand::prefixed_name('api_key_verdicts'), [md5($key . '|sandbox') => $verdict]);
+            }
+            $gateway = self::save_gateway(true);
+            $gateway->init_form_fields();
+            $option_key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$option_key] = ['api_key' => $key, 'checkout_env' => $env, 'title' => 'stored title'];
+            $gateway->init_settings();
+            $GLOBALS['__twoinc_test_http_response'] = $response;
+            $GLOBALS['__twoinc_test_admin_messages'] = [];
+            $GLOBALS['__twoinc_test_admin_errors'] = [];
+            $gateway->test_post_data = [
+                $gateway->get_field_key('api_key') => $typed,
+                $gateway->get_field_key('checkout_env') => $posted_env,
+                $gateway->get_field_key('title') => 'edited title',
+                $gateway->get_field_key('payment_terms_days') => ['30'],
+            ];
+            $gateway->process_admin_options();
+            $saved = get_option($option_key, []);
+
+            TinyAssert::same([$want_key, $want_env], [$saved['api_key'] ?? null, $saved['checkout_env'] ?? null], $description);
+            TinyAssert::same('edited title', $saved['title'] ?? null, $description . ': other fields still save');
+            $verifies = array_values(array_filter(array_column($GLOBALS['__twoinc_test_http_calls'], 'url'), static function ($url) {
+                return strpos($url, '/v1/merchant/verify_api_key') !== false;
+            }));
+            // An unjudged save makes no check of its own (no notice says one ran); the tax code section may still read the saved key's profile.
+            if ($host !== null) {
+                TinyAssert::same($host, (string) preg_replace('#^(https://[^/]+).*$#', '$1', (string) ($verifies[0] ?? '')), $description . ': host the key was checked against');
+            }
+            $errors = implode("\n", $GLOBALS['__twoinc_test_admin_errors']);
+            $messages = implode("\n", $GLOBALS['__twoinc_test_admin_messages']);
+            if ($notice === null) {
+                TinyAssert::same(['', ''], [$errors, $messages], $description . ': no notice');
+            } else {
+                TinyAssert::true(strpos($blocking ? $errors : $messages, $notice) !== false, $description . ": notice [$errors|$messages]");
+                TinyAssert::same('', $blocking ? $messages : $errors, $description . ': nothing in the other bucket');
+            }
+        }
+        unset($GLOBALS['__twoinc_test_http_response']);
+    }
+
+    /** The key field renders empty, with a note while a key is saved (TWO-27109). */
+    private static function testTheSavedKeyNeverReachesTheSettingsPage(): void
+    {
+        foreach ([['secret-key-1234', true, 'a saved key is noted, not shown'], ['', false, 'no key, no note']] as [$key, $noted, $description]) {
+            $GLOBALS['__twoinc_test_options'] = [];
+            $gateway = self::save_gateway(true);
+            $gateway->init_form_fields();
+            $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()] = ['api_key' => $key];
+            $gateway->init_settings();
+            $html = (string) $gateway->generate_api_key_with_verification_html('api_key', $gateway->form_fields['api_key']);
+            TinyAssert::true($key === '' || strpos($html, $key) === false, $description . ': the key is not in the page');
+            TinyAssert::same($noted, strpos($html, 'A key is saved. Leave this blank to keep it.') !== false, $description);
         }
     }
 

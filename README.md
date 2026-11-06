@@ -184,6 +184,16 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 `200` is a good key for that environment; `401` means the key and the resolved
 environment disagree.
 
+Saving the settings treats the API key and the Environment as one pair
+(TWO-27109). The key field always renders empty, and leaving it empty keeps the
+saved key. A changed pair is checked against the environment it would be saved
+with: a pair Two accepts is saved, and one Two rejects keeps both saved values.
+When Two cannot judge the new pair, it replaces the saved one only if Two's last
+definitive answer about the saved pair was not ok. That answer is kept per key
+and environment in the `twoinc_api_key_verdicts` option, which is not cleared by
+`wp transient delete`. A shop upgraded from an earlier build reads the transient
+above until its first answer is recorded there. Other fields save either way.
+
 If you wish to use the staging site,
 
 ```bash

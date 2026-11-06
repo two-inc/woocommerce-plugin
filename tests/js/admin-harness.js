@@ -363,6 +363,9 @@ async function loadAdmin(options) {
   if (opts.apiKeyNotices) {
     adminSettings.api_key_notices = opts.apiKeyNotices;
   }
+  if (opts.hasSavedKey !== undefined) {
+    adminSettings.has_saved_key = opts.hasSavedKey;
+  }
   global.twoinc_admin = adminSettings;
   global.window.twoinc_admin = adminSettings;
   loadAdminSource();

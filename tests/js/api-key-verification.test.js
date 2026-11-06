@@ -426,3 +426,28 @@ describe("API key verification — categorized failure display", () => {
     expect($("#twoinc-merchant-id").text()).toBe("42");
   });
 });
+
+// TWO-27109: the key field renders empty, so the saved key is checked by reference.
+describe("API key verification with the saved key never on the page", () => {
+  test.each([
+    [true, 1, "a saved key is checked on load without the page holding it"],
+    [false, 0, "with no saved key and an empty field nothing is checked"]
+  ])("has_saved_key %p makes %p call(s): %s", async (hasSavedKey, calls) => {
+    const ajax = jest.fn(function () {
+      return { done: function () {}, fail: function () {} };
+    });
+    await loadAdmin({
+      apiKey: "",
+      hasSavedKey: hasSavedKey,
+      checked: [30],
+      stubAjax: function (jq) {
+        jq.ajax = ajax;
+      }
+    });
+    expect(ajax).toHaveBeenCalledTimes(calls);
+    if (calls) {
+      expect(ajax.mock.calls[0][0].data.stored).toBe(1);
+      expect(ajax.mock.calls[0][0].data.api_key).toBe("");
+    }
+  });
+});

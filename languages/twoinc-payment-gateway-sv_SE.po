@@ -1692,11 +1692,6 @@ msgstr "driftsatt %s UTC"
 msgid "%s API key verified."
 msgstr "%s API-nyckel verifierad."
 
-#: class/WC_Twoinc.php:8914
-#, php-format
-msgid "%s rejected that API key, so the previously saved key was kept."
-msgstr "%s avvisade den här API-nyckeln, så den tidigare sparade nyckeln behölls."
-
 #: class/WC_Twoinc.php:8917
 #, php-format
 msgid "API key saved, but %s could not be reached to verify it."
@@ -2086,3 +2081,19 @@ msgstr "%s har inga betalningsvillkor tillgängliga för den här beställningen
 #, php-format
 msgid "%1$s is not available for orders in %2$s. Please choose another currency or payment method."
 msgstr "%1$s är inte tillgängligt för beställningar i %2$s. Välj en annan valuta eller ett annat betalningssätt."
+
+#. translators: %s: the payment method's product name
+#: class/WC_Twoinc.php:9028
+#, php-format
+msgid "%s rejected that API key for the selected environment, so the previously saved API key and environment were kept."
+msgstr "%s avvisade den API-nyckeln för den valda miljön, så den tidigare sparade API-nyckeln och miljön behölls."
+
+#. translators: %s: the payment method's product name
+#: class/WC_Twoinc.php:9035
+#, php-format
+msgid "%s could not check the new API key and environment, so the previously saved ones, which it last accepted, were kept. Save again once it can be reached."
+msgstr "%s kunde inte kontrollera den nya API-nyckeln och miljön, så de tidigare sparade, som senast godkändes, behölls. Spara igen när tjänsten går att nå."
+
+#: class/WC_Twoinc.php:7512
+msgid "A key is saved. Leave this blank to keep it."
+msgstr "En nyckel är sparad. Lämna fältet tomt för att behålla den."
