@@ -1221,8 +1221,10 @@ final class OrderPostprocessingSpec
             $action === 'fulfil' ? $gateway->on_order_completed(42) : $gateway->on_order_cancelled(42);
             $notes = implode("\n", $order->notes);
             TinyAssert::true(strpos($notes, $note) !== false, "$description: notes [$notes]");
-            TinyAssert::same($status !== 0 || !$sent, strpos($notes, 'could not be reached') === false, "$description: says unreachable only when Two did not answer");
-            TinyAssert::same($status >= 400 && $sent, strpos($notes, 'refused') !== false, "$description: says refused only when Two answered with a refusal");
+            $answered = $sent && $status !== 0;
+            $refused = $answered && in_array($status, [400, 409], true);
+            TinyAssert::same(!$sent || $answered, strpos($notes, 'could not be reached') === false, "$description: says unreachable only when Two did not answer");
+            TinyAssert::same($refused, strpos($notes, 'refused') !== false, "$description: says refused only when Two answered with a refusal");
             TinyAssert::same($sent, $gateway->sent !== [], "$description: sent to Two");
         }
     }
