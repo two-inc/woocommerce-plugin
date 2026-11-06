@@ -6336,8 +6336,9 @@ if (!class_exists('WC_Twoinc')) {
             if ($value === '' || self::is_sendable_vendor_name($value)) {
                 return wp_kses_post($value);
             }
+            // A saved name went through wp_kses_post, so "&" is stored as "&amp;" and posted back as "&".
             $saved = (string) $this->get_option($key);
-            if ($value === trim($saved)) {
+            if ($value === trim($saved) || $value === trim(html_entity_decode($saved, ENT_QUOTES, 'UTF-8'))) {
                 return $saved;
             }
             throw new Exception(__('Enter a vendor name of at most 255 characters, using unaccented letters, digits, spaces and punctuation only, with no line breaks. The previously saved vendor name was kept.', 'twoinc-payment-gateway'));

@@ -13494,6 +13494,7 @@ final class BrandConfigSpec
             ['', 'Caf' . "\u{e9}" . ' Nord', '', true, 'an accented letter is refused'],
             ['Old', "North\nWarehouse", 'Old', true, 'a line break is refused'],
             ['Caf' . "\u{e9}" . ' Nord', 'Caf' . "\u{e9}" . ' Nord', 'Caf' . "\u{e9}" . ' Nord', false, 'a name saved before the rule, posted back unchanged, is let through'],
+            ['Caf' . "\u{e9}" . ' &amp; Co', 'Caf' . "\u{e9}" . ' & Co', 'Caf' . "\u{e9}" . ' &amp; Co', false, 'so is one with an ampersand, stored encoded and posted back decoded'],
         ];
         foreach ($cases as [$saved, $posted, $want, $refused, $description]) {
             $GLOBALS['__twoinc_test_options'] = [];
