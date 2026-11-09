@@ -10,9 +10,11 @@ concurrency:
 
 jobs:
   # The PHP minors to test, read from php.net on every run by
-  # dev/support-matrix.sh (TWO-27171): every minor from the plugin's declared
-  # floor (readme.txt "Requires PHP") to the newest one php.net supports. A
-  # transport or parse failure fails discovery rather than skipping green.
+  # dev/support-matrix.sh --php-unit (TWO-27171): every minor from the plugin's
+  # declared floor (readme.txt "Requires PHP") to the newest one php.net
+  # supports. It reads nothing else, so only a php.net outage can hold the unit
+  # jobs up, and a transport or parse failure fails discovery rather than
+  # skipping green.
   discover:
     name: Discover PHP versions
     runs-on: ${{ vars.RUNNER_STANDARD }}
@@ -28,7 +30,7 @@ jobs:
         id: gen
         run: |
           set -o pipefail
-          php=$(bash dev/support-matrix.sh --emit-all | jq -c '.php_unit')
+          php=$(bash dev/support-matrix.sh --php-unit)
           echo "PHP minors: $php"
           echo "php=$php" >> "$GITHUB_OUTPUT"
 

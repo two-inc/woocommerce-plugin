@@ -7,6 +7,9 @@
 #   dev/support-matrix.sh --emit-all   one JSON object for CI:
 #     {"e2e": [runnable combos], "skips": [combos not run, with reasons],
 #      "php_unit": [PHP minors for the unit and lint jobs]}
+#   dev/support-matrix.sh --php-unit   the php_unit list alone, as a JSON
+#     array. Reads only readme.txt and php.net, so an outage of the WordPress,
+#     WooCommerce or Docker Hub sources cannot block the unit and static jobs.
 #
 # Support window, and where each part comes from:
 #   PHP          php.net/releases (?json): the minors in supported_versions,
@@ -77,8 +80,9 @@ cd "$(dirname "$0")/.."
 mode=report
 case "${1:-}" in
     --emit-all) mode=all ;;
+    --php-unit) mode=unit ;;
     "") ;;
-    *) echo "usage: $0 [--emit-all]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--emit-all | --php-unit]" >&2; exit 2 ;;
 esac
 
 HUB=https://hub.docker.com/v2/namespaces/library/repositories/wordpress/tags
@@ -140,6 +144,10 @@ php_unit=$(jq -r '.[].version' <<<"$php_json" \
 [ -n "$php_unit" ] || die "no PHP minors between the floor $php_floor and $php_newest"
 log "PHP supported (php.net): $(echo $php_supported)"
 log "PHP unit and lint: $(echo $php_unit)"
+if [ "$mode" = unit ]; then
+    jq -R . <<<"$php_unit" | jq -sc '.'
+    exit 0
+fi
 
 # --- WordPress --------------------------------------------------------------
 wp_json=$(fetch 'https://api.wordpress.org/core/version-check/1.7/') || exit 2
