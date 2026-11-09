@@ -41,6 +41,15 @@ function two_e2e_blocks_checkout_content()
     $content = isset($GLOBALS['two_e2e_blocks_checkout_content'])
         ? $GLOBALS['two_e2e_blocks_checkout_content']
         : '';
+    // WooCommerce before 8.3 seeds the shortcode here, not Blocks markup. Its
+    // Checkout block fills an empty block with the default inner blocks when it
+    // renders, so the empty block is that release's canonical Blocks checkout
+    // (the e2e matrix runs the WooCommerce floor, TWO-27171).
+    if (false === strpos($content, 'wp:woocommerce/checkout')) {
+        return "<!-- wp:woocommerce/checkout -->\n"
+            . '<div class="wp-block-woocommerce-checkout wc-block-checkout is-loading"></div>' . "\n"
+            . '<!-- /wp:woocommerce/checkout -->';
+    }
     if (false === strpos($content, 'wp:woocommerce/checkout-fields-block')) {
         WP_CLI::error('WooCommerce no longer yields inner Blocks checkout markup');
     }
