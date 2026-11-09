@@ -116,6 +116,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 * Fixed: on the Checkout block, a buyer could still place an order with Two after the availability check said Two was not available, leaving a pending order. The order is now refused with that message, as the classic checkout already does by switching Two off.
 * The plugin now declares that it supports WooCommerce's High-Performance Order Storage and the cart and checkout blocks, so WooCommerce no longer lists it as incompatible with them.
 * Fixed: on older WooCommerce versions such as 7.6, the plugin no longer writes a "get_cart was called incorrectly" notice to the PHP log on each page load. Which payment methods checkout offers is unchanged.
+* Fixed: on WordPress 6.9.1 and later, the plugin no longer writes a notice that the "twoinc-blocks-checkout" style "was enqueued with dependencies that are not registered" to the PHP log. The checkout looks the same.
 
 = 2.25.0 =
 
