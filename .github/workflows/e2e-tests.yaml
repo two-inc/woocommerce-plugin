@@ -87,6 +87,15 @@ jobs:
     # teardown below can run somewhere other than where the next leg starts.
     env:
       COMPOSE_PROJECT_NAME: e2e-${{ github.run_id }}-${{ strategy.job-index }}
+      # This repo is public, so every step that prints shop or browser output
+      # runs it through this one sed -E script (TWO-27183). Playwright's
+      # failed-request call logs can print session cookies and auth headers.
+      # Checkout URLs carry a token= value in the query or fragment, plain,
+      # URL-encoded or double-encoded, so that value is redacted wherever it
+      # appears.
+      REDACT_SED: |-
+        s/((set-)?cookie|authorization)["']?[[:space:]]*([:=,]).*/\1\3 [redacted]/I
+        s/(token(=|%3D|%253D))[^&#[:space:]"'<>]*/\1[redacted]/Ig
     # Must exceed Playwright's own worst case, or a fully-failing suite is
     # killed before it can report: 8 tests x 2 attempts (retries: 1) x the
     # 180s per-test timeout = 48m, plus 5 order-intent legs x 2 x 120s = 20m,
@@ -249,14 +258,11 @@ jobs:
 
       - name: Run e2e tests
         working-directory: tests/e2e
-        # This repo is public: Playwright's failed-request call logs can print
-        # session cookies and auth headers, so redact them from the job log.
-        # Checkout URLs carry a token= value in the query or fragment, plain or
-        # URL-encoded, so redact that value wherever it appears (TWO-27183).
-        # pipefail keeps a failing run failing the step.
+        # Redacted with the job's REDACT_SED. pipefail keeps a failing run
+        # failing the step.
         run: |
           set -o pipefail
-          npx playwright test 2>&1 | sed -uE -e "s/((set-)?cookie|authorization)[\"']?[[:space:]]*([:=,]).*/\\1\\3 [redacted]/I" -e "s/(token(=|%3D))[^&#[:space:]\"'<>]*/\\1[redacted]/Ig"
+          npx playwright test 2>&1 | sed -uE "$REDACT_SED"
         env:
           MERCHANT_API_KEY: ${{ steps.secrets.outputs.MERCHANT_API_KEY }}
           TWO_ADMIN_PASSWORD: ${{ steps.secrets.outputs.TWO_ADMIN_PASSWORD }}
@@ -274,7 +280,9 @@ jobs:
             echo "No PHP notices logged."
             exit 0
           fi
-          entries=$(grep -E '^\[[^]]*\] PHP ' <<<"$log" | sed -E 's/^\[[^]]*\] //' | sort | uniq -c | sort -rn || true)
+          # Every line this step prints comes from entries, so redacting here
+          # with the job's REDACT_SED covers them all.
+          entries=$(grep -E '^\[[^]]*\] PHP ' <<<"$log" | sed -E 's/^\[[^]]*\] //' | sed -E "$REDACT_SED" | sort | uniq -c | sort -rn || true)
           # Ours: the plugin's directory, or any function, class or asset
           # handle it defines, every one of which carries "twoinc" in some case
           # (or the old name, tillit). A _doing_it_wrong backtrace names
