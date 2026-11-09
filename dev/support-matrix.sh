@@ -24,6 +24,14 @@
 #                wider of the two and the one that applies.
 #                WordPress series, their newest patch and minimum PHP:
 #                api.wordpress.org/core/version-check/1.7.
+#                The PHP minors each WordPress series supports: the core
+#                handbook's "PHP Compatibility and WordPress Versions" table,
+#                read through the handbook's REST endpoint
+#                (make.wordpress.org/core/wp-json/wp/v2/handbook?slug=
+#                php-compatibility-and-wordpress-versions). Quoted: "WordPress
+#                software is tested and compatible with the versions in this
+#                list." Each cell is Y or N; it retired its "beta support"
+#                label in May 2026, and anything but Y counts as not declared.
 #                WooCommerce versions: api.wordpress.org/plugins/info/1.0; each
 #                version's "Requires at least" (WordPress) and "Requires PHP"
 #                from its readme.txt in the wordpress.org plugin SVN.
@@ -43,14 +51,13 @@
 #               skip  WordPress X requires PHP Y or later      (version-check)
 #               skip  WooCommerce X requires PHP Y or later    (its readme)
 #               skip  no maintained wordpress:php<minor>-apache runtime image
-#               run, provisional: WordPress X does not declare PHP Y yet.
-#                     WordPress publishes no machine-readable PHP ceiling, so
-#                     the declaration read here is docker-library's: it ships a
-#                     WordPress series only on the PHP minors that series runs
-#                     on, so no wordpress:<series>-php<minor>-apache tag means
-#                     not declared. Every php.net minor gets legs from its first
-#                     GA release, but these run non-blocking (continue-on-error)
-#                     with a warning, so they are exercised and cannot block.
+#               run, provisional: WordPress X does not declare PHP Y yet: the
+#                     handbook table has no Y for that series and minor, or no
+#                     row for that series. Every php.net minor gets legs from
+#                     its first GA release, but these run non-blocking
+#                     (continue-on-error) with a warning, so they are exercised
+#                     and cannot block. Docker images only decide whether a leg
+#                     can run, never whether WordPress supports it.
 #               run   otherwise, blocking
 #
 # A runnable leg builds docker/wordpress-core/Dockerfile: the runtime of
@@ -59,9 +66,10 @@
 # being rebuilt once a newer series ships, so their PHP falls behind.
 #
 # Honest CI (TWO-24998): a transport or parse failure fails discovery, because
-# an empty matrix would skip green. A Docker Hub lookup that errors (anything
-# but a clean 200 or 404) counts as published, so a registry blip shows as a
-# red leg rather than a silent skip.
+# an empty matrix would skip green, as does a matrix with no blocking leg,
+# because it could never go red. A Docker Hub lookup that errors (anything but
+# a clean 200 or 404) counts as published, so a registry blip shows as a red
+# leg rather than a silent skip.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -152,6 +160,38 @@ wp_php() { awk -v s="$1" '$1 == s { print $3 }' <<<"$wp_series"; }
 log "WordPress window (L-1 + floor):"
 for s in $wp_window; do log "  $(wp_patch "$s") (requires PHP $(wp_php "$s"))"; done
 
+# --- WordPress's declared PHP support ----------------------------------------
+compat_json=$(fetch 'https://make.wordpress.org/core/wp-json/wp/v2/handbook?slug=php-compatibility-and-wordpress-versions') || exit 2
+# One "<series>\t<PHP column>\t<cell>" line per table cell, from every table
+# whose header row starts "WP / PHP Version". A column is a minor ("8.5") or
+# an open range ("8.3 and newer", "5.6 and older").
+wp_compat=$(jq -r '.[0].content.rendered // empty' <<<"$compat_json" \
+    | tr -d '\r\n' \
+    | sed -e 's#</tr>#\n#g' -e 's#</t[hd]>#\t#g' -e 's#<[^>]*>##g' -e 's#&nbsp;# #g' \
+    | awk -F'\t' '
+        function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
+        trim($1) ~ /WP \/ PHP Version$/ { n = NF; for (i = 2; i <= NF; i++) col[i] = trim($i); next }
+        n && trim($1) ~ /^[0-9]+\.[0-9]+$/ {
+            for (i = 2; i <= n; i++) if (col[i] != "") print trim($1) "\t" col[i] "\t" trim($i)
+        }') || die "the WordPress PHP compatibility page did not parse"
+[ -n "$wp_compat" ] || die "the WordPress PHP compatibility page has no 'WP / PHP Version' table"
+# wp_declares <series> <php minor>: the table marks that minor Y for that series.
+wp_declares() {
+    awk -F'\t' -v s="$1" -v p="$2" '
+        function le(a, b,  x, y) {
+            split(a, x, "."); split(b, y, ".")
+            return x[1] + 0 < y[1] + 0 || (x[1] + 0 == y[1] + 0 && x[2] + 0 <= y[2] + 0)
+        }
+        $1 != s { next }
+        { v = $2; sub(/ .*/, "", v) }
+        $2 == p || ($2 ~ / and newer$/ && le(v, p)) || ($2 ~ / and older$/ && le(p, v)) { print $3; exit }
+    ' <<<"$wp_compat" | grep -qx Y
+}
+for s in $wp_window; do
+    cut -f1 <<<"$wp_compat" | grep -qxF "$s" \
+        || echo "::warning::support-matrix: WordPress's PHP compatibility table has no row for WordPress $s yet, so its legs run non-blocking" >&2
+done
+
 # --- WooCommerce ------------------------------------------------------------
 wc_json=$(fetch 'https://api.wordpress.org/plugins/info/1.0/woocommerce.json') || exit 2
 wc_stable=$(jq -r '.version' <<<"$wc_json")
@@ -197,8 +237,8 @@ classify() {
         reason="WooCommerce $wc requires PHP ${wc_php[$wcs]} or later"
     elif [ "${runtime[$php]}" = missing ]; then
         reason="no wordpress:php$php-apache runtime image"
-    elif [ "$(hub_tag "$wps-php$php-apache")" = missing ]; then
-        provisional="WordPress $wps does not declare PHP $php (no wordpress:$wps-php$php-apache image); runs non-blocking"
+    elif ! wp_declares "$wps" "$php"; then
+        provisional="WordPress $wps does not declare PHP $php (WordPress's PHP compatibility table); runs non-blocking"
     fi
     entries+=("$(jq -nc --arg wordpress "$wp" --arg series "$wps" --arg woocommerce "$wc" \
         --arg php "$php" --arg reason "$reason" --arg provisional "$provisional" \
@@ -225,6 +265,8 @@ skips=$(jq -c '[.[] | select(.reason != "") | {wordpress, woocommerce, php, reas
 unit=$(jq -R . <<<"$php_unit" | jq -sc '.')
 runs=$(jq length <<<"$e2e")
 [ "$runs" -gt 0 ] || echo "::warning::support-matrix: every combination is a skip, so e2e tests nothing this run" >&2
+[ "$runs" -eq 0 ] || [ "$provisional" -lt "$runs" ] \
+    || die "every runnable combination is non-blocking, so e2e could never fail; check WordPress's PHP compatibility table"
 
 if [ "$mode" = all ]; then
     jq -nc --argjson e2e "$e2e" --argjson skips "$skips" --argjson php_unit "$unit" \
