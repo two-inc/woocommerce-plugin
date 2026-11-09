@@ -173,7 +173,8 @@ for s in $wp_window; do log "  $(wp_patch "$s") (requires PHP $(wp_php "$s"))"; 
 # --- WordPress's declared PHP support ----------------------------------------
 compat_json=$(fetch 'https://make.wordpress.org/core/wp-json/wp/v2/handbook?slug=php-compatibility-and-wordpress-versions') || exit 2
 # One "<series>\t<PHP column>\t<cell>" line per table cell, from every table
-# whose header row starts "WP / PHP Version". A column is a minor ("8.5") or
+# whose header row's first cell ends "WP / PHP Version" (the stripped HTML fuses
+# it to the text before the table). A column is a minor ("8.5") or
 # an open range ("8.3 and newer", "5.6 and older").
 wp_compat=$(jq -r '.[0].content.rendered // empty' <<<"$compat_json" \
     | tr -d '\r\n' \
