@@ -25,3 +25,11 @@ RUN set -eux; \
     rm -rf keep wordpress.tar.gz; \
     chown -R www-data:www-data /usr/src/wordpress; \
     grep -q "\$wp_version = '${WORDPRESS_CORE}';" /usr/src/wordpress/wp-includes/version.php
+
+# PHP before 8.1 truncates each logged error at log_errors_max_len (1024 bytes
+# in this image). A doing-it-wrong backtrace names the plugin past that point,
+# so the e2e notice gate would file it as upstream. 0 means no limit; PHP 8.1
+# removed the setting.
+RUN if php -r 'exit(PHP_VERSION_ID < 80100 ? 0 : 1);'; then \
+        echo 'log_errors_max_len = 0' > /usr/local/etc/php/conf.d/zz-log-errors-max-len.ini; \
+    fi
