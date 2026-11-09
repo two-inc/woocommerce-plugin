@@ -65,12 +65,34 @@ export async function setBillingCountry(page: Page, countryName: string) {
     return;
   }
 
+  const code = COUNTRY_CODES[countryName];
+  expect(code, `no country code mapped for "${countryName}"`).toBeDefined();
+
   const input = field.locator("input").first();
   await input.click();
   await input.fill(countryName);
   await field.getByRole("option", { name: countryName, exact: true }).click();
-  await expect(input).toHaveValue(countryName, { timeout: DEFAULT_TIMEOUT });
+  // The input shows the typed name from fill() alone, so only the cart store
+  // proves the option was committed.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          (addressKey) =>
+            window.wp?.data?.select("wc/store/cart")?.getCustomerData?.()?.[addressKey]?.country ?? null,
+          `${prefix}Address`
+        ),
+      { timeout: DEFAULT_TIMEOUT }
+    )
+    .toBe(code);
 }
+
+/** The store keeps the country code; the combobox shows the name. */
+const COUNTRY_CODES: Record<string, string> = {
+  Norway: "NO",
+  Spain: "ES",
+  "United Kingdom (UK)": "GB"
+};
 
 export async function fillCompanySearch(page: Page, companyName = BUYER_COMPANY) {
   const wrap = page.locator(COMPANY_WRAP).first();
