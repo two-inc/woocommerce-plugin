@@ -102,7 +102,10 @@ services:
       retries: 10
 
   wpcli:
-    image: wordpress:cli-2.11.0-php8.2
+    # CI's e2e legs set WPCLI_IMAGE to wordpress:cli-php<minor> for the leg's
+    # PHP minor, so install, activation and provisioning run on the PHP under
+    # test (TWO-27171). upgrade-smoke.yaml mirrors this default.
+    image: ${WPCLI_IMAGE:-wordpress:cli-2.11.0-php8.2}
     user: "33:33"
     entrypoint: /opt/tillit-payment-gateway/docker/wpcli.sh
     restart: always

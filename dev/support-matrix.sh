@@ -54,6 +54,8 @@
 #               skip  WordPress X requires PHP Y or later      (version-check)
 #               skip  WooCommerce X requires PHP Y or later    (its readme)
 #               skip  no maintained wordpress:php<minor>-apache runtime image
+#               skip  no wordpress:cli-php<minor> image: wp-cli installs and
+#                     provisions the shop on the leg's own PHP, never another
 #               run, provisional: WordPress X does not declare PHP Y yet: the
 #                     handbook table has no Y for that series and minor, or no
 #                     row for that series. Every php.net minor gets legs from
@@ -228,8 +230,11 @@ for s in $wc_window; do
 done
 
 # --- Classify ---------------------------------------------------------------
-declare -A runtime=()
-for php in $php_supported $php_floor; do runtime[$php]=$(hub_tag "php$php-apache"); done
+declare -A runtime=() cli=()
+for php in $php_supported $php_floor; do
+    runtime[$php]=$(hub_tag "php$php-apache")
+    cli[$php]=$(hub_tag "cli-php$php")
+done
 
 entries=()
 # classify <wordpress series> <woocommerce series> <php minor>
@@ -245,6 +250,8 @@ classify() {
         reason="WooCommerce $wc requires PHP ${wc_php[$wcs]} or later"
     elif [ "${runtime[$php]}" = missing ]; then
         reason="no wordpress:php$php-apache runtime image"
+    elif [ "${cli[$php]}" = missing ]; then
+        reason="no wordpress:cli-php$php image, so wp-cli cannot install the shop on PHP $php"
     elif ! wp_declares "$wps" "$php"; then
         provisional="WordPress $wps does not declare PHP $php (WordPress's PHP compatibility table); runs non-blocking"
     fi

@@ -154,14 +154,16 @@ jobs:
         run: |
           # Compose defaults WOOCOM_PLUGIN_CONFIG_JSON to the local-dev
           # config; CI must seed the gateway with the staging config the
-          # previous step rendered. WORDPRESS_IMAGE and WOOCOM_VERSION select
-          # this leg's combination.
+          # previous step rendered. WORDPRESS_IMAGE, WPCLI_IMAGE and
+          # WOOCOM_VERSION select this leg's combination; wp-cli runs on the
+          # leg's PHP minor too, so provisioning exercises it.
           {
             echo "WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-demostoregb.json"
             # The seeded config stores staging; the flag is what offers
             # Staging in the admin (TWO-26604).
             echo "TWO_INTERNAL_ENVIRONMENTS=1"
             echo "WORDPRESS_IMAGE=$COMPOSE_PROJECT_NAME-wordpress"
+            echo "WPCLI_IMAGE=wordpress:cli-php${{ matrix.combo.php }}"
             echo "WOOCOM_VERSION=${{ matrix.combo.woocommerce }}"
             echo "TWO_DEBUG_LOG_ONLY=1"
           } > .env
@@ -191,7 +193,8 @@ jobs:
           wp=$(docker compose exec -T wpcli wp core version | tr -d '\r')
           wc=$(docker compose exec -T wpcli wp plugin get woocommerce --field=version | tr -d '\r')
           php=$(docker compose exec -T wordpress php -r 'echo PHP_VERSION;' | tr -d '\r')
-          echo "Under test: WordPress $wp, WooCommerce $wc, PHP $php"
+          cli_php=$(docker compose exec -T wpcli php -r 'echo PHP_VERSION;' | tr -d '\r')
+          echo "Under test: WordPress $wp, WooCommerce $wc, PHP $php (wp-cli on PHP $cli_php)"
           fail=0
           [ "$wp" = "$WANT_WP" ] || { echo "::error::e2e: expected WordPress $WANT_WP, booted $wp"; fail=1; }
           [ "$wc" = "$WANT_WC" ] || { echo "::error::e2e: expected WooCommerce $WANT_WC, installed $wc"; fail=1; }
@@ -199,14 +202,21 @@ jobs:
             "$WANT_PHP".*) ;;
             *) echo "::error::e2e: expected PHP $WANT_PHP, the image runs $php"; fail=1 ;;
           esac
+          case "$cli_php" in
+            "$WANT_PHP".*) ;;
+            *) echo "::error::e2e: expected wp-cli on PHP $WANT_PHP, it runs $cli_php"; fail=1 ;;
+          esac
           [ "$fail" -eq 0 ]
           echo "php=$php" >> "$GITHUB_OUTPUT"
+          echo "cli_php=$cli_php" >> "$GITHUB_OUTPUT"
         id: versions
 
       # The image should run the newest patch of its PHP minor (TWO-27171).
       # One behind gets a warning, however long it has lagged; never a failure.
       - name: PHP is the latest patch
-        run: bash dev/check-php-patch.sh "wordpress:php${{ matrix.combo.php }}-apache (built with WordPress ${{ matrix.combo.wordpress }})" "${{ steps.versions.outputs.php }}"
+        run: |
+          bash dev/check-php-patch.sh "wordpress:php${{ matrix.combo.php }}-apache (built with WordPress ${{ matrix.combo.wordpress }})" "${{ steps.versions.outputs.php }}"
+          bash dev/check-php-patch.sh "wordpress:cli-php${{ matrix.combo.php }}" "${{ steps.versions.outputs.cli_php }}"
 
       # The plugin ships a verbatim copy of core's checkout/payment-method.php,
       # replaced through woocommerce_locate_template, an override WooCommerce's
