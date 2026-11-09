@@ -246,8 +246,8 @@ upstream on every run, and its header states the policy and sources:
   minor down to the plugin's declared floor (`Requires PHP` in `readme.txt`).
 - **WordPress and WooCommerce**: WooCommerce's published L-1 policy, the
   current and previous release series of each at their newest patch, plus the
-  plugin's declared minimums (`Requires at least` in `readme.txt`, `WC requires
-  at least` in the plugin header).
+  plugin's declared minimums (`Requires at least` in `readme.txt`,
+  `WC requires at least` in the plugin header).
 
 The e2e suite runs on every WordPress x WooCommerce x PHP combination in that
 window, once with the classic and once with the blocks checkout. A combination
