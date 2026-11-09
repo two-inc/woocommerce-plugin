@@ -252,7 +252,9 @@ upstream on every run, and its header states the policy and sources:
 The e2e suite runs on every WordPress x WooCommerce x PHP combination in that
 window, once with the classic and once with the blocks checkout. Every PHP
 minor gets legs from its first GA release; where the WordPress series does not
-declare that PHP yet, the legs run non-blocking, with a warning. A combination
+declare that PHP yet, the legs run non-blocking, with a warning. The declared
+WordPress, WooCommerce and PHP floors also run together as one blocking
+combination, even where php.net has ended support for that PHP. A combination
 that cannot run (WooCommerce requires a newer WordPress, or no runtime image
 exists for that PHP) is listed in the discover job's summary with a warning
 rather than dropped. Each leg builds `docker/wordpress-core` (the maintained
