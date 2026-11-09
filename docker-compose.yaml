@@ -17,10 +17,11 @@ services:
     extra_hosts:
       - "portal.localhost:host-gateway"
     # Pinned by default so a local stack stays deterministic. CI's e2e matrix
-    # overrides it to run the same suite on the current WordPress release, so
-    # the readme's "Tested up to" claim rests on a real checkout (PLAT-2320).
+    # sets WORDPRESS_IMAGE to an image it builds per leg from
+    # docker/wordpress-core, one per WordPress x PHP combination that
+    # dev/support-matrix.sh discovers (TWO-27171).
     # upgrade-smoke.yaml mirrors this default; move both together.
-    image: wordpress:${WORDPRESS_VERSION:-6.8}-php8.2-apache
+    image: ${WORDPRESS_IMAGE:-wordpress:${WORDPRESS_VERSION:-6.8}-php8.2-apache}
     restart: always
     ports:
       - "${WORDPRESS_PORT:-8888}:80"

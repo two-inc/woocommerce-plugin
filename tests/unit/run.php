@@ -12191,7 +12191,7 @@ final class BrandConfigSpec
      * WooCommerce's own "outdated templates" report scans the active theme
      * only, so nothing upstream notices this filter-based copy going stale.
      * The core release it was taken from and the md5 of everything outside
-     * the TWOINC markers are pinned here instead; the support-matrix legs set
+     * the TWOINC markers are pinned here instead; the e2e legs set
      * WC_CORE_TEMPLATE_PATH and diff against the real installed core, which
      * is what catches an upgrade that moves the template.
      */

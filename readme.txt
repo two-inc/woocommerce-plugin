@@ -37,9 +37,12 @@ Simply put, Two is customer-centric, with less friction and higher conversion ra
 
 = Compatibility with WooCommerce =
 
-The plugin has been tested for compatibility with WooCommerce version 10.3.5 with
-[HPOS](https://woocommerce.com/document/high-performance-order-storage/) enabled, on both the
-classic shortcode checkout and the [block-based checkout](https://woocommerce.com/checkout-blocks/).
+Every change to the plugin is tested on the current and previous release series of
+WordPress and WooCommerce, and on WooCommerce 7.6, on every PHP version that still receives
+updates. Tests cover both the classic shortcode checkout and the
+[block-based checkout](https://woocommerce.com/checkout-blocks/), with
+[HPOS](https://woocommerce.com/document/high-performance-order-storage/) enabled on every
+WooCommerce release that turns it on by default.
 It requires WooCommerce 7.6 or later.
 
 == Installation ==

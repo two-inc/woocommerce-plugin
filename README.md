@@ -236,6 +236,29 @@ verification.
 Identity verification / SCA, merchant-portal flows and multi-country coverage
 are out of scope here — they live in the `e2e-tests` repo.
 
+### Versions CI tests
+
+Nothing in CI lists versions by hand. `dev/support-matrix.sh` reads them from
+upstream on every run, and its header states the policy and sources:
+
+- **PHP**: every minor php.net still supports (active or security support).
+  The unit tests and a lint of every shipped PHP file also run on each older
+  minor down to the plugin's declared floor (`Requires PHP` in `readme.txt`).
+- **WordPress and WooCommerce**: WooCommerce's published L-1 policy, the
+  current and previous release series of each at their newest patch, plus the
+  plugin's declared minimums (`Requires at least` in `readme.txt`, `WC requires
+  at least` in the plugin header).
+
+The e2e suite runs on every WordPress x WooCommerce x PHP combination in that
+window, once with the classic and once with the blocks checkout. A combination
+that cannot run (WooCommerce requires a newer WordPress, or no WordPress image
+exists for that PHP) is listed in the discover job's summary with a warning
+rather than dropped. Each leg builds `docker/wordpress-core` (the maintained
+`wordpress:php<minor>-apache` runtime with the WordPress core under test) and
+fails if its PHP is more than 7 days behind php.net's newest patch
+(`dev/check-php-patch.sh`). Run `bash dev/support-matrix.sh` to see what CI
+will test today.
+
 ### Environment
 
 - Store: <http://localhost:8888>, admin at `/wp-admin` (`exampleuser@two.inc` / `examplepassword123`).
