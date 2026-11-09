@@ -33,15 +33,20 @@
 #   php_unit  Every PHP minor from the declared floor to the newest supported
 #             one. setup-php resolves the newest patch of each.
 #   e2e       Every WordPress x WooCommerce pair in the window, times every
-#             supported PHP minor, classified run or skip, first match wins:
-#               WooCommerce X requires WordPress Y or later   (its readme)
-#               WordPress X requires PHP Y or later           (version-check)
-#               WooCommerce X requires PHP Y or later         (its readme)
-#               WordPress X was never published on PHP Y: docker-library ships
-#                 a WordPress series only on the PHP minors it runs on, so no
-#                 wordpress:<series>-php<minor>-apache tag means no image
-#               no maintained wordpress:php<minor>-apache runtime image
-#               run
+#             supported PHP minor, classified, first match wins:
+#               skip  WooCommerce X requires WordPress Y or later (its readme)
+#               skip  WordPress X requires PHP Y or later      (version-check)
+#               skip  WooCommerce X requires PHP Y or later    (its readme)
+#               skip  no maintained wordpress:php<minor>-apache runtime image
+#               run, provisional: WordPress X does not declare PHP Y yet.
+#                     WordPress publishes no machine-readable PHP ceiling, so
+#                     the declaration read here is docker-library's: it ships a
+#                     WordPress series only on the PHP minors that series runs
+#                     on, so no wordpress:<series>-php<minor>-apache tag means
+#                     not declared. Every php.net minor gets legs from its first
+#                     GA release, but these run non-blocking (continue-on-error)
+#                     with a warning, so they are exercised and cannot block.
+#               run   otherwise, blocking
 #
 # A runnable leg builds docker/wordpress-core/Dockerfile: the runtime of
 # wordpress:php<minor>-apache, which docker-library rebuilds for every PHP
@@ -186,21 +191,25 @@ for wps in $wp_window; do
                 reason="WordPress $wp requires PHP $(wp_php "$wps") or later"
             elif ! ver_le "$(series "${wc_php[$wcs]}")" "$php"; then
                 reason="WooCommerce $wc requires PHP ${wc_php[$wcs]} or later"
-            elif [ "$(hub_tag "$wps-php$php-apache")" = missing ]; then
-                reason="WordPress $wps was never published on PHP $php (no wordpress:$wps-php$php-apache image)"
             elif [ "${runtime[$php]}" = missing ]; then
                 reason="no maintained wordpress:php$php-apache runtime image"
             fi
+            provisional=
+            if [ -z "$reason" ] && [ "$(hub_tag "$wps-php$php-apache")" = missing ]; then
+                provisional="WordPress $wps does not declare PHP $php (no wordpress:$wps-php$php-apache image); runs non-blocking"
+            fi
             entries+=("$(jq -nc --arg wordpress "$wp" --arg series "$wps" --arg woocommerce "$wc" \
-                --arg php "$php" --arg reason "$reason" \
+                --arg php "$php" --arg reason "$reason" --arg provisional "$provisional" \
                 '{wordpress: $wordpress, wordpress_series: $series, woocommerce: $woocommerce,
-                  php: $php, reason: $reason}')")
+                  php: $php, reason: $reason, provisional: ($provisional != ""),
+                  provisional_reason: $provisional}')")
         done
     done
 done
 
 all=$(printf '%s\n' "${entries[@]}" | jq -sc '.')
 e2e=$(jq -c '[.[] | select(.reason == "") | del(.reason)]' <<<"$all")
+provisional=$(jq '[.[] | select(.reason == "" and .provisional)] | length' <<<"$all")
 skips=$(jq -c '[.[] | select(.reason != "") | {wordpress, woocommerce, php, reason}]' <<<"$all")
 unit=$(jq -R . <<<"$php_unit" | jq -sc '.')
 runs=$(jq length <<<"$e2e")
@@ -213,6 +222,8 @@ if [ "$mode" = all ]; then
 fi
 
 echo
-echo "E2E combinations ($runs run, $(jq length <<<"$skips") skip):"
-jq -r '.[] | if .reason == "" then "  RUN   WordPress \(.wordpress)  WooCommerce \(.woocommerce)  PHP \(.php)"
-             else "  SKIP  WordPress \(.wordpress)  WooCommerce \(.woocommerce)  PHP \(.php): \(.reason)" end' <<<"$all"
+echo "E2E combinations ($runs run, of which $provisional provisional, $(jq length <<<"$skips") skip):"
+jq -r '.[] | "WordPress \(.wordpress)  WooCommerce \(.woocommerce)  PHP \(.php)" as $c
+    | if .reason != "" then "  SKIP  \($c): \(.reason)"
+      elif .provisional then "  RUN*  \($c): \(.provisional_reason)"
+      else "  RUN   \($c)" end' <<<"$all"

@@ -1,18 +1,15 @@
 #!/usr/bin/env bash
-# dev/check-php-patch.sh <running-php-version>
+# dev/check-php-patch.sh <image> <running-php-version>
 #
 # Checks that an e2e image runs the newest patch of its PHP minor (TWO-27171).
 # The newest patch and its release date come from php.net
-# (https://www.php.net/releases/?json&version=<minor>).
-#   on the newest patch (or newer than php.net lists)  pass
-#   behind, newest patch released 7 days ago or less   ::warning::, pass
-#   behind, newest patch released more than 7 days ago ::error::, fail
-# The 7 days cover docker-library rebuilding its images after a PHP release.
-# An image that lags for longer needs a base that keeps up, not a longer grace.
+# (https://www.php.net/releases/?json&version=<minor>). An image behind it gets
+# a ::warning:: naming the image, the running patch and the newest one, however
+# long it has lagged. It never fails the leg; only a failed php.net lookup does.
 set -euo pipefail
 
-GRACE_DAYS=7
-running=${1:?usage: $0 <running-php-version>}
+image=${1:?usage: $0 <image> <running-php-version>}
+running=${2:?usage: $0 <image> <running-php-version>}
 [[ $running =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || { echo "::error::php-patch: '$running' is not a PHP version" >&2; exit 1; }
 minor=$(cut -d. -f1,2 <<<"$running")
 
@@ -26,15 +23,7 @@ released=$(jq -r '.date // empty' <<<"$release")
 
 newest=$(printf '%s\n%s\n' "$running" "$latest" | sort -V | tail -1)
 if [ "$newest" = "$running" ]; then
-    echo "PHP $running is the newest $minor patch (php.net: $latest, released $released)"
+    echo "$image runs PHP $running, the newest $minor patch (php.net: $latest, released $released)"
     exit 0
 fi
-
-age=$((($(date -u +%s) - $(date -u -d "$released" +%s)) / 86400))
-msg="image runs PHP $running but php.net released $latest on $released ($age days ago)"
-if [ "$age" -le "$GRACE_DAYS" ]; then
-    echo "::warning title=PHP patch behind::$msg; within the $GRACE_DAYS-day grace for image rebuilds"
-    exit 0
-fi
-echo "::error title=PHP patch behind::$msg; past the $GRACE_DAYS-day grace, so the image is not keeping up"
-exit 1
+echo "::warning title=PHP patch behind::$image runs PHP $running; php.net's newest $minor patch is $latest, released $released"

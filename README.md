@@ -250,13 +250,16 @@ upstream on every run, and its header states the policy and sources:
   `WC requires at least` in the plugin header).
 
 The e2e suite runs on every WordPress x WooCommerce x PHP combination in that
-window, once with the classic and once with the blocks checkout. A combination
-that cannot run (WooCommerce requires a newer WordPress, or no WordPress image
+window, once with the classic and once with the blocks checkout. Every PHP
+minor gets legs from its first GA release; where the WordPress series does not
+declare that PHP yet, the legs run non-blocking, with a warning. A combination
+that cannot run (WooCommerce requires a newer WordPress, or no runtime image
 exists for that PHP) is listed in the discover job's summary with a warning
 rather than dropped. Each leg builds `docker/wordpress-core` (the maintained
 `wordpress:php<minor>-apache` runtime with the WordPress core under test) and
-fails if its PHP is more than 7 days behind php.net's newest patch
-(`dev/check-php-patch.sh`). Run `bash dev/support-matrix.sh` to see what CI
+warns if its PHP is behind php.net's newest patch (`dev/check-php-patch.sh`).
+PHP notices go to the shop's debug log rather than the page; one from this
+plugin's code fails the leg. Run `bash dev/support-matrix.sh` to see what CI
 will test today.
 
 ### Environment

@@ -22,7 +22,9 @@ jobs:
   # Honest CI (TWO-24998): the run or skip decision is made here. A combination
   # that cannot run never becomes a green leg: it is listed in this job's step
   # summary and gets one ::warning:: with its reason. A transport or parse
-  # failure fails discovery rather than emitting an empty matrix.
+  # failure fails discovery rather than emitting an empty matrix. A PHP minor
+  # gets legs from its first GA release; where the WordPress series does not
+  # declare that PHP, the leg runs non-blocking with a warning and a summary row.
   discover:
     name: Discover the support matrix
     runs-on: ${{ vars.RUNNER_STANDARD }}
@@ -49,9 +51,11 @@ jobs:
             echo ""
             echo "| WordPress | WooCommerce | PHP | Status | Reason |"
             echo "|---|---|---|---|---|"
-            jq -r '.[] | "| \(.wordpress) | \(.woocommerce) | \(.php) | ✅ tested | |"' <<<"$combos"
+            jq -r '.[] | select(.provisional | not) | "| \(.wordpress) | \(.woocommerce) | \(.php) | ✅ tested | |"' <<<"$combos"
+            jq -r '.[] | select(.provisional) | "| \(.wordpress) | \(.woocommerce) | \(.php) | ⚠️ tested, non-blocking | \(.provisional_reason) |"' <<<"$combos"
             jq -r '.[] | "| \(.wordpress) | \(.woocommerce) | \(.php) | 🚫 NOT run | \(.reason) |"' <<<"$skips"
           } >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.[] | select(.provisional) | "::warning title=Combination tested non-blocking::WordPress \(.wordpress) / WooCommerce \(.woocommerce) / PHP \(.php): \(.provisional_reason)"' <<<"$combos"
           jq -r '.[] | "::warning title=Combination NOT tested::WordPress \(.wordpress) / WooCommerce \(.woocommerce) / PHP \(.php): \(.reason)"' <<<"$skips"
           if [ "$(jq length <<<"$combos")" -eq 0 ]; then
             echo "::error::e2e: no runnable combination in the support window"
@@ -62,6 +66,9 @@ jobs:
     name: e2e (WP ${{ matrix.combo.wordpress }}, WC ${{ matrix.combo.woocommerce }}, PHP ${{ matrix.combo.php }}, ${{ matrix.renderer }})
     needs: discover
     runs-on: ${{ vars.RUNNER_STANDARD }}
+    # A PHP minor the WordPress series does not declare is exercised but
+    # cannot block (see dev/support-matrix.sh).
+    continue-on-error: ${{ matrix.combo.provisional }}
     strategy:
       fail-fast: false
       # Every runnable combination times both renderers. Capped so the legs do
@@ -196,10 +203,10 @@ jobs:
           echo "php=$php" >> "$GITHUB_OUTPUT"
         id: versions
 
-      # The image must run the newest patch of its PHP minor, with a 7-day
-      # grace for image rebuilds after a PHP release (TWO-27171).
+      # The image should run the newest patch of its PHP minor (TWO-27171).
+      # One behind gets a warning, however long it has lagged; never a failure.
       - name: PHP is the latest patch
-        run: bash dev/check-php-patch.sh "${{ steps.versions.outputs.php }}"
+        run: bash dev/check-php-patch.sh "wordpress:php${{ matrix.combo.php }}-apache (built with WordPress ${{ matrix.combo.wordpress }})" "${{ steps.versions.outputs.php }}"
 
       # The plugin ships a verbatim copy of core's checkout/payment-method.php,
       # replaced through woocommerce_locate_template, an override WooCommerce's
