@@ -227,6 +227,28 @@ jobs:
           TWO_ADMIN_PASSWORD: ${{ steps.secrets.outputs.TWO_ADMIN_PASSWORD }}
           E2E_CHECKOUT_RENDERER: ${{ matrix.renderer }}
 
+      # [DIAG TEMP TWO-27178] Print the plugin's WooCommerce log lines and the
+      # status of every two_* wc-ajax call, to see whether the shop refused the
+      # company searches. Any line naming a key, token, cookie, password,
+      # secret or authorization is dropped, and query strings are never shown.
+      - name: "[DIAG TEMP TWO-27178] Print the plugin log and wc-ajax statuses"
+        if: always()
+        run: |
+          redact() { grep -viE 'key|token|cookie|authori|password|secret|bearer' || true; }
+          logdir=$(docker compose exec -T wpcli wp eval 'echo defined("WC_LOG_DIR") ? WC_LOG_DIR : "";' 2>/dev/null | tr -d '\r')
+          echo "WC_LOG_DIR: ${logdir:-unknown}"
+          docker compose exec -T wpcli sh -c "ls -1 '$logdir' 2>/dev/null" || true
+          echo "--- Rate limit / twoinc lines (last 300) ---"
+          docker compose exec -T wpcli sh -c "grep -hiE 'rate limit|twoinc|API proxy' '$logdir'/*.log 2>/dev/null" | redact | cut -c1-400 | tail -n 300
+          echo "--- wc-ajax two_* calls: count by route and status ---"
+          docker compose logs --no-log-prefix wordpress 2>/dev/null \
+            | sed -nE 's/.*\[([^]]+)\] "[A-Z]+ [^" ]*wc-ajax=(two_[a-z_]+)[^"]*" ([0-9]{3}) .*/\1 \2 \3/p' > /tmp/twoinc-ajax.txt || true
+          awk '{print $2, $3}' /tmp/twoinc-ajax.txt | sort | uniq -c | sort -rn
+          echo "--- company search and lookup calls per minute (max 60 lines) ---"
+          awk '$2 ~ /two_company/ {print substr($1, 1, 17), $2}' /tmp/twoinc-ajax.txt | sort | uniq -c | sort -rn | head -n 60
+          echo "--- every non-2xx two_* call (time, route, status; last 200) ---"
+          awk '$3 !~ /^2/' /tmp/twoinc-ajax.txt | tail -n 200
+
       - name: Upload test results
         # always(), not failure(): a job that exceeds timeout-minutes is
         # CANCELLED, not failed, and a cancelled job skips every step whose
