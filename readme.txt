@@ -120,7 +120,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 * The plugin now declares that it supports WooCommerce's High-Performance Order Storage and the cart and checkout blocks, so WooCommerce no longer lists it as incompatible with them.
 * Fixed: on older WooCommerce versions such as 7.6, the plugin no longer writes a "get_cart was called incorrectly" notice to the PHP log on each page load. Which payment methods checkout offers is unchanged.
 * Fixed: on WordPress 6.9.1 and later, the plugin no longer writes a notice that the "twoinc-blocks-checkout" style "was enqueued with dependencies that are not registered" to the PHP log. The checkout looks the same.
-* Fixed: on WooCommerce 7.6 with the Checkout block, the billing address now shows the Company field when company search sits in the address, as it already does on newer WooCommerce. Before, the field stayed hidden, so company search never appeared and buyers could not choose their company to pay with Two.
+* Fixed: on WooCommerce 7.6 with the Checkout block, the checkout address form now shows the Company field when company search sits in the address, as it already does on newer WooCommerce. Before, the field stayed hidden, so company search never appeared and buyers could not choose their company to pay with Two.
 
 = 2.25.0 =
 

@@ -3128,14 +3128,17 @@ final class BrandConfigSpec
     private static function testBlocksCompanyAttributeRevealedOnlyWhereTheSearchNeedsIt(): void
     {
         $checkout = ['blockName' => 'woocommerce/checkout', 'attrs' => []];
-        $shown = ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => true]];
+        $shown = ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => true, 'requireCompanyField' => false]];
+        $shownRequired = ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => true, 'requireCompanyField' => true]];
         $cases = [
             [$checkout, 'yes', true, [], $shown, 'an empty Checkout block with the search in the address'],
             [
                 ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => false, 'requireCompanyField' => false]],
-                'yes', true, [],
-                ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => true, 'requireCompanyField' => false]],
-                'a saved block with the row hidden',
+                'yes', true, [], $shown, 'a saved block with the row hidden',
+            ],
+            [
+                ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => false, 'requireCompanyField' => true]],
+                'yes', true, [], $shown, 'a saved block with the row hidden but required is revealed optional',
             ],
             [['blockName' => 'woocommerce/checkout'], 'yes', true, [], $shown, 'a parsed block with no attrs key'],
             [$checkout, 'no', true, [], $checkout, 'search relocated to the payment tile'],
@@ -3145,22 +3148,25 @@ final class BrandConfigSpec
                 ['blockName' => 'woocommerce/cart', 'attrs' => []], 'yes', true, [],
                 ['blockName' => 'woocommerce/cart', 'attrs' => []], 'another block on the checkout page',
             ],
-            [$shown, 'yes', true, [], $shown, 'a block that already shows the row'],
+            [$shownRequired, 'yes', true, [], $shownRequired, 'a block that already shows the row is left as the merchant saved it'],
+            ['<p>not a parsed block</p>', 'yes', true, [], '<p>not a parsed block</p>', 'a value that is not a parsed block'],
         ];
+
+        // Registered at plugins_loaded, so the handler finds the gateway itself rather than being handed one.
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
 
         foreach ($cases as $case) {
             list($block, $enabled, $singular, $blocks, $expected, $description) = $case;
 
             $GLOBALS['__twoinc_test_is_singular'] = $singular;
             $GLOBALS['__twoinc_test_page_blocks'] = $blocks ?: ['woocommerce/checkout'];
+            $prop->setValue(null, self::companySearchGateway($enabled));
 
-            TinyAssert::same(
-                $expected,
-                (new WC_Twoinc_Checkout(self::companySearchGateway($enabled)))->reveal_blocks_company_attribute($block),
-                $description
-            );
+            TinyAssert::same($expected, WC_Twoinc_Checkout::reveal_blocks_company_attribute($block), $description);
         }
 
+        $prop->setValue(null, null);
         unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
     }
 
@@ -3177,6 +3183,16 @@ final class BrandConfigSpec
             public function get_enable_company_search()
             {
                 return $this->search_enabled;
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'api_key' ? 'key' : ($empty_value ?? '');
+            }
+
+            public function get_merchant_id()
+            {
+                return 'mid';
             }
         };
     }

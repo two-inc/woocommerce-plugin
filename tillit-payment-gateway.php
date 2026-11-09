@@ -192,6 +192,12 @@ function load_twoinc_classes()
     // Records the company the buyer captured against the cart this session holds.
     add_action('wc_ajax_two_remember_company', ['WC_Twoinc_Checkout', 'ajax_remember_company']);
 
+    // WooCommerce 7.6's Checkout block reads its company row from its own
+    // attribute, which defaults to hidden (TWO-27186). Registered here, not in
+    // the gateway constructor: a block theme renders the page content before
+    // anything has built the gateway, so the handler looks it up lazily.
+    add_filter('render_block_data', ['WC_Twoinc_Checkout', 'reveal_blocks_company_attribute']);
+
     // A Blocks checkout builds its payment list from its own registry and
     // never reads woocommerce_payment_gateways.
     add_action('woocommerce_blocks_payment_method_type_registration', static function ($registry) {
