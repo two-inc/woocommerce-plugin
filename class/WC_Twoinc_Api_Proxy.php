@@ -43,8 +43,11 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
             return isset($_REQUEST[$key]) ? sanitize_text_field(wp_unslash($_REQUEST[$key])) : '';
         }
 
-        /** Unenveloped: the browser handlers parse the API's own response shape. */
-        private static function relay($response): void
+        /**
+         * Unenveloped: the browser handlers parse the API's own response shape.
+         * A successful body may be reshaped first by `$shape`.
+         */
+        private static function relay($response, ?callable $shape = null): void
         {
             if (is_wp_error($response) || !is_array($response)) {
                 wp_send_json_error('Upstream request failed', 502);
@@ -52,6 +55,9 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
             }
             $status = (int) wp_remote_retrieve_response_code($response);
             $decoded = json_decode((string) wp_remote_retrieve_body($response), true);
+            if ($shape && is_array($decoded) && $status >= 200 && $status < 300) {
+                $decoded = $shape($decoded);
+            }
             // An empty or unparseable body would reach `.done` as literal null,
             // which every handler dereferences.
             wp_send_json(is_array($decoded) ? $decoded : [], $status > 0 ? $status : 502);
@@ -88,7 +94,10 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
             self::relay($gateway->make_request('/companies/v2/supported-countries', [], 'GET'));
         }
 
-        /** wc-ajax handler: registry address lookup for one company. */
+        /**
+         * wc-ajax handler: registry address lookup for one company. Each
+         * address's postcode is relayed as its country writes it (TWO-27159).
+         */
         public static function ajax_company_by_id(): void
         {
             $gateway = self::authorize('company lookup', 'company_by_id');
@@ -102,7 +111,10 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
                 wp_send_json_error('Invalid company id');
                 return;
             }
-            self::relay($gateway->make_request('/companies/v2/company/' . rawurlencode($lookup_id), [], 'GET'));
+            self::relay(
+                $gateway->make_request('/companies/v2/company/' . rawurlencode($lookup_id), [], 'GET'),
+                [WC_Twoinc_Postcode_Format::class, 'fit_company']
+            );
         }
 
         /** wc-ajax handler: the buyer's payment terms for the due-in-days copy. */

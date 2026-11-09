@@ -541,3 +541,143 @@ describe("TWO-40 — field routing for an externally supplied address", () => {
     });
   });
 });
+
+describe("TWO-27159: a company pick writes the registry phone", () => {
+  let ctx;
+  let $;
+  let ajax;
+
+  beforeEach(() => {
+    // A 429 arms a notice timer that must not outlive the test.
+    jest.useFakeTimers();
+    ctx = loadTwoinc({ enable_address_lookup: "yes" });
+    $ = ctx.$;
+    ajax = harness.stubAjax($);
+    buildAddressForm();
+    $("form[name='checkout']").append(
+      '<input type="tel" id="billing_phone" name="billing_phone" value="" />' +
+        '<input type="tel" id="shipping_phone" name="shipping_phone" value="" />'
+    );
+  });
+
+  afterEach(() => {
+    ajax.restore();
+    document.body.innerHTML = "";
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  });
+
+  const WITH_PHONE = (phone) => ({
+    addresses: [{ street_address: "Registry Street 1", phone_number: phone }]
+  });
+  const NO_PHONE = { addresses: [{ street_address: "Registry Street 1" }] };
+  const succeed = (data) => (call) => call.succeed(data);
+  const fail = (status) => (call) => call.fail("error", "failed", status);
+
+  /** Pick a company on a role and settle its address lookup with `settle`. */
+  function pick(role, settle) {
+    ctx.Twoinc.getInstance().addressLookup({ lookup_id: "lookup" }, role);
+    settle(ajax.last());
+  }
+
+  test.each([
+    {
+      typed: "",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      expected: "+31 20 123 4567",
+      description: "a registry phone fills an empty field"
+    },
+    {
+      typed: "+44 7700 900123",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      expected: "+31 20 123 4567",
+      description: "a registry phone replaces the field's value"
+    },
+    {
+      typed: "+44 7700 900123",
+      first: succeed(WITH_PHONE("  ")),
+      expected: "+44 7700 900123",
+      description: "a blank registry phone is no phone"
+    },
+    {
+      typed: "+44 7700 900123",
+      first: succeed(NO_PHONE),
+      expected: "+44 7700 900123",
+      description: "a pick with no phone keeps a typed phone"
+    },
+    {
+      typed: "+44 7700 900123",
+      first: fail(500),
+      expected: "+44 7700 900123",
+      description: "a failed lookup keeps a typed phone"
+    },
+    {
+      typed: "",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      second: succeed(WITH_PHONE("+31 10 765 4321")),
+      expected: "+31 10 765 4321",
+      description: "a re-pick's registry phone replaces the last one"
+    },
+    {
+      typed: "",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      second: succeed(NO_PHONE),
+      expected: "",
+      description: "a re-pick with no phone clears the registry phone"
+    },
+    {
+      typed: "",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      second: succeed({ addresses: [] }),
+      expected: "",
+      description: "a re-pick with no address clears the registry phone"
+    },
+    {
+      typed: "",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      second: fail(500),
+      expected: "",
+      description: "a re-pick whose lookup fails clears the registry phone"
+    },
+    {
+      typed: "",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      second: fail(429),
+      expected: "",
+      description: "a re-pick refused by the rate limit clears the registry phone"
+    },
+    {
+      typed: "",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      edited: "+31 20 123 9999",
+      second: succeed(NO_PHONE),
+      expected: "+31 20 123 9999",
+      description: "a phone the buyer edited is never cleared"
+    }
+  ])("$description", ({ typed, first, edited, second, expected, description }) => {
+    $("#billing_phone").val(typed);
+    pick("billing", first);
+    if (edited !== undefined) $("#billing_phone").val(edited);
+    if (second) pick("billing", second);
+
+    expect({ description, phone: $("#billing_phone").val() }).toEqual({
+      description,
+      phone: expected
+    });
+  });
+
+  test("a shipping pick writes the shipping phone and leaves billing's alone", () => {
+    $("#billing_phone").val("+44 7700 900123");
+    pick("shipping", succeed(WITH_PHONE("+31 20 123 4567")));
+
+    expect($("#shipping_phone").val()).toBe("+31 20 123 4567");
+    expect($("#billing_phone").val()).toBe("+44 7700 900123");
+  });
+
+  test("a sole trader with no phone clears a registry phone still standing, as a verified phone does", () => {
+    pick("billing", succeed(WITH_PHONE("+31 20 123 4567")));
+    ctx.Twoinc.getInstance().writeSoleTraderAddress({ phone_number: "" }, "billing");
+
+    expect($("#billing_phone").val()).toBe("");
+  });
+});

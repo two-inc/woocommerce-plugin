@@ -393,6 +393,8 @@ final class BrandConfigSpec
             'testApiProxyRelaysUpstreamBodyAndStatusVerbatim',
             'testApiProxyRelaysAnEmptyUpstreamBodyAsAnObject',
             'testApiProxyCompanyLookupKeepsTheIdToOnePathSegment',
+            'testPostcodeFormatFitsTheCountrysWrittenFormOrLeavesItAlone',
+            'testApiProxyCompanyLookupRelaysPostcodesAsTheirCountryWritesThem',
             'testApiProxyEveryEndpointAuthenticatesWithTheApiKey',
             'testApiProxyPaymentTermsResolvesTheMerchantServerSide',
             'testApiProxyOrderIntentPostsTheDecodedBodyOrRefuses',
@@ -15942,6 +15944,68 @@ final class BrandConfigSpec
                 TinyAssert::same(false, $response['success'] ?? null, $description);
                 TinyAssert::same([], $gateway->calls, $description);
             }
+        }
+    }
+
+    /** A registry postcode is written as its country writes it, and never invented (TWO-27159). */
+    private static function testPostcodeFormatFitsTheCountrysWrittenFormOrLeavesItAlone(): void
+    {
+        $cases = [
+            ['1234AB', 'NL', '1234 AB', 'a Dutch postcode gains its space'],
+            ['1234ab', 'nl', '1234 ab', 'letter case and a lower-case country are kept'],
+            ['1234 AB', 'NL', '1234 AB', 'a postcode already in form is unchanged'],
+            ['00950', 'PL', '00-950', 'a Polish postcode gains its hyphen'],
+            ['11122', 'SE', '111 22', 'a Swedish postcode gains its space'],
+            ['1000-001', 'PT', '1000-001', 'a Portuguese postcode keeps its hyphen'],
+            ['VLT1117', 'MT', 'VLT 1117', 'a Maltese postcode with letters and digits'],
+            ['1 0 1 1 5', 'DE', '10115', 'stray spaces are dropped where the format has none'],
+            ['1234A', 'NL', '1234A', 'too short to fill the format is relayed unchanged'],
+            ['1234ABC', 'NL', '1234ABC', 'too long for the format is relayed unchanged'],
+            ['12345', 'NL', '12345', 'a digit in a letter slot is relayed unchanged'],
+            ['SW1A1AA', 'GB', 'SW1A1AA', 'a country with no fixed format is relayed unchanged'],
+            ['1234AB', '', '1234AB', 'no country is relayed unchanged'],
+            ['', 'NL', '', 'an empty postcode stays empty'],
+        ];
+        foreach ($cases as [$postcode, $country, $expected, $description]) {
+            TinyAssert::same($expected, WC_Twoinc_Postcode_Format::fit($postcode, $country), $description);
+        }
+    }
+
+    /**
+     * The address lookup's postcodes reach the browser as their country writes
+     * them, judged by the address's own country, else the company's; an error
+     * body is relayed untouched (TWO-27159).
+     */
+    private static function testApiProxyCompanyLookupRelaysPostcodesAsTheirCountryWritesThem(): void
+    {
+        $body = [
+            'country' => 'NL',
+            'addresses' => [
+                ['postal_code' => '1234AB', 'phone_number' => '+31201234567'],
+                ['postal_code' => '00950', 'country' => 'PL'],
+                ['city' => 'Amsterdam'],
+            ],
+        ];
+        $cases = [
+            [200, $body, [
+                'country' => 'NL',
+                'addresses' => [
+                    ['postal_code' => '1234 AB', 'phone_number' => '+31201234567'],
+                    ['postal_code' => '00-950', 'country' => 'PL'],
+                    ['city' => 'Amsterdam'],
+                ],
+            ], 'each postcode is fitted by its own country, else the company\'s'],
+            [404, ['error' => 'not found'], ['error' => 'not found'], 'an error body is relayed verbatim'],
+            [500, $body, $body, 'a failed lookup is not reshaped'],
+        ];
+        foreach ($cases as [$status, $upstream, $expected, $description]) {
+            $gateway = self::proxyGateway(['response' => ['code' => $status], 'body' => json_encode($upstream)]);
+            $_REQUEST = ['lookup_id' => '12345678'];
+            $response = self::runProxyHandler($gateway, 'ajax_company_by_id');
+            $_REQUEST = [];
+
+            TinyAssert::same($expected, $response['relayed'] ?? null, $description);
+            TinyAssert::same($status, $response['status'] ?? null, $description);
         }
     }
 

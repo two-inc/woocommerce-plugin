@@ -2195,6 +2195,7 @@ require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Stored_Term.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Tax_Code_Section.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Payment_Terms.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Sole_Trader.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Postcode_Format.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Api_Proxy.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Checkout.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Storefront_Gate.php';
