@@ -3,6 +3,7 @@ import { type Locator, type Page, expect } from "@playwright/test";
 import { BUYER_COMPANY, CHECKOUT_RENDERER } from "../config.js";
 import * as blocks from "./checkout-blocks.js";
 import * as classic from "./checkout.js";
+import { wooCommerceBelow } from "../wp-cli.js";
 
 /** Renderer-independent: Blocks is a skin over the classic controller's chips. */
 export const MODE_CHIP = classic.MODE_CHIP;
@@ -60,6 +61,21 @@ const blocksDriver: CheckoutDriver = {
   goto: async (page) => {
     await page.goto("/checkout/");
     await page.locator(blocksDriver.root).waitFor({ state: "visible" });
+    // TWO-27177: before WooCommerce 11.4 the Checkout block can mount its
+    // shipping form before the cart store holds the country, validate the
+    // County as required, and keep that hidden error once the country turns
+    // out to make it optional, so the order is refused at submit
+    // (https://github.com/woocommerce/woocommerce/pull/69652). A buyer
+    // reopening checkout has the country known on mount, so do the same.
+    // Remove once the support window starts at WooCommerce 11.4.
+    if (wooCommerceBelow(11, 4)) {
+      await page.waitForFunction(
+        () =>
+          !!window.wp?.data?.select("wc/store/cart")?.getCustomerData?.()?.shippingAddress?.country
+      );
+      await page.reload();
+      await page.locator(blocksDriver.root).waitFor({ state: "visible" });
+    }
   },
   selectTwoPayment: blocks.selectTwoPayment,
   fillBuyerDetails: blocks.fillContactDetails,
