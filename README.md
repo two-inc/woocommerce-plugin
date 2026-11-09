@@ -242,8 +242,9 @@ Nothing in CI lists versions by hand. `dev/support-matrix.sh` reads them from
 upstream on every run, and its header states the policy and sources:
 
 - **PHP**: every minor php.net still supports (active or security support).
-  The unit tests and a lint of every shipped PHP file also run on each older
-  minor down to the plugin's declared floor (`Requires PHP` in `readme.txt`).
+  The unit tests, a lint of every shipped PHP file, phpcs and phpstan also run
+  on each older minor down to the plugin's declared floor (`Requires PHP` in
+  `readme.txt`). Their discovery reads only php.net and `readme.txt`.
 - **WordPress and WooCommerce**: WooCommerce's published L-1 policy, the
   current and previous release series of each at their newest patch, plus the
   plugin's declared minimums (`Requires at least` in `readme.txt`,
@@ -251,15 +252,18 @@ upstream on every run, and its header states the policy and sources:
 
 The e2e suite runs on every WordPress x WooCommerce x PHP combination in that
 window, once with the classic and once with the blocks checkout. Every PHP
-minor gets legs from its first GA release; where the WordPress series does not
-declare that PHP yet, the legs run non-blocking, with a warning. The declared
+minor gets legs from its first GA release; where WordPress's own PHP
+compatibility table (in the core handbook) does not mark that PHP as supported
+for the series, the legs run non-blocking, with a warning. The declared
 WordPress, WooCommerce and PHP floors also run together as one blocking
 combination, even where php.net has ended support for that PHP. A combination
-that cannot run (WooCommerce requires a newer WordPress, or no runtime image
-exists for that PHP) is listed in the discover job's summary with a warning
-rather than dropped. Each leg builds `docker/wordpress-core` (the maintained
-`wordpress:php<minor>-apache` runtime with the WordPress core under test) and
-warns if its PHP is behind php.net's newest patch (`dev/check-php-patch.sh`).
+that cannot run (WooCommerce requires a newer WordPress, or no runtime or
+wp-cli image exists for that PHP) is listed in the discover job's summary with
+a warning rather than dropped. Each leg builds `docker/wordpress-core` (the
+maintained `wordpress:php<minor>-apache` runtime with the WordPress core under
+test), installs and provisions the shop with `wordpress:cli-php<minor>`, and
+warns if either runs a PHP behind php.net's newest patch
+(`dev/check-php-patch.sh`).
 PHP notices go to the shop's debug log rather than the page; one from this
 plugin's code fails the leg. Run `bash dev/support-matrix.sh` to see what CI
 will test today.
