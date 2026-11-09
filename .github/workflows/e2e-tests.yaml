@@ -263,8 +263,13 @@ jobs:
             exit 0
           fi
           entries=$(grep -E '^\[[^]]*\] PHP ' <<<"$log" | sed -E 's/^\[[^]]*\] //' | sort | uniq -c | sort -rn || true)
-          ours=$(grep -E 'tillit-payment-gateway|WC_Twoinc' <<<"$entries" || true)
-          theirs=$(grep -vE 'tillit-payment-gateway|WC_Twoinc' <<<"$entries" || true)
+          # Ours: the plugin's directory, or any function, class or asset
+          # handle it defines, every one of which carries "twoinc" in some case
+          # (or the old name, tillit). A _doing_it_wrong backtrace names
+          # functions only, never files, so the path alone misses them.
+          ours_re='tillit|twoinc'
+          ours=$(grep -iE "$ours_re" <<<"$entries" || true)
+          theirs=$(grep -viE "$ours_re" <<<"$entries" || true)
           if [ -n "$theirs" ]; then
             echo "::warning title=Upstream PHP notices::$(wc -l <<<"$theirs") distinct notices from WordPress or WooCommerce on this combination (see this step's log)"
             echo "$theirs"
