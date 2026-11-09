@@ -48,14 +48,28 @@ export async function openCompanySearch(page: Page) {
     .waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
 }
 
-/** Blocks renders the country as a plain select, so it can be driven directly. */
+/**
+ * Current Blocks renders the country as a plain select, driven directly. Older
+ * Blocks (WooCommerce 7.6) renders a combobox whose id sits on a wrapper div
+ * around a text input, so the input is typed into and the option picked.
+ */
 export async function setBillingCountry(page: Page, countryName: string) {
   const prefix = await addressPrefix(page);
-  const select = page.locator(`#${prefix}-country`);
-  await select.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
-  const before = await select.inputValue();
-  await select.selectOption({ label: countryName });
-  await expect(select).not.toHaveValue(before, { timeout: DEFAULT_TIMEOUT });
+  const field = page.locator(`#${prefix}-country`);
+  await field.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
+
+  if (await field.evaluate((el) => el.tagName === "SELECT")) {
+    const before = await field.inputValue();
+    await field.selectOption({ label: countryName });
+    await expect(field).not.toHaveValue(before, { timeout: DEFAULT_TIMEOUT });
+    return;
+  }
+
+  const input = field.locator("input").first();
+  await input.click();
+  await input.fill(countryName);
+  await field.getByRole("option", { name: countryName, exact: true }).click();
+  await expect(input).toHaveValue(countryName, { timeout: DEFAULT_TIMEOUT });
 }
 
 export async function fillCompanySearch(page: Page, companyName = BUYER_COMPANY) {
