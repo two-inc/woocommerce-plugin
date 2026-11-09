@@ -205,12 +205,15 @@ jobs:
       # own "outdated templates" report cannot see because it scans the active
       # theme only. Every leg has a real WooCommerce release on disk, so diff
       # the copy against it, and run the unit suite on the leg's PHP while at it.
+      # env -i: the container carries the shop's settings (TWO_* hosts, internal
+      # environments), which the unit suite must not see, as on a bare runner.
       - name: Core template drift (WooCommerce ${{ matrix.combo.woocommerce }})
         run: |
           docker compose exec -T \
-            -e WC_CORE_TEMPLATE_PATH=/var/www/html/wp-content/plugins/woocommerce/templates/checkout/payment-method.php \
             -w /var/www/html/wp-content/plugins/tillit-payment-gateway \
-            wordpress php tests/unit/run.php
+            wordpress env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            WC_CORE_TEMPLATE_PATH=/var/www/html/wp-content/plugins/woocommerce/templates/checkout/payment-method.php \
+            php tests/unit/run.php
 
       - name: Configure the shop for the ${{ matrix.renderer }} checkout
         run: |
