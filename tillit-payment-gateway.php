@@ -284,6 +284,20 @@ function wc_twoinc_add_to_gateways($gateways)
 function wc_twoinc_enqueue_styles()
 {
     wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, twoinc_get_asset_version('assets/css/twoinc.css'));
+
+    // The Checkout block's stylesheet sits on top of the one above, so it is
+    // enqueued here, after it, where its dependency is always registered
+    // (TWO-27181). WooCommerce asks the Blocks integration for its handles
+    // during init on every request, admin included, where this never runs.
+    if (class_exists('WC_Twoinc_Blocks_Support')) {
+        $blocks_style = 'assets/css/blocks-checkout.css';
+        wp_enqueue_style(
+            'twoinc-blocks-checkout',
+            WC_TWOINC_PLUGIN_URL . $blocks_style,
+            ['twoinc-payment-gateway-css'],
+            twoinc_get_asset_version($blocks_style)
+        );
+    }
 }
 
 function wc_twoinc_enqueue_scripts()
