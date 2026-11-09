@@ -6134,7 +6134,12 @@ if (!class_exists('WC_Twoinc')) {
             // The minimums judge the basket being purchased, so a cartless
             // context leaves only the billing-country gate — the API still
             // enforces the platform minimum at order creation.
-            $basket_is_judgeable = !WC()->cart->is_empty();
+            // Before wp_loaded the cart is not yet read from the session, and
+            // WooCommerce's Blocks registry asks this filter during init
+            // (TWO-27178). Reading it then is "called incorrectly" and says
+            // nothing about the basket, so that is a cartless context too;
+            // the minimums are judged once the cart has loaded.
+            $basket_is_judgeable = did_action('wp_loaded') && !WC()->cart->is_empty();
 
             // A basket in another currency is judged by converting its
             // value into the minimum's currency via the Two FX layer

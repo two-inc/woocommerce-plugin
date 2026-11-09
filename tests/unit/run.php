@@ -64,6 +64,7 @@ final class BrandConfigSpec
             'testRefusedEditMarksTheOrderOnce',
             'testAdminOrderSaveReachesTheEditPath',
             'testDeclaresFeatureCompatibility',
+            'testBlocksStylesheetFollowsTheStylesheetItDependsOn',
             'testShippingDetailsCarriedByCreateAndEditBodies',
             'testShippingDetailsFilterOverrides',
             'testShippingDetailsFilterGarbageDiscarded',
@@ -80,6 +81,7 @@ final class BrandConfigSpec
             'testAvailabilityGateRemovesGatewayWhenUnmet',
             'testAvailabilityGateKeepsGatewayAtExactMinimum',
             'testAvailabilityGateComparesNetNotGross',
+            'testAvailabilityGateLeavesTheCartAloneBeforeWpLoaded',
             'testAvailabilityGateRestrictsBillingCountry',
             'testSupportedBuyerCountriesNormalisesApiField',
             'testAvailabilityGateJudgesMerchantBuyerCountryAllowlist',
@@ -2217,6 +2219,31 @@ final class BrandConfigSpec
         }
     }
 
+    /**
+     * TWO-27181: WordPress drops a stylesheet whose dependency is not
+     * registered, and logs it. The Checkout block stylesheet is enqueued only
+     * right after the stylesheet it depends on, never from the Blocks
+     * integration, which WooCommerce calls during init on every request.
+     */
+    private static function testBlocksStylesheetFollowsTheStylesheetItDependsOn(): void
+    {
+        $main = (string) file_get_contents(dirname(__DIR__, 2) . '/tillit-payment-gateway.php');
+        $blocks = (string) file_get_contents(dirname(__DIR__, 2) . '/class/WC_Twoinc_Blocks_Support.php');
+        preg_match('/function wc_twoinc_enqueue_styles\(\)\s*\{(.*?)\n\}/s', $main, $match);
+        $body = $match[1] ?? '';
+        $base = strpos($body, "wp_enqueue_style('twoinc-payment-gateway-css'");
+        $skin = strpos($body, "'twoinc-blocks-checkout'");
+        $cases = [
+            [$base !== false, 'the storefront enqueues the base stylesheet'],
+            [$base !== false && $skin !== false && $base < $skin, 'and the Checkout block stylesheet after it'],
+            [preg_match("/'twoinc-blocks-checkout',[^;]*\\['twoinc-payment-gateway-css'\\]/s", $body) === 1, 'naming it as its dependency'],
+            [strpos($blocks, 'wp_enqueue_style') === false, 'the Blocks integration enqueues no stylesheet'],
+        ];
+        foreach ($cases as [$holds, $description]) {
+            TinyAssert::true($holds, $description);
+        }
+    }
+
     /** TWO-26175: the admin order-form save (legacy and HPOS screens) reaches the edit path for configured Two orders only. */
     private static function testAdminOrderSaveReachesTheEditPath(): void
     {
@@ -2786,6 +2813,42 @@ final class BrandConfigSpec
         WC()->cart = new StubCart(250.0, 43.39);
         $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate($gateways);
         TinyAssert::true(!isset($result['woocommerce-gateway-testbrand']));
+    }
+
+    /**
+     * TWO-27178: WooCommerce's Blocks registry asks the gate during init,
+     * before wp_loaded, when reading the cart is "called incorrectly". The
+     * gate leaves the cart alone then and judges what it can without it.
+     */
+    private static function testAvailabilityGateLeavesTheCartAloneBeforeWpLoaded(): void
+    {
+        self::useTestbrand();
+        $GLOBALS['__twoinc_test_currency'] = 'EUR';
+        $cases = [
+            // [wp_loaded fired, billing country, offered, cart read, description]
+            [false, 'NL', true, false, 'before wp_loaded a basket below the minimum is not judged'],
+            [false, 'DE', false, false, 'before wp_loaded the billing-country gate still judges'],
+            [true, 'NL', false, true, 'after wp_loaded the minimum judges the basket'],
+        ];
+        foreach ($cases as [$loaded, $country, $offered, $read, $description]) {
+            $GLOBALS['__twoinc_test_actions_done']['wp_loaded'] = $loaded ? 1 : 0;
+            WC()->cart = new class (100.0) extends StubCart {
+                public $read = false;
+
+                public function is_empty()
+                {
+                    $this->read = true;
+                    return parent::is_empty();
+                }
+            };
+            WC()->customer = new StubCustomer($country);
+
+            $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate(['woocommerce-gateway-testbrand' => 'gw']);
+
+            TinyAssert::same($offered, isset($result['woocommerce-gateway-testbrand']), $description . ': offered');
+            TinyAssert::same($read, WC()->cart->read, $description . ': cart read');
+        }
+        $GLOBALS['__twoinc_test_actions_done']['wp_loaded'] = 1;
     }
 
     private static function testPaymentValidationErrorFilterVetoes(): void
