@@ -205,6 +205,44 @@ describe("billing country switch", () => {
       expect(capturedCompany()).toEqual({ name: "", id: "" });
     });
 
+    // TWO-27159: the registry phone goes with the address; the buyer's own stays.
+    test.each([
+      { after: null, expected: "", description: "a registry phone is retracted" },
+      {
+        after: () => ctx.$("#billing_phone").val("+34 600 000 999"),
+        expected: "+34 600 000 999",
+        description: "a phone the buyer edited stays"
+      },
+      {
+        after: () =>
+          ctx.Twoinc.getInstance().writeSoleTraderAddress(
+            { phone_number: "+34 600 000 001" },
+            "billing"
+          ),
+        expected: "+34 600 000 001",
+        description: "a sole trader's verified phone equal to the registry's stays"
+      }
+    ])("$description", ({ after, expected, description }) => {
+      initializeCheckout();
+      ctx
+        .$("form[name='checkout']")
+        .append('<input type="tel" id="billing_phone" name="billing_phone" />');
+      captureCompany("Example Co", "123456789");
+      ctx.Twoinc.getInstance().addressLookup({ lookup_id: "lookup" }, "billing");
+      ajax
+        .last()
+        .succeed({ addresses: [{ street_address: "Calle 1", phone_number: "+34 600 000 001" }] });
+      if (after) after();
+
+      ctx.$("#billing_country").val("ES");
+      fireCountryChange();
+
+      expect({ description, phone: ctx.$("#billing_phone").val() }).toEqual({
+        description,
+        phone: expected
+      });
+    });
+
     test("records the new country so the next re-render is inert again", () => {
       initializeCheckout();
 

@@ -2031,6 +2031,9 @@ class TwoCompanySearch {
     if (window.twoinc.enable_address_lookup === "yes") {
       Twoinc.getInstance().clearAddress(this.role);
     }
+    // The registry phone goes with the address; a sole trader's verified
+    // phone, which is not recorded as a registry phone, stays (TWO-27159).
+    Twoinc.getInstance().retractRegistryPhone(this.role);
     Twoinc.getInstance().addressStateFor(this.role).registryApplied = false;
     // Not a blind `{}` (TWO-40): `write()` above already recomputed this, but
     // a shipping fallback may be the reason it isn't empty — clearing
@@ -6580,13 +6583,19 @@ class Twoinc {
    *  - `lookupSeq`: monotonic supersession counter for that role's address
    *    lookup (TWO-24867) — bumped by every lookup on the role and by every
    *    real change of THAT role's country.
+   *  - `registryPhone`: the registry phone `applyRegistryPhone()` last wrote
+   *    onto the role, or "" (TWO-27159). Kept apart from the field's written
+   *    marker, which a sole trader's verified phone shares, so only the
+   *    registry's number is ever retracted.
    *
    * @param {string} [role]
-   * @returns {{registryApplied: boolean, lookupSeq: number}}
+   * @returns {{registryApplied: boolean, lookupSeq: number, registryPhone: string}}
    */
   addressStateFor(role) {
     const key = role || twoincAddressRoles.invoice();
-    if (!this.addressState[key]) this.addressState[key] = { registryApplied: false, lookupSeq: 0 };
+    if (!this.addressState[key]) {
+      this.addressState[key] = { registryApplied: false, lookupSeq: 0, registryPhone: "" };
+    }
     return this.addressState[key];
   }
 
@@ -6634,6 +6643,7 @@ class Twoinc {
         // new record omits would otherwise keep the outgoing company's value.
         self.clearAddress(addressRole);
         self.setAddress(response.addresses[0], addressRole);
+        self.applyRegistryPhone(response.addresses[0].phone_number, addressRole);
         // Only here, on the branch that actually writes registry data. A
         // buyer's own address (account-prefilled, or typed by hand) never
         // goes through this path, so this flag distinguishes the two —
@@ -6642,10 +6652,16 @@ class Twoinc {
         // is empty for company hits that carry no organisation number even
         // though a lookup DID run for them.
         state.registryApplied = true;
+        return;
       }
+      // A pick that fills nothing still replaces the company, so the previous
+      // pick's registry phone goes; the address is left as it was (TWO-27159).
+      self.retractRegistryPhone(addressRole);
     });
     addressResponse.fail(function (jqXHR) {
       if (seq !== state.lookupSeq) return;
+      // As a pick that fills nothing, whatever the failure (TWO-27159).
+      self.retractRegistryPhone(addressRole);
       // Only the shop's own limiter earns the "wait a moment" copy: it is the
       // one failure that retrying does fix. Anything else keeps its silence,
       // where the buyer types the address themselves.
@@ -6730,6 +6746,49 @@ class Twoinc {
   }
 
   /**
+   * Write the company's registered phone from a company pick onto the phone
+   * field of the role whose address the same pick wrote (TWO-27159, as
+   * PrestaShop, OpenCart and Magento).
+   *
+   * A registry phone replaces whatever the field holds, as the address fields
+   * do. A pick whose register has no phone writes nothing, and clears only a
+   * registry phone this role was given that the buyer has not since changed,
+   * so company B never leaves company A's number standing. A phone the buyer
+   * typed or edited is never cleared.
+   *
+   * @param {*} phone the address's `phone_number`, absent when the register has none
+   * @param {string} role
+   * @returns {boolean} whether the field changed
+   */
+  applyRegistryPhone(phone, role) {
+    const value = twoincUtilHelper.blankToEmpty(phone);
+    if (!value) return this.retractRegistryPhone(role);
+    const $field = jQuery(twoincAddressRoles.field(role, "phone"));
+    if (!$field.length) return false;
+    this.addressStateFor(role).registryPhone = value;
+    $field.val(value).attr(ADDRESS_WRITTEN_ATTR, value);
+    return true;
+  }
+
+  /**
+   * Clear the registry phone `applyRegistryPhone()` wrote onto a role, where
+   * the field still holds it, and forget the record (TWO-27159).
+   *
+   * @param {string} role
+   * @returns {boolean} whether the field was cleared
+   */
+  retractRegistryPhone(role) {
+    const state = this.addressStateFor(role);
+    const written = state.registryPhone;
+    state.registryPhone = "";
+    if (!written) return false;
+    const $field = jQuery(twoincAddressRoles.field(role, "phone"));
+    if (twoincUtilHelper.blankToEmpty($field.val()) !== written) return false;
+    $field.val("").removeAttr(ADDRESS_WRITTEN_ATTR);
+    return true;
+  }
+
+  /**
    * Write an adopted sole trader's address and phone onto a role (TWO-26775).
    *
    * Unlike `setAddress()`, a blank is not a value: each field is written only
@@ -6740,6 +6799,10 @@ class Twoinc {
    * absent or matches no state clears it on the same terms. Country, email and the
    * buyer's own names are never written.
    *
+   * The phone on the role is the buyer's own from here on, so the record of a
+   * registry phone is dropped: a verified number equal to the registry's must
+   * survive a country switch (TWO-27159).
+   *
    * @param {Object} buyer the autofill buyer
    * @param {string} role
    * @returns {void}
@@ -6747,6 +6810,7 @@ class Twoinc {
   writeSoleTraderAddress(buyer, role) {
     const blank = twoincUtilHelper.blankToEmpty;
     const source = buyer.billing_address || buyer.address;
+    this.addressStateFor(role).registryPhone = "";
     const values = { phone: blank(buyer.phone_number) };
     if (source && typeof source === "object") {
       const street = blank(source.street !== undefined ? source.street : source.street_address);
