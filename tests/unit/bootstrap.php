@@ -85,8 +85,18 @@ function apply_filters($tag, $value, ...$extra)
     return $value;
 }
 
+// A plain request is past wp_loaded, so specs start there; one that runs
+// earlier unsets the entry.
+$GLOBALS['__twoinc_test_actions_done'] = ['wp_loaded' => 1];
+
+function did_action($tag)
+{
+    return $GLOBALS['__twoinc_test_actions_done'][$tag] ?? 0;
+}
+
 function do_action($tag, ...$args)
 {
+    $GLOBALS['__twoinc_test_actions_done'][$tag] = did_action($tag) + 1;
     foreach ($GLOBALS['__twoinc_test_filters'][$tag] ?? [] as $entry) {
         call_user_func_array($entry['cb'], array_slice($args, 0, max(1, $entry['args'])));
     }
