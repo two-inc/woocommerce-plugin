@@ -5,7 +5,9 @@
 # The newest patch and its release date come from php.net
 # (https://www.php.net/releases/?json&version=<minor>). An image behind it gets
 # a ::warning:: naming the image, the running patch and the newest one, however
-# long it has lagged. It never fails the leg; only a failed php.net lookup does.
+# long it has lagged. It never fails the leg: a php.net lookup that fails or
+# finds no release is a warning too. Only a running version that is not a PHP
+# version at all is an error.
 set -euo pipefail
 
 image=${1:?usage: $0 <image> <running-php-version>}
@@ -15,11 +17,11 @@ minor=$(cut -d. -f1,2 <<<"$running")
 
 release=$(curl -fsSL --retry 3 --retry-all-errors --retry-delay 3 --max-time 30 \
     "https://www.php.net/releases/?json&version=$minor") \
-    || { echo "::error::php-patch: could not query php.net for PHP $minor" >&2; exit 1; }
-latest=$(jq -r '.version // empty' <<<"$release")
-released=$(jq -r '.date // empty' <<<"$release")
+    || { echo "::warning title=PHP patch not checked::$image runs PHP $running; could not query php.net for the newest $minor patch"; exit 0; }
+latest=$(jq -r '.version // empty' <<<"$release" 2>/dev/null) || latest=
+released=$(jq -r '.date // empty' <<<"$release" 2>/dev/null) || released=
 [ -n "$latest" ] && [ -n "$released" ] \
-    || { echo "::error::php-patch: php.net has no release for PHP $minor" >&2; exit 1; }
+    || { echo "::warning title=PHP patch not checked::$image runs PHP $running; php.net lists no release for PHP $minor"; exit 0; }
 
 newest=$(printf '%s\n%s\n' "$running" "$latest" | sort -V | tail -1)
 if [ "$newest" = "$running" ]; then
