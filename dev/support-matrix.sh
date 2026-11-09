@@ -11,11 +11,14 @@
 # Support window, and where each part comes from:
 #   PHP          php.net/releases (?json): the minors in supported_versions,
 #                that is active or security support, not end of life.
-#   WordPress    WooCommerce's published version support policy, "latest minus
-#   WooCommerce  one" (L-1): the current stable release series and the one
-#                immediately before it, of both WordPress and WooCommerce, and
-#                only the newest patch of each series.
+#   WordPress    WooCommerce's published version support policy, quoted:
+#   WooCommerce    "Woo uses a latest-minus-one (L-1) policy for WordPress and
+#                  WooCommerce version compatibility."
+#                  "Within each release series, only the latest patch release
+#                  is officially supported."
 #                https://developer.woocommerce.com/docs/contribution/contributing/version-support-policy/
+#                So: the current stable release series and the one before it,
+#                of both WordPress and WooCommerce, newest patch of each.
 #                WordPress.org itself calls only its newest release supported,
 #                so for a WooCommerce extension the WooCommerce policy is the
 #                wider of the two and the one that applies.
@@ -27,7 +30,9 @@
 #   Floors       The plugin's declared minimums stay in the window too, at the
 #                newest patch of their series: readme.txt "Requires at least"
 #                (WordPress) and "Requires PHP", and the main plugin file's
-#                "WC requires at least".
+#                "WC requires at least". The three floors also make one e2e
+#                combination together, on the declared PHP floor even where
+#                php.net has ended its support.
 #
 # Matrices:
 #   php_unit  Every PHP minor from the declared floor to the newest supported
@@ -176,36 +181,42 @@ done
 
 # --- Classify ---------------------------------------------------------------
 declare -A runtime=()
-for php in $php_supported; do runtime[$php]=$(hub_tag "php$php-apache"); done
+for php in $php_supported $php_floor; do runtime[$php]=$(hub_tag "php$php-apache"); done
 
 entries=()
-for wps in $wp_window; do
+# classify <wordpress series> <woocommerce series> <php minor>
+classify() {
+    local wps=$1 wcs=$2 php=$3 wp wc reason= provisional=
     wp=$(wp_patch "$wps")
+    wc=${wc_ver[$wcs]}
+    if ! ver_le "${wc_wp[$wcs]}" "$wp"; then
+        reason="WooCommerce $wc requires WordPress ${wc_wp[$wcs]} or later"
+    elif ! ver_le "$(series "$(wp_php "$wps")")" "$php"; then
+        reason="WordPress $wp requires PHP $(wp_php "$wps") or later"
+    elif ! ver_le "$(series "${wc_php[$wcs]}")" "$php"; then
+        reason="WooCommerce $wc requires PHP ${wc_php[$wcs]} or later"
+    elif [ "${runtime[$php]}" = missing ]; then
+        reason="no wordpress:php$php-apache runtime image"
+    elif [ "$(hub_tag "$wps-php$php-apache")" = missing ]; then
+        provisional="WordPress $wps does not declare PHP $php (no wordpress:$wps-php$php-apache image); runs non-blocking"
+    fi
+    entries+=("$(jq -nc --arg wordpress "$wp" --arg series "$wps" --arg woocommerce "$wc" \
+        --arg php "$php" --arg reason "$reason" --arg provisional "$provisional" \
+        '{wordpress: $wordpress, wordpress_series: $series, woocommerce: $woocommerce,
+          php: $php, reason: $reason, provisional: ($provisional != ""),
+          provisional_reason: $provisional}')")
+}
+
+for wps in $wp_window; do
     for wcs in $wc_window; do
-        wc=${wc_ver[$wcs]}
-        for php in $php_supported; do
-            reason=
-            if ! ver_le "${wc_wp[$wcs]}" "$wp"; then
-                reason="WooCommerce $wc requires WordPress ${wc_wp[$wcs]} or later"
-            elif ! ver_le "$(series "$(wp_php "$wps")")" "$php"; then
-                reason="WordPress $wp requires PHP $(wp_php "$wps") or later"
-            elif ! ver_le "$(series "${wc_php[$wcs]}")" "$php"; then
-                reason="WooCommerce $wc requires PHP ${wc_php[$wcs]} or later"
-            elif [ "${runtime[$php]}" = missing ]; then
-                reason="no maintained wordpress:php$php-apache runtime image"
-            fi
-            provisional=
-            if [ -z "$reason" ] && [ "$(hub_tag "$wps-php$php-apache")" = missing ]; then
-                provisional="WordPress $wps does not declare PHP $php (no wordpress:$wps-php$php-apache image); runs non-blocking"
-            fi
-            entries+=("$(jq -nc --arg wordpress "$wp" --arg series "$wps" --arg woocommerce "$wc" \
-                --arg php "$php" --arg reason "$reason" --arg provisional "$provisional" \
-                '{wordpress: $wordpress, wordpress_series: $series, woocommerce: $woocommerce,
-                  php: $php, reason: $reason, provisional: ($provisional != ""),
-                  provisional_reason: $provisional}')")
-        done
+        for php in $php_supported; do classify "$wps" "$wcs" "$php"; done
     done
 done
+# The floor leg: the declared WordPress, WooCommerce and PHP minimums together,
+# kept even where php.net has ended support for that PHP (spec rule 2).
+if ! grep -qxF "$php_floor" <<<"$php_supported"; then
+    classify "$wp_floor" "$wc_floor" "$php_floor"
+fi
 
 all=$(printf '%s\n' "${entries[@]}" | jq -sc '.')
 e2e=$(jq -c '[.[] | select(.reason == "") | del(.reason)]' <<<"$all")
