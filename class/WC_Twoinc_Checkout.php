@@ -60,6 +60,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // the same reason update_company_fields() registers the classic
             // field past that toggle.
             add_filter('option_woocommerce_checkout_company_field', [$this, 'reveal_blocks_company_field']);
+            // Older WooCommerce releases such as 7.6 ignore that option on the
+            // Checkout block and read the block's own showCompanyField
+            // attribute instead, which defaults to hidden (TWO-27186).
+            add_filter('render_block_data', [$this, 'reveal_blocks_company_attribute']);
         }
 
         /**
@@ -87,6 +91,31 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             }
 
             return self::is_blocks_checkout_request() ? 'optional' : $value;
+        }
+
+        /**
+         * The same reveal as reveal_blocks_company_field(), for a Checkout
+         * block that reads its company row from its own attribute. WooCommerce
+         * sends the parsed attributes to the browser, so an empty block (all
+         * defaults) is covered as well as a saved one.
+         *
+         * @param mixed $parsed_block
+         *
+         * @return mixed
+         */
+        public function reveal_blocks_company_attribute($parsed_block)
+        {
+            if (!is_array($parsed_block) || ($parsed_block['blockName'] ?? null) !== 'woocommerce/checkout') {
+                return $parsed_block;
+            }
+            $attrs = isset($parsed_block['attrs']) && is_array($parsed_block['attrs']) ? $parsed_block['attrs'] : [];
+            if (!empty($attrs['showCompanyField']) || $this->reveal_blocks_company_field('hidden') !== 'optional') {
+                return $parsed_block;
+            }
+            $attrs['showCompanyField'] = true;
+            $parsed_block['attrs'] = $attrs;
+
+            return $parsed_block;
         }
 
         /**

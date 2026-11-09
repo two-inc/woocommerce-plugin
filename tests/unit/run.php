@@ -91,6 +91,7 @@ final class BrandConfigSpec
             'testOrderCreationResolvesTheCompanyAcrossBothAddressRoles',
             'testBlocksTileChoiceDrivesTheSurchargeGate',
             'testBlocksCompanyRowRevealedOnlyWhereTheSearchNeedsIt',
+            'testBlocksCompanyAttributeRevealedOnlyWhereTheSearchNeedsIt',
             'testOrderCreationRefusesAnUnsupportedBuyerCountry',
             'testOrderIntentRefusesAnUnsupportedBuyerCountry',
             'testOrderCreationRefusesADeclinedOrderIntent',
@@ -3109,28 +3110,75 @@ final class BrandConfigSpec
             $GLOBALS['__twoinc_test_is_singular'] = $singular;
             $GLOBALS['__twoinc_test_page_blocks'] = $blocks ?: ['woocommerce/checkout'];
 
-            $gateway = new class ($enabled) extends WC_Twoinc {
-                public $search_enabled;
-
-                public function __construct($enabled)
-                {
-                    $this->search_enabled = $enabled;
-                }
-
-                public function get_enable_company_search()
-                {
-                    return $this->search_enabled;
-                }
-            };
-
             TinyAssert::same(
                 $expected,
-                (new WC_Twoinc_Checkout($gateway))->reveal_blocks_company_field($stored),
+                (new WC_Twoinc_Checkout(self::companySearchGateway($enabled)))->reveal_blocks_company_field($stored),
                 $description
             );
         }
 
         unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
+    }
+
+    /**
+     * Given a Checkout block that reads its company row from its own
+     * showCompanyField attribute (WooCommerce 7.6); When it renders; Then the
+     * row is revealed exactly where the option filter reveals it (TWO-27186).
+     */
+    private static function testBlocksCompanyAttributeRevealedOnlyWhereTheSearchNeedsIt(): void
+    {
+        $checkout = ['blockName' => 'woocommerce/checkout', 'attrs' => []];
+        $shown = ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => true]];
+        $cases = [
+            [$checkout, 'yes', true, [], $shown, 'an empty Checkout block with the search in the address'],
+            [
+                ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => false, 'requireCompanyField' => false]],
+                'yes', true, [],
+                ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => true, 'requireCompanyField' => false]],
+                'a saved block with the row hidden',
+            ],
+            [['blockName' => 'woocommerce/checkout'], 'yes', true, [], $shown, 'a parsed block with no attrs key'],
+            [$checkout, 'no', true, [], $checkout, 'search relocated to the payment tile'],
+            [$checkout, 'yes', false, [], $checkout, 'a page that is not a Blocks checkout'],
+            [$checkout, 'yes', true, ['woocommerce/cart'], $checkout, 'a Blocks page without the checkout block'],
+            [
+                ['blockName' => 'woocommerce/cart', 'attrs' => []], 'yes', true, [],
+                ['blockName' => 'woocommerce/cart', 'attrs' => []], 'another block on the checkout page',
+            ],
+            [$shown, 'yes', true, [], $shown, 'a block that already shows the row'],
+        ];
+
+        foreach ($cases as $case) {
+            list($block, $enabled, $singular, $blocks, $expected, $description) = $case;
+
+            $GLOBALS['__twoinc_test_is_singular'] = $singular;
+            $GLOBALS['__twoinc_test_page_blocks'] = $blocks ?: ['woocommerce/checkout'];
+
+            TinyAssert::same(
+                $expected,
+                (new WC_Twoinc_Checkout(self::companySearchGateway($enabled)))->reveal_blocks_company_attribute($block),
+                $description
+            );
+        }
+
+        unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
+    }
+
+    private static function companySearchGateway(string $enabled): WC_Twoinc
+    {
+        return new class ($enabled) extends WC_Twoinc {
+            public $search_enabled;
+
+            public function __construct($enabled)
+            {
+                $this->search_enabled = $enabled;
+            }
+
+            public function get_enable_company_search()
+            {
+                return $this->search_enabled;
+            }
+        };
     }
 
     /**
