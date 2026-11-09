@@ -27,7 +27,20 @@ wp user get "$WORDPRESS_ADMIN_USER" $SAFE >/dev/null 2>&1 ||
   wp user create "$WORDPRESS_ADMIN_USER" "$WORDPRESS_ADMIN_EMAIL" --role=administrator --user_pass="$WORDPRESS_ADMIN_PASSWORD" $SAFE
 
 wp theme is-installed storefront $SAFE || wp theme install storefront $SAFE
-wp plugin is-installed loco-translate $SAFE || wp plugin install loco-translate $SAFE
+# Loco Translate is a local-dev convenience the e2e suite never uses. Its
+# current release can require a newer WordPress than the one under test (the
+# CI floor leg runs the plugin's declared minimum), so it is skipped there,
+# going by the "Requires at least" wordpress.org publishes for it (TWO-27171).
+loco_requires=$(wp eval 'require_once ABSPATH . "wp-admin/includes/plugin-install.php";
+  $i = plugins_api("plugin_information", array("slug" => "loco-translate", "fields" => array("sections" => false)));
+  echo is_wp_error($i) ? "" : $i->requires;' $SAFE)
+if wp plugin is-installed loco-translate $SAFE; then
+  :
+elif [ -n "$loco_requires" ] && ! php -r 'exit(version_compare($argv[1], $argv[2], ">=") ? 0 : 1);' "$(wp core version $SAFE)" "$loco_requires"; then
+  echo "Skipping loco-translate: it requires WordPress $loco_requires, this is WordPress $(wp core version $SAFE)"
+else
+  wp plugin install loco-translate $SAFE
+fi
 # Installed, not activated: the gift card e2e activates it for its own tests (TWO-26309).
 wp plugin is-installed pw-woocommerce-gift-cards $SAFE || wp plugin install pw-woocommerce-gift-cards --version=2.52 $SAFE
 
@@ -37,7 +50,8 @@ if [ "$(wp plugin get woocommerce --field=version $SAFE 2>/dev/null)" != "$WOOCO
   ! wp plugin verify-checksums woocommerce $SAFE; then
   wp plugin install woocommerce --version="$WOOCOM_VERSION" --force $SAFE
 fi
-wp plugin activate woocommerce loco-translate $SAFE
+wp plugin activate woocommerce $SAFE
+if wp plugin is-installed loco-translate $SAFE; then wp plugin activate loco-translate $SAFE; fi
 
 set +e
 until wp plugin activate tillit-payment-gateway; do
