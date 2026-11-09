@@ -52,14 +52,9 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
                 sprintf('window.twoincBlocksName = %s;', wp_json_encode($this->name)),
                 'before'
             );
-
-            $style = 'assets/css/blocks-checkout.css';
-            wp_enqueue_style(
-                'twoinc-blocks-checkout',
-                WC_TWOINC_PLUGIN_URL . $style,
-                ['twoinc-payment-gateway-css'],
-                twoinc_get_asset_version($style)
-            );
+            // The stylesheet is enqueued by wc_twoinc_enqueue_styles(), after the
+            // base stylesheet it depends on: WooCommerce calls this during init on
+            // every request, where that dependency is not registered (TWO-27181).
 
             return [$handle];
         }

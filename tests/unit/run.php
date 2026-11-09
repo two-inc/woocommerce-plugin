@@ -64,6 +64,7 @@ final class BrandConfigSpec
             'testRefusedEditMarksTheOrderOnce',
             'testAdminOrderSaveReachesTheEditPath',
             'testDeclaresFeatureCompatibility',
+            'testBlocksStylesheetFollowsTheStylesheetItDependsOn',
             'testShippingDetailsCarriedByCreateAndEditBodies',
             'testShippingDetailsFilterOverrides',
             'testShippingDetailsFilterGarbageDiscarded',
@@ -2214,6 +2215,31 @@ final class BrandConfigSpec
         ];
         foreach ($cases as [$needle, $desc]) {
             TinyAssert::true(strpos($source, $needle) !== false, $desc);
+        }
+    }
+
+    /**
+     * TWO-27181: WordPress drops a stylesheet whose dependency is not
+     * registered, and logs it. The Checkout block stylesheet is enqueued only
+     * right after the stylesheet it depends on, never from the Blocks
+     * integration, which WooCommerce calls during init on every request.
+     */
+    private static function testBlocksStylesheetFollowsTheStylesheetItDependsOn(): void
+    {
+        $main = (string) file_get_contents(dirname(__DIR__, 2) . '/tillit-payment-gateway.php');
+        $blocks = (string) file_get_contents(dirname(__DIR__, 2) . '/class/WC_Twoinc_Blocks_Support.php');
+        preg_match('/function wc_twoinc_enqueue_styles\(\)\s*\{(.*?)\n\}/s', $main, $match);
+        $body = $match[1] ?? '';
+        $base = strpos($body, "wp_enqueue_style('twoinc-payment-gateway-css'");
+        $skin = strpos($body, "'twoinc-blocks-checkout'");
+        $cases = [
+            [$base !== false, 'the storefront enqueues the base stylesheet'],
+            [$base !== false && $skin !== false && $base < $skin, 'and the Checkout block stylesheet after it'],
+            [preg_match("/'twoinc-blocks-checkout',[^;]*\\['twoinc-payment-gateway-css'\\]/s", $body) === 1, 'naming it as its dependency'],
+            [strpos($blocks, 'wp_enqueue_style') === false, 'the Blocks integration enqueues no stylesheet'],
+        ];
+        foreach ($cases as [$holds, $description]) {
+            TinyAssert::true($holds, $description);
         }
     }
 
