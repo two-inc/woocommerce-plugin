@@ -156,6 +156,7 @@ jobs:
             echo "TWO_INTERNAL_ENVIRONMENTS=1"
             echo "WORDPRESS_IMAGE=$COMPOSE_PROJECT_NAME-wordpress"
             echo "WOOCOM_VERSION=${{ matrix.combo.woocommerce }}"
+            echo "TWO_DEBUG_LOG_ONLY=1"
           } > .env
           docker compose up -d
 
@@ -241,6 +242,31 @@ jobs:
           MERCHANT_API_KEY: ${{ steps.secrets.outputs.MERCHANT_API_KEY }}
           TWO_ADMIN_PASSWORD: ${{ steps.secrets.outputs.TWO_ADMIN_PASSWORD }}
           E2E_CHECKOUT_RENDERER: ${{ matrix.renderer }}
+
+      # Notices are logged, not printed into the page (TWO_DEBUG_LOG_ONLY in
+      # docker-compose.yaml). One from this plugin's code fails the leg, as it
+      # did when it broke the page; WooCommerce's or WordPress's own are a
+      # warning, since a production shop logs them rather than shows them.
+      - name: PHP notices logged by the shop
+        if: always() && steps.versions.outcome == 'success'
+        run: |
+          log=$(docker compose exec -T wordpress sh -c 'cat /var/www/html/wp-content/debug.log 2>/dev/null' | tr -d '\r')
+          if [ -z "$log" ]; then
+            echo "No PHP notices logged."
+            exit 0
+          fi
+          entries=$(grep -E '^\[[^]]*\] PHP ' <<<"$log" | sed -E 's/^\[[^]]*\] //' | sort | uniq -c | sort -rn || true)
+          ours=$(grep -E 'tillit-payment-gateway|WC_Twoinc' <<<"$entries" || true)
+          theirs=$(grep -vE 'tillit-payment-gateway|WC_Twoinc' <<<"$entries" || true)
+          if [ -n "$theirs" ]; then
+            echo "::warning title=Upstream PHP notices::$(wc -l <<<"$theirs") distinct notices from WordPress or WooCommerce on this combination (see this step's log)"
+            echo "$theirs"
+          fi
+          if [ -n "$ours" ]; then
+            head -n 10 <<<"$ours" | while read -r line; do echo "::error title=Plugin PHP notice::$line"; done
+            exit 1
+          fi
+          echo "No PHP notices from this plugin."
 
       - name: Upload test results
         # always(), not failure(): a job that exceeds timeout-minutes is
