@@ -283,6 +283,15 @@ will test today.
   has accumulated too much e2e order volume to pass fraud velocity checks, so
   every order it places is declined. It goes back to `tillittestuk` once CI is
   trusted again.
+- Company search: the suite tests the plugin, not Two's registry search, so
+  with `TWO_E2E_FAKE_COMPANY_SEARCH=1` the shop's company search and company
+  lookup are answered by a fake, `docker/mu-plugins/two-e2e-company-search.php`,
+  from the companies in `tests/e2e/fake/companies.json` (TWO-27195). It answers
+  at the shop's outbound HTTP layer, so the plugin's own proxy, rate limiter,
+  parsing and checkout UI still run. Every other call (order create, fulfil,
+  refund, cancel and the rest) goes to Two staging, and each CI leg fails if a
+  search reached Two or the fake answered anything else. A spec that searches
+  for a new company adds it to the fixtures
 
 ### Prerequisites
 
@@ -297,6 +306,8 @@ will test today.
 # The compose default seeds the LOCAL dev config; e2e runs against the
 # staging shop, so pin the staging config first (CI does the same):
 echo WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-demostoregb.json > .env
+# Company search and lookup go to the e2e fake, as in CI (see below):
+echo TWO_E2E_FAKE_COMPANY_SEARCH=1 >> .env
 docker compose up -d
 # wait ~90s for wpcli bootstrap to finish (installs WooCommerce, creates products, activates plugin).
 # An existing stack keeps its gateway settings: run `make clean` first so the staging config is applied

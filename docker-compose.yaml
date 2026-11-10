@@ -59,6 +59,10 @@ services:
       # deprecations on a newer PHP blank the checkout. The workflow then fails
       # the leg on any notice from this plugin's code.
       TWO_DEBUG_LOG_ONLY: "${TWO_DEBUG_LOG_ONLY:-}"
+      # 1 for an e2e stack: docker/mu-plugins/two-e2e-company-search.php then
+      # answers the shop's company search and lookup with fixtures instead of
+      # Two (TWO-27195). Unset, the shop searches Two as it would live.
+      TWO_E2E_FAKE_COMPANY_SEARCH: "${TWO_E2E_FAKE_COMPANY_SEARCH:-}"
       # Brand override for the plugin's WC_Twoinc_Brand loader (dev only)
       TWO_BRAND_CODE: "${TWO_BRAND_CODE:-}"
       # The developer host overrides below are honoured only on a site whose
