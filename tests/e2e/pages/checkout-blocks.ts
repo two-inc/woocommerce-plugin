@@ -79,7 +79,8 @@ export async function setBillingCountry(page: Page, countryName: string) {
       () =>
         page.evaluate(
           (addressKey) =>
-            window.wp?.data?.select("wc/store/cart")?.getCustomerData?.()?.[addressKey]?.country ?? null,
+            window.wp?.data?.select("wc/store/cart")?.getCustomerData?.()?.[addressKey]?.country ??
+            null,
           `${prefix}Address`
         ),
       { timeout: DEFAULT_TIMEOUT }
