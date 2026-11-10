@@ -250,11 +250,18 @@ jobs:
 
       # The shop logs each call to Two (a transport error or a non-2xx answer
       # as an error) only with API logging on, so a failed leg can show what
-      # Two answered the company search (TWO-27184).
+      # Two answered the company search (TWO-27184). Set through PHP, not
+      # `wp option patch update`, which refuses a key the seeded settings do
+      # not carry yet.
       - name: Log the shop's calls to Two
         run: |
-          docker compose exec -T wpcli wp option patch update \
-            woocommerce_woocommerce-gateway-tillit_settings enable_api_logging yes
+          docker compose exec -T wpcli wp eval '
+            $key = "woocommerce_woocommerce-gateway-tillit_settings";
+            $settings = (array) get_option($key, []);
+            $settings["enable_api_logging"] = "yes";
+            update_option($key, $settings);
+            echo "enable_api_logging: " . get_option($key)["enable_api_logging"] . PHP_EOL;
+          '
 
       - uses: actions/setup-node@v7
         with:
