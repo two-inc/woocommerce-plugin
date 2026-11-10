@@ -1477,7 +1477,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * The buyer's phone sent to Two: the billing phone, else the shipping phone (TWO-27209). When the cart
          * ships, the WooCommerce 7.6 Checkout block shows one address form and copies its phone to billing only
-         * when an address field changes afterwards, so a buyer who types the phone last leaves billing without one.
+         * when an address field changes afterwards or the same-address box is re-ticked, so a buyer who types the
+         * phone last leaves billing without one.
          *
          * @param WC_Order $order
          */
