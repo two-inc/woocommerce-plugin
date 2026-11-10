@@ -1475,6 +1475,18 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * The buyer's phone sent to Two: the billing phone, else the shipping phone (TWO-27209). When the cart
+         * ships, the WooCommerce 7.6 Checkout block shows one address form and copies its phone to billing only
+         * when an address field changes afterwards, so a buyer who types the phone last leaves billing without one.
+         *
+         * @param WC_Order $order
+         */
+        private static function buyer_phone($order): string
+        {
+            return (string) ($order->get_billing_phone() ?: $order->get_shipping_phone());
+        }
+
+        /**
          * Brand extension hooks fire in this order, each seeing the
          * previous one's result (the same hooks fire in
          * compose_twoinc_edit_order so create and edit stay symmetric):
@@ -1567,7 +1579,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                         'email' => $order->get_billing_email(),
                         'first_name' => $order->get_billing_first_name(),
                         'last_name' => $order->get_billing_last_name(),
-                        'phone_number' => $order->get_billing_phone()
+                        'phone_number' => self::buyer_phone($order)
                     ],
                 ],
                 'buyer_department' => $department,
