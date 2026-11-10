@@ -94,7 +94,7 @@ jobs:
       # URL-encoded or double-encoded, so that value is redacted wherever it
       # appears.
       REDACT_SED: |-
-        s/((set-)?cookie|authorization)["']?[[:space:]]*([:=,]).*/\1\3 [redacted]/I
+        s/((set-)?cookie|authorization|x-api-key)["']?[[:space:]]*([:=,]).*/\1\3 [redacted]/I
         s/(token(=|%3D|%253D))[^&#[:space:]"'<>]*/\1[redacted]/Ig
     # Must exceed Playwright's own worst case, or a fully-failing suite is
     # killed before it can report: 8 tests x 2 attempts (retries: 1) x the
