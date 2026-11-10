@@ -113,6 +113,8 @@
   var holds = [];
   /** The cart totals the holds last saw: only a server answer brings new ones. */
   var holdTotals = null;
+  /** Per role, the address object the holds last saw: the store hands out a new one per change. */
+  var holdSeen = {};
 
   function cartStore() {
     return wp.data && wp.data.select && wp.data.select("wc/store/cart");
@@ -516,7 +518,7 @@
     if (!held) return update;
     // Only once the call has returned: one that throws must not pause the sync for good.
     holds.push(held);
-    holdTotals = cartTotals();
+    seeStore();
     var release = function () {
       holds.splice(holds.indexOf(held), 1);
       putBack(held);
@@ -557,20 +559,31 @@
   /**
    * An address change while a request is out is the buyer's, and is what goes
    * back over the answer rather than the address as it was when the request
-   * went out (TWO-27188). Blocks writes an edit to the address alone, while a
-   * server answer replaces the whole cart, totals included: new totals are how
-   * an answer is told apart.
+   * went out (TWO-27188). Blocks writes an edit as a new address object and
+   * leaves the totals alone, while a server answer replaces the whole cart,
+   * totals included. Any other change (an error, a progress flag) leaves the
+   * address object as it was, so it is not read as an edit either.
    */
   function keepEdits() {
-    var totals = cartTotals();
-    var answered = totals !== holdTotals;
-    holdTotals = totals;
+    var seen = holdSeen;
+    var answered = cartTotals() !== holdTotals;
+    seeStore();
     if (answered) return;
-    holds.forEach(function (held) {
-      addressRoles().forEach(function (entry) {
-        var address = storedAddress(entry.store);
-        if (address && held[entry.store]) held[entry.store] = Object.assign({}, address);
+    addressRoles().forEach(function (entry) {
+      var address = holdSeen[entry.store];
+      if (!address || address === seen[entry.store]) return;
+      holds.forEach(function (held) {
+        if (held[entry.store]) held[entry.store] = Object.assign({}, address);
       });
+    });
+  }
+
+  /** What the holds compare the next store change against. */
+  function seeStore() {
+    holdTotals = cartTotals();
+    holdSeen = {};
+    addressRoles().forEach(function (entry) {
+      holdSeen[entry.store] = storedAddress(entry.store);
     });
   }
 
