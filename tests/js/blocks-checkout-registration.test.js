@@ -1139,6 +1139,50 @@ describe("blocks-checkout.js reaches the rest of the tile's surfaces", () => {
     expect(updates).toEqual([{ namespace: "twoinc-payment-gateway", data: { active: true } }]);
     expect(base.calls.resyncs).toBe(atMount + 1);
   });
+
+  /**
+   * TWO-27188. A country change clears the company picked under the old
+   * country, which blanks required fields, so Blocks holds the new country
+   * back. Before WooCommerce 9.5 the cart-extensions answer then replaced the
+   * store's addresses with the server's, and the country snapped back.
+   */
+  test.each([
+    { version: "7.6.2", country: "ES", seen: ["ES"], description: "7.6 keeps the buyer's country" },
+    { version: "9.4.1", country: "ES", seen: ["ES"], description: "9.4 keeps the buyer's country" },
+    { version: "9.5.0", country: "GB", seen: ["GB"], description: "9.5 is left to Blocks" },
+    { version: "11.2.0", country: "GB", seen: ["GB"], description: "11.2 is left to Blocks" },
+    { version: null, country: "GB", seen: ["GB"], description: "an unknown version is left alone" }
+  ])("an answer overwriting a held address: $description", async ({ version, country, seen }) => {
+    const held = { country: "ES", address_1: "", city: "", postcode: "" };
+    const server = { country: "GB", address_1: "1 Old Street", city: "London", postcode: "N1 1AA" };
+    const base = baseGlobals("address_area", held, held);
+    const { env, registered } = globals({});
+    env.wp.data = base.data;
+    const methodData = env.wc.wcSettings.getSetting;
+    env.wc.wcSettings.getSetting = (key) => (key === "wcVersion" ? version : methodData(key));
+    // What Blocks' cart-extensions call does with its answer before 9.5: the whole cart, addresses included.
+    env.wc.blocksCheckout = {
+      extensionCartUpdate() {
+        return Promise.resolve().then(() => {
+          Object.assign(base.address, server);
+          Object.assign(base.shippingAddress, server);
+          base.publish("wc/store/cart");
+        });
+      }
+    };
+    evaluate(env);
+    registered[0].content.type({});
+    // What the controller reads, straight after the skin's own pass over each store change.
+    const painted = [];
+    base.data.subscribe(() => painted.push(shadowInput("billing_country").value), "wc/store/cart");
+
+    bodyHandlers["update_checkout.twoincBlocks"]();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect([base.address.country, base.shippingAddress.country]).toEqual([country, country]);
+    expect(shadowInput("billing_country").value).toBe(country);
+    expect(painted.slice(0, 1)).toEqual(seen);
+  });
 });
 
 describe("blocks-checkout.js persists the capture across a page load", () => {

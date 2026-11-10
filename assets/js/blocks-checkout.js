@@ -106,6 +106,8 @@
   var saveScheduled = false;
   var restored = false;
   var announcedActive = null;
+  /** Cart-extensions requests out whose answer may overwrite the addresses (TWO-27188). */
+  var holdingAddresses = 0;
 
   function cartStore() {
     return wp.data && wp.data.select && wp.data.select("wc/store/cart");
@@ -499,9 +501,72 @@
   function announceChoice(active) {
     var api = wc.blocksCheckout;
     if (!api || !api.extensionCartUpdate) return null;
-    return api.extensionCartUpdate({
+    var held = extensionOverwritesAddresses() ? storedAddresses() : null;
+    if (held) holdingAddresses += 1;
+    var update = api.extensionCartUpdate({
       namespace: "twoinc-payment-gateway",
       data: { active: active }
+    });
+    if (!held) return update;
+    var release = function () {
+      holdingAddresses -= 1;
+      putBack(held);
+      onCartChange();
+    };
+    return Promise.resolve(update).then(
+      function (response) {
+        release();
+        return response;
+      },
+      function (error) {
+        release();
+        throw error;
+      }
+    );
+  }
+
+  /**
+   * Before WooCommerce 9.5 the cart-extensions answer replaces the store's
+   * addresses outright, including one Blocks is still holding back because a
+   * required field is blank. A country the buyer just changed then snaps back
+   * to the one the server last saw (TWO-27188). From 9.5 Blocks leaves an
+   * address it has not sent alone, so nothing here runs there.
+   */
+  function extensionOverwritesAddresses() {
+    var version = String(settings.getSetting("wcVersion", "") || "");
+    if (!version) return false;
+    var parts = version.split(".").map(function (part) {
+      return parseInt(part, 10) || 0;
+    });
+    return parts[0] < 9 || (parts[0] === 9 && (parts[1] || 0) < 5);
+  }
+
+  /** Each role's address as the store holds it now, or null before the cart resolves. */
+  function storedAddresses() {
+    var held = {};
+    var any = false;
+    addressRoles().forEach(function (entry) {
+      var address = storedAddress(entry.store);
+      if (!address) return;
+      held[entry.store] = Object.assign({}, address);
+      any = true;
+    });
+    return any ? held : null;
+  }
+
+  /** The keys an answer changed, back to what the store held when the request went out. */
+  function putBack(held) {
+    addressRoles().forEach(function (entry) {
+      var was = held[entry.store];
+      var now = storedAddress(entry.store);
+      if (!was || !now) return;
+      var patch = null;
+      Object.keys(was).forEach(function (key) {
+        if (now[key] === was[key]) return;
+        patch = patch || {};
+        patch[key] = was[key];
+      });
+      if (patch) wp.data.dispatch("wc/store/cart")[entry.setter](patch);
     });
   }
 
@@ -639,6 +704,21 @@
     });
   }
 
+  function onCartChange() {
+    // A country change is what the controller re-reads its per-country
+    // gates on, the same pass a classic `updated_checkout` triggers.
+    pullTotals();
+    // The addresses a cart-extensions answer just overwrote are not the buyer's: they are put
+    // back before anything reads them (TWO-27188).
+    if (holdingAddresses) return;
+    // Before `pull()`, so a key this pass releases is repainted from the store in it.
+    push();
+    var moved = pull();
+    restore();
+    if (moved) resync();
+    mount();
+  }
+
   function bootstrap() {
     // The controller this file skins is a declared dependency; absent it, nothing to mount.
     if (!control()) return;
@@ -655,17 +735,7 @@
       document.addEventListener(type, releaseOnEdit, true);
     });
     if (!wp.data || !wp.data.subscribe) return;
-    wp.data.subscribe(function () {
-      // A country change is what the controller re-reads its per-country
-      // gates on, the same pass a classic `updated_checkout` triggers.
-      pullTotals();
-      // Before `pull()`, so a key this pass releases is repainted from the store in it.
-      push();
-      var moved = pull();
-      restore();
-      if (moved) resync();
-      mount();
-    }, "wc/store/cart");
+    wp.data.subscribe(onCartChange, "wc/store/cart");
     // Preselect BEFORE the first announcement, or the announcement is about a
     // method the buyer is about to be moved off (TWO-25800).
     wp.data.subscribe(preselectOnce, "wc/store/payment");
