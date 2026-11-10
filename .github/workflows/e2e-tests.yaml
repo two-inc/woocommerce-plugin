@@ -248,6 +248,14 @@ jobs:
             /opt/tillit-payment-gateway/tests/e2e/provision/checkout-renderer.php \
             ${{ matrix.renderer }}
 
+      # The shop logs each call to Two (a transport error or a non-2xx answer
+      # as an error) only with API logging on, so a failed leg can show what
+      # Two answered the company search (TWO-27184).
+      - name: Log the shop's calls to Two
+        run: |
+          docker compose exec -T wpcli wp option patch update \
+            woocommerce_woocommerce-gateway-tillit_settings enable_api_logging yes
+
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -267,6 +275,23 @@ jobs:
           MERCHANT_API_KEY: ${{ steps.secrets.outputs.MERCHANT_API_KEY }}
           TWO_ADMIN_PASSWORD: ${{ steps.secrets.outputs.TWO_ADMIN_PASSWORD }}
           E2E_CHECKOUT_RENDERER: ${{ matrix.renderer }}
+
+      # What the shop logged of its company searches against Two: a transport
+      # error or a non-2xx answer is logged as an error (TWO-27184). The
+      # message only, never its context (request and response bodies), and
+      # redacted with the job's REDACT_SED.
+      - name: Company searches the shop logged
+        if: failure() && steps.versions.outcome == 'success'
+        run: |
+          lines=$(docker compose exec -T wordpress sh -c \
+            'cat /var/www/html/wp-content/uploads/wc-logs/twoinc-payment-gateway-*.log 2>/dev/null' \
+            | tr -d '\r' | grep -F '/companies/v2/company' | sed -E 's/ (CONTEXT:|\{).*$//' || true)
+          if [ -z "$lines" ]; then
+            echo "The shop logged no company search."
+            exit 0
+          fi
+          echo "By level: $(awk '{print $2}' <<<"$lines" | sort | uniq -c | tr '\n' ' ')"
+          grep -E ' (ERROR|CRITICAL|WARNING) ' <<<"$lines" | sed -E "$REDACT_SED" | head -n 50 || true
 
       # Notices are logged, not printed into the page (TWO_DEBUG_LOG_ONLY in
       # docker-compose.yaml). One from this plugin's code fails the leg, as it
