@@ -175,6 +175,10 @@ jobs:
             echo "WPCLI_IMAGE=wordpress:cli-php${{ matrix.combo.php }}"
             echo "WOOCOM_VERSION=${{ matrix.combo.woocommerce }}"
             echo "TWO_DEBUG_LOG_ONLY=1"
+            # Company search and lookup are answered by the e2e fake, not Two
+            # (TWO-27195): the legs share one merchant key and tripped Two's
+            # rate limits on search.
+            echo "TWO_E2E_FAKE_COMPANY_SEARCH=1"
           } > .env
           docker compose up -d
 
@@ -283,8 +287,44 @@ jobs:
           TWO_ADMIN_PASSWORD: ${{ steps.secrets.outputs.TWO_ADMIN_PASSWORD }}
           E2E_CHECKOUT_RENDERER: ${{ matrix.renderer }}
 
-      # What the shop logged of its company searches against Two: a transport
-      # error or a non-2xx answer is logged as an error (TWO-27184). For each
+      # Company search and lookup reach the e2e fake and every other call
+      # reaches Two (TWO-27195), judged from the shop's own API log: the fake
+      # marks each answer with an x-two-e2e-fake header. A leg fails on a
+      # search that reached Two or a call the fake answered that is not a
+      # search. Paths only, ids collapsed.
+      - name: Company searches reached the fake, everything else Two
+        if: always() && steps.versions.outcome == 'success'
+        run: |
+          log=$(docker compose exec -T wordpress sh -c \
+            'cat /var/www/html/wp-content/uploads/wc-logs/twoinc-payment-gateway-*.log 2>/dev/null' \
+            | tr -d '\r' | grep -F ' CONTEXT: ' || true)
+          # shellcheck disable=SC2016
+          by='(.response.headers // {}) | if type == "object" then with_entries(.key |= ascii_downcase) else {} end
+            | if has("x-two-e2e-fake") then "fake" else "two" end'
+          calls=$(while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            call=$(sed -nE 's/^[^ ]+ [A-Z]+ ([A-Z]+ \/[^ :?]*).*/\1/p' <<<"${line%% CONTEXT: *}")
+            [ -n "$call" ] || continue
+            echo "$(jq -r "$by" <<<"${line#* CONTEXT: }" 2>/dev/null || echo unreadable) $call"
+          done <<<"$log" | perl -pe 's#/(?!v\d+(?:/|$))[^/\s]*\d[^/\s]*#/{id}#g')
+          if [ -z "$calls" ]; then
+            echo "The shop logged no call to Two."
+            exit 0
+          fi
+          sort <<<"$calls" | uniq -c | sort -rn | sed -E "$REDACT_SED"
+          search='GET /companies/v2/company(/[^/ ]+)?$'
+          wrong=$( { grep -E "^(two|unreadable) $search" <<<"$calls"; grep -E '^fake ' <<<"$calls" | grep -vE "^fake $search"; } || true)
+          if [ -n "$wrong" ]; then
+            echo "::error::e2e: a company search reached Two, or the fake answered something else:"
+            sort <<<"$wrong" | uniq -c | sed -E "$REDACT_SED"
+            exit 1
+          fi
+
+      # What the shop logged of its company searches: a transport error or a
+      # non-2xx answer is logged as an error (TWO-27184). Search and lookup are
+      # answered by the e2e fake (TWO-27195), so an error here is the fake's or
+      # the shop's own; the shop's own refusals of a search (a bad checkout
+      # token, its rate limiter) are logged as warnings and kept. For each
       # error, the message plus, from its context, the response's status, the
       # headers that name who answered and any rate limit they state, and the
       # body's error code and message fields. Never the request or the whole
