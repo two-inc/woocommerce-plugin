@@ -3150,6 +3150,8 @@ final class BrandConfigSpec
             ],
             [$shownRequired, 'yes', true, [], $shownRequired, 'a block that already shows the row is left as the merchant saved it'],
             ['<p>not a parsed block</p>', 'yes', true, [], '<p>not a parsed block</p>', 'a value that is not a parsed block'],
+            [$checkout, 'yes', true, [], $checkout, 'no API key', ['', 'mid']],
+            [$checkout, 'yes', true, [], $checkout, 'no merchant id', ['key', '']],
         ];
 
         // Registered at plugins_loaded, so the handler finds the gateway itself rather than being handed one.
@@ -3158,10 +3160,11 @@ final class BrandConfigSpec
 
         foreach ($cases as $case) {
             list($block, $enabled, $singular, $blocks, $expected, $description) = $case;
+            list($api_key, $merchant_id) = $case[6] ?? ['key', 'mid'];
 
             $GLOBALS['__twoinc_test_is_singular'] = $singular;
             $GLOBALS['__twoinc_test_page_blocks'] = $blocks ?: ['woocommerce/checkout'];
-            $prop->setValue(null, self::companySearchGateway($enabled));
+            $prop->setValue(null, self::companySearchGateway($enabled, $api_key, $merchant_id));
 
             TinyAssert::same($expected, WC_Twoinc_Checkout::reveal_blocks_company_attribute($block), $description);
         }
@@ -3170,14 +3173,18 @@ final class BrandConfigSpec
         unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
     }
 
-    private static function companySearchGateway(string $enabled): WC_Twoinc
+    private static function companySearchGateway(string $enabled, string $api_key = 'key', string $merchant_id = 'mid'): WC_Twoinc
     {
-        return new class ($enabled) extends WC_Twoinc {
+        return new class ($enabled, $api_key, $merchant_id) extends WC_Twoinc {
             public $search_enabled;
+            private $test_api_key;
+            private $test_merchant_id;
 
-            public function __construct($enabled)
+            public function __construct($enabled, $api_key, $merchant_id)
             {
                 $this->search_enabled = $enabled;
+                $this->test_api_key = $api_key;
+                $this->test_merchant_id = $merchant_id;
             }
 
             public function get_enable_company_search()
@@ -3187,12 +3194,12 @@ final class BrandConfigSpec
 
             public function get_option($key, $empty_value = null)
             {
-                return $key === 'api_key' ? 'key' : ($empty_value ?? '');
+                return $key === 'api_key' ? $this->test_api_key : ($empty_value ?? '');
             }
 
             public function get_merchant_id()
             {
-                return 'mid';
+                return $this->test_merchant_id;
             }
         };
     }
