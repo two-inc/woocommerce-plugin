@@ -305,16 +305,19 @@ jobs:
             echo "No PHP notices logged."
             exit 0
           fi
-          # Every line this step prints comes from entries, so redacting here
-          # with the job's REDACT_SED covers them all.
-          entries=$(grep -E '^\[[^]]*\] PHP ' <<<"$log" | sed -E 's/^\[[^]]*\] //' | sed -E "$REDACT_SED" | sort | uniq -c | sort -rn || true)
+          entries=$(grep -E '^\[[^]]*\] PHP ' <<<"$log" | sed -E 's/^\[[^]]*\] //' || true)
           # Ours: the plugin's directory, or any function, class or asset
           # handle it defines, every one of which carries "twoinc" in some case
           # (or the old name, tillit). A _doing_it_wrong backtrace names
           # functions only, never files, so the path alone misses them.
+          # Classified before redaction, so redacting cannot strip the path a
+          # notice is classified by. Every line this step prints comes from
+          # ours or theirs, so redacting each with the job's REDACT_SED covers
+          # them all.
           ours_re='tillit|twoinc'
-          ours=$(grep -iE "$ours_re" <<<"$entries" || true)
-          theirs=$(grep -viE "$ours_re" <<<"$entries" || true)
+          tally() { grep . | sed -E "$REDACT_SED" | sort | uniq -c | sort -rn; }
+          ours=$(grep -iE "$ours_re" <<<"$entries" | tally || true)
+          theirs=$(grep -viE "$ours_re" <<<"$entries" | tally || true)
           if [ -n "$theirs" ]; then
             echo "::warning title=Upstream PHP notices::$(wc -l <<<"$theirs") distinct notices from WordPress or WooCommerce on this combination (see this step's log)"
             echo "$theirs"
