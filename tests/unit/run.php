@@ -13,6 +13,7 @@ require __DIR__ . '/EnvironmentOptionsSpec.php';
 require __DIR__ . '/AllowedFieldsSpec.php';
 require __DIR__ . '/OrderTermWireSpec.php';
 require __DIR__ . '/PendingRecoverySpec.php';
+require __DIR__ . '/BuyerPhoneSpec.php';
 
 final class TinyAssert
 {
@@ -19220,4 +19221,5 @@ EnvironmentOptionsSpec::runAll();
 AllowedFieldsSpec::runAll();
 OrderTermWireSpec::runAll();
 PendingRecoverySpec::runAll();
+BuyerPhoneSpec::runAll();
 print("All tests passed.\n");
