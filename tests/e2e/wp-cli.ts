@@ -25,10 +25,12 @@ export function wooCommerceVersion(): number[] {
   return wooCommerceVersionRead;
 }
 
-/** Whether the shop's WooCommerce is older than `major.minor`. */
-export function wooCommerceBelow(major: number, minor: number): boolean {
-  const [have, haveMinor] = wooCommerceVersion();
-  return have < major || (have === major && haveMinor < minor);
+/** Whether the shop's WooCommerce is older than `major.minor.patch`. */
+export function wooCommerceBelow(major: number, minor: number, patch = 0): boolean {
+  const [have, haveMinor, havePatch = 0] = wooCommerceVersion();
+  if (have !== major) return have < major;
+  if (haveMinor !== minor) return haveMinor < minor;
+  return havePatch < patch;
 }
 
 export function setOption(name: string, value: string): void {

@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
 import { getOrder } from "../two-api.js";
-import { checkout } from "../pages/renderer.js";
+import { checkout, skipWhereCheckoutTaxesUntaxedShipping } from "../pages/renderer.js";
 import * as store from "../pages/store.js";
 import * as wpAdmin from "../pages/wp-admin.js";
 import { resetCartShapes, setOption, wp } from "../wp-cli.js";
@@ -87,6 +87,7 @@ for (const [shape, products, check, description] of carts) {
 }
 
 test("a subscriber re-splits untaxed shipping and the order is placed", async ({ page }) => {
+  skipWhereCheckoutTaxesUntaxedShipping();
   // Shipping recorded untaxed while the shop's shipping tax setting resolves to 20%.
   setOption(SHAPE_OPTION, "taxes,untaxed");
   setOption(SUBSCRIBER_OPTION, "resplit");

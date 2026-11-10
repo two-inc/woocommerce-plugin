@@ -1,4 +1,4 @@
-import { type Locator, type Page, expect } from "@playwright/test";
+import { type Locator, type Page, expect, test } from "@playwright/test";
 
 import { BUYER_COMPANY, CHECKOUT_RENDERER } from "../config.js";
 import * as blocks from "./checkout-blocks.js";
@@ -96,6 +96,19 @@ const blocksDriver: CheckoutDriver = {
 
 export const checkout: CheckoutDriver =
   CHECKOUT_RENDERER === "blocks" ? blocksDriver : classicDriver;
+
+/**
+ * TWO-27171: before WooCommerce 9.5.2 recalculating an order taxes its shipping lines whatever their tax status
+ * (WC_Order_Item_Shipping::calculate_taxes()), and the Blocks checkout recalculates the order it builds from the
+ * cart, so shipping the cart leaves untaxed is ordered taxed. The classic checkout keeps the cart's shipping tax.
+ * Call from a test whose cart ships untaxed. Remove once the support window starts at WooCommerce 9.5.2.
+ */
+export function skipWhereCheckoutTaxesUntaxedShipping(): void {
+  test.skip(
+    checkout.renderer === "blocks" && wooCommerceBelow(9, 5, 2),
+    "WooCommerce before 9.5.2 taxes untaxed shipping when the Blocks checkout recalculates the order: WC_Order_Item_Shipping::calculate_taxes() ignores the line's tax status"
+  );
+}
 
 /** The renderer the shop was NOT configured for must not render at all. */
 export async function expectConfiguredRenderer(page: Page) {
