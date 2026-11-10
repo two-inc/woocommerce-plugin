@@ -106,6 +106,15 @@
   var saveScheduled = false;
   var restored = false;
   var announcedActive = null;
+  /**
+   * One per cart-extensions request out whose answer may overwrite the
+   * addresses: what the buyer has entered, put back over that answer (TWO-27188).
+   */
+  var holds = [];
+  /** The cart totals the holds last saw: only a server answer brings new ones. */
+  var holdTotals = null;
+  /** Per role, the address object the holds last saw: the store hands out a new one per change. */
+  var holdSeen = {};
 
   function cartStore() {
     return wp.data && wp.data.select && wp.data.select("wc/store/cart");
@@ -499,9 +508,115 @@
   function announceChoice(active) {
     var api = wc.blocksCheckout;
     if (!api || !api.extensionCartUpdate) return null;
-    return api.extensionCartUpdate({
-      namespace: "twoinc-payment-gateway",
-      data: { active: active }
+    var args = { namespace: "twoinc-payment-gateway", data: { active: active } };
+    if (!extensionOverwritesAddresses()) return api.extensionCartUpdate(args);
+    // A company cleared on a country change blanks its address and asks for this in one
+    // tick: the blanks reach the store first, or the snapshot holds the old address.
+    push();
+    var held = storedAddresses();
+    var update = api.extensionCartUpdate(args);
+    if (!held) return update;
+    // Only once the call has returned: one that throws must not pause the sync for good.
+    holds.push(held);
+    seeStore();
+    var release = function () {
+      holds.splice(holds.indexOf(held), 1);
+      putBack(held);
+      onCartChange();
+    };
+    return Promise.resolve(update).then(
+      function (response) {
+        release();
+        return response;
+      },
+      function (error) {
+        release();
+        throw error;
+      }
+    );
+  }
+
+  /**
+   * Before WooCommerce 9.5 the cart-extensions answer replaces the store's
+   * addresses outright, including one Blocks is still holding back because a
+   * required field is blank. A country the buyer just changed then snaps back
+   * to the one the server last saw (TWO-27188). From 9.5 Blocks leaves an
+   * address it has not sent alone, so nothing here runs there, nor on a
+   * version that is missing or does not read as one.
+   */
+  function extensionOverwritesAddresses() {
+    var match = /^(\d+)(?:\.(\d+))?/.exec(String(settings.getSetting("wcVersion", "") || ""));
+    if (!match) return false;
+    var major = parseInt(match[1], 10);
+    return major < 9 || (major === 9 && parseInt(match[2] || "0", 10) < 5);
+  }
+
+  function cartTotals() {
+    var store = cartStore();
+    return (store && store.getCartTotals && store.getCartTotals()) || null;
+  }
+
+  /**
+   * An address change while a request is out is the buyer's, and is what goes
+   * back over the answer rather than the address as it was when the request
+   * went out (TWO-27188). Blocks writes an edit as a new address object and
+   * leaves the totals alone, while a server answer replaces the whole cart,
+   * totals included. Any other change (an error, a progress flag) leaves the
+   * address object as it was, so it is not read as an edit either.
+   */
+  function keepEdits() {
+    var seen = holdSeen;
+    var answered = cartTotals() !== holdTotals;
+    seeStore();
+    if (answered) return;
+    addressRoles().forEach(function (entry) {
+      var address = holdSeen[entry.store];
+      if (!address || address === seen[entry.store]) return;
+      holds.forEach(function (held) {
+        if (held[entry.store]) held[entry.store] = Object.assign({}, address);
+      });
+    });
+  }
+
+  /** What the holds compare the next store change against. */
+  function seeStore() {
+    holdTotals = cartTotals();
+    holdSeen = {};
+    addressRoles().forEach(function (entry) {
+      holdSeen[entry.store] = storedAddress(entry.store);
+    });
+  }
+
+  /** Each role's address as the store holds it now, or null before the cart resolves. */
+  function storedAddresses() {
+    var held = {};
+    var any = false;
+    addressRoles().forEach(function (entry) {
+      var address = storedAddress(entry.store);
+      if (!address) return;
+      held[entry.store] = Object.assign({}, address);
+      any = true;
+    });
+    return any ? held : null;
+  }
+
+  /**
+   * The keys an answer changed, back to what the buyer last entered. A value
+   * the answer only normalised (a postcode's case, say) goes back as typed
+   * too, as the field showed it before the answer landed.
+   */
+  function putBack(held) {
+    addressRoles().forEach(function (entry) {
+      var was = held[entry.store];
+      var now = storedAddress(entry.store);
+      if (!was || !now) return;
+      var patch = null;
+      Object.keys(was).forEach(function (key) {
+        if (now[key] === was[key]) return;
+        patch = patch || {};
+        patch[key] = was[key];
+      });
+      if (patch) wp.data.dispatch("wc/store/cart")[entry.setter](patch);
     });
   }
 
@@ -639,6 +754,24 @@
     });
   }
 
+  function onCartChange() {
+    // A country change is what the controller re-reads its per-country
+    // gates on, the same pass a classic `updated_checkout` triggers.
+    pullTotals();
+    // The addresses a cart-extensions answer just overwrote are not the buyer's: they are put
+    // back before anything reads them (TWO-27188).
+    if (holds.length) {
+      keepEdits();
+      return;
+    }
+    // Before `pull()`, so a key this pass releases is repainted from the store in it.
+    push();
+    var moved = pull();
+    restore();
+    if (moved) resync();
+    mount();
+  }
+
   function bootstrap() {
     // The controller this file skins is a declared dependency; absent it, nothing to mount.
     if (!control()) return;
@@ -655,17 +788,7 @@
       document.addEventListener(type, releaseOnEdit, true);
     });
     if (!wp.data || !wp.data.subscribe) return;
-    wp.data.subscribe(function () {
-      // A country change is what the controller re-reads its per-country
-      // gates on, the same pass a classic `updated_checkout` triggers.
-      pullTotals();
-      // Before `pull()`, so a key this pass releases is repainted from the store in it.
-      push();
-      var moved = pull();
-      restore();
-      if (moved) resync();
-      mount();
-    }, "wc/store/cart");
+    wp.data.subscribe(onCartChange, "wc/store/cart");
     // Preselect BEFORE the first announcement, or the announcement is about a
     // method the buyer is about to be moved off (TWO-25800).
     wp.data.subscribe(preselectOnce, "wc/store/payment");
