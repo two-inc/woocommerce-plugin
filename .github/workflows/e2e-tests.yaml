@@ -40,6 +40,7 @@ jobs:
           set -o pipefail
           all=$(bash dev/support-matrix.sh --emit-all)
           combos=$(jq -c '.e2e' <<<"$all")
+          combos=$(jq -c '[.[] | select(.woocommerce == "7.6.2" and (.provisional | not))] | .[:2]' <<<"$combos") # [DIAG TEMP TWO-27171]
           skips=$(jq -c '.skips' <<<"$all")
           echo "combos=$combos" >> "$GITHUB_OUTPUT"
           echo "Runnable combinations:"
@@ -77,7 +78,7 @@ jobs:
       max-parallel: 12
       matrix:
         combo: ${{ fromJSON(needs.discover.outputs.combos) }}
-        renderer: [classic, blocks]
+        renderer: [blocks] # [DIAG TEMP TWO-27171]
     # Namespace the Compose project per leg, the same way upgrade-smoke.yaml
     # namespaces its docker resources by run id. The
     # compose volumes are project-scoped, so a leg landing on a runner that
@@ -281,7 +282,7 @@ jobs:
         # failing the step.
         run: |
           set -o pipefail
-          npx playwright test 2>&1 | sed -uE "$REDACT_SED"
+          npx playwright test tests/gift-card.spec.ts tests/refund-unpaired-lines.spec.ts 2>&1 | sed -uE "$REDACT_SED" # [DIAG TEMP TWO-27171]
         env:
           MERCHANT_API_KEY: ${{ steps.secrets.outputs.MERCHANT_API_KEY }}
           TWO_ADMIN_PASSWORD: ${{ steps.secrets.outputs.TWO_ADMIN_PASSWORD }}
@@ -380,6 +381,49 @@ jobs:
           echo "Distinct responses:"
           sed -E 's/^[^|]* \| //; s/(cf-ray|x-ratelimit-remaining|x-ratelimit-reset)=[^ ]*/\1=*/g' <<<"$out" \
             | sort | uniq -c | sort -rn
+
+      # [DIAG TEMP TWO-27171] The plugin's own errors, what it sent for each order, and the orders as stored.
+      - name: "[DIAG TEMP TWO-27171] shop errors and the orders it sent"
+        if: failure() && steps.versions.outcome == 'success'
+        env:
+          DIAG_SED: |-
+            s/[Bb]earer[[:space:]]+[^[:space:]"',]+/Bearer [redacted]/g
+            s/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]*)?/[jwt]/g
+            s/([?&#][^=&#[:space:]"']*(sig|signature|token|key|secret|auth|hash|code)[^=&#[:space:]"']*=)[^&#[:space:]"'<>]*/\1[redacted]/Ig
+            s/https?:\/\/[^[:space:]"'<>]*\?[^[:space:]"'<>]*/[url with query]/g
+            s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[email]/g
+            s/\+[0-9][0-9 ()-]{6,}[0-9]/[phone]/g
+            s/(^|[^0-9.])0[0-9]{9,10}([^0-9]|$)/\1[phone]\2/g
+        run: |
+          redact() { sed -E "$REDACT_SED" | sed -E "$DIAG_SED"; }
+          log=$(docker compose exec -T wordpress sh -c \
+            'cat /var/www/html/wp-content/uploads/wc-logs/twoinc-payment-gateway-*.log 2>/dev/null' | tr -d '\r')
+          # shellcheck disable=SC2016
+          summary='
+            def clip: tostring | gsub("[[:space:]]+"; " ") | .[0:400];
+            (.response // {}) as $r | ($r.body) as $b
+            | "status=\($r.status_code // "none")"
+              + (if ($b | type) == "object" then " " + ([("error_code", "error_message", "error_details", "message", "detail")
+                  as $k | select($b[$k] != null) | "\($k)=\($b[$k] | clip)"] | join(" ")) else "" end)
+              + " sent_totals=" + ((.request.body // {}) | if type == "object" then {gross_amount, net_amount, tax_amount, discount_amount} else {} end | tojson)
+              + " sent_lines=" + ([((.request.body // {}) | if type == "object" then (.line_items // []) else [] end)[]
+                  | {type, name, gross_amount, net_amount, tax_amount, discount_amount, tax_rate, tax_class_name}] | tojson)'
+          echo "== plugin ERROR, CRITICAL and WARNING lines, and every order create and intent"
+          grep -E '^[^ ]+ (ERROR|CRITICAL|WARNING) |^[^ ]+ [A-Z]+ POST /v1/order(_intent)?( |$)' <<<"$log" \
+            | grep -vE 'companies/v2/company' | head -n 40 | while IFS= read -r line; do
+            msg=${line%% CONTEXT: *}
+            if [ "$msg" = "$line" ]; then
+              echo "$msg | context not logged"
+            else
+              echo "$msg | $(jq -r "$summary" <<<"${line#* CONTEXT: }" 2>/dev/null || echo "context unreadable")"
+            fi
+          done | redact
+          echo "== the shop's last orders"
+          docker compose exec -T wpcli wp eval-file /opt/tillit-payment-gateway/tests/e2e/provision/diag-orders.php 2>&1 \
+            | tr -d '\r' | head -n 200 | redact
+          echo "== PHP fatal errors with their stack"
+          docker compose exec -T wordpress sh -c 'cat /var/www/html/wp-content/debug.log 2>/dev/null' | tr -d '\r' \
+            | grep -A14 'PHP Fatal' | head -n 40 | redact
 
       # Notices are logged, not printed into the page (TWO_DEBUG_LOG_ONLY in
       # docker-compose.yaml). One from this plugin's code fails the leg, as it
