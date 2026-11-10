@@ -7,6 +7,7 @@ import {
   PHONE_NUMBER,
   RECIPIENT_EMAIL
 } from "../config.js";
+import { explainSearchFailure, watchCompanySearch } from "./company-search-log.js";
 
 export async function selectTwoPayment(page: Page) {
   const radio = page.locator("#payment_method_woocommerce-gateway-tillit");
@@ -78,26 +79,35 @@ export async function fillCompanySearch(page: Page, companyName = BUYER_COMPANY,
   // step needs instead.
   await selectRegisteredCompany(page);
 
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      await openCompanySearch(page);
+  const searches = watchCompanySearch(page);
+  try {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        await openCompanySearch(page);
 
-      const searchInput = page.locator(`${COMPANY_PANEL} .two-company-dropdown__query`);
-      await searchInput.waitFor({ state: "visible", timeout: 5_000 });
-      await searchInput.pressSequentially(companyName, { delay: 50 });
+        const searchInput = page.locator(`${COMPANY_PANEL} .two-company-dropdown__query`);
+        await searchInput.waitFor({ state: "visible", timeout: 5_000 });
+        await searchInput.pressSequentially(companyName, { delay: 50 });
 
-      const result = page.locator(`${COMPANY_PANEL} .two-company-dropdown__row`).first();
-      await result.waitFor({ state: "visible", timeout: 10_000 });
-      await page.waitForTimeout(500);
-      await result.click();
+        const result = page.locator(`${COMPANY_PANEL} .two-company-dropdown__row`).first();
+        try {
+          await result.waitFor({ state: "visible", timeout: 10_000 });
+        } catch (e) {
+          throw explainSearchFailure(searches, e);
+        }
+        await page.waitForTimeout(500);
+        await result.click();
 
-      await expect(page.locator("#billing_address_1")).not.toBeEmpty({ timeout: LONG_TIMEOUT });
-      return;
-    } catch (e) {
-      if (attempt === retries) throw e;
-      await page.keyboard.press("Escape");
-      await page.waitForTimeout(1_000);
+        await expect(page.locator("#billing_address_1")).not.toBeEmpty({ timeout: LONG_TIMEOUT });
+        return;
+      } catch (e) {
+        if (attempt === retries) throw e;
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(1_000);
+      }
     }
+  } finally {
+    searches.stop();
   }
 }
 
