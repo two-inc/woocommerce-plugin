@@ -103,11 +103,15 @@ export async function fillCompanySearch(page: Page, companyName = BUYER_COMPANY)
   const searches = watchCompanySearch(page);
   const result = wrap.locator(".two-company-dropdown__row").first();
   try {
-    const query = wrap.locator(".two-company-dropdown__query");
-    await query.pressSequentially(companyName, { delay: 50 });
-    await result.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
-  } catch (e) {
-    throw explainSearchFailure(searches, e);
+    // Outside the explained wait: a box that cannot be typed into is its own failure, not a missing row.
+    await wrap
+      .locator(".two-company-dropdown__query")
+      .pressSequentially(companyName, { delay: 50 });
+    try {
+      await result.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
+    } catch (e) {
+      throw explainSearchFailure(searches, e);
+    }
   } finally {
     searches.stop();
   }
