@@ -1332,6 +1332,11 @@ class StubOrder
         return '+4712345678';
     }
 
+    public function get_shipping_phone()
+    {
+        return '';
+    }
+
     public function get_shipping_company()
     {
         return '';
