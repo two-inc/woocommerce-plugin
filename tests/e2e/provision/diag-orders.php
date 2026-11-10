@@ -28,6 +28,16 @@ foreach ($orders as $order) {
         $order->get_cart_tax(),
         $order->get_meta('twoinc_order_id') ? 'yes' : 'no'
     );
+    // Lengths only, never the values.
+    printf(
+        "  phones: billing_len=%d shipping_len=%d same=%s billing_country=%s shipping_country=%s billing_company_len=%d\n",
+        strlen((string) $order->get_billing_phone()),
+        strlen((string) $order->get_shipping_phone()),
+        $order->get_billing_phone() === $order->get_shipping_phone() ? 'yes' : 'no',
+        $order->get_billing_country(),
+        $order->get_shipping_country(),
+        strlen((string) $order->get_billing_company())
+    );
     foreach ($order->get_items('line_item') as $item) {
         printf("  product %s total=%s tax=%s taxes=%s\n", $item->get_name(), $item->get_total(), $item->get_total_tax(), wp_json_encode($item->get_taxes()));
     }
