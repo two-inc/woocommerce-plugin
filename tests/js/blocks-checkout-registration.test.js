@@ -260,10 +260,20 @@ function baseGlobals(location, billing, shipping) {
   });
   const address = Object.assign(blank(), billing || {});
   const shippingAddress = Object.assign(blank(), shipping || {});
+  // The same object until a server answer replaces the cart, as in the Blocks store.
+  let totals = { total_price: "38600", total_tax: "0", currency_minor_unit: 2 };
 
   /** Fire the listeners one store's subscription registered. */
   function publish(store) {
     (subscribers[store] || []).forEach((fn) => fn());
+  }
+
+  /** What Blocks' `receiveCart` does with a server answer: the whole cart replaced, totals included. */
+  function receiveCart(answer) {
+    totals = Object.assign({}, totals);
+    Object.assign(address, answer);
+    Object.assign(shippingAddress, answer);
+    publish("wc/store/cart");
   }
 
   return {
@@ -277,6 +287,7 @@ function baseGlobals(location, billing, shipping) {
     activeMethod,
     resolution,
     publish,
+    receiveCart,
 
     data: {
       select: (store) =>
@@ -286,11 +297,7 @@ function baseGlobals(location, billing, shipping) {
               getCartData: () => ({}),
               getCustomerData: () =>
                 resolution.customerData ? { billingAddress: address, shippingAddress } : {},
-              getCartTotals: () => ({
-                total_price: "38600",
-                total_tax: "0",
-                currency_minor_unit: 2
-              }),
+              getCartTotals: () => totals,
               // Only the resolver-backed selector ever finishes.
               hasFinishedResolution: (selector) => selector === "getCartData" && resolution.finished
             },
@@ -1145,44 +1152,122 @@ describe("blocks-checkout.js reaches the rest of the tile's surfaces", () => {
    * country, which blanks required fields, so Blocks holds the new country
    * back. Before WooCommerce 9.5 the cart-extensions answer then replaced the
    * store's addresses with the server's, and the country snapped back.
+   *
+   * Steps: `announce` asks for a recalculation and `choose` picks this method; `clear` is the controller
+   * clearing a company's address, which blanks it and asks in the same tick;
+   * `throw` is a call that throws; `edit:key=value` is the buyer's edit while
+   * a request is out; `answer[:n]` and `reject` settle the first request (or the nth, from 0).
    */
-  test.each([
-    { version: "7.6.2", country: "ES", seen: ["ES"], description: "7.6 keeps the buyer's country" },
-    { version: "9.4.1", country: "ES", seen: ["ES"], description: "9.4 keeps the buyer's country" },
-    { version: "9.5.0", country: "GB", seen: ["GB"], description: "9.5 is left to Blocks" },
-    { version: "11.2.0", country: "GB", seen: ["GB"], description: "11.2 is left to Blocks" },
-    { version: null, country: "GB", seen: ["GB"], description: "an unknown version is left alone" }
-  ])("an answer overwriting a held address: $description", async ({ version, country, seen }) => {
-    const held = { country: "ES", address_1: "", city: "", postcode: "" };
-    const server = { country: "GB", address_1: "1 Old Street", city: "London", postcode: "N1 1AA" };
-    const base = baseGlobals("address_area", held, held);
-    const { env, registered } = globals({});
-    env.wp.data = base.data;
-    const methodData = env.wc.wcSettings.getSetting;
-    env.wc.wcSettings.getSetting = (key) => (key === "wcVersion" ? version : methodData(key));
-    // What Blocks' cart-extensions call does with its answer before 9.5: the whole cart, addresses included.
-    env.wc.blocksCheckout = {
-      extensionCartUpdate() {
-        return Promise.resolve().then(() => {
-          Object.assign(base.address, server);
-          Object.assign(base.shippingAddress, server);
+  test.each`
+    version     | start       | steps                                                    | country | city        | patches | description
+    ${"7.6.2"}  | ${"blank"}  | ${"announce answer"}                                     | ${"ES"} | ${""}       | ${1}    | ${"7.6 keeps the buyer's country"}
+    ${"9.4.1"}  | ${"blank"}  | ${"announce answer"}                                     | ${"ES"} | ${""}       | ${1}    | ${"9.4 keeps the buyer's country"}
+    ${"9.5.0"}  | ${"blank"}  | ${"announce answer"}                                     | ${"GB"} | ${"London"} | ${0}    | ${"9.5 is left to Blocks"}
+    ${"11.2.0"} | ${"blank"}  | ${"announce answer"}                                     | ${"GB"} | ${"London"} | ${0}    | ${"11.2 is left to Blocks"}
+    ${null}     | ${"blank"}  | ${"announce answer"}                                     | ${"GB"} | ${"London"} | ${0}    | ${"an unknown version is left alone"}
+    ${"trunk"}  | ${"blank"}  | ${"announce answer"}                                     | ${"GB"} | ${"London"} | ${0}    | ${"a version that is not a number is left alone"}
+    ${"7.6.2"}  | ${"blank"}  | ${"announce edit:country=FR answer"}                     | ${"FR"} | ${""}       | ${1}    | ${"a country changed in flight ends as changed"}
+    ${"7.6.2"}  | ${"blank"}  | ${"announce edit:city=Paris answer"}                     | ${"ES"} | ${"Paris"}  | ${1}    | ${"a city typed in flight is kept"}
+    ${"7.6.2"}  | ${"blank"}  | ${"choose reject edit:country=FR"}                       | ${"FR"} | ${""}       | ${0}    | ${"a rejection releases the hold"}
+    ${"7.6.2"}  | ${"blank"}  | ${"announce announce edit:country=FR answer:0 answer:1"} | ${"FR"} | ${""}       | ${2}    | ${"two requests out, answered in order"}
+    ${"7.6.2"}  | ${"blank"}  | ${"announce announce edit:country=FR answer:1 answer:0"} | ${"FR"} | ${""}       | ${2}    | ${"two requests out, answered out of order"}
+    ${"7.6.2"}  | ${"filled"} | ${"clear answer"}                                        | ${"ES"} | ${""}       | ${2}    | ${"a company's address blanked and announced in one tick"}
+    ${"7.6.2"}  | ${"blank"}  | ${"throw edit:country=FR"}                               | ${"FR"} | ${""}       | ${0}    | ${"a call that throws leaves the sync running"}
+  `(
+    "an answer overwriting a held address: $description",
+    async ({ version, start, steps, country, city, patches }) => {
+      const server = {
+        country: "GB",
+        address_1: "1 Old Street",
+        city: "London",
+        postcode: "N1 1AA"
+      };
+      const held =
+        start === "filled"
+          ? Object.assign({}, server, { country: "ES" })
+          : { country: "ES", address_1: "", city: "", postcode: "" };
+      const base = baseGlobals("address_area", held, held);
+      const { env, registered } = globals({});
+      env.wp.data = base.data;
+      const methodData = env.wc.wcSettings.getSetting;
+      env.wc.wcSettings.getSetting = (key) => (key === "wcVersion" ? version : methodData(key));
+      const pending = [];
+      let throwNext = false;
+      // Blocks' cart-extensions call: asynchronous, and before 9.5 its answer replaces the whole cart.
+      env.wc.blocksCheckout = {
+        extensionCartUpdate() {
+          if (throwNext) throw new Error("not sent");
+          return new Promise((resolve, reject) => {
+            pending.push({
+              answer(addresses) {
+                base.receiveCart(addresses);
+                resolve(addresses);
+              },
+              reject: () => reject(new Error("refused"))
+            });
+          });
+        }
+      };
+      evaluate(env);
+      registered[0].content.type({});
+      // The page load's own announcement of the method, answered before the buyer starts.
+      pending.splice(0).forEach((request) => request.answer({}));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      // What the controller reads, straight after the skin's own pass over each store change.
+      const painted = [];
+      base.data.subscribe(
+        () => painted.push(shadowInput("billing_country").value),
+        "wc/store/cart"
+      );
+      const announce = () => {
+        try {
+          bodyHandlers["update_checkout.twoincBlocks"]();
+        } catch (error) {
+          // A throwing call surfaces in the handler; what matters is what it leaves behind.
+        }
+      };
+      const act = {
+        announce,
+        // The buyer picking this method, whose announcement handles its own refusal.
+        choose: () => {
+          base.activeMethod.name = "woocommerce-gateway-tillit";
+          base.publish("wc/store/payment");
+        },
+        throw: () => {
+          throwNext = true;
+          announce();
+        },
+        // The controller's own clear: bare value writes, then `update_checkout`, in one tick.
+        clear: () => {
+          ["address_1", "address_2", "city", "postcode", "state"].forEach((key) => {
+            shadowInput("billing_" + key).value = "";
+          });
+          announce();
+        },
+        edit: (change) => {
+          const [key, value] = change.split("=");
+          base.address[key] = value;
+          base.shippingAddress[key] = value;
           base.publish("wc/store/cart");
-        });
+        },
+        answer: (n) => pending[Number(n || 0)].answer(server),
+        reject: () => pending[0].reject()
+      };
+
+      for (const step of steps.split(" ")) {
+        const [name, arg] = step.split(":");
+        act[name](arg);
+        await new Promise((resolve) => setTimeout(resolve, 0));
       }
-    };
-    evaluate(env);
-    registered[0].content.type({});
-    // What the controller reads, straight after the skin's own pass over each store change.
-    const painted = [];
-    base.data.subscribe(() => painted.push(shadowInput("billing_country").value), "wc/store/cart");
 
-    bodyHandlers["update_checkout.twoincBlocks"]();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect([base.address.country, base.shippingAddress.country]).toEqual([country, country]);
-    expect(shadowInput("billing_country").value).toBe(country);
-    expect(painted.slice(0, 1)).toEqual(seen);
-  });
+      expect([base.address.country, base.shippingAddress.country]).toEqual([country, country]);
+      expect(base.address.city).toBe(city);
+      expect(shadowInput("billing_country").value).toBe(country);
+      // The controller reads the server's stale country only where it is the outcome.
+      expect(painted.includes(server.country)).toBe(country === server.country);
+      expect(base.calls.patches).toHaveLength(patches);
+    }
+  );
 });
 
 describe("blocks-checkout.js persists the capture across a page load", () => {

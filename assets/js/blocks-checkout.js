@@ -106,8 +106,13 @@
   var saveScheduled = false;
   var restored = false;
   var announcedActive = null;
-  /** Cart-extensions requests out whose answer may overwrite the addresses (TWO-27188). */
-  var holdingAddresses = 0;
+  /**
+   * One per cart-extensions request out whose answer may overwrite the
+   * addresses: what the buyer has entered, put back over that answer (TWO-27188).
+   */
+  var holds = [];
+  /** The cart totals the holds last saw: only a server answer brings new ones. */
+  var holdTotals = null;
 
   function cartStore() {
     return wp.data && wp.data.select && wp.data.select("wc/store/cart");
@@ -501,15 +506,19 @@
   function announceChoice(active) {
     var api = wc.blocksCheckout;
     if (!api || !api.extensionCartUpdate) return null;
-    var held = extensionOverwritesAddresses() ? storedAddresses() : null;
-    if (held) holdingAddresses += 1;
-    var update = api.extensionCartUpdate({
-      namespace: "twoinc-payment-gateway",
-      data: { active: active }
-    });
+    var args = { namespace: "twoinc-payment-gateway", data: { active: active } };
+    if (!extensionOverwritesAddresses()) return api.extensionCartUpdate(args);
+    // A company cleared on a country change blanks its address and asks for this in one
+    // tick: the blanks reach the store first, or the snapshot holds the old address.
+    push();
+    var held = storedAddresses();
+    var update = api.extensionCartUpdate(args);
     if (!held) return update;
+    // Only once the call has returned: one that throws must not pause the sync for good.
+    holds.push(held);
+    holdTotals = cartTotals();
     var release = function () {
-      holdingAddresses -= 1;
+      holds.splice(holds.indexOf(held), 1);
       putBack(held);
       onCartChange();
     };
@@ -530,15 +539,39 @@
    * addresses outright, including one Blocks is still holding back because a
    * required field is blank. A country the buyer just changed then snaps back
    * to the one the server last saw (TWO-27188). From 9.5 Blocks leaves an
-   * address it has not sent alone, so nothing here runs there.
+   * address it has not sent alone, so nothing here runs there, nor on a
+   * version that is missing or does not read as one.
    */
   function extensionOverwritesAddresses() {
-    var version = String(settings.getSetting("wcVersion", "") || "");
-    if (!version) return false;
-    var parts = version.split(".").map(function (part) {
-      return parseInt(part, 10) || 0;
+    var match = /^(\d+)(?:\.(\d+))?/.exec(String(settings.getSetting("wcVersion", "") || ""));
+    if (!match) return false;
+    var major = parseInt(match[1], 10);
+    return major < 9 || (major === 9 && parseInt(match[2] || "0", 10) < 5);
+  }
+
+  function cartTotals() {
+    var store = cartStore();
+    return (store && store.getCartTotals && store.getCartTotals()) || null;
+  }
+
+  /**
+   * An address change while a request is out is the buyer's, and is what goes
+   * back over the answer rather than the address as it was when the request
+   * went out (TWO-27188). Blocks writes an edit to the address alone, while a
+   * server answer replaces the whole cart, totals included: new totals are how
+   * an answer is told apart.
+   */
+  function keepEdits() {
+    var totals = cartTotals();
+    var answered = totals !== holdTotals;
+    holdTotals = totals;
+    if (answered) return;
+    holds.forEach(function (held) {
+      addressRoles().forEach(function (entry) {
+        var address = storedAddress(entry.store);
+        if (address && held[entry.store]) held[entry.store] = Object.assign({}, address);
+      });
     });
-    return parts[0] < 9 || (parts[0] === 9 && (parts[1] || 0) < 5);
   }
 
   /** Each role's address as the store holds it now, or null before the cart resolves. */
@@ -554,7 +587,11 @@
     return any ? held : null;
   }
 
-  /** The keys an answer changed, back to what the store held when the request went out. */
+  /**
+   * The keys an answer changed, back to what the buyer last entered. A value
+   * the answer only normalised (a postcode's case, say) goes back as typed
+   * too, as the field showed it before the answer landed.
+   */
   function putBack(held) {
     addressRoles().forEach(function (entry) {
       var was = held[entry.store];
@@ -710,7 +747,10 @@
     pullTotals();
     // The addresses a cart-extensions answer just overwrote are not the buyer's: they are put
     // back before anything reads them (TWO-27188).
-    if (holdingAddresses) return;
+    if (holds.length) {
+      keepEdits();
+      return;
+    }
     // Before `pull()`, so a key this pass releases is repainted from the store in it.
     push();
     var moved = pull();
