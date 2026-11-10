@@ -284,21 +284,61 @@ jobs:
           E2E_CHECKOUT_RENDERER: ${{ matrix.renderer }}
 
       # What the shop logged of its company searches against Two: a transport
-      # error or a non-2xx answer is logged as an error (TWO-27184). The
-      # message only, never its context (request and response bodies), and
-      # redacted with the job's REDACT_SED.
+      # error or a non-2xx answer is logged as an error (TWO-27184). For each
+      # error, the message plus, from its context, the response's status, the
+      # headers that name who answered and any rate limit they state, and the
+      # body's error code and message fields. Never the request or the whole
+      # body. The context is " CONTEXT: " and JSON on every leg: WooCommerce
+      # 11 writes it so, and docker/mu-plugins/two-e2e-log-context.php adds it
+      # where 7.6 drops it. Everything printed is redacted with REDACT_SED.
       - name: Company searches the shop logged
         if: failure() && steps.versions.outcome == 'success'
         run: |
-          lines=$(docker compose exec -T wordpress sh -c \
+          log=$(docker compose exec -T wordpress sh -c \
             'cat /var/www/html/wp-content/uploads/wc-logs/twoinc-payment-gateway-*.log 2>/dev/null' \
-            | tr -d '\r' | grep -F '/companies/v2/company' | sed -E 's/ (CONTEXT:|\{).*$//' || true)
-          if [ -z "$lines" ]; then
+            | tr -d '\r' | grep -F '/companies/v2/company' || true)
+          if [ -z "$log" ]; then
             echo "The shop logged no company search."
             exit 0
           fi
-          echo "By level: $(awk '{print $2}' <<<"$lines" | sort | uniq -c | tr '\n' ' ')"
-          grep -E ' (ERROR|CRITICAL|WARNING) ' <<<"$lines" | sed -E "$REDACT_SED" | head -n 50 || true
+          echo "By level: $(awk '{print $2}' <<<"$log" | sort | uniq -c | tr '\n' ' ')"
+          errors=$(grep -E '^[^ ]+ (ERROR|CRITICAL|WARNING) ' <<<"$log" || true)
+          [ -n "$errors" ] || exit 0
+          # shellcheck disable=SC2016
+          summary='
+            def clip: tostring | gsub("[[:space:]]+"; " ") | .[0:200];
+            (.response // {}) as $r
+            | ($r.headers | if type == "object" then with_entries(.key |= ascii_downcase) else {} end) as $h
+            | $r.body as $b
+            | ["status=\($r.status_code // "none")"]
+              + [("retry-after", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset",
+                  "server", "via", "cf-ray", "cf-mitigated") as $k
+                 | select($h | has($k))
+                 | "\($k)=\($h[$k] | if type == "array" then join(",") else . end | clip)"]
+              + if ($b | type) == "object" then
+                  [("error_code", "error_message", "code", "message", "detail", "error") as $k
+                   | select($b[$k] | type == "string" or type == "number")
+                   | "body.\($k)=\($b[$k] | clip)"]
+                elif ($b | type) == "string" and ($b | length) > 0 then
+                  ["body=\(if ($b | test("<html"; "i")) then "html" else "text" end) length=\($b | length)"]
+                  + [$b | scan("(?i)error(?: code)?:? ?[0-9]{3,4}") | "body.error=\(clip)"][0:1]
+                  + [$b | scan("(?is)<title>(.*?)</title>") | "body.title=\(.[0] | clip)"][0:1]
+                else [] end
+            | join(" ")'
+          out=$(while IFS= read -r line; do
+            msg=${line%% CONTEXT: *}
+            if [ "$msg" = "$line" ]; then
+              details="context not logged"
+            else
+              details=$(jq -r "$summary" <<<"${line#* CONTEXT: }" 2>/dev/null || echo "context unreadable")
+            fi
+            echo "$msg | $details"
+          done <<<"$errors" | sed -E "$REDACT_SED")
+          head -n 50 <<<"$out"
+          # Grouped without the values that differ on every response.
+          echo "Distinct responses:"
+          sed -E 's/^[^|]* \| //; s/(cf-ray|x-ratelimit-remaining|x-ratelimit-reset)=[^ ]*/\1=*/g' <<<"$out" \
+            | sort | uniq -c | sort -rn
 
       # Notices are logged, not printed into the page (TWO_DEBUG_LOG_ONLY in
       # docker-compose.yaml). One from this plugin's code fails the leg, as it
