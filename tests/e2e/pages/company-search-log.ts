@@ -45,9 +45,8 @@ export function watchCompanySearch(page: Page): CompanySearchLog {
   };
   const onFailed = (request: Request) => {
     if (!SEARCH_URL.test(request.url())) return;
-    record(
-      `transport failure "${request.failure()?.errorText ?? "unknown"}", country=${countryOf(request)}`
-    );
+    const reason = request.failure()?.errorText ?? "unknown";
+    record(`transport failure "${reason}", country=${countryOf(request)}`);
   };
 
   page.on("response", onResponse);
