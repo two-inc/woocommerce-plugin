@@ -156,7 +156,12 @@ point mount nothing without it, so the address-area search that otherwise runs
 for other payment methods stays off and the company field is plain text.
 Server side, `WC_Twoinc_Api_Proxy::authorize()` and both sole-trader handlers
 (`ajax_availability()`, `ajax_tokens()`) refuse with "Gateway unavailable"
-before Two is called. Switching the gateway back on restores all of it. Test
-gateways default to disabled, as an unsaved gateway is in core, so a test that
-reaches these handlers switches its gateway on (`runProxyHandler()` and
-`runTokensHandler()` do so unless told otherwise).
+before Two is called. The store's own company field setting applies too:
+`reveal_company_field_for()` leaves a hidden row hidden on the Blocks checkout
+(option and block attribute alike), and `update_company_fields()` adds no
+`billing_company` or `shipping_company` the store left out. Switching the
+gateway back on restores all of it. An unsaved Two gateway is on, as its
+setting defaults to `'yes'`, but the unit tests' `WC_Payment_Gateway` stub
+defaults to `'no'`, so a test that reaches these paths switches its gateway on
+(`runProxyHandler()`, `runTokensHandler()` and `companySearchGateway()` do so
+unless told otherwise).
