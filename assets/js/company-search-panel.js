@@ -1606,12 +1606,15 @@
     };
 
     /**
-     * Cancel the in-flight search for the current bind, if any.
+     * Cancel the in-flight search for the current bind, if any, and stop the
+     * spinner: an aborted search never settles, so `_runSearch()` never turns
+     * it off itself (TWO-27235).
      *
      * @returns {boolean} true when a request was actually aborted
      */
     CompanySearchPanel.prototype.abortActiveRequest = function () {
         this._cancelPendingSearch();
+        this._setSearching(false);
         return this.search.abortActiveRequest(this._token);
     };
 

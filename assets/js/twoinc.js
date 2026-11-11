@@ -1050,6 +1050,21 @@ class TwoCompanySearch {
    */
   lastObservedCountry = null;
 
+  /**
+   * Whether this role's country was empty at its last notification
+   * (TWO-27235). Set by `countryDidClear()`, and seeded true on a page that
+   * loads with no country.
+   */
+  countryCleared = false;
+
+  /**
+   * Whether the search issued last had no country to run against
+   * (TWO-27235), so its empty answer is worded as the missing country rather
+   * than as a registry with no match. Only the last search issued ever
+   * paints: the panel drops an answer it has already searched past.
+   */
+  lastSearchHadNoCountry = false;
+
   /** What the panel announces once a search answers. */
   searchResultsText(plural) {
     const text = window.twoinc && window.twoinc.text;
@@ -1069,6 +1084,14 @@ class TwoCompanySearch {
     return (
       (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_unavailable) ||
       "Company search is temporarily unavailable. Please try again."
+    );
+  }
+
+  /** What a search answers with no country selected (TWO-27235). */
+  companySearchNoCountryText() {
+    return (
+      (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_no_country) ||
+      "Select your country above to search for your company."
     );
   }
 
@@ -1141,6 +1164,7 @@ class TwoCompanySearch {
         return this.companySearchTooShortText();
       },
       noResultsMessage: () => {
+        if (this.lastSearchHadNoCountry) return this.companySearchNoCountryText();
         return (
           (window.wc_country_select_params && wc_country_select_params.i18n_no_matches) ||
           "No matches found"
@@ -1171,6 +1195,18 @@ class TwoCompanySearch {
    * @returns {Promise<Object>}
    */
   searchCompanies(params) {
+    // Read per request, never captured when the panel was built (TWO-24867):
+    // the panel outlives a country change on every path that does not rebuild
+    // it, and a captured value searched the previous country's register while
+    // the form said otherwise.
+    const country = params.getCountryCode();
+    // No country, no registry to ask (TWO-27235): nothing leaves the browser,
+    // and the empty answer reads as the select-a-country sentence through
+    // `noResultsMessage()`.
+    this.lastSearchHadNoCountry = !country;
+    if (!country) {
+      return Promise.resolve({ items: [] });
+    }
     // Defense in depth: the field is disabled the moment the
     // country falls outside the registry's coverage, but a request already
     // queued (debounce) before that landed must not reach the network.
@@ -1184,11 +1220,7 @@ class TwoCompanySearch {
     }
     const seq = ++this.companySearchSeq;
     const searchParams = new URLSearchParams({
-      // Read per request, never captured when the panel was built (TWO-24867):
-      // the panel outlives a country change on every path that does not rebuild
-      // it, and a captured value searched the previous country's register while
-      // the form said otherwise.
-      country: params.getCountryCode(),
+      country: country,
       limit: this.companySearchLimit,
       offset: 0,
       q: params.term,
@@ -1518,7 +1550,10 @@ class TwoCompanySearch {
    * the plain company field, which is the one that posts.
    */
   companySearchIsOffered() {
-    if (!twoincSupportedBuyerCountries.isSupported(this.currentCountry())) return false;
+    const country = this.currentCountry();
+    // No country is not an excluded one (TWO-27235): the control stays, and
+    // a search there asks for a country instead of the row going.
+    if (country && !twoincSupportedBuyerCountries.isSupported(country)) return false;
     if (this.companySearchCountryIsSupported()) return true;
     // Pending reads as offered, as the registry gate's own null does: an
     // answer that may restore the control is not worth a visible teardown.
@@ -1799,6 +1834,42 @@ class TwoCompanySearch {
     const previous = this.lastObservedCountry;
     this.lastObservedCountry = country;
     return !!previous && country !== previous;
+  }
+
+  /**
+   * Whether this notification is the buyer emptying the country (TWO-27235),
+   * and if so, drop the search in flight: it answers for the country just
+   * left. Only the clear itself counts. The checkout re-notifies with the
+   * country still empty (WooCommerce re-emits `change` on a re-render, every
+   * `updated_checkout`, a Blocks store pass that moved another field), and
+   * aborting on a repeat would drop the search the buyer has typed since.
+   * The panel's abort also stops the spinner, since an aborted search never
+   * settles to stop it. The captured company is kept: the same country
+   * back leaves it valid, and another runs `countryDidChange()`'s path.
+   * Invoke once per notification.
+   *
+   * @param {string} country upper-cased ISO code currently in the field
+   * @returns {boolean}
+   */
+  countryDidClear(country) {
+    if (country || this.countryCleared) {
+      this.countryCleared = !country;
+      return false;
+    }
+    this.countryCleared = true;
+    if (this.panel) this.panel.abortActiveRequest();
+    return true;
+  }
+
+  /**
+   * Seed both trackers with the country the page settled on, without acting
+   * on it. A page that loads with no country is already cleared, so its first
+   * empty notification is a repeat, not a clear (TWO-27235).
+   */
+  seedCountry() {
+    const country = this.currentCountry();
+    this.countryDidChange(country);
+    this.countryCleared = !country;
   }
 
   // ----------------------------------------------------------------- surfaces
@@ -5951,16 +6022,17 @@ class Twoinc {
     // acted on — right for the re-render WooCommerce fires at init, wrong
     // for a buyer who changes country before any re-render happens.
     //
-    // Through `countryDidChange` rather than by assignment, so this file has
-    // exactly one writer for the tracker.
-    twoincSelectWooHelper.countryDidChange(twoincSelectWooHelper.currentCountry());
+    // Through `seedCountry()`, which goes through `countryDidChange`, so this
+    // file has exactly one writer for the tracker; it seeds the clear tracker
+    // too (TWO-27235).
+    twoincSelectWooHelper.seedCountry();
 
     // The delivery control's tracker needs the same seed as billing's above:
     // unseeded, its first `previous` is null, so `countryDidChange` reads the
     // buyer's FIRST shipping-country change as "no previous country to have
     // moved away from" and swallows it — leaving a shipping company captured
     // under a country the buyer has left.
-    twoincSelectWooHelperShipping.countryDidChange(twoincSelectWooHelperShipping.currentCountry());
+    twoincSelectWooHelperShipping.seedCountry();
 
     // Mint eagerly and unconditionally, once per checkout load (TWO-40) —
     // never gated on the country selected above. Idempotent (`primeTokens`
@@ -7077,6 +7149,10 @@ class Twoinc {
       // this event's work should be derived from.
       Twoinc.getInstance().clearCompanyIfCountryStale(movedCountry);
     }
+    // A re-render can empty the country with no `change` (TWO-27235); the
+    // tracker tells that clear apart from this event's own repeats.
+    twoincSelectWooHelper.countryDidClear(movedCountry);
+    twoincSelectWooHelperShipping.countryDidClear(twoincSelectWooHelperShipping.currentCountry());
 
     Twoinc.getInstance().updateElements();
 
@@ -7227,6 +7303,7 @@ class Twoinc {
   syncBillingCountry() {
     const country = twoincSelectWooHelper.currentCountry();
     const changed = twoincSelectWooHelper.countryDidChange(country);
+    twoincSelectWooHelper.countryDidClear(country);
 
     // Unconditional, and before the guard below: this pass is idempotent
     // and the events the guard swallows are exactly the ones that just
@@ -7308,6 +7385,7 @@ class Twoinc {
     const helper = twoincSelectWooHelperShipping;
     const country = helper.currentCountry();
     const changed = helper.countryDidChange(country);
+    helper.countryDidClear(country);
 
     twoincDomHelper.toggleBusinessFields();
     if (!changed) return;

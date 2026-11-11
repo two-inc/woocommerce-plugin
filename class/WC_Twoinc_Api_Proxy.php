@@ -77,8 +77,17 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
             if (!$gateway) {
                 return;
             }
+            // TWO-27235: with no country there is no registry to search. The
+            // checkout says so without asking; this refuses anything else that
+            // gets here, before Two is called.
+            $country = self::req('country');
+            if ($country === '') {
+                self::log_refusal('company search', 'no country to search in');
+                wp_send_json_error('Country required', 400);
+                return;
+            }
             $params = [
-                'country' => self::req('country'),
+                'country' => $country,
                 'limit' => absint(self::req('limit')),
                 'offset' => absint(self::req('offset')),
                 'q' => self::req('q'),
