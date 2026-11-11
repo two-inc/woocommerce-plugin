@@ -164,4 +164,5 @@ gateway back on restores all of it. An unsaved Two gateway is on, as its
 setting defaults to `'yes'`, but the unit tests' `WC_Payment_Gateway` stub
 defaults to `'no'`, so a test that reaches these paths switches its gateway on
 (`runProxyHandler()` and `runTokensHandler()` do so unless told otherwise;
-`companySearchGateway()` takes the state as its first argument).
+`companySearchGateway()` always does, as its argument is the company search
+setting, and a test that needs the gateway off sets `enabled` afterwards).
