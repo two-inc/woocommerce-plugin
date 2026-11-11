@@ -235,6 +235,12 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
                 wp_send_json_error('Gateway unavailable');
                 return;
             }
+            // TWO-27227: no registry call while the gateway is disabled.
+            if ($gateway->enabled !== 'yes') {
+                self::log_refusal('availability check', 'the payment method is disabled');
+                wp_send_json_error('Gateway unavailable');
+                return;
+            }
             $country = isset($_REQUEST['country']) ? sanitize_text_field(wp_unslash($_REQUEST['country'])) : '';
             wp_send_json_success([
                 'available' => self::is_available($gateway, $country),
@@ -259,6 +265,12 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
             $gateway = WC_Twoinc::get_instance();
             if (!$gateway) {
                 self::log_refusal('token mint', 'gateway instance unavailable');
+                wp_send_json_error('Gateway unavailable');
+                return;
+            }
+            // TWO-27227: no registry call while the gateway is disabled.
+            if ($gateway->enabled !== 'yes') {
+                self::log_refusal('token mint', 'the payment method is disabled');
                 wp_send_json_error('Gateway unavailable');
                 return;
             }

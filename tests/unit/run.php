@@ -93,6 +93,7 @@ final class BrandConfigSpec
             'testBlocksTileChoiceDrivesTheSurchargeGate',
             'testBlocksCompanyRowRevealedOnlyWhereTheSearchNeedsIt',
             'testBlocksCompanyAttributeRevealedOnlyWhereTheSearchNeedsIt',
+            'testADisabledGatewayLeavesTheStoresCompanyFieldAsSet',
             'testOrderCreationRefusesAnUnsupportedBuyerCountry',
             'testOrderIntentRefusesAnUnsupportedBuyerCountry',
             'testOrderCreationRefusesADeclinedOrderIntent',
@@ -332,6 +333,7 @@ final class BrandConfigSpec
             'testRecordlessOkResponseIsCategorisedButDoesNotWithhold',
             'testUnresolvedMerchantTermsDoNotWithholdPaymentMethod',
             'testCheckoutWindowTwoincSuppressedOnVerificationFailure',
+            'testADisabledGatewayStandsCompanySearchDown',
             'testVerifyApiKeyMalformedResponseNotMiscategorizedAsNotConfigured',
             'testAdminLiveVerificationWarmsCheckoutCache',
             'testSettingsScreenVerificationDoesNotFireOnOtherAdminPages',
@@ -1680,6 +1682,7 @@ final class BrandConfigSpec
             public function __construct()
             {
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->enabled = 'yes';
             }
 
             public function get_option($key, $empty_value = null)
@@ -3174,6 +3177,83 @@ final class BrandConfigSpec
         unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
     }
 
+    /**
+     * TWO-27227: given a store's own company field setting; When the gateway
+     * is switched off; Then the Blocks option, the Checkout block's attributes
+     * and the classic billing and shipping fields are left as the merchant set
+     * them, hidden included; switching it back on reveals a hidden row again.
+     */
+    private static function testADisabledGatewayLeavesTheStoresCompanyFieldAsSet(): void
+    {
+        $GLOBALS['__twoinc_test_is_singular'] = true;
+        $GLOBALS['__twoinc_test_page_blocks'] = ['woocommerce/checkout'];
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
+
+        // Each store setting as the Checkout block's attributes and as the
+        // classic field WooCommerce core hands over (none when hidden).
+        $blockInput = ['hidden' => [false, false], 'optional' => [true, false], 'required' => [true, true]];
+        $classicInput = [
+            'hidden' => null,
+            'optional' => ['label' => 'Company', 'required' => false],
+            'required' => ['label' => 'Company', 'required' => true],
+        ];
+        $observe = static function (WC_Twoinc $gateway, string $setting) use ($prop, $blockInput, $classicInput): array {
+            $prop->setValue(null, $gateway);
+            $checkout = new WC_Twoinc_Checkout($gateway);
+            [$show, $require] = $blockInput[$setting];
+            $block = WC_Twoinc_Checkout::reveal_blocks_company_attribute([
+                'blockName' => 'woocommerce/checkout',
+                'attrs' => ['showCompanyField' => $show, 'requireCompanyField' => $require],
+            ]);
+            $fields = ['billing' => [], 'shipping' => []];
+            if ($classicInput[$setting] !== null) {
+                $fields['billing']['billing_company'] = $classicInput[$setting];
+                $fields['shipping']['shipping_company'] = $classicInput[$setting];
+            }
+            $fields = $checkout->update_company_fields($fields);
+            $classic = static function ($field) use ($classicInput, $setting): string {
+                if ($field === null) {
+                    return 'absent';
+                }
+                if ($field === $classicInput[$setting]) {
+                    return 'as set';
+                }
+                return $field['required'] === false ? 'added optional' : 'added required';
+            };
+
+            return [
+                $checkout->reveal_blocks_company_field($setting),
+                [$block['attrs']['showCompanyField'], $block['attrs']['requireCompanyField']],
+                $classic($fields['billing']['billing_company'] ?? null),
+                $classic($fields['shipping']['shipping_company'] ?? null),
+            ];
+        };
+
+        // [store setting, Turn on/off in order, Blocks option, Checkout block [show, require], classic fields, why].
+        $cases = [
+            ['hidden', ['yes'], 'optional', [true, false], 'added optional', 'on: a hidden row is revealed optional'],
+            ['optional', ['yes'], 'optional', [true, false], 'as set', 'on: an optional row is left as set'],
+            ['required', ['yes'], 'required', [true, true], 'as set', 'on: a required row is left as set'],
+            ['hidden', ['no'], 'hidden', [false, false], 'absent', 'off: a hidden row stays hidden'],
+            ['optional', ['no'], 'optional', [true, false], 'as set', 'off: an optional row is left as set'],
+            ['required', ['no'], 'required', [true, true], 'as set', 'off: a required row is left as set'],
+            ['hidden', ['no', 'yes'], 'optional', [true, false], 'added optional', 'switched back on: a hidden row is revealed again'],
+        ];
+        foreach ($cases as [$setting, $states, $option, $attrs, $classic, $description]) {
+            $gateway = self::companySearchGateway('yes');
+            foreach ($states as $state) {
+                $gateway->enabled = $state;
+                $observed = $observe($gateway, $setting);
+            }
+            TinyAssert::same([$option, $attrs, $classic, $classic], $observed, $description);
+        }
+
+        $prop->setValue(null, null);
+        unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
+    }
+
+    /** A gateway switched on (Turn on/off) unless told otherwise, with company search $enabled. */
     private static function companySearchGateway(string $enabled, string $api_key = 'key', string $merchant_id = 'mid'): WC_Twoinc
     {
         return new class ($enabled, $api_key, $merchant_id) extends WC_Twoinc {
@@ -3183,6 +3263,7 @@ final class BrandConfigSpec
 
             public function __construct($enabled, $api_key, $merchant_id)
             {
+                $this->enabled = 'yes';
                 $this->search_enabled = $enabled;
                 $this->test_api_key = $api_key;
                 $this->test_merchant_id = $merchant_id;
@@ -7866,6 +7947,7 @@ final class BrandConfigSpec
     {
         $make_gateway = static function (string $type) {
             return new class ($type) extends WC_Twoinc {
+                public $enabled = 'yes';
                 public $options;
 
                 public function __construct($type)
@@ -8050,8 +8132,9 @@ final class BrandConfigSpec
      * Run the token-minting wc-ajax handler with $gateway installed as the
      * gateway singleton, and return the recorded JSON response.
      */
-    private static function runTokensHandler($gateway): array
+    private static function runTokensHandler($gateway, string $enabled = 'yes'): array
     {
+        $gateway->enabled = $enabled;
         $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
         $prop->setAccessible(true);
         $prop->setValue(null, $gateway);
@@ -14059,6 +14142,7 @@ final class BrandConfigSpec
 
         $make_gateway = static function ($response) {
             return new class ($response) extends WC_Twoinc {
+                public $enabled = 'yes';
                 public $options = ['api_key' => 'key'];
                 private $response;
 
@@ -14110,6 +14194,115 @@ final class BrandConfigSpec
             TinyAssert::same($printed, strpos($output, 'window.twoinc') !== false, $description);
         }
         unset($GLOBALS['__twoinc_test_is_checkout']);
+    }
+
+    /**
+     * TWO-27227: a disabled gateway stands company search down. The checkout
+     * bootstrap is withheld whatever the key verdict (so neither the tile nor
+     * the address-area search mounts), every proxy route and both sole-trader
+     * routes refuse before Two is called, and switching the gateway back on
+     * restores each.
+     */
+    private static function testADisabledGatewayStandsCompanySearchDown(): void
+    {
+        $GLOBALS['__twoinc_test_is_checkout'] = true;
+        $make_gateway = static function ($response) {
+            return new class ($response) extends WC_Twoinc {
+                public $options = ['api_key' => 'key'];
+                private $response;
+
+                public function __construct($response)
+                {
+                    $this->response = $response;
+                }
+
+                public function get_twoinc_checkout_host()
+                {
+                    return 'https://api.example';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+
+                public function update_option($key, $value = '')
+                {
+                    $this->options[$key] = $value;
+                    return true;
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
+                {
+                    return $this->response;
+                }
+            };
+        };
+        $ok = ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
+        $rejected = ['response' => ['code' => 401], 'body' => json_encode(['message' => 'invalid'])];
+
+        // [Turn on/off, verify response, bootstrap printed, why].
+        $cases = [
+            ['yes', $ok, true, 'an enabled gateway with a verified key prints it'],
+            ['yes', $rejected, false, 'a rejected key withholds it, as before'],
+            ['no', $ok, false, 'a disabled gateway withholds it even with a verified key'],
+            ['no', $rejected, false, 'a disabled gateway with a rejected key withholds it'],
+        ];
+        foreach ($cases as [$enabled, $response, $printed, $description]) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            WC_Twoinc::reset_merchant_record_memo();
+            $gateway = $make_gateway($response);
+            $prints = static function () use ($gateway): bool {
+                ob_start();
+                (new WC_Twoinc_Checkout($gateway))->inject_cart_details();
+                return strpos((string) ob_get_clean(), 'window.twoinc') !== false;
+            };
+
+            $gateway->enabled = $enabled;
+            TinyAssert::same($printed, $prints(), $description);
+            $gateway->enabled = 'yes';
+            TinyAssert::same($response === $ok, $prints(), $description . ' (switched back on)');
+        }
+        unset($GLOBALS['__twoinc_test_is_checkout']);
+
+        // Every proxy route refuses while disabled; the ones that reach Two
+        // with no request body call it again once switched back on.
+        $_REQUEST = ['q' => 'exampleco', 'country' => 'GB', 'lookup_id' => 'lookup-1'];
+        $relays = ['ajax_company_search', 'ajax_company_by_id', 'ajax_supported_countries', 'ajax_payment_terms'];
+        foreach (array_merge($relays, ['ajax_order_intent']) as $handler) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $gateway = self::proxyGateway();
+            $response = self::runProxyHandler($gateway, $handler, 'no');
+            TinyAssert::same(['success' => false, 'data' => 'Gateway unavailable', 'status' => null], $response, "$handler refuses while disabled");
+            TinyAssert::same([], $gateway->calls, "$handler reached Two while disabled");
+
+            if (in_array($handler, $relays, true)) {
+                self::runProxyHandler($gateway, $handler);
+                TinyAssert::same(1, count($gateway->calls), "$handler calls Two again once switched back on");
+            }
+        }
+        $_REQUEST = [];
+
+        // The sole-trader routes reach the registry too.
+        $_REQUEST = ['country' => 'GB'];
+        foreach (['no' => false, 'yes' => true] as $enabled => $served) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            WC_Twoinc_Sole_Trader::reset_cache();
+            $gateway = self::tokenMintingGateway(['SOLE_TRADER']);
+            $gateway->enabled = $enabled;
+            $GLOBALS['__twoinc_test_ajax_json'] = null;
+            self::withGatewayInstance($gateway, [WC_Twoinc_Sole_Trader::class, 'ajax_availability']);
+            TinyAssert::same($served, $GLOBALS['__twoinc_test_ajax_json']['success'] ?? null, "availability, Turn on/off \"$enabled\"");
+            TinyAssert::same($served, $gateway->requests !== [], "availability reaches the registry only when on, Turn on/off \"$enabled\"");
+            $gateway->requests = [];
+            TinyAssert::same(
+                $served,
+                self::runTokensHandler($gateway, $enabled)['success'] ?? null,
+                "token mint, Turn on/off \"$enabled\""
+            );
+            TinyAssert::same($served, $gateway->requests !== [], "token mint reaches Two only when on, Turn on/off \"$enabled\"");
+        }
+        $_REQUEST = [];
     }
 
     /**
@@ -15963,10 +16156,12 @@ final class BrandConfigSpec
 
     /**
      * Run one proxy handler against a gateway double, as the wc_ajax hook
-     * would, and hand back what it sent to the browser.
+     * would, and hand back what it sent to the browser. The gateway is
+     * switched on unless a case says otherwise (TWO-27227).
      */
-    private static function runProxyHandler($gateway, string $handler): array
+    private static function runProxyHandler($gateway, string $handler, string $enabled = 'yes'): array
     {
+        $gateway->enabled = $enabled;
         $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
         $prop->setAccessible(true);
         $prop->setValue(null, $gateway);

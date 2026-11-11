@@ -394,10 +394,11 @@ final class OrderPostprocessingSpec
         };
     }
 
-    /** Runs the intent wc-ajax handler against $gateway, with $post as the browser's request. */
+    /** Runs the intent wc-ajax handler against $gateway, switched on, with $post as the browser's request. */
     private static function driveIntent($gateway, array $post): void
     {
         $_POST = $post;
+        $gateway->enabled = 'yes';
         $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
         $prop->setAccessible(true);
         $prop->setValue(null, $gateway);

@@ -69,7 +69,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property WC_Twoinc\:\:\$requests\.$#'
 			identifier: property.notFound
-			count: 10
+			count: 12
 			path: tests/unit/run.php
 
 		-

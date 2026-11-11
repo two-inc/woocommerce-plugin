@@ -95,7 +95,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             if ($value !== 'hidden' || !$gateway) {
                 return $value;
             }
-            if ($gateway->get_enable_company_search() !== 'yes') {
+            // A disabled gateway leaves the merchant's own company row as
+            // they set it (TWO-27227).
+            if ($gateway->enabled !== 'yes' || $gateway->get_enable_company_search() !== 'yes') {
                 return $value;
             }
 
@@ -265,7 +267,11 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // Registered before the two fields below so it stays first in
             // insertion order, which decides render order among fields that
             // share a priority (PHP's sort is stable).
-            if (!isset($fields['billing']['billing_company'])) {
+            //
+            // A disabled gateway adds neither company field (TWO-27227): the
+            // store's own company field setting applies, hidden included.
+            $gateway_enabled = $this->wc_twoinc->enabled === 'yes';
+            if ($gateway_enabled && !isset($fields['billing']['billing_company'])) {
                 $fields['billing']['billing_company'] = [
                     // The payment tile's own guidance is the only signal that
                     // a company is needed — no required flag, and no asterisk
@@ -319,7 +325,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // "ship to a different address?" form is currently shown, the same
             // way the billing control is always registered regardless of the
             // admin's company-search-location setting.
-            if (!isset($fields['shipping']['shipping_company'])) {
+            if ($gateway_enabled && !isset($fields['shipping']['shipping_company'])) {
                 $fields['shipping']['shipping_company'] = [
                     'label' => __('Company name', 'twoinc-payment-gateway'),
                     'autocomplete' => 'organization',
@@ -885,6 +891,14 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // company search from rendering there (TWO-25326 follow-up).
             // The same condition is_available() judges, and it adds no fetch
             // of its own to a checkout render.
+            //
+            // A disabled gateway withholds it too (TWO-27227): with company
+            // search in the address area it would otherwise still mount for
+            // other methods and query the registry for a gateway the merchant
+            // switched off. Not logged: it is a setting, not a fault.
+            if ($this->wc_twoinc->enabled !== 'yes') {
+                return;
+            }
             $status = $this->wc_twoinc->get_api_key_verification_status();
             if (WC_Twoinc::is_definitive_key_failure($status['status'])) {
                 $this->wc_twoinc->log_withheld_from_checkout(
