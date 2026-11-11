@@ -93,6 +93,7 @@ final class BrandConfigSpec
             'testBlocksTileChoiceDrivesTheSurchargeGate',
             'testBlocksCompanyRowRevealedOnlyWhereTheSearchNeedsIt',
             'testBlocksCompanyAttributeRevealedOnlyWhereTheSearchNeedsIt',
+            'testADisabledGatewayLeavesTheStoresCompanyFieldAsSet',
             'testOrderCreationRefusesAnUnsupportedBuyerCountry',
             'testOrderIntentRefusesAnUnsupportedBuyerCountry',
             'testOrderCreationRefusesADeclinedOrderIntent',
@@ -1681,6 +1682,7 @@ final class BrandConfigSpec
             public function __construct()
             {
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->enabled = 'yes';
             }
 
             public function get_option($key, $empty_value = null)
@@ -3175,6 +3177,83 @@ final class BrandConfigSpec
         unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
     }
 
+    /**
+     * TWO-27227: given a store's own company field setting; When the gateway
+     * is switched off; Then the Blocks option, the Checkout block's attributes
+     * and the classic billing and shipping fields are left as the merchant set
+     * them, hidden included; switching it back on reveals a hidden row again.
+     */
+    private static function testADisabledGatewayLeavesTheStoresCompanyFieldAsSet(): void
+    {
+        $GLOBALS['__twoinc_test_is_singular'] = true;
+        $GLOBALS['__twoinc_test_page_blocks'] = ['woocommerce/checkout'];
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
+
+        // Each store setting as the Checkout block's attributes and as the
+        // classic field WooCommerce core hands over (none when hidden).
+        $blockInput = ['hidden' => [false, false], 'optional' => [true, false], 'required' => [true, true]];
+        $classicInput = [
+            'hidden' => null,
+            'optional' => ['label' => 'Company', 'required' => false],
+            'required' => ['label' => 'Company', 'required' => true],
+        ];
+        $observe = static function (WC_Twoinc $gateway, string $setting) use ($prop, $blockInput, $classicInput): array {
+            $prop->setValue(null, $gateway);
+            $checkout = new WC_Twoinc_Checkout($gateway);
+            [$show, $require] = $blockInput[$setting];
+            $block = WC_Twoinc_Checkout::reveal_blocks_company_attribute([
+                'blockName' => 'woocommerce/checkout',
+                'attrs' => ['showCompanyField' => $show, 'requireCompanyField' => $require],
+            ]);
+            $fields = ['billing' => [], 'shipping' => []];
+            if ($classicInput[$setting] !== null) {
+                $fields['billing']['billing_company'] = $classicInput[$setting];
+                $fields['shipping']['shipping_company'] = $classicInput[$setting];
+            }
+            $fields = $checkout->update_company_fields($fields);
+            $classic = static function ($field) use ($classicInput, $setting): string {
+                if ($field === null) {
+                    return 'absent';
+                }
+                if ($field === $classicInput[$setting]) {
+                    return 'as set';
+                }
+                return $field['required'] === false ? 'added optional' : 'added required';
+            };
+
+            return [
+                $checkout->reveal_blocks_company_field($setting),
+                [$block['attrs']['showCompanyField'], $block['attrs']['requireCompanyField']],
+                $classic($fields['billing']['billing_company'] ?? null),
+                $classic($fields['shipping']['shipping_company'] ?? null),
+            ];
+        };
+
+        // [store setting, Turn on/off in order, Blocks option, Checkout block [show, require], classic fields, why].
+        $cases = [
+            ['hidden', ['yes'], 'optional', [true, false], 'added optional', 'on: a hidden row is revealed optional'],
+            ['optional', ['yes'], 'optional', [true, false], 'as set', 'on: an optional row is left as set'],
+            ['required', ['yes'], 'required', [true, true], 'as set', 'on: a required row is left as set'],
+            ['hidden', ['no'], 'hidden', [false, false], 'absent', 'off: a hidden row stays hidden'],
+            ['optional', ['no'], 'optional', [true, false], 'as set', 'off: an optional row is left as set'],
+            ['required', ['no'], 'required', [true, true], 'as set', 'off: a required row is left as set'],
+            ['hidden', ['no', 'yes'], 'optional', [true, false], 'added optional', 'switched back on: a hidden row is revealed again'],
+        ];
+        foreach ($cases as [$setting, $states, $option, $attrs, $classic, $description]) {
+            $gateway = self::companySearchGateway('yes');
+            foreach ($states as $state) {
+                $gateway->enabled = $state;
+                $observed = $observe($gateway, $setting);
+            }
+            TinyAssert::same([$option, $attrs, $classic, $classic], $observed, $description);
+        }
+
+        $prop->setValue(null, null);
+        unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
+    }
+
+    /** A gateway switched on (Turn on/off) unless told otherwise, with company search $enabled. */
     private static function companySearchGateway(string $enabled, string $api_key = 'key', string $merchant_id = 'mid'): WC_Twoinc
     {
         return new class ($enabled, $api_key, $merchant_id) extends WC_Twoinc {
@@ -3184,6 +3263,7 @@ final class BrandConfigSpec
 
             public function __construct($enabled, $api_key, $merchant_id)
             {
+                $this->enabled = 'yes';
                 $this->search_enabled = $enabled;
                 $this->test_api_key = $api_key;
                 $this->test_merchant_id = $merchant_id;
