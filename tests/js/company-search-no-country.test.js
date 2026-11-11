@@ -7,8 +7,8 @@
  * country still empty: WooCommerce re-emits `change` on #billing_country, and
  * `updated_checkout` fires after every refresh (the Blocks checkout reaches
  * the same handler on each store pass that moves an address field). A repeat
- * that aborted would cancel the search the buyer typed since, with the spinner
- * left on. A page that loads with no country counts as already cleared, so its
+ * that aborted would cancel the search the buyer typed since. A page that
+ * loads with no country counts as already cleared, so its
  * first empty notification is a repeat too.
  *
  * Driven through `initialize()`'s own bindings and the real panel.
@@ -174,15 +174,14 @@ describe("company search with no country", () => {
         aborted: searches().some(function (call) {
           return call.abortedWhilePending;
         }),
-        // Up only while a request is on the wire. Not asked of a search the
-        // clear aborted: the panel paints nothing for an aborted answer.
-        spinner: aborted ? null : spinnerVisible(),
+        // Up only while a request is on the wire: the abort takes it down.
+        spinner: spinnerVisible(),
         description: description
       }).toEqual({
         countries: countries,
         sentence: sentence,
         aborted: aborted,
-        spinner: aborted ? null : countries.length > 0,
+        spinner: !aborted && countries.length > 0,
         description: description
       });
     }

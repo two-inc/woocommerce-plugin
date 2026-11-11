@@ -1842,8 +1842,9 @@ class TwoCompanySearch {
    * left. Only the clear itself counts. The checkout re-notifies with the
    * country still empty (WooCommerce re-emits `change` on a re-render, every
    * `updated_checkout`, a Blocks store pass that moved another field), and
-   * aborting on a repeat would drop the search the buyer has typed since and
-   * leave the spinner on. The captured company is kept: the same country
+   * aborting on a repeat would drop the search the buyer has typed since.
+   * The panel's abort also stops the spinner, since an aborted search never
+   * settles to stop it. The captured company is kept: the same country
    * back leaves it valid, and another runs `countryDidChange()`'s path.
    * Invoke once per notification.
    *

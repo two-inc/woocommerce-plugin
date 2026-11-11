@@ -59,8 +59,9 @@ description: "The vendored company-search-panel.js (two-copy edit rule, parity d
   `countryDidClear()` lets only the clear itself abort, since WooCommerce
   re-emits `change` with the country still empty, `updated_checkout` follows
   every refresh and a Blocks store pass that moves another field reaches the
-  same handler, and a repeat abort would drop a search typed since and leave
-  the spinner on. A page that loads with no country is seeded as already
+  same handler, and a repeat abort would drop a search typed since. The
+  panel's `abortActiveRequest()` also turns the spinner off, as an aborted
+  search never settles to do it. A page that loads with no country is seeded as already
   cleared (`seedCountry()`). The proxy refuses an empty country with a 400
   before calling Two.
 - **The chip row is shown whenever it offers a mode the buyer is not already
