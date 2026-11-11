@@ -882,7 +882,7 @@ msgstr "%s har bekräftat begäran om att fullgöra beställningen. En faktura s
 
 #: class/WC_Twoinc.php:5857
 msgid "Could not update status to \"Cancelled\"."
-msgstr ""
+msgstr "Kunde inte uppdatera status till \"Avbruten\"."
 
 #: class/WC_Twoinc.php:5865
 #, php-format

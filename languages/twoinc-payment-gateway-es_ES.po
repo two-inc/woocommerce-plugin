@@ -881,7 +881,7 @@ msgstr "%s ha recibido la solicitud de cumplir el pedido. Se enviará una factur
 
 #: class/WC_Twoinc.php:5857
 msgid "Could not update status to \"Cancelled\"."
-msgstr ""
+msgstr "No se ha podido actualizar el estado a \"Cancelado\"."
 
 #: class/WC_Twoinc.php:5865
 #, php-format

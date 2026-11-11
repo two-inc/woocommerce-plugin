@@ -881,7 +881,7 @@ msgstr "%s heeft het verzoek om de bestelling uit te voeren bevestigd. Er wordt 
 
 #: class/WC_Twoinc.php:5857
 msgid "Could not update status to \"Cancelled\"."
-msgstr ""
+msgstr "De status kon niet worden bijgewerkt naar \"Geannuleerd\"."
 
 #: class/WC_Twoinc.php:5865
 #, php-format
