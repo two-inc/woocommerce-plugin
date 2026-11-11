@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 import { getOrder, triggerFulfilBatch, waitForOrderState } from "../two-api.js";
-import { checkout } from "../pages/renderer.js";
+import { checkout, skipWhereCheckoutTaxesUntaxedShipping } from "../pages/renderer.js";
 import * as store from "../pages/store.js";
 import * as wpAdmin from "../pages/wp-admin.js";
 import { resetCartShapes, setOption, wp } from "../wp-cli.js";
@@ -34,6 +34,7 @@ async function untilItWorks(what: string, action: () => Promise<void>, timeout =
 test("a refund with a rate refunding nothing sends its zero subtotal and is accepted", async ({
   page
 }) => {
+  skipWhereCheckoutTaxesUntaxedShipping();
   test.setTimeout(480_000);
   setOption("two_e2e_cart_shape", "taxes,untaxed");
   const lastName = `E2EZeroBucket${Date.now().toString(36)}`;

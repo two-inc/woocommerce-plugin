@@ -236,6 +236,38 @@ verification.
 Identity verification / SCA, merchant-portal flows and multi-country coverage
 are out of scope here — they live in the `e2e-tests` repo.
 
+### Versions CI tests
+
+Nothing in CI lists versions by hand. `dev/support-matrix.sh` reads them from
+upstream on every run, and its header states the policy and sources:
+
+- **PHP**: every minor php.net still supports (active or security support).
+  The unit tests, a lint of every shipped PHP file, phpcs and phpstan also run
+  on each older minor down to the plugin's declared floor (`Requires PHP` in
+  `readme.txt`). Their discovery reads only php.net and `readme.txt`.
+- **WordPress and WooCommerce**: WooCommerce's published L-1 policy, the
+  current and previous release series of each at their newest patch, plus the
+  plugin's declared minimums (`Requires at least` in `readme.txt`,
+  `WC requires at least` in the plugin header).
+
+The e2e suite runs on every WordPress x WooCommerce x PHP combination in that
+window, once with the classic and once with the blocks checkout. Every PHP
+minor gets legs from its first GA release; where WordPress's own PHP
+compatibility table (in the core handbook) does not mark that PHP as supported
+for the series, the legs run non-blocking, with a warning. The declared
+WordPress, WooCommerce and PHP floors also run together as one blocking
+combination, even where php.net has ended support for that PHP. A combination
+that cannot run (WooCommerce requires a newer WordPress, or no runtime or
+wp-cli image exists for that PHP) is listed in the discover job's summary with
+a warning rather than dropped. Each leg builds `docker/wordpress-core` (the
+maintained `wordpress:php<minor>-apache` runtime with the WordPress core under
+test), installs and provisions the shop with `wordpress:cli-php<minor>`, and
+warns if either runs a PHP behind php.net's newest patch
+(`dev/check-php-patch.sh`).
+PHP notices go to the shop's debug log rather than the page; one from this
+plugin's code fails the leg. Run `bash dev/support-matrix.sh` to see what CI
+will test today.
+
 ### Environment
 
 - Store: <http://localhost:8888>, admin at `/wp-admin` (`exampleuser@two.inc` / `examplepassword123`).
@@ -251,6 +283,15 @@ are out of scope here — they live in the `e2e-tests` repo.
   has accumulated too much e2e order volume to pass fraud velocity checks, so
   every order it places is declined. It goes back to `tillittestuk` once CI is
   trusted again.
+- Company search: the suite tests the plugin, not Two's registry search, so
+  with `TWO_E2E_FAKE_COMPANY_SEARCH=1` the shop's company search and company
+  lookup are answered by a fake, `docker/mu-plugins/two-e2e-company-search.php`,
+  from the companies in `tests/e2e/fake/companies.json` (TWO-27195). It answers
+  at the shop's outbound HTTP layer, so the plugin's own proxy, rate limiter,
+  parsing and checkout UI still run. Every other call (order create, fulfil,
+  refund, cancel and the rest) goes to Two staging, and each CI leg fails if a
+  search reached Two or the fake answered anything else. A spec that searches
+  for a new company adds it to the fixtures
 
 ### Prerequisites
 
@@ -265,6 +306,8 @@ are out of scope here — they live in the `e2e-tests` repo.
 # The compose default seeds the LOCAL dev config; e2e runs against the
 # staging shop, so pin the staging config first (CI does the same):
 echo WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-demostoregb.json > .env
+# Company search and lookup go to the e2e fake, as in CI (see below):
+echo TWO_E2E_FAKE_COMPANY_SEARCH=1 >> .env
 docker compose up -d
 # wait ~90s for wpcli bootstrap to finish (installs WooCommerce, creates products, activates plugin).
 # An existing stack keeps its gateway settings: run `make clean` first so the staging config is applied

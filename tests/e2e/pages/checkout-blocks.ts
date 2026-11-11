@@ -7,6 +7,7 @@ import {
   PHONE_NUMBER,
   RECIPIENT_EMAIL
 } from "../config.js";
+import { explainSearchFailure, watchCompanySearch } from "./company-search-log.js";
 
 declare global {
   interface Window {
@@ -48,25 +49,72 @@ export async function openCompanySearch(page: Page) {
     .waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
 }
 
-/** Blocks renders the country as a plain select, so it can be driven directly. */
+/**
+ * Current Blocks renders the country as a plain select, driven directly. Older
+ * Blocks (WooCommerce 7.6) renders a combobox whose id sits on a wrapper div
+ * around a text input, so the input is typed into and the option picked.
+ */
 export async function setBillingCountry(page: Page, countryName: string) {
   const prefix = await addressPrefix(page);
-  const select = page.locator(`#${prefix}-country`);
-  await select.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
-  const before = await select.inputValue();
-  await select.selectOption({ label: countryName });
-  await expect(select).not.toHaveValue(before, { timeout: DEFAULT_TIMEOUT });
+  const field = page.locator(`#${prefix}-country`);
+  await field.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
+
+  if (await field.evaluate((el) => el.tagName === "SELECT")) {
+    const before = await field.inputValue();
+    await field.selectOption({ label: countryName });
+    await expect(field).not.toHaveValue(before, { timeout: DEFAULT_TIMEOUT });
+    return;
+  }
+
+  const code = COUNTRY_CODES[countryName];
+  expect(code, `no country code mapped for "${countryName}"`).toBeDefined();
+
+  const input = field.locator("input").first();
+  await input.click();
+  await input.fill(countryName);
+  await field.getByRole("option", { name: countryName, exact: true }).click();
+  // The input shows the typed name from fill() alone, so only the cart store
+  // proves the option was committed.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          (addressKey) =>
+            window.wp?.data?.select("wc/store/cart")?.getCustomerData?.()?.[addressKey]?.country ??
+            null,
+          `${prefix}Address`
+        ),
+      { timeout: DEFAULT_TIMEOUT }
+    )
+    .toBe(code);
 }
+
+/** The store keeps the country code; the combobox shows the name. */
+const COUNTRY_CODES: Record<string, string> = {
+  Norway: "NO",
+  Spain: "ES",
+  "United Kingdom (UK)": "GB"
+};
 
 export async function fillCompanySearch(page: Page, companyName = BUYER_COMPANY) {
   const wrap = page.locator(COMPANY_WRAP).first();
   await openCompanySearch(page);
 
-  const query = wrap.locator(".two-company-dropdown__query");
-  await query.pressSequentially(companyName, { delay: 50 });
-
+  const searches = watchCompanySearch(page);
   const result = wrap.locator(".two-company-dropdown__row").first();
-  await result.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
+  try {
+    // Outside the explained wait: a box that cannot be typed into is its own failure, not a missing row.
+    await wrap
+      .locator(".two-company-dropdown__query")
+      .pressSequentially(companyName, { delay: 50 });
+    try {
+      await result.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
+    } catch (e) {
+      throw explainSearchFailure(searches, e);
+    }
+  } finally {
+    searches.stop();
+  }
   await result.click();
 
   const prefix = await addressPrefix(page);

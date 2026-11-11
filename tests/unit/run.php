@@ -92,6 +92,7 @@ final class BrandConfigSpec
             'testOrderCreationResolvesTheCompanyAcrossBothAddressRoles',
             'testBlocksTileChoiceDrivesTheSurchargeGate',
             'testBlocksCompanyRowRevealedOnlyWhereTheSearchNeedsIt',
+            'testBlocksCompanyAttributeRevealedOnlyWhereTheSearchNeedsIt',
             'testOrderCreationRefusesAnUnsupportedBuyerCountry',
             'testOrderIntentRefusesAnUnsupportedBuyerCountry',
             'testOrderCreationRefusesADeclinedOrderIntent',
@@ -3110,28 +3111,98 @@ final class BrandConfigSpec
             $GLOBALS['__twoinc_test_is_singular'] = $singular;
             $GLOBALS['__twoinc_test_page_blocks'] = $blocks ?: ['woocommerce/checkout'];
 
-            $gateway = new class ($enabled) extends WC_Twoinc {
-                public $search_enabled;
-
-                public function __construct($enabled)
-                {
-                    $this->search_enabled = $enabled;
-                }
-
-                public function get_enable_company_search()
-                {
-                    return $this->search_enabled;
-                }
-            };
-
             TinyAssert::same(
                 $expected,
-                (new WC_Twoinc_Checkout($gateway))->reveal_blocks_company_field($stored),
+                (new WC_Twoinc_Checkout(self::companySearchGateway($enabled)))->reveal_blocks_company_field($stored),
                 $description
             );
         }
 
         unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
+    }
+
+    /**
+     * Given a Checkout block that reads its company row from its own
+     * showCompanyField attribute (WooCommerce 7.6); When it renders; Then the
+     * row is revealed exactly where the option filter reveals it (TWO-27186).
+     */
+    private static function testBlocksCompanyAttributeRevealedOnlyWhereTheSearchNeedsIt(): void
+    {
+        $checkout = ['blockName' => 'woocommerce/checkout', 'attrs' => []];
+        $shown = ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => true, 'requireCompanyField' => false]];
+        $shownRequired = ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => true, 'requireCompanyField' => true]];
+        $cases = [
+            [$checkout, 'yes', true, [], $shown, 'an empty Checkout block with the search in the address'],
+            [
+                ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => false, 'requireCompanyField' => false]],
+                'yes', true, [], $shown, 'a saved block with the row hidden',
+            ],
+            [
+                ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => false, 'requireCompanyField' => true]],
+                'yes', true, [], $shown, 'a saved block with the row hidden but required is revealed optional',
+            ],
+            [['blockName' => 'woocommerce/checkout'], 'yes', true, [], $shown, 'a parsed block with no attrs key'],
+            [$checkout, 'no', true, [], $checkout, 'search relocated to the payment tile'],
+            [$checkout, 'yes', false, [], $checkout, 'a page that is not a Blocks checkout'],
+            [$checkout, 'yes', true, ['woocommerce/cart'], $checkout, 'a Blocks page without the checkout block'],
+            [
+                ['blockName' => 'woocommerce/cart', 'attrs' => []], 'yes', true, [],
+                ['blockName' => 'woocommerce/cart', 'attrs' => []], 'another block on the checkout page',
+            ],
+            [$shownRequired, 'yes', true, [], $shownRequired, 'a block that already shows the row is left as the merchant saved it'],
+            ['<p>not a parsed block</p>', 'yes', true, [], '<p>not a parsed block</p>', 'a value that is not a parsed block'],
+            [$checkout, 'yes', true, [], $checkout, 'no API key', ['', 'mid']],
+            [$checkout, 'yes', true, [], $checkout, 'no merchant id', ['key', '']],
+        ];
+
+        // Registered at plugins_loaded, so the handler finds the gateway itself rather than being handed one.
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
+
+        foreach ($cases as $case) {
+            list($block, $enabled, $singular, $blocks, $expected, $description) = $case;
+            list($api_key, $merchant_id) = $case[6] ?? ['key', 'mid'];
+
+            $GLOBALS['__twoinc_test_is_singular'] = $singular;
+            $GLOBALS['__twoinc_test_page_blocks'] = $blocks ?: ['woocommerce/checkout'];
+            $prop->setValue(null, self::companySearchGateway($enabled, $api_key, $merchant_id));
+
+            TinyAssert::same($expected, WC_Twoinc_Checkout::reveal_blocks_company_attribute($block), $description);
+        }
+
+        $prop->setValue(null, null);
+        unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
+    }
+
+    private static function companySearchGateway(string $enabled, string $api_key = 'key', string $merchant_id = 'mid'): WC_Twoinc
+    {
+        return new class ($enabled, $api_key, $merchant_id) extends WC_Twoinc {
+            public $search_enabled;
+            private $test_api_key;
+            private $test_merchant_id;
+
+            public function __construct($enabled, $api_key, $merchant_id)
+            {
+                $this->search_enabled = $enabled;
+                $this->test_api_key = $api_key;
+                $this->test_merchant_id = $merchant_id;
+            }
+
+            public function get_enable_company_search()
+            {
+                return $this->search_enabled;
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'api_key' ? $this->test_api_key : ($empty_value ?? '');
+            }
+
+            public function get_merchant_id()
+            {
+                return $this->test_merchant_id;
+            }
+        };
     }
 
     /**
@@ -12255,7 +12326,7 @@ final class BrandConfigSpec
      * WooCommerce's own "outdated templates" report scans the active theme
      * only, so nothing upstream notices this filter-based copy going stale.
      * The core release it was taken from and the md5 of everything outside
-     * the TWOINC markers are pinned here instead; the support-matrix legs set
+     * the TWOINC markers are pinned here instead; the e2e legs set
      * WC_CORE_TEMPLATE_PATH and diff against the real installed core, which
      * is what catches an upgrade that moves the template.
      */

@@ -37,9 +37,12 @@ Simply put, Two is customer-centric, with less friction and higher conversion ra
 
 = Compatibility with WooCommerce =
 
-The plugin has been tested for compatibility with WooCommerce version 10.3.5 with
-[HPOS](https://woocommerce.com/document/high-performance-order-storage/) enabled, on both the
-classic shortcode checkout and the [block-based checkout](https://woocommerce.com/checkout-blocks/).
+Every change to the plugin is tested on the current and previous release series of
+WordPress and WooCommerce, and on WooCommerce 7.6, on every PHP version that still receives
+updates. Tests cover both the classic shortcode checkout and the
+[block-based checkout](https://woocommerce.com/checkout-blocks/), with
+[HPOS](https://woocommerce.com/document/high-performance-order-storage/) enabled on every
+WooCommerce release that turns it on by default.
 It requires WooCommerce 7.6 or later.
 
 == Installation ==
@@ -118,6 +121,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 * The plugin now declares that it supports WooCommerce's High-Performance Order Storage and the cart and checkout blocks, so WooCommerce no longer lists it as incompatible with them.
 * Fixed: on older WooCommerce versions such as 7.6, the plugin no longer writes a "get_cart was called incorrectly" notice to the PHP log on each page load. Which payment methods checkout offers is unchanged.
 * Fixed: on WordPress 6.9.1 and later, the plugin no longer writes a notice that the "twoinc-blocks-checkout" style "was enqueued with dependencies that are not registered" to the PHP log. The checkout looks the same.
+* Fixed: on WooCommerce 7.6 with the Checkout block, the checkout address form now shows the Company field when company search sits in the address, as it already does on newer WooCommerce. Before, the field stayed hidden, so company search never appeared and buyers could not choose their company to pay with Two.
 
 = 2.25.0 =
 

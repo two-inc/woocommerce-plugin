@@ -3,6 +3,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { checkout } from "../pages/renderer.js";
 import * as store from "../pages/store.js";
 import { resetCartShapes, setOption } from "../wp-cli.js";
+import { fakeCompany } from "../fake/companies.js";
 
 /**
  * A company belongs to the country it was found under. Switching the buyer's
@@ -13,41 +14,23 @@ import { resetCartShapes, setOption } from "../wp-cli.js";
  * The cart needs shipping, so block checkout shows its shipping form and the
  * company is captured there: the shape the bug needed.
  *
- * The company search, the registry address lookup and the availability check
- * are answered here in the browser, with invented companies, so the test
- * depends on no registry data and never sends a mismatched pair upstream.
+ * The company search and the registry address lookup are answered by the e2e
+ * fake behind the shop (TWO-27195), with invented companies, and the
+ * availability check here in the browser, so the test depends on no registry
+ * data and never sends a mismatched pair upstream.
  */
-type Company = {
-  country: string;
-  name: string;
-  number: string;
-  lookup: string;
-  address: object;
-};
+type Company = { country: string; name: string; number: string };
+
+function company(name: string): Company {
+  const fake = fakeCompany(name);
+  return { country: fake.country, name: fake.name, number: fake.national_identifier.id };
+}
 
 const COMPANIES: Record<string, Company> = {
-  GB: {
-    country: "GB",
-    name: "FAKE WIDGETS TEST LTD",
-    number: "00000001",
-    lookup: "gb-fake-1",
-    address: { street_address: "1 Fake Street", city: "London", postal_code: "N1 1AA" }
-  },
+  GB: company("FAKE WIDGETS TEST LTD"),
   // A second GB company, so the last pick is a body the checkout has not already answered.
-  GB2: {
-    country: "GB",
-    name: "OTHER FAKE TEST LTD",
-    number: "00000002",
-    lookup: "gb-fake-2",
-    address: { street_address: "2 Fake Street", city: "Leeds", postal_code: "LS1 1AA" }
-  },
-  ES: {
-    country: "ES",
-    name: "EMPRESA FICTICIA PRUEBA SL",
-    number: "B00000001",
-    lookup: "es-fake-1",
-    address: { street_address: "Calle Falsa 1", city: "Madrid", postal_code: "28001" }
-  }
+  GB2: company("OTHER FAKE TEST LTD"),
+  ES: company("EMPRESA FICTICIA PRUEBA SL")
 };
 
 const FIRST_NAME = "Test";
@@ -67,32 +50,10 @@ test.afterEach(() => {
   resetCartShapes();
 });
 
-/** Answer the plugin's own wc-ajax relays, and record every availability check the browser sends. */
-async function fakeTwoRelays(page: Page): Promise<Intent[]> {
+/** Answer the availability check, and record every one the browser sends. */
+async function fakeAvailabilityCheck(page: Page): Promise<Intent[]> {
   const intents: Intent[] = [];
 
-  await page.route(/[?&]wc-ajax=two_company_search\b/, async (route) => {
-    const params = new URL(route.request().url()).searchParams;
-    const country = (params.get("country") || "").toUpperCase();
-    const query = (params.get("q") || "").toUpperCase();
-    const hits = Object.values(COMPANIES).filter(
-      (c) => c.country === country && c.name.startsWith(query)
-    );
-    await route.fulfill({
-      json: {
-        items: hits.map((c) => ({
-          name: c.name,
-          national_identifier: { id: c.number },
-          lookup_id: c.lookup
-        }))
-      }
-    });
-  });
-  await page.route(/[?&]wc-ajax=two_company_by_id\b/, async (route) => {
-    const lookup = new URL(route.request().url()).searchParams.get("lookup_id");
-    const hit = Object.values(COMPANIES).find((c) => c.lookup === lookup);
-    await route.fulfill({ json: { addresses: hit ? [hit.address] : [] } });
-  });
   await page.route(/[?&]wc-ajax=two_order_intent\b/, async (route) => {
     const posted = new URLSearchParams(route.request().postData() || "").get("intent");
     intents.push(JSON.parse(posted || "{}"));
@@ -133,7 +94,7 @@ async function expectLastIntentFor(intents: Intent[], key: string) {
 
 test("switching country drops the company picked under the previous country", async ({ page }) => {
   setOption("two_e2e_cart_shape", "untaxed");
-  const intents = await fakeTwoRelays(page);
+  const intents = await fakeAvailabilityCheck(page);
 
   await store.addProductToCart(page, "Product 1");
   await checkout.goto(page);

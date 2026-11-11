@@ -12,6 +12,27 @@ export function wp(...args: string[]): string {
   });
 }
 
+let wooCommerceVersionRead: number[] | null = null;
+
+/** The shop's WooCommerce version as [major, minor, patch], read once. */
+export function wooCommerceVersion(): number[] {
+  if (!wooCommerceVersionRead) {
+    wooCommerceVersionRead = wp("plugin", "get", "woocommerce", "--field=version")
+      .trim()
+      .split(".")
+      .map((part) => parseInt(part, 10) || 0);
+  }
+  return wooCommerceVersionRead;
+}
+
+/** Whether the shop's WooCommerce is older than `major.minor.patch`. */
+export function wooCommerceBelow(major: number, minor: number, patch = 0): boolean {
+  const [have, haveMinor, havePatch = 0] = wooCommerceVersion();
+  if (have !== major) return have < major;
+  if (haveMinor !== minor) return haveMinor < minor;
+  return havePatch < patch;
+}
+
 export function setOption(name: string, value: string): void {
   wp("option", "update", name, value);
 }

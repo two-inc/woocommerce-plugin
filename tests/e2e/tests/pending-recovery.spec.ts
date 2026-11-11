@@ -1,6 +1,6 @@
 import { type Page, test, expect } from "@playwright/test";
 
-import { STORE_URL } from "../config.js";
+import { LONG_TIMEOUT, STORE_URL } from "../config.js";
 import { cancelOrder, getOrderState, waitForOrderState } from "../two-api.js";
 import { checkout } from "../pages/renderer.js";
 import * as store from "../pages/store.js";
@@ -21,7 +21,8 @@ type Placed = { wcOrderId: number; twoOrderId: string; paymentUrl: string };
 
 /**
  * Aborts every main-frame navigation `blocked` matches while `act` runs, and returns the first URL it
- * aborted.
+ * aborted. The navigation follows a round trip to Two (the order create, or Two's verification), so it
+ * waits as long as placing an order does, not the 15s default.
  */
 async function abortNavigation(
   page: Page,
@@ -35,10 +36,10 @@ async function abortNavigation(
       : route.continue();
   });
   try {
-    const aborted = page.waitForEvent(
-      "requestfailed",
-      (request) => request.isNavigationRequest() && blocked(request.url())
-    );
+    const aborted = page.waitForEvent("requestfailed", {
+      predicate: (request) => request.isNavigationRequest() && blocked(request.url()),
+      timeout: LONG_TIMEOUT
+    });
     await act().catch(() => undefined);
     return (await aborted).url();
   } finally {

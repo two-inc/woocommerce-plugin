@@ -17,10 +17,11 @@ services:
     extra_hosts:
       - "portal.localhost:host-gateway"
     # Pinned by default so a local stack stays deterministic. CI's e2e matrix
-    # overrides it to run the same suite on the current WordPress release, so
-    # the readme's "Tested up to" claim rests on a real checkout (PLAT-2320).
+    # sets WORDPRESS_IMAGE to an image it builds per leg from
+    # docker/wordpress-core, one per WordPress x PHP combination that
+    # dev/support-matrix.sh discovers (TWO-27171).
     # upgrade-smoke.yaml mirrors this default; move both together.
-    image: wordpress:${WORDPRESS_VERSION:-6.8}-php8.2-apache
+    image: ${WORDPRESS_IMAGE:-wordpress:${WORDPRESS_VERSION:-6.8}-php8.2-apache}
     restart: always
     ports:
       - "${WORDPRESS_PORT:-8888}:80"
@@ -49,6 +50,19 @@ services:
             define( 'WP_HOME', 'https://' . $$two_fwd_host );
             define( 'WP_SITEURL', WP_HOME );
         }
+        if ( getenv_docker( 'TWO_DEBUG_LOG_ONLY', '' ) !== '' ) {
+            define( 'WP_DEBUG_DISPLAY', false );
+            define( 'WP_DEBUG_LOG', true );
+        }
+      # Set by the CI e2e legs (TWO-27171): PHP notices go to
+      # wp-content/debug.log instead of into the page, where WooCommerce's own
+      # deprecations on a newer PHP blank the checkout. The workflow then fails
+      # the leg on any notice from this plugin's code.
+      TWO_DEBUG_LOG_ONLY: "${TWO_DEBUG_LOG_ONLY:-}"
+      # 1 for an e2e stack: docker/mu-plugins/two-e2e-company-search.php then
+      # answers the shop's company search and lookup with fixtures instead of
+      # Two (TWO-27195). Unset, the shop searches Two as it would live.
+      TWO_E2E_FAKE_COMPANY_SEARCH: "${TWO_E2E_FAKE_COMPANY_SEARCH:-}"
       # Brand override for the plugin's WC_Twoinc_Brand loader (dev only)
       TWO_BRAND_CODE: "${TWO_BRAND_CODE:-}"
       # The developer host overrides below are honoured only on a site whose
@@ -92,7 +106,10 @@ services:
       retries: 10
 
   wpcli:
-    image: wordpress:cli-2.11.0-php8.2
+    # CI's e2e legs set WPCLI_IMAGE to wordpress:cli-php<minor> for the leg's
+    # PHP minor, so install, activation and provisioning run on the PHP under
+    # test (TWO-27171). upgrade-smoke.yaml mirrors this default.
+    image: ${WPCLI_IMAGE:-wordpress:cli-2.11.0-php8.2}
     user: "33:33"
     entrypoint: /opt/tillit-payment-gateway/docker/wpcli.sh
     restart: always
