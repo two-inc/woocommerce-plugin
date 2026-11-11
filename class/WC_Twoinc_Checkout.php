@@ -885,6 +885,14 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // company search from rendering there (TWO-25326 follow-up).
             // The same condition is_available() judges, and it adds no fetch
             // of its own to a checkout render.
+            //
+            // A disabled gateway withholds it too (TWO-27227): with company
+            // search in the address area it would otherwise still mount for
+            // other methods and query the registry for a gateway the merchant
+            // switched off. Not logged: it is a setting, not a fault.
+            if ($this->wc_twoinc->enabled !== 'yes') {
+                return;
+            }
             $status = $this->wc_twoinc->get_api_key_verification_status();
             if (WC_Twoinc::is_definitive_key_failure($status['status'])) {
                 $this->wc_twoinc->log_withheld_from_checkout(

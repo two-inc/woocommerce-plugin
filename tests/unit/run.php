@@ -332,6 +332,7 @@ final class BrandConfigSpec
             'testRecordlessOkResponseIsCategorisedButDoesNotWithhold',
             'testUnresolvedMerchantTermsDoNotWithholdPaymentMethod',
             'testCheckoutWindowTwoincSuppressedOnVerificationFailure',
+            'testADisabledGatewayStandsCompanySearchDown',
             'testVerifyApiKeyMalformedResponseNotMiscategorizedAsNotConfigured',
             'testAdminLiveVerificationWarmsCheckoutCache',
             'testSettingsScreenVerificationDoesNotFireOnOtherAdminPages',
@@ -7866,6 +7867,7 @@ final class BrandConfigSpec
     {
         $make_gateway = static function (string $type) {
             return new class ($type) extends WC_Twoinc {
+                public $enabled = 'yes';
                 public $options;
 
                 public function __construct($type)
@@ -8050,8 +8052,9 @@ final class BrandConfigSpec
      * Run the token-minting wc-ajax handler with $gateway installed as the
      * gateway singleton, and return the recorded JSON response.
      */
-    private static function runTokensHandler($gateway): array
+    private static function runTokensHandler($gateway, string $enabled = 'yes'): array
     {
+        $gateway->enabled = $enabled;
         $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
         $prop->setAccessible(true);
         $prop->setValue(null, $gateway);
@@ -14059,6 +14062,7 @@ final class BrandConfigSpec
 
         $make_gateway = static function ($response) {
             return new class ($response) extends WC_Twoinc {
+                public $enabled = 'yes';
                 public $options = ['api_key' => 'key'];
                 private $response;
 
@@ -14110,6 +14114,112 @@ final class BrandConfigSpec
             TinyAssert::same($printed, strpos($output, 'window.twoinc') !== false, $description);
         }
         unset($GLOBALS['__twoinc_test_is_checkout']);
+    }
+
+    /**
+     * TWO-27227: a disabled gateway stands company search down. The checkout
+     * bootstrap is withheld whatever the key verdict (so neither the tile nor
+     * the address-area search mounts), every proxy route and both sole-trader
+     * routes refuse before Two is called, and switching the gateway back on
+     * restores each.
+     */
+    private static function testADisabledGatewayStandsCompanySearchDown(): void
+    {
+        $GLOBALS['__twoinc_test_is_checkout'] = true;
+        $make_gateway = static function ($response) {
+            return new class ($response) extends WC_Twoinc {
+                public $options = ['api_key' => 'key'];
+                private $response;
+
+                public function __construct($response)
+                {
+                    $this->response = $response;
+                }
+
+                public function get_twoinc_checkout_host()
+                {
+                    return 'https://api.example';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+
+                public function update_option($key, $value = '')
+                {
+                    $this->options[$key] = $value;
+                    return true;
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
+                {
+                    return $this->response;
+                }
+            };
+        };
+        $ok = ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
+        $rejected = ['response' => ['code' => 401], 'body' => json_encode(['message' => 'invalid'])];
+
+        // [Turn on/off, verify response, bootstrap printed, why].
+        $cases = [
+            ['yes', $ok, true, 'an enabled gateway with a verified key prints it'],
+            ['yes', $rejected, false, 'a rejected key withholds it, as before'],
+            ['no', $ok, false, 'a disabled gateway withholds it even with a verified key'],
+            ['no', $rejected, false, 'a disabled gateway with a rejected key withholds it'],
+        ];
+        foreach ($cases as [$enabled, $response, $printed, $description]) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            WC_Twoinc::reset_merchant_record_memo();
+            $gateway = $make_gateway($response);
+            $prints = static function () use ($gateway): bool {
+                ob_start();
+                (new WC_Twoinc_Checkout($gateway))->inject_cart_details();
+                return strpos((string) ob_get_clean(), 'window.twoinc') !== false;
+            };
+
+            $gateway->enabled = $enabled;
+            TinyAssert::same($printed, $prints(), $description);
+            $gateway->enabled = 'yes';
+            TinyAssert::same($response === $ok, $prints(), $description . ' (switched back on)');
+        }
+        unset($GLOBALS['__twoinc_test_is_checkout']);
+
+        // Every proxy route refuses while disabled; the ones that reach Two
+        // with no request body call it again once switched back on.
+        $_REQUEST = ['q' => 'exampleco', 'country' => 'GB', 'lookup_id' => 'lookup-1'];
+        $relays = ['ajax_company_search', 'ajax_company_by_id', 'ajax_supported_countries', 'ajax_payment_terms'];
+        foreach (array_merge($relays, ['ajax_order_intent']) as $handler) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $gateway = self::proxyGateway();
+            $response = self::runProxyHandler($gateway, $handler, 'no');
+            TinyAssert::same(['success' => false, 'data' => 'Gateway unavailable', 'status' => null], $response, "$handler refuses while disabled");
+            TinyAssert::same([], $gateway->calls, "$handler reached Two while disabled");
+
+            if (in_array($handler, $relays, true)) {
+                self::runProxyHandler($gateway, $handler);
+                TinyAssert::same(1, count($gateway->calls), "$handler calls Two again once switched back on");
+            }
+        }
+        $_REQUEST = [];
+
+        // The sole-trader routes reach the registry too.
+        $_REQUEST = ['country' => 'GB'];
+        foreach (['no' => false, 'yes' => true] as $enabled => $served) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            WC_Twoinc_Sole_Trader::reset_cache();
+            $gateway = self::tokenMintingGateway(['SOLE_TRADER']);
+            $gateway->enabled = $enabled;
+            $GLOBALS['__twoinc_test_ajax_json'] = null;
+            self::withGatewayInstance($gateway, [WC_Twoinc_Sole_Trader::class, 'ajax_availability']);
+            TinyAssert::same($served, $GLOBALS['__twoinc_test_ajax_json']['success'] ?? null, "availability, Turn on/off \"$enabled\"");
+            TinyAssert::same(
+                $served,
+                self::runTokensHandler($gateway, $enabled)['success'] ?? null,
+                "token mint, Turn on/off \"$enabled\""
+            );
+        }
+        $_REQUEST = [];
     }
 
     /**
@@ -15963,10 +16073,12 @@ final class BrandConfigSpec
 
     /**
      * Run one proxy handler against a gateway double, as the wc_ajax hook
-     * would, and hand back what it sent to the browser.
+     * would, and hand back what it sent to the browser. The gateway is
+     * switched on unless a case says otherwise (TWO-27227).
      */
-    private static function runProxyHandler($gateway, string $handler): array
+    private static function runProxyHandler($gateway, string $handler, string $enabled = 'yes'): array
     {
+        $gateway->enabled = $enabled;
         $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
         $prop->setAccessible(true);
         $prop->setValue(null, $gateway);

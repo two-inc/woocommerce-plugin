@@ -25,6 +25,13 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
                 wp_send_json_error('Gateway unavailable');
                 return null;
             }
+            // TWO-27227: a disabled gateway stands company search down, and
+            // nothing else these routes serve is offered either.
+            if ($gateway->enabled !== 'yes') {
+                self::log_refusal($handler, 'the payment method is disabled');
+                wp_send_json_error('Gateway unavailable');
+                return null;
+            }
             return $gateway;
         }
 

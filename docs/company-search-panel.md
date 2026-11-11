@@ -146,3 +146,17 @@ description: "The vendored company-search-panel.js (two-copy edit rule, parity d
   at construction, because the current key's own `'default' => 'yes'` is what
   renders the admin checkbox: only one stored value makes the screen and every
   getter agree.
+
+## A disabled gateway stands company search down
+
+With "Turn on/off" off, `WC_Twoinc_Checkout::inject_cart_details()` prints no
+`window.twoinc` (TWO-27227), before the key is judged and without logging, as a
+setting is not a fault. The classic bootstrap and every blocks-checkout entry
+point mount nothing without it, so the address-area search that otherwise runs
+for other payment methods stays off and the company field is plain text.
+Server side, `WC_Twoinc_Api_Proxy::authorize()` and both sole-trader handlers
+(`ajax_availability()`, `ajax_tokens()`) refuse with "Gateway unavailable"
+before Two is called. Switching the gateway back on restores all of it. Test
+gateways default to disabled, as an unsaved gateway is in core, so a test that
+reaches these handlers switches its gateway on (`runProxyHandler()` and
+`runTokensHandler()` do so unless told otherwise).
