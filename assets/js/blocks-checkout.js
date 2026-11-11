@@ -750,7 +750,7 @@
     twoincDomHelper.loadStorageInputs();
     twoincDomHelper.restoreCapturedCompany();
     twoincCompanySearchControls.forEach(function (search) {
-      search.countryDidChange(search.currentCountry());
+      search.seedCountry();
     });
   }
 
