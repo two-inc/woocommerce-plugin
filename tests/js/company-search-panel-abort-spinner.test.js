@@ -34,7 +34,8 @@ describe("the panel's abortActiveRequest()", () => {
 
   beforeEach(() => {
     harness.loadTwoinc();
-    document.body.innerHTML = '<div id="host"><input id="company" class="company-field" type="text" /></div>';
+    document.body.innerHTML =
+      '<div id="host"><input id="company" class="company-field" type="text" /></div>';
   });
 
   afterEach(() => {
@@ -58,11 +59,18 @@ describe("the panel's abortActiveRequest()", () => {
     query.value = "acme";
     query.dispatchEvent(new Event("input", { bubbles: true }));
     await flushTimers();
-    expect({ description, spinning: !!document.querySelector(SPINNER_ACTIVE) }).toEqual({ description, spinning: true });
+    expect({ description, spinning: !!document.querySelector(SPINNER_ACTIVE) }).toEqual({
+      description,
+      spinning: true
+    });
 
     panel.abortActiveRequest();
 
-    expect({ description, open: panel.isOpen(), spinning: !!document.querySelector(SPINNER_ACTIVE) }).toEqual({
+    expect({
+      description,
+      open: panel.isOpen(),
+      spinning: !!document.querySelector(SPINNER_ACTIVE)
+    }).toEqual({
       description,
       open: true,
       spinning: false
