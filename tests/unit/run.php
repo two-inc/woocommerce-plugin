@@ -14293,11 +14293,14 @@ final class BrandConfigSpec
             $GLOBALS['__twoinc_test_ajax_json'] = null;
             self::withGatewayInstance($gateway, [WC_Twoinc_Sole_Trader::class, 'ajax_availability']);
             TinyAssert::same($served, $GLOBALS['__twoinc_test_ajax_json']['success'] ?? null, "availability, Turn on/off \"$enabled\"");
+            TinyAssert::same($served, $gateway->requests !== [], "availability reaches the registry only when on, Turn on/off \"$enabled\"");
+            $gateway->requests = [];
             TinyAssert::same(
                 $served,
                 self::runTokensHandler($gateway, $enabled)['success'] ?? null,
                 "token mint, Turn on/off \"$enabled\""
             );
+            TinyAssert::same($served, $gateway->requests !== [], "token mint reaches Two only when on, Turn on/off \"$enabled\"");
         }
         $_REQUEST = [];
     }
