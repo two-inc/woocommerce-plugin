@@ -17739,10 +17739,149 @@ final class ProductButtonSpec
     }
 }
 
+/**
+ * Saving the settings checks the API key against the environment chosen in
+ * the same form, not the one already saved (TWO-27299, ABN-625). Driven
+ * through the real process_admin_options() and make_request(); only the HTTP
+ * transport is stubbed. The key field is a password input pre-filled with the
+ * saved key, so leaving it untouched posts the saved key back.
+ */
+final class KeyEnvironmentSaveSpec
+{
+    private const PRODUCTION = 'https://api.two.inc/';
+    private const SANDBOX = 'https://api.sandbox.two.inc/';
+
+    public static function runAll(): void
+    {
+        $tests = [
+            'testEverySaveTalksToTheChosenEnvironmentWithTheChosenKey',
+        ];
+        foreach ($tests as $test) {
+            self::$test();
+            print("PASS KeyEnvironmentSaveSpec::$test\n");
+        }
+    }
+
+    /** @return array<int, array{0: array, 1: string, 2: string, 3: string, 4: ?string, 5: string}> */
+    private static function cases(): array
+    {
+        $sandbox = ['api_key' => 'sandbox-key-old', 'checkout_env' => 'SANDBOX'];
+        $production = ['api_key' => 'production-key-old', 'checkout_env' => 'PROD'];
+        // saved settings, posted key, posted environment, expected host, key that must never be sent, description
+        return [
+            [[], 'sandbox-key-new', 'SANDBOX', self::SANDBOX, null, 'first key, nothing saved, sandbox chosen'],
+            [[], 'production-key-new', 'PROD', self::PRODUCTION, null, 'first key, nothing saved, production chosen'],
+            [$sandbox, 'sandbox-key-new', 'SANDBOX', self::SANDBOX, 'sandbox-key-old', 'key changed in sandbox'],
+            [$production, 'production-key-new', 'PROD', self::PRODUCTION, 'production-key-old', 'key changed in production'],
+            [$sandbox, 'production-key-new', 'PROD', self::PRODUCTION, 'sandbox-key-old', 'switched sandbox to production with a production key'],
+            [$production, 'sandbox-key-new', 'SANDBOX', self::SANDBOX, 'production-key-old', 'switched production to sandbox with a sandbox key'],
+            [$sandbox, 'sandbox-key-old', 'PROD', self::PRODUCTION, null, 'switched sandbox to production, key left as saved'],
+            [$production, 'production-key-old', 'SANDBOX', self::SANDBOX, null, 'switched production to sandbox, key left as saved'],
+        ];
+    }
+
+    /** A gateway reading the settings as currently stored. */
+    private static function gateway(): WC_Twoinc
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public $test_post_data = [];
+
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+        $gateway->init_settings();
+        return $gateway;
+    }
+
+    private static function store(array $settings): void
+    {
+        $GLOBALS['__twoinc_test_options'] = [
+            'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings' => $settings,
+        ];
+    }
+
+    private static function testEverySaveTalksToTheChosenEnvironmentWithTheChosenKey(): void
+    {
+        $options_before = $GLOBALS['__twoinc_test_options'] ?? [];
+        $response_before = $GLOBALS['__twoinc_test_http_response'] ?? null;
+        $GLOBALS['__twoinc_test_http_response'] = [
+            'response' => ['code' => 200],
+            'body' => json_encode(['id' => 'merchant-1', 'short_name' => 'shop']),
+            'headers' => [],
+        ];
+        $failures = [];
+        try {
+            foreach (self::cases() as [$saved, $key, $env, $host, $old_key, $description]) {
+                try {
+                    self::saveThenCheckout($saved, $key, $env, $host, $old_key, $description);
+                } catch (RuntimeException $e) {
+                    // Every row runs, so one report names every failing case.
+                    $failures[] = $e->getMessage();
+                }
+            }
+        } finally {
+            $GLOBALS['__twoinc_test_options'] = $options_before;
+            $GLOBALS['__twoinc_test_http_response'] = $response_before;
+            $GLOBALS['__twoinc_test_http_calls'] = [];
+        }
+        if ($failures !== []) {
+            throw new RuntimeException(implode("\n", $failures));
+        }
+    }
+
+    private static function saveThenCheckout(array $saved, string $key, string $env, string $host, ?string $old_key, string $description): void
+    {
+        self::store($saved);
+        $GLOBALS['__twoinc_test_http_calls'] = [];
+        $gateway = self::gateway();
+        $gateway->test_post_data = [
+            $gateway->get_field_key('api_key') => $key,
+            $gateway->get_field_key('checkout_env') => $env,
+        ];
+        $gateway->process_admin_options();
+
+        $calls = $GLOBALS['__twoinc_test_http_calls'];
+        TinyAssert::true(self::verifyCalls($calls) !== [], "the save verified the key: $description");
+        self::assertEveryCall($calls, $key, $host, $old_key, "during the save: $description");
+
+        // The saved pair is what the next checkout call uses.
+        $GLOBALS['__twoinc_test_http_calls'] = [];
+        self::gateway()->make_request('/v1/order_intent', ['a' => 1]);
+        $calls = $GLOBALS['__twoinc_test_http_calls'];
+        TinyAssert::same(1, count($calls), "one checkout call after the save: $description");
+        self::assertEveryCall($calls, $key, $host, $old_key, "checkout after the save: $description");
+    }
+
+    private static function verifyCalls(array $calls): array
+    {
+        return array_filter($calls, static function ($call) {
+            return strpos((string) $call['url'], '/v1/merchant/verify_api_key') !== false;
+        });
+    }
+
+    private static function assertEveryCall(array $calls, string $key, string $host, ?string $old_key, string $message): void
+    {
+        foreach ($calls as $call) {
+            $url = (string) $call['url'];
+            $sent = $call['args']['headers']['X-API-Key'] ?? null;
+            $where = strtok($url, '?');
+            TinyAssert::same($key, $sent, "key sent to $where, $message");
+            TinyAssert::true(strpos($url, $host) === 0, "expected host $host, got $where, $message");
+            if ($old_key !== null) {
+                TinyAssert::true($sent !== $old_key, "the old key was sent to $where, $message");
+            }
+        }
+    }
+}
+
 BrandConfigSpec::runAll();
 AnchorOnlyHtmlSpec::runAll();
 SubtitleSaveValidationSpec::runAll();
 CaptureMemorySpec::runAll();
 ProductPromoSpec::runAll();
 ProductButtonSpec::runAll();
+KeyEnvironmentSaveSpec::runAll();
 print("All tests passed.\n");
