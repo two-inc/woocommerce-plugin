@@ -16,8 +16,9 @@ concurrency:
 jobs:
   # Which WordPress x WooCommerce x PHP combinations the checkout suite runs
   # on (TWO-27171), read from upstream on every run by dev/support-matrix.sh,
-  # whose header states the support policy and sources. Each runnable
-  # combination runs the classic and the blocks checkout (TWO-25797).
+  # whose header states the support policy, the sources and which combinations
+  # it picks (TWO-27314). The newest stack and the floors run the classic and
+  # the blocks checkout (TWO-25797); every other combination runs blocks only.
   #
   # Honest CI (TWO-24998): the run or skip decision is made here. A combination
   # that cannot run never becomes a green leg: it is listed in this job's step
@@ -30,7 +31,7 @@ jobs:
     runs-on: ${{ vars.RUNNER_STANDARD }}
     timeout-minutes: 10
     outputs:
-      combos: ${{ steps.gen.outputs.combos }}
+      legs: ${{ steps.gen.outputs.legs }}
     steps:
       - uses: actions/checkout@v7
 
@@ -41,19 +42,20 @@ jobs:
           all=$(bash dev/support-matrix.sh --emit-all)
           combos=$(jq -c '.e2e' <<<"$all")
           skips=$(jq -c '.skips' <<<"$all")
-          echo "combos=$combos" >> "$GITHUB_OUTPUT"
+          legs=$(jq -c '[.[] | . as $c | .renderers[] | {combo: ($c | del(.renderers)), renderer: .}]' <<<"$combos")
+          echo "legs=$legs" >> "$GITHUB_OUTPUT"
           echo "Runnable combinations:"
           jq . <<<"$combos"
           {
             echo "## WordPress x WooCommerce x PHP coverage"
             echo ""
-            echo "Each tested combination runs the classic and the blocks checkout."
+            echo "One factor at a time from the newest stack, plus the declared floors."
             echo ""
-            echo "| WordPress | WooCommerce | PHP | Status | Reason |"
-            echo "|---|---|---|---|---|"
-            jq -r '.[] | select(.provisional | not) | "| \(.wordpress) | \(.woocommerce) | \(.php) | ✅ tested | |"' <<<"$combos"
-            jq -r '.[] | select(.provisional) | "| \(.wordpress) | \(.woocommerce) | \(.php) | ⚠️ tested, non-blocking | \(.provisional_reason) |"' <<<"$combos"
-            jq -r '.[] | "| \(.wordpress) | \(.woocommerce) | \(.php) | 🚫 NOT run | \(.reason) |"' <<<"$skips"
+            echo "| WordPress | WooCommerce | PHP | Checkout | Status | Reason |"
+            echo "|---|---|---|---|---|---|"
+            jq -r '.[] | select(.provisional | not) | "| \(.wordpress) | \(.woocommerce) | \(.php) | \(.renderers | join(", ")) | ✅ tested | |"' <<<"$combos"
+            jq -r '.[] | select(.provisional) | "| \(.wordpress) | \(.woocommerce) | \(.php) | \(.renderers | join(", ")) | ⚠️ tested, non-blocking | \(.provisional_reason) |"' <<<"$combos"
+            jq -r '.[] | "| \(.wordpress) | \(.woocommerce) | \(.php) | | 🚫 NOT run | \(.reason) |"' <<<"$skips"
           } >> "$GITHUB_STEP_SUMMARY"
           jq -r '.[] | select(.provisional) | "::warning title=Combination tested non-blocking::WordPress \(.wordpress) / WooCommerce \(.woocommerce) / PHP \(.php): \(.provisional_reason)"' <<<"$combos"
           jq -r '.[] | "::warning title=Combination NOT tested::WordPress \(.wordpress) / WooCommerce \(.woocommerce) / PHP \(.php): \(.reason)"' <<<"$skips"
@@ -71,14 +73,12 @@ jobs:
     continue-on-error: ${{ matrix.combo.provisional }}
     strategy:
       fail-fast: false
-      # Every runnable combination times both renderers. Capped so the legs do
-      # not all place orders on Two staging at once; the cap costs wall time,
-      # never coverage. 12 at once overran checkout-api staging's single pod
-      # (TWO-27314), so 6.
+      # Capped so the legs do not all place orders on Two staging at once; the
+      # cap costs wall time, never coverage. 12 at once overran checkout-api
+      # staging's single pod (TWO-27314), so 6.
       max-parallel: 6
       matrix:
-        combo: ${{ fromJSON(needs.discover.outputs.combos) }}
-        renderer: [classic, blocks]
+        include: ${{ fromJSON(needs.discover.outputs.legs) }}
     # Namespace the Compose project per leg, the same way upgrade-smoke.yaml
     # namespaces its docker resources by run id. The
     # compose volumes are project-scoped, so a leg landing on a runner that

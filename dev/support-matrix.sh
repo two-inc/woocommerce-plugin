@@ -5,7 +5,8 @@
 # Usage:
 #   dev/support-matrix.sh              human-readable report
 #   dev/support-matrix.sh --emit-all   one JSON object for CI:
-#     {"e2e": [runnable combos], "skips": [combos not run, with reasons],
+#     {"e2e": [runnable combos, each with the checkout renderers it runs],
+#      "skips": [selected combos that cannot run, with reasons],
 #      "php_unit": [PHP minors for the unit and lint jobs]}
 #   dev/support-matrix.sh --php-unit   the php_unit list alone, as a JSON
 #     array. Reads only readme.txt and php.net, so an outage of the WordPress,
@@ -48,8 +49,14 @@
 # Matrices:
 #   php_unit  Every PHP minor from the declared floor to the newest supported
 #             one. setup-php resolves the newest patch of each.
-#   e2e       Every WordPress x WooCommerce pair in the window, times every
-#             supported PHP minor, classified, first match wins:
+#   e2e       One factor at a time from the newest stack (TWO-27314): the
+#             newest WordPress series, WooCommerce series and supported PHP
+#             minor together, on the blocks and the classic checkout; then,
+#             on the blocks checkout only, every other WooCommerce series in
+#             the window, every other supported PHP minor and every other
+#             WordPress series, each with the other two at their newest; and
+#             the three floors together on both checkouts. Each is classified,
+#             first match wins:
 #               skip  WooCommerce X requires WordPress Y or later (its readme)
 #               skip  WordPress X requires PHP Y or later      (version-check)
 #               skip  WooCommerce X requires PHP Y or later    (its readme)
@@ -238,9 +245,9 @@ for php in $php_supported $php_floor; do
 done
 
 entries=()
-# classify <wordpress series> <woocommerce series> <php minor>
+# classify <wordpress series> <woocommerce series> <php minor> <renderers JSON>
 classify() {
-    local wps=$1 wcs=$2 php=$3 wp wc reason= provisional=
+    local wps=$1 wcs=$2 php=$3 renderers=$4 wp wc reason= provisional=
     wp=$(wp_patch "$wps")
     wc=${wc_ver[$wcs]}
     if ! ver_le "${wc_wp[$wcs]}" "$wp"; then
@@ -258,20 +265,37 @@ classify() {
     fi
     entries+=("$(jq -nc --arg wordpress "$wp" --arg series "$wps" --arg woocommerce "$wc" \
         --arg php "$php" --arg reason "$reason" --arg provisional "$provisional" \
+        --argjson renderers "$renderers" \
         '{wordpress: $wordpress, wordpress_series: $series, woocommerce: $woocommerce,
-          php: $php, reason: $reason, provisional: ($provisional != ""),
-          provisional_reason: $provisional}')")
+          php: $php, renderers: $renderers, reason: $reason,
+          provisional: ($provisional != ""), provisional_reason: $provisional}')")
 }
 
+wp_newest=$(tail -1 <<<"$wp_window")
+wc_newest=$(tail -1 <<<"$wc_window")
+# away <wordpress series> <woocommerce series> <php minor>: how many of the
+# three differ from the newest stack.
+away() {
+    local n=0
+    [ "$1" = "$wp_newest" ] || n=$((n + 1))
+    [ "$2" = "$wc_newest" ] || n=$((n + 1))
+    [ "$3" = "$php_newest" ] || n=$((n + 1))
+    echo "$n"
+}
 for wps in $wp_window; do
     for wcs in $wc_window; do
-        for php in $php_supported; do classify "$wps" "$wcs" "$php"; done
+        for php in $php_supported; do
+            case $(away "$wps" "$wcs" "$php") in
+                0) classify "$wps" "$wcs" "$php" '["blocks","classic"]' ;;
+                1) classify "$wps" "$wcs" "$php" '["blocks"]' ;;
+            esac
+        done
     done
 done
 # The floor leg: the declared WordPress, WooCommerce and PHP minimums together,
 # kept even where php.net has ended support for that PHP (spec rule 2).
-if ! grep -qxF "$php_floor" <<<"$php_supported"; then
-    classify "$wp_floor" "$wc_floor" "$php_floor"
+if [ "$(away "$wp_floor" "$wc_floor" "$php_floor")" -gt 1 ]; then
+    classify "$wp_floor" "$wc_floor" "$php_floor" '["blocks","classic"]'
 fi
 
 all=$(printf '%s\n' "${entries[@]}" | jq -sc '.')
@@ -292,7 +316,7 @@ fi
 
 echo
 echo "E2E combinations ($runs run, of which $provisional provisional, $(jq length <<<"$skips") skip):"
-jq -r '.[] | "WordPress \(.wordpress)  WooCommerce \(.woocommerce)  PHP \(.php)" as $c
+jq -r '.[] | "WordPress \(.wordpress)  WooCommerce \(.woocommerce)  PHP \(.php)  \(.renderers | join("+"))" as $c
     | if .reason != "" then "  SKIP  \($c): \(.reason)"
       elif .provisional then "  RUN*  \($c): \(.provisional_reason)"
       else "  RUN   \($c)" end' <<<"$all"
