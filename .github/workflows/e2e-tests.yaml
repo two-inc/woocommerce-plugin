@@ -73,8 +73,9 @@ jobs:
       fail-fast: false
       # Every runnable combination times both renderers. Capped so the legs do
       # not all place orders on Two staging at once; the cap costs wall time,
-      # never coverage.
-      max-parallel: 12
+      # never coverage. 12 at once overran checkout-api staging's single pod
+      # (TWO-27314), so 6.
+      max-parallel: 6
       matrix:
         combo: ${{ fromJSON(needs.discover.outputs.combos) }}
         renderer: [classic, blocks]
