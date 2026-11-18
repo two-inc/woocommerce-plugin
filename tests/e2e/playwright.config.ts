@@ -20,7 +20,10 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
     actionTimeout: 15_000,
     trace: "retain-on-failure",
-    video: "retain-on-failure"
+    video: "retain-on-failure",
+    // CI uploads only failure screenshots (traces/videos can carry cookies and
+    // this repo is public), so take them.
+    screenshot: "only-on-failure"
   },
   projects: [
     {
