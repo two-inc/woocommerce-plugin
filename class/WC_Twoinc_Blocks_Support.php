@@ -17,7 +17,7 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
         /**
          * Asked of the live gateway rather than read from the settings row, so
          * the Blocks tile obeys the same availability gates as the classic one
-         * (API-key verdict, brand minimum order) — ABN-554.
+         * (API-key verdict, brand minimum order).
          */
         public function is_active()
         {
@@ -39,7 +39,7 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
                     'wp-data',
                     'wc-blocks-checkout',
                     // The classic controller this file is a skin over, so its
-                    // globals exist before the mount runs (ABN-554).
+                    // globals exist before the mount runs.
                     'twoinc-payment-gateway-js',
                 ],
                 twoinc_get_asset_version($asset),
@@ -52,14 +52,9 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
                 sprintf('window.twoincBlocksName = %s;', wp_json_encode($this->name)),
                 'before'
             );
-
-            $style = 'assets/css/blocks-checkout.css';
-            wp_enqueue_style(
-                'twoinc-blocks-checkout',
-                WC_TWOINC_PLUGIN_URL . $style,
-                ['twoinc-payment-gateway-css'],
-                twoinc_get_asset_version($style)
-            );
+            // The stylesheet is enqueued by wc_twoinc_enqueue_styles(), after the
+            // base stylesheet it depends on: WooCommerce calls this during init on
+            // every request, where that dependency is not registered (TWO-27181).
 
             return [$handle];
         }
@@ -73,13 +68,18 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
                 // The gateway's own payment-box description, whole — every
                 // slot the controller this file skins fills. Without the about
                 // block, which the tile's label renders instead, the same
-                // split the classic template makes (ABN-554).
+                // split the classic template makes.
                 'description' => $gateway ? $gateway->description : '',
                 'about' => $gateway ? $gateway->get_about_block_html() : '',
                 // Its own field, not part of the description: the classic
-                // checkout emits the same block from its own hook (ABN-554).
+                // checkout emits the same block from its own hook.
                 'terms' => $gateway ? $gateway->get_terms_consent_html() : '',
                 'iconUrl' => $gateway ? $gateway->icon : '',
+                // Refuses the submit after a declined or failed availability check (TWO-26292).
+                'unavailable' => sprintf(
+                    __('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name')
+                ),
                 // TWO-25800: the product-page button preselects this gateway
                 // by writing the session key classic checkout already reads.
                 // Blocks has no server-side equivalent, so the tile selects

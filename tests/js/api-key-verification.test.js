@@ -19,7 +19,7 @@ const { loadAdmin, GATEWAY_ID } = require("./admin-harness");
 
 // Mirrors twoinc_ajax_verify_api_key()'s error envelope, `definitive` included:
 // that flag is computed server-side by WC_Twoinc::is_definitive_key_failure(),
-// the one place the categories are listed (ABN-533).
+// the one place the categories are listed.
 const DEFINITIVE_STATUSES = ["invalid_key", "not_configured"];
 
 function stubAjaxError(status, code) {
@@ -230,7 +230,7 @@ describe("API key verification — categorized failure display", () => {
   });
 
   /**
-   * ABN-536. Every non-ok category took the reject branch, so an unreachable
+   * Every non-ok category took the reject branch, so an unreachable
    * API blanked the Merchant ID and reddened a perfectly valid key. Only a
    * verdict that judged the key may do that.
    *
@@ -424,5 +424,30 @@ describe("API key verification — categorized failure display", () => {
     expect($("#twoinc-merchant-info").css("display")).not.toBe("none");
     expect($("#twoinc-merchant-invalid-notice").css("display")).toBe("none");
     expect($("#twoinc-merchant-id").text()).toBe("42");
+  });
+});
+
+// TWO-27109: the key field renders empty, so the saved key is checked by reference.
+describe("API key verification with the saved key never on the page", () => {
+  test.each([
+    [true, 1, "a saved key is checked on load without the page holding it"],
+    [false, 0, "with no saved key and an empty field nothing is checked"]
+  ])("has_saved_key %p makes %p call(s): %s", async (hasSavedKey, calls) => {
+    const ajax = jest.fn(function () {
+      return { done: function () {}, fail: function () {} };
+    });
+    await loadAdmin({
+      apiKey: "",
+      hasSavedKey: hasSavedKey,
+      checked: [30],
+      stubAjax: function (jq) {
+        jq.ajax = ajax;
+      }
+    });
+    expect(ajax).toHaveBeenCalledTimes(calls);
+    if (calls) {
+      expect(ajax.mock.calls[0][0].data.stored).toBe(1);
+      expect(ajax.mock.calls[0][0].data.api_key).toBe("");
+    }
   });
 });

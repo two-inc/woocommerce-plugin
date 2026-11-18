@@ -11,11 +11,11 @@
  *      is rendered, and is what names the radiogroup;
  *   3. the fee label shows the currency SYMBOL (the server-formatted
  *      buyer_fee_share_display), never the currency code;
- *   4. whether an amount shows is decided over the whole offered set
- *      (ABN-528), so chips never disagree about carrying a fee.
+ *   4. whether an amount shows is decided over the whole offered set,
+ *      so chips never disagree about carrying a fee.
  *
- * The second is the radio-group keyboard contract the chips' roles advertise
- * (ABN-554): one tab stop, arrow traversal with wrapping, the checked and
+ * The second is the radio-group keyboard contract the chips' roles advertise:
+ * one tab stop, arrow traversal with wrapping, the checked and
  * visual states moving as one, focus surviving a re-render, and one commit per
  * sweep. Tab order itself is not observable in jsdom, so the tab-stop count and
  * the focus ring are verified in a real browser instead.
@@ -417,7 +417,7 @@ describe("payment terms chips", () => {
 
   // Every re-render replaces every chip, so a chip the buyer is on is
   // destroyed. Without a handover focus falls to the body and the keyboard
-  // loses its place in the group (ABN-554).
+  // loses its place in the group.
   describe("a re-render under the buyer's focus", () => {
     /** @returns {string|null} the day-count of the focused chip, if any */
     function focusedDays() {
@@ -473,7 +473,7 @@ describe("payment terms chips", () => {
 
   // The chips advertise themselves as a radio group, so they owe that role's
   // keyboard contract: the group is ONE tab stop and the arrow keys move the
-  // checked term and the focus together (ABN-554, W3C APG radio pattern).
+  // checked term and the focus together (W3C APG radio pattern).
   // Tab order itself is not observable in jsdom and is verified in a browser;
   // what is observable here is the roving tabindex the browser reads, and the
   // focus the handler moves itself.
@@ -751,10 +751,76 @@ describe("payment terms chips", () => {
         expect(harness.requestParams(ajax.last()).get("days")).toBe("90");
       });
     });
+
+    // The server answers HTTP 200 with success:false for a term the merchant
+    // does not offer, and records nothing. The chips move on the buyer's
+    // gesture, ahead of that answer, so a refusal has to put them back: a tick
+    // on a refused term would otherwise ride the submit and be refused there.
+    describe("a term the server refuses", () => {
+      let ajax;
+
+      afterEach(() => {
+        if (ajax) ajax.restore();
+        ajax = null;
+      });
+
+      /** Move from `from` onto `to` by keyboard, post it, and have the server answer. */
+      function chooseAndAnswer(from, to, answer) {
+        const chips = mountGroup(from);
+        ajax = harness.stubAjax(ctx.$);
+        focusChip(from);
+        press(to > from ? "ArrowRight" : "ArrowLeft");
+        chips.select(to);
+        ajax.last().succeed(answer);
+        return chips;
+      }
+
+      test.each([
+        { from: 60, to: 90, description: "a refused 90 puts the tick back on the accepted 60" },
+        { from: 60, to: 30, description: "a refused 30 puts the tick back on the accepted 60" }
+      ])("$description", ({ from, to }) => {
+        const chips = chooseAndAnswer(from, to, { success: false, data: "not available" });
+
+        expect(selectedDays()).toBe(String(from));
+        expect(checkedDays()).toBe(String(from));
+        // The field the order is composed on, not just the paint.
+        expect(ctx.$("input[name='two_selected_term']").val()).toBe(String(from));
+        expect(chips.config().selected).toBe(from);
+        expect(chips.pendingTerm).toBeNull();
+      });
+
+      // The refusal carries the live offered set, so a term the merchant has
+      // withdrawn since the page loaded is not left on offer to be refused again.
+      test("a refusal carrying the live offered set drops the withdrawn chip", () => {
+        const chips = chooseAndAnswer(60, 90, {
+          success: false,
+          data: { message: "not available", terms: [30, 60], selected: 60 }
+        });
+
+        expect(
+          ctx
+            .$(".twoinc-term-chip")
+            .map((i, el) => ctx.$(el).attr("data-days"))
+            .get()
+        ).toEqual(["30", "60"]);
+        expect(selectedDays()).toBe("60");
+        expect(ctx.$("input[name='two_selected_term']").val()).toBe("60");
+        expect(chips.config().terms).toEqual([30, 60]);
+        expect(chips.config().selected).toBe(60);
+      });
+
+      test("an accepted term is kept and recorded as the one the server holds", () => {
+        const chips = chooseAndAnswer(60, 90, { success: true, data: { selected: 90 } });
+
+        expect(selectedDays()).toBe("90");
+        expect(ctx.$("input[name='two_selected_term']").val()).toBe("90");
+        expect(chips.config().selected).toBe(90);
+      });
+    });
   });
 
   /**
-   * ABN-554. An aria-label replaces the whole accessible name, so the "+€n,nn"
+   * An aria-label replaces the whole accessible name, so the "+€n,nn"
    * rendered inside an end-of-month chip is announced nowhere unless the name
    * states it too.
    */

@@ -1,0 +1,29 @@
+{
+  "_comment": "Shared environment case table (TWO-26604). Byte-identical in prestashop-plugin, woocommerce-plugin and magento-plugin. stored null means a fresh install (the platform's install default); flag null means TWO_INTERNAL_ENVIRONMENTS is unset.",
+  "resolve": [
+    {"stored": null, "flag": null, "options": ["production", "sandbox"], "effective": "sandbox", "api_host": "https://api.sandbox.two.inc", "checkout_host": "https://checkout.sandbox.two.inc", "health_ok": true, "description": "fresh install defaults to sandbox"},
+    {"stored": null, "flag": "1", "options": ["production", "sandbox", "staging"], "effective": "sandbox", "api_host": "https://api.sandbox.two.inc", "checkout_host": "https://checkout.sandbox.two.inc", "health_ok": true, "description": "the flag never changes the default"},
+    {"stored": "production", "flag": null, "options": ["production", "sandbox"], "effective": "production", "api_host": "https://api.two.inc", "checkout_host": "https://checkout.two.inc", "health_ok": true, "description": "production unaffected"},
+    {"stored": "sandbox", "flag": null, "options": ["production", "sandbox"], "effective": "sandbox", "api_host": "https://api.sandbox.two.inc", "checkout_host": "https://checkout.sandbox.two.inc", "health_ok": true, "description": "sandbox offered and accepted"},
+    {"stored": "staging", "flag": "1", "options": ["production", "sandbox", "staging"], "effective": "staging", "api_host": "https://api.staging.two.inc", "checkout_host": "https://checkout.staging.two.inc", "health_ok": true, "description": "internal shop on staging"},
+    {"stored": "staging", "flag": null, "options": ["production", "sandbox", "staging"], "effective": "staging", "api_host": "https://api.staging.two.inc", "checkout_host": "https://checkout.staging.two.inc", "health_ok": false, "description": "flag removed: staging kept and shown"},
+    {"stored": "production", "flag": "1", "options": ["production", "sandbox", "staging"], "effective": "production", "api_host": "https://api.two.inc", "checkout_host": "https://checkout.two.inc", "health_ok": true, "description": "internal shop may pick production"},
+    {"stored": "STAGING", "flag": null, "options": ["production", "sandbox", "staging"], "effective": "staging", "api_host": "https://api.staging.two.inc", "checkout_host": "https://checkout.staging.two.inc", "health_ok": false, "description": "case-insensitive read"},
+    {"stored": "prod", "flag": null, "options": ["production", "sandbox"], "effective": "production", "api_host": "https://api.two.inc", "checkout_host": "https://checkout.two.inc", "health_ok": true, "description": "alias"},
+    {"stored": " Production ", "flag": null, "options": ["production", "sandbox"], "effective": "production", "api_host": "https://api.two.inc", "checkout_host": "https://checkout.two.inc", "health_ok": true, "description": "trimmed and lowercased"},
+    {"stored": "garbage", "flag": null, "options": ["production", "sandbox"], "effective": "sandbox", "api_host": "https://api.sandbox.two.inc", "checkout_host": "https://checkout.sandbox.two.inc", "health_ok": false, "description": "unknown never reaches production"},
+    {"stored": "", "flag": null, "options": ["production", "sandbox"], "effective": "sandbox", "api_host": "https://api.sandbox.two.inc", "checkout_host": "https://checkout.sandbox.two.inc", "health_ok": false, "description": "empty never reaches production"},
+    {"stored": "sandbox", "flag": "0", "options": ["production", "sandbox"], "effective": "sandbox", "api_host": "https://api.sandbox.two.inc", "checkout_host": "https://checkout.sandbox.two.inc", "health_ok": true, "description": "only exactly 1 enables (0)"},
+    {"stored": "sandbox", "flag": "true", "options": ["production", "sandbox"], "effective": "sandbox", "api_host": "https://api.sandbox.two.inc", "checkout_host": "https://checkout.sandbox.two.inc", "health_ok": true, "description": "only exactly 1 enables (true)"},
+    {"stored": "sandbox", "flag": "", "options": ["production", "sandbox"], "effective": "sandbox", "api_host": "https://api.sandbox.two.inc", "checkout_host": "https://checkout.sandbox.two.inc", "health_ok": true, "description": "only exactly 1 enables (empty)"}
+  ],
+  "save": [
+    {"stored": "sandbox", "submitted": "staging", "flag": null, "accepted": false, "description": "staging not saveable without the flag"},
+    {"stored": "staging", "submitted": "staging", "flag": null, "accepted": true, "description": "re-save keeps staging"},
+    {"stored": "sandbox", "submitted": "staging", "flag": "1", "accepted": true, "description": "staging saveable with the flag"},
+    {"stored": "staging", "submitted": "production", "flag": null, "accepted": true, "description": "production always saveable"},
+    {"stored": "production", "submitted": "sandbox", "flag": null, "accepted": true, "description": "sandbox always saveable"},
+    {"stored": "sandbox", "submitted": "development", "flag": "1", "accepted": false, "description": "anything else refused"},
+    {"stored": "sandbox", "submitted": "", "flag": "1", "accepted": false, "description": "empty refused"}
+  ]
+}

@@ -15,34 +15,70 @@ concurrency:
 # via shivammathur/setup-php `tools:` (same action the unit-test matrix
 # already uses). Tool versions are pinned to the releases the committed
 # baselines were generated with; bump them together with a baseline refresh.
+#
+# Both run on every PHP minor the unit tests run on (TWO-27171), discovered
+# the same way. phpstan.neon pins phpVersion to the declared floor, so its
+# findings do not change with the PHP running it; each leg proves the tool
+# and its result hold on that minor.
 jobs:
-  phpcs:
+  discover:
+    name: Discover PHP versions
     runs-on: ${{ vars.RUNNER_STANDARD }}
     timeout-minutes: 10
     permissions:
       contents: read
+    outputs:
+      php: ${{ steps.gen.outputs.php }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve the PHP minors
+        id: gen
+        run: |
+          set -o pipefail
+          php=$(bash dev/support-matrix.sh --php-unit)
+          echo "PHP minors: $php"
+          echo "php=$php" >> "$GITHUB_OUTPUT"
+
+  phpcs:
+    name: phpcs (PHP ${{ matrix.php-version }})
+    needs: discover
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ${{ fromJSON(needs.discover.outputs.php) }}
     steps:
       - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: "8.3"
+          php-version: ${{ matrix.php-version }}
           tools: phpcs:4.0.1
 
       - name: Run phpcs
         run: phpcs
 
   phpstan:
+    name: phpstan (PHP ${{ matrix.php-version }})
+    needs: discover
     runs-on: ${{ vars.RUNNER_STANDARD }}
     timeout-minutes: 10
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ${{ fromJSON(needs.discover.outputs.php) }}
     steps:
       - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: "8.3"
+          php-version: ${{ matrix.php-version }}
           tools: phpstan:2.2.5
 
       # No Composer, so the WordPress/WooCommerce API stubs are fetched

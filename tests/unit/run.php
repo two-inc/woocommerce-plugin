@@ -3,6 +3,17 @@
 declare(strict_types=1);
 
 require __DIR__ . '/bootstrap.php';
+// Registered for the whole suite and inert until armed, so every other spec runs with a subscriber present.
+require __DIR__ . '/fixtures/orderpostprocessing.php';
+require __DIR__ . '/fixtures/builderorders.php';
+require __DIR__ . '/OrderPostprocessingSpec.php';
+require __DIR__ . '/TaxCodeSpec.php';
+require __DIR__ . '/TaxCodeAdminSpec.php';
+require __DIR__ . '/EnvironmentOptionsSpec.php';
+require __DIR__ . '/AllowedFieldsSpec.php';
+require __DIR__ . '/OrderTermWireSpec.php';
+require __DIR__ . '/PendingRecoverySpec.php';
+require __DIR__ . '/BuyerPhoneSpec.php';
 
 final class TinyAssert
 {
@@ -28,6 +39,8 @@ final class BrandConfigSpec
         $tests = [
             'testBrandLoaderReturnsTwoDefaults',
             'testCheckoutTitleRendersConfiguredValueVerbatim',
+            'testTheEnglishInstallTitleIsClearedOnce',
+            'testAShopThatNeverChoseTermsOffersItsDefaultTerm',
             'testGatewayIdAndMetaIdentityUnchanged',
             'testConstantsMatchBrandConfig',
             'testBrandFileFilterMergesOverDefaults',
@@ -49,11 +62,18 @@ final class BrandConfigSpec
             'testShippingDetailsOmitTrackingWithoutMeta',
             'testShippingDetailsFromShipmentTrackingMeta',
             'testProcessUpdateRefusesTerminalStates',
+            'testRefusedEditMarksTheOrderOnce',
+            'testAdminOrderSaveReachesTheEditPath',
+            'testDeclaresFeatureCompatibility',
+            'testBlocksStylesheetFollowsTheStylesheetItDependsOn',
             'testShippingDetailsCarriedByCreateAndEditBodies',
             'testShippingDetailsFilterOverrides',
             'testShippingDetailsFilterGarbageDiscarded',
-            'testDefaultShippingTaxClassFallbackOnlyAppliesWhenNoRateIsDeclared',
-            'testDefaultShippingTaxClassFieldValidatesAgainstLiveTaxClasses',
+            'testShippingRateFollowsTheControlTable',
+            'testShippingTaxRateComesFromShopRatesAndReconciles',
+            'testRefundTaxRatesComeFromTheParentOrder',
+            'testTaxHelpersKeepTheirPre300CallForms',
+            'testDefaultShippingTaxClassSettingIsRemoved',
             'testLegacyOrderCreateFilterRunsBeforeOrderPayload',
             'testBrandFileReturningNonArrayFallsBackToDefaults',
             'testMetaKeysDeriveFromBrandPrefix',
@@ -62,6 +82,7 @@ final class BrandConfigSpec
             'testAvailabilityGateRemovesGatewayWhenUnmet',
             'testAvailabilityGateKeepsGatewayAtExactMinimum',
             'testAvailabilityGateComparesNetNotGross',
+            'testAvailabilityGateLeavesTheCartAloneBeforeWpLoaded',
             'testAvailabilityGateRestrictsBillingCountry',
             'testSupportedBuyerCountriesNormalisesApiField',
             'testAvailabilityGateJudgesMerchantBuyerCountryAllowlist',
@@ -71,6 +92,8 @@ final class BrandConfigSpec
             'testOrderCreationResolvesTheCompanyAcrossBothAddressRoles',
             'testBlocksTileChoiceDrivesTheSurchargeGate',
             'testBlocksCompanyRowRevealedOnlyWhereTheSearchNeedsIt',
+            'testBlocksCompanyAttributeRevealedOnlyWhereTheSearchNeedsIt',
+            'testADisabledGatewayLeavesTheStoresCompanyFieldAsSet',
             'testOrderCreationRefusesAnUnsupportedBuyerCountry',
             'testOrderIntentRefusesAnUnsupportedBuyerCountry',
             'testOrderCreationRefusesADeclinedOrderIntent',
@@ -94,6 +117,7 @@ final class BrandConfigSpec
             'testUninstallCleanupClearsSettingsAndTermCache',
             'testMerchantRecordFetchSharedAcrossConsumersAndOffTheBlob',
             'testMerchantRecordRefetchedOnIdentityChangingSave',
+            'testMerchantRecordResolvesAMissingOrStaleMerchantId',
             'testNightlyMerchantRecordRefreshScheduledAtLocalMidnight',
             'testOnDemandMerchantRecordRefreshReplacesCacheOrKeepsLastKnownGood',
             'testForcedRefreshEntryPointsSpendOneFetchNotTwo',
@@ -150,7 +174,7 @@ final class BrandConfigSpec
             'testSurchargeTaxTreatmentRequiresExplicitSelection',
             'testPaymentTermsValidationRequiresSelection',
             'testDefaultTermCoercedToOfferedSet',
-            'testOrderPayloadCarriesSelectedAndAvailableTerms',
+            'testOrderPayloadCarriesSelectedTermOnly',
             'testCartFeeAndOrderPayloadChargeTheSameTerm',
             'testPaymentTermsInvalidPostFallsBackToDefault',
             'testPaymentTermsDisabledMeansNoPayloadTerms',
@@ -172,13 +196,14 @@ final class BrandConfigSpec
             'testSoleTraderRegistryErrorFallsBackToNoSoleTrader',
             'testSoleTraderRegistryRejectsMalformedCountry',
             'testSoleTraderRegistryResponseCachedPerRequest',
+            'testSoleTraderTypesCachedOutsideTheSession',
             'testSoleTraderTokenMintReadsHeaderCaseInsensitively',
             'testSoleTraderTokenMintFailsClosed',
             'testSoleTraderSignupUrlFollowsEnvAndFilter',
             'testEnvironmentModeNormalisesStoredCheckoutEnv',
             'testEnvironmentHostFollowsModeAndBrandTemplate',
             'testLocaleFollowsRequestLocaleWithEnglishFallback',
-            'testCheckoutHostPrefersExplicitModeOverDevSniffing',
+            'testCheckoutHostFollowsStoredModeNotHostname',
             'testServiceHostsShareTheApiHostsEnvironment',
             'testDevHostOverridesAreIndependentAndProductionSafe',
             'testOrderEditNeverCarriesTheOrganisationNumber',
@@ -199,7 +224,7 @@ final class BrandConfigSpec
             'testInvoiceStreamFilenameSanitizesOrderId',
             'testNegativeDiscountGuardPassesLegitimateDiscount',
             'testNegativeDiscountGuardThrowsOnNegativeLineDiscount',
-            'testNegativeDiscountGuardThrowsOnNegativeOrderDiscount',
+            'testOrderDiscountIsFlooredAtZeroAndNeverRefused',
             'testNegativeDiscountGuardNoFalsePositiveFromEarlyRounding',
             'testNegativeDiscountGuardSkipsRefundLineItems',
             'testFxSameCurrencyShortCircuitsWithoutNetwork',
@@ -263,6 +288,7 @@ final class BrandConfigSpec
             'testAboutTooltipEscapesTheBrandProductName',
             'testAboutControlFallsBackIntoTheHiddenPaymentBoxWhenATemplateOverrideWins',
             'testPaymentMethodTemplateIsStillCoreVerbatim',
+            'testTemplatePinIgnoresOnlyPhpComments',
             'testTermChipGroupIsNamedByANonLabelHeading',
             'testPaymentBoxRendersCompanySearchTileSlotBetweenSoleTraderAndIntentMessage',
             'testDeclinedBoxCarriesCompanyTemplate',
@@ -298,12 +324,16 @@ final class BrandConfigSpec
             'testCategorizeVerificationResultDistinguishesFailureReasons',
             'testVerifyApiKeyDistinguishesUnreachableFromNotConfigured',
             'testOnlyARejectedApiKeyRevertsOnSave',
+            'testTheKeyAndEnvironmentSaveAsOnePair',
+            'testTheSavedKeyNeverReachesTheSettingsPage',
+            'testTheVendorNameIsPrintableAsciiOfAtMost255',
             'testApiKeyVerificationStatusCachedAcrossCallsWithinTtl',
             'testOnlyADefinitiveKeyRejectionWithholdsPaymentMethod',
             'testIsAvailableTrueOnlyWhenEnabledAndVerified',
             'testRecordlessOkResponseIsCategorisedButDoesNotWithhold',
             'testUnresolvedMerchantTermsDoNotWithholdPaymentMethod',
             'testCheckoutWindowTwoincSuppressedOnVerificationFailure',
+            'testADisabledGatewayStandsCompanySearchDown',
             'testVerifyApiKeyMalformedResponseNotMiscategorizedAsNotConfigured',
             'testAdminLiveVerificationWarmsCheckoutCache',
             'testSettingsScreenVerificationDoesNotFireOnOtherAdminPages',
@@ -326,12 +356,18 @@ final class BrandConfigSpec
             'testFulfilmentTriggerStatusDoesNotFireForUnconfiguredStatus',
             'testFulfilmentTriggerExcludesCancelledAndRefundedFromOptionsAndStoredValue',
             'testCancelledOrderNeverMisdispatchesAsFulfilmentEvenIfConfiguredAsTrigger',
+            'testStatusChangeIsSentToTwoOnceOnEveryWooCommercePath',
+            'testStatusChangeSendsNothingForAnUnconfiguredGateway',
+            'testLegacyBulkActionReportsTheStatusChangeWithoutSendingAgain',
             'testShouldDisableSslVerifyFollowsToggleInEveryEnvironment',
             'testPaymentSubtitlePrefersMerchantFreeTextOverBrandTagline',
             'testPaymentSubtitleOfOnlyDroppedMarkupEmitsNoElement',
             'testPaymentSubtitleFallsBackToBrandTaglineWhenBlank',
             'testBrandTaglineIsEscapedAndAnEmptyResultEmitsNoElement',
             'testTaxSubtotalsRequiredWhenMerchantOptsIn',
+            'testRefundTaxSubtotalsFollowTheValidateTaxSubtotalsSetting',
+            'testTaxSubtotalsSettingMatchesTheOtherPlugins',
+            'testOnlyThePaymentTermsFeeIsSentAsBuyerFee',
             'testTaxSubtotalsSettingIsOnByDefaultForNewInstalls',
             'testSeTaxSubtotalsBackfill',
             'testSeTaxSubtotalsBackfillDoesNotUndoAMerchantOptOut',
@@ -363,6 +399,8 @@ final class BrandConfigSpec
             'testApiProxyRelaysUpstreamBodyAndStatusVerbatim',
             'testApiProxyRelaysAnEmptyUpstreamBodyAsAnObject',
             'testApiProxyCompanyLookupKeepsTheIdToOnePathSegment',
+            'testPostcodeFormatFitsTheCountrysWrittenFormOrLeavesItAlone',
+            'testApiProxyCompanyLookupRelaysPostcodesAsTheirCountryWritesThem',
             'testApiProxyEveryEndpointAuthenticatesWithTheApiKey',
             'testApiProxyPaymentTermsResolvesTheMerchantServerSide',
             'testApiProxyOrderIntentPostsTheDecodedBodyOrRefuses',
@@ -393,6 +431,7 @@ final class BrandConfigSpec
             'testRateLimitRefusesEveryWcAjaxHandlerBeforeItReachesTheApi',
             'testRateLimitRefusesTheNonProxyHandlersToo',
             'testEveryWithholdingBranchNamesItsReasonInTheLog',
+            'testTheBasketCurrencyDecidesWhetherTwoIsOffered',
             'testTheGateLogNamesWhichConditionRefused',
             'testTheHealthChecklistNamesWhyTheMethodIsAbsent',
             'testTheHealthChecklistNamesTheBrandBillingCountryGate',
@@ -409,10 +448,48 @@ final class BrandConfigSpec
 
 
     /**
-     * ABN-518. Every branch that withholds the method writes a line naming
+     * Every branch that withholds the method writes a line naming
      * the reason: the merchant has no other way to tell a switched-off
      * gateway from a rejected key.
      */
+    /** Given a basket in some currency; When checkout asks for methods; Then Two is offered only in a currency it invoices in. */
+    private static function testTheBasketCurrencyDecidesWhetherTwoIsOffered(): void
+    {
+        // [basket currency, offered, why]
+        $cases = [
+            ['NOK', true, 'Norwegian krone is invoiced'],
+            ['GBP', true, 'pound sterling is invoiced'],
+            ['SEK', true, 'Swedish krona is invoiced'],
+            ['USD', true, 'US dollar is invoiced'],
+            ['DKK', true, 'Danish krone is invoiced'],
+            ['EUR', true, 'euro is invoiced'],
+            ['CHF', false, 'Swiss franc is not'],
+            ['PLN', false, 'Polish zloty is not'],
+        ];
+        foreach ($cases as [$currency, $offered, $description]) {
+            $GLOBALS['__twoinc_test_currency'] = $currency;
+            $GLOBALS['__twoinc_test_logs'] = [];
+            WC_Twoinc::reset_withhold_log_guard();
+            $gateway = new class () extends WC_Twoinc {
+                public $enabled = 'yes';
+
+                public function __construct()
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                }
+
+                public function get_api_key_verification_status()
+                {
+                    return ['status' => 'ok', 'code' => 200, 'body' => null];
+                }
+            };
+            TinyAssert::same($offered, $gateway->is_available(), $description);
+            $logged = implode("\n", array_column($GLOBALS['__twoinc_test_logs'], 'message'));
+            TinyAssert::same(!$offered, strpos($logged, "basket currency $currency") !== false, $description . ": logged [$logged]");
+        }
+        unset($GLOBALS['__twoinc_test_currency']);
+    }
+
     private static function testEveryWithholdingBranchNamesItsReasonInTheLog(): void
     {
         $make_gateway = static function (array $options, $verify_code, $record) {
@@ -446,7 +523,7 @@ final class BrandConfigSpec
                     return true;
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     if (strpos($endpoint, 'verify_api_key') !== false) {
                         return $this->verify_code === 200
@@ -522,7 +599,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-518. Four conditions shared one log line that dumped the basket
+     * Four conditions shared one log line that dumped the basket
      * without saying which of them refused.
      */
     private static function testTheGateLogNamesWhichConditionRefused(): void
@@ -600,7 +677,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-518. The settings page answers "why is it not in my checkout?"
+     * The settings page answers "why is it not in my checkout?"
      * without a log file.
      */
     private static function testTheHealthChecklistNamesWhyTheMethodIsAbsent(): void
@@ -660,7 +737,7 @@ final class BrandConfigSpec
                         'checked_on' => 0,
                         'attempted_on' => 0,
                         'count' => $this->terms_state === 'resolved' ? 1 : 0,
-                        // ABN-537's keys: the display reads both.
+                        // Both freshness keys: the display reads both.
                         'stale' => $this->terms_state !== 'resolved',
                         'refresh_failed' => $this->terms_state === 'fetch_failed',
                     ];
@@ -691,7 +768,7 @@ final class BrandConfigSpec
                     return [30];
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     return $this->verify_code === 200
                         ? ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])]
@@ -718,7 +795,7 @@ final class BrandConfigSpec
                 'a definitive rejection names both fields'],
             ['yes', [], 503, null, null, null, 'resolved',
                 'Shown at checkout',
-                'ABN-533: a transient verdict falls through to the cached record and withholds nothing'],
+                'a transient verdict falls through to the cached record and withholds nothing'],
             ['yes', ['surcharge_type' => 'not-a-method'], 200, null, null, null, 'resolved',
                 'the saved surcharge method is not recognised. Check "Surcharge method".',
                 'an unrecognised stored surcharge method names its own admin field'],
@@ -730,7 +807,7 @@ final class BrandConfigSpec
                 'whether the fee can be priced depends on the basket currency, so it is a constraint'],
             ['yes', [], 200, null, null, null, 'none_offered',
                 'Shown at checkout',
-                "ABN-533's companion ruling offers the tile with an empty term set"],
+                "the companion ruling offers the tile with an empty term set"],
             ['yes', [], 200, null, null, null, 'fetch_failed',
                 'Shown at checkout',
                 'and a failed terms read withholds nothing either'],
@@ -781,7 +858,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-518. A brand overlay that restricts billing countries withholds the
+     * A brand overlay that restricts billing countries withholds the
      * method for every other buyer, and no local setting says so.
      */
     private static function testTheHealthChecklistNamesTheBrandBillingCountryGate(): void
@@ -795,8 +872,16 @@ final class BrandConfigSpec
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
             }
 
+            public function get_merchant_available_terms(): array
+            {
+                return [30];
+            }
+
             public function get_option($key, $empty_value = null)
             {
+                if ($key === 'payment_terms_days') {
+                    return [30];
+                }
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
@@ -844,7 +929,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-518: a malformed buyer-country payload is a contract break, not a
+     * A malformed buyer-country payload is a contract break, not a
      * deliberate empty allowlist, and an unfetched profile has an unknown
      * floor rather than none.
      */
@@ -926,7 +1011,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-515 review: an install upgraded before the attempt stamp existed has
+     * An install upgraded before the attempt stamp existed has
      * a successful read to report, so "no attempt" would contradict it, and a
      * shop with no key saved has nothing to retry.
      */
@@ -977,7 +1062,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-515. An unresolved term set left the merchant with a cause but no
+     * An unresolved term set left the merchant with a cause but no
      * time and no field to act on.
      */
     private static function testTheTermsNoticeCarriesTheLastAttemptAndTheFieldsToCheck(): void
@@ -1086,7 +1171,7 @@ final class BrandConfigSpec
         WC()->cart = null;
         WC()->customer = null;
         WC()->session = null;
-        unset($GLOBALS['__twoinc_test_tax_classes'], $GLOBALS['__twoinc_test_tax_rates'], $GLOBALS['__twoinc_test_find_rates'], $GLOBALS['__twoinc_test_display_incl_tax']);
+        unset($GLOBALS['__twoinc_test_tax_classes'], $GLOBALS['__twoinc_test_tax_rates'], $GLOBALS['__twoinc_test_find_rates'], $GLOBALS['__twoinc_test_find_rates_args'], $GLOBALS['__twoinc_test_display_incl_tax']);
         unset($GLOBALS['__twoinc_test_located_template']);
         remove_all_filters('woocommerce_locate_template');
         foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'twoinc_payment_validation_error', 'twoinc_sole_trader_signup_url', 'twoinc_shipping_details'] as $tag) {
@@ -1156,7 +1241,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-529. The payment method title is the merchant's configured Title
+     * The payment method title is the merchant's configured Title
      * verbatim: no term length appended and no placeholder substitution, which
      * is what the Magento, Magento Hyva and PrestaShop tiles do.
      */
@@ -1168,12 +1253,15 @@ final class BrandConfigSpec
             ['Business invoice - %s days', 'Business invoice - %s days', 'a placeholder is literal text, not a substitution site'],
             ['5% on invoice', '5% on invoice', 'a literal percent survives'],
             ['Faktura & "kredit" <30 dagar>', 'Faktura & "kredit" <30 dagar>', 'quotes, ampersands and angle brackets reach core unaltered'],
-            ['   ', 'Two', 'a whitespace-only title falls back to the brand product name'],
-            ['', 'Two', 'an empty title falls back to the brand product name'],
-            [null, 'Business invoice', 'a shop that never saved the setting gets the shipped default, which carries no placeholder'],
+            ['   ', 'Business invoice', 'a whitespace-only title falls back to the default title'],
+            ['', 'Business invoice', 'an empty title falls back to the default title'],
+            [null, 'Business invoice', 'a shop that never saved the setting gets the default title'],
+            ['', 'Bedriftsfaktura', 'the default title is in the shop\'s language', ['Business invoice' => 'Bedriftsfaktura']],
         ];
 
-        foreach ($cases as [$stored, $expected, $description]) {
+        foreach ($cases as $case) {
+            [$stored, $expected, $description] = $case;
+            $GLOBALS['__twoinc_test_translations'] = $case[3] ?? [];
             $gateway = self::save_gateway(true);
             $gateway->init_form_fields();
             $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()] = $stored === null
@@ -1183,6 +1271,156 @@ final class BrandConfigSpec
 
             TinyAssert::same($expected, $gateway->get_pay_title(), $description);
         }
+        $GLOBALS['__twoinc_test_translations'] = [];
+        $fresh = self::save_gateway(true);
+        $fresh->init_form_fields();
+        TinyAssert::same(['', 'Business invoice'], [$fresh->form_fields['title']['default'], $fresh->form_fields['title']['placeholder']], 'nothing is stored as the title at install; the field shows the default as its placeholder');
+    }
+
+    /**
+     * Given a title an earlier version stored at install in English; When the
+     * plugin loads once; Then it is cleared so the default shows in the shop's
+     * language, and nothing else is touched (TWO-27109).
+     */
+    private static function testTheEnglishInstallTitleIsClearedOnce(): void
+    {
+        $option_key = 'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings';
+        $done = WC_Twoinc_Brand::prefixed_name('english_install_title_cleared');
+        // [saved title (null: no settings row), already done, title after, why]
+        $cases = [
+            ['Pay with Tillit', false, '', 'the oldest install title'],
+            ['Pay in 15 days with invoice', false, '', 'the 15-day install title'],
+            ['Business invoice 30 days', false, '', 'the 30-day install title'],
+            ['Business invoice %s days', false, '', 'the placeholder install title'],
+            ['Business invoice - %s days', false, '', 'the dashed placeholder install title'],
+            ['Business invoice', false, '', 'the latest install title'],
+            ['Business invoice ', false, 'Business invoice ', 'only an exact match: a trailing space is an edit'],
+            ['business invoice', false, 'business invoice', 'only an exact match: case is an edit'],
+            ['Faktura', false, 'Faktura', 'a merchant title is kept'],
+            ['Business invoice', true, 'Business invoice', 'once done, a default title typed later is kept'],
+            [null, false, null, 'a fresh install has nothing to clear and gains no settings row'],
+        ];
+        foreach ($cases as [$title, $already, $want, $description]) {
+            $GLOBALS['__twoinc_test_options'] = $already ? [$done => '1'] : [];
+            if ($title !== null) {
+                $GLOBALS['__twoinc_test_options'][$option_key] = ['title' => $title, 'payment_subtitle' => 'Receive the invoice via EHF and PDF'];
+            }
+            new WC_Twoinc();
+            new WC_Twoinc();
+            $row = get_option($option_key, null);
+            TinyAssert::same($want, is_array($row) ? ($row['title'] ?? null) : null, $description);
+            if ($title !== null) {
+                TinyAssert::same('Receive the invoice via EHF and PDF', $row['payment_subtitle'] ?? null, $description . ': the subtitle is never touched');
+            }
+            TinyAssert::same('1', get_option($done), $description . ': marked done');
+        }
+        $GLOBALS['__twoinc_test_options'] = [];
+    }
+
+    /**
+     * A shop that never saved a term selection offers the account's default
+     * term, the one its orders were booked on, so the refusal of an empty
+     * offered set does not turn it away (TWO-27109).
+     */
+    private static function testAShopThatNeverChoseTermsOffersItsDefaultTerm(): void
+    {
+        $option_key = 'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings';
+        $absent = 'absent';
+        // [settings row (null: none), record read, account default, offered, selection after, logged, why]
+        $cases = [
+            [['title' => 'Faktura'], true, 30, [14, 30, 60], [30], false, 'never saved: the default term is ticked'],
+            [null, true, 30, [14, 30], [30], false, 'a fresh install that never opened the settings: the same'],
+            [['api_key' => 'key', 'payment_terms_days' => []], true, 30, [14, 30], [30], false, 'the [] a first key save stores before the record is read is not a choice'],
+            [['merchant_id' => 'mid', 'payment_terms_days' => ''], true, 30, [14, 30], [30], false, 'nor is the blank WooCommerce persists from its own read of the unset field'],
+            [['payment_terms_days' => [60]], true, 30, [30, 60], [60], false, 'an existing selection is kept'],
+            [['payment_terms_custom_days' => '45'], true, 30, [30, 45], $absent, false, 'a custom term is a selection too'],
+            [['title' => 'Faktura'], true, 45, [14, 30], $absent, true, 'a default Two does not offer: nothing ticked, and the log says so'],
+            [['title' => 'Faktura'], true, 0, [14, 30], $absent, true, 'no account default: nothing ticked, and the log says so'],
+            [['title' => 'Faktura'], false, 30, [14, 30], $absent, false, 'the record not read yet: nothing judged'],
+        ];
+        foreach ($cases as [$row, $read, $default, $offered, $want, $logged, $description]) {
+            $GLOBALS['__twoinc_test_options'] = [
+                // Past the upgrade's one-time drop of a made-up default, covered by the row below.
+                WC_Twoinc_Brand::prefixed_name('merchant_due_in_days_dropped') => 'yes',
+                WC_Twoinc_Brand::prefixed_name('merchant_due_in_days') => $default,
+                WC_Twoinc_Brand::prefixed_name('merchant_available_terms') => json_encode($offered),
+            ];
+            if ($read) {
+                $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on')] = time();
+            }
+            if ($row !== null) {
+                $GLOBALS['__twoinc_test_options'][$option_key] = $row;
+            }
+            $GLOBALS['__twoinc_test_logs'] = [];
+            new WC_Twoinc();
+            new WC_Twoinc();
+            $after = get_option($option_key, null);
+            $selection = is_array($after) && array_key_exists('payment_terms_days', $after) ? $after['payment_terms_days'] : $absent;
+            TinyAssert::same($want, $selection, $description);
+            $warnings = array_values(array_filter(array_column($GLOBALS['__twoinc_test_logs'], 'message'), static function ($m) {
+                return strpos($m, 'No payment term is ticked') !== false;
+            }));
+            TinyAssert::same($logged ? 1 : 0, count($warnings), $description . ': logged once at most');
+        }
+
+        // With no API key saved the read cannot run, so nothing is queued, on any request.
+        $GLOBALS['__twoinc_test_options'] = [
+            $option_key => ['title' => 'Faktura'],
+            WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on') => time(),
+            WC_Twoinc_Brand::prefixed_name('merchant_due_in_days_dropped') => 'yes',
+        ];
+        $GLOBALS['__twoinc_test_as_schedule_calls'] = [];
+        $GLOBALS['__twoinc_test_as_scheduled'] = [];
+        new WC_Twoinc();
+        TinyAssert::same([], $GLOBALS['__twoinc_test_as_schedule_calls'], 'no key: no background read is queued');
+
+        // The upgrade itself: its one-time drop leaves no default, so the record is read again at once.
+        $GLOBALS['__twoinc_test_options'] = [
+            $option_key => ['api_key' => 'key', 'merchant_id' => 'mid'],
+            WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on') => time(),
+            WC_Twoinc_Brand::prefixed_name('merchant_due_in_days') => 14,
+            WC_Twoinc_Brand::prefixed_name('merchant_available_terms') => json_encode([14, 30]),
+        ];
+        $GLOBALS['__twoinc_test_http_response'] = ['response' => ['code' => 200], 'body' => json_encode(['id' => 'mid', 'due_in_days' => 30, 'available_terms' => [14, 30]])];
+        $GLOBALS['__twoinc_test_http_calls'] = [];
+        $GLOBALS['__twoinc_test_as_schedule_calls'] = [];
+        $GLOBALS['__twoinc_test_as_scheduled'] = [];
+        WC_Twoinc::reset_merchant_record_memo();
+        new WC_Twoinc();
+        new WC_Twoinc();
+        TinyAssert::same([], $GLOBALS['__twoinc_test_http_calls'], 'the request that builds the gateway, perhaps a buyer\'s, fetches nothing');
+        TinyAssert::same(
+            [['hook' => WC_Twoinc::merchant_record_refresh_hook(), 'unique' => true, 'async' => true]],
+            $GLOBALS['__twoinc_test_as_schedule_calls'],
+            'the record is read again in the background, queued once'
+        );
+        TinyAssert::same(null, get_option($option_key)['payment_terms_days'] ?? null, 'nothing is ticked on the dropped default');
+        WC_Twoinc::reset_merchant_record_memo();
+        (new WC_Twoinc())->refresh_merchant_record_caches(true);
+        TinyAssert::same([30], get_option($option_key)['payment_terms_days'] ?? null, 'the background read ticks the default the record gives, not the one dropped');
+        unset($GLOBALS['__twoinc_test_http_response']);
+        $GLOBALS['__twoinc_test_as_scheduled'] = [];
+
+        // The lazy path: the first merchant record read seeds the shop that has none.
+        $GLOBALS['__twoinc_test_options'] = [$option_key => ['api_key' => 'key', 'merchant_id' => 'mid']];
+        WC_Twoinc::reset_merchant_record_memo();
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->init_settings();
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
+            {
+                return ['response' => ['code' => 200], 'body' => json_encode(['id' => 'mid', 'due_in_days' => 30, 'available_terms' => [14, 30]])];
+            }
+        };
+        TinyAssert::same(true, $gateway->refresh_merchant_record_caches(true), 'the record is read');
+        TinyAssert::same([30], get_option($option_key)['payment_terms_days'] ?? null, 'the first record read ticks the default term');
+        TinyAssert::same([30], WC_Twoinc_Payment_Terms::get_available_terms($gateway), 'and it is offered at once');
+        WC_Twoinc::reset_merchant_record_memo();
+        $GLOBALS['__twoinc_test_options'] = [];
     }
 
     private static function testBrandLoaderReturnsTwoDefaults(): void
@@ -1444,6 +1682,7 @@ final class BrandConfigSpec
             public function __construct()
             {
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->enabled = 'yes';
             }
 
             public function get_option($key, $empty_value = null)
@@ -1757,7 +1996,7 @@ final class BrandConfigSpec
             return $payload;
         }, 10, 2);
 
-        $body = WC_Twoinc_Helper::compose_twoinc_edit_order(new StubOrder(), 'IT', 'Project X', '', '');
+        $body = WC_Twoinc_Helper::compose_twoinc_edit_order(new StubOrder(), 'IT', 'Project X', '');
 
         TinyAssert::same('Brand line', $body['line_items'][0]['name']);
         TinyAssert::same('Overlay Vendor', $body['vendor_name']);
@@ -1900,6 +2139,184 @@ final class BrandConfigSpec
         TinyAssert::same(true, $method->invoke($gateway, $order, $twoinc_meta));
     }
 
+    /** TWO-26171: a refused admin edit marks the order once; tracking, an unchanged save and later saves do not. */
+    private static function testRefusedEditMarksTheOrderOnce(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+            }
+        };
+        $method = new ReflectionMethod(WC_Twoinc::class, 'process_update_twoinc_order');
+        $method->setAccessible(true);
+        $twoinc_meta = [
+            'order_reference' => 'test-order-reference', 'company_id' => '912345678', 'department' => '', 'project' => '',
+            'purchase_order_number' => '', 'invoice_emails' => [], 'payment_reference_message' => '', 'payment_reference_ocr' => '',
+            'payment_reference' => '', 'payment_reference_type' => '', 'vendor_name' => '',
+        ];
+        $hash_key = WC_Twoinc_Brand::meta_key('invoice_hash');
+        $marker_key = WC_Twoinc_Brand::meta_key('not_sent_at');
+        $new_order = function (float $total) {
+            return new class ($total) extends StubOrder {
+                private $total;
+
+                public function __construct(float $total)
+                {
+                    $this->total = $total;
+                }
+
+                public function get_total()
+                {
+                    return $this->total;
+                }
+            };
+        };
+        $tracking = [['tracking_provider' => 'dhl', 'tracking_number' => 'LATE-1']];
+
+        // [accepted total, total now, tracking added, already marked, baseline stored, trigger, notes, marked, baseline after, description]
+        $cases = [
+            [125.0, 125.0, false, false, true, 'admin_edit', 0, false, true, 'unchanged save'],
+            [125.0, 125.0, true, false, true, 'admin_edit', 0, false, true, 'tracking number added after fulfilment'],
+            [125.0, 150.0, false, false, true, 'admin_edit', 1, true, true, 'amount edited after fulfilment'],
+            [125.0, 150.0, false, true, true, 'admin_edit', 0, true, true, 'second refused save'],
+            [125.0, 150.0, false, false, false, 'admin_edit', 0, false, true, 'order from before the invoice hash takes a baseline'],
+            [125.0, 150.0, false, false, true, 'tracking_number', 0, false, true, 'tracking push is not an admin edit'],
+        ];
+        foreach ($cases as [$accepted, $now, $add_tracking, $marked, $baseline, $trigger, $notes, $marked_after, $baseline_after, $desc]) {
+            $order = $new_order($now);
+            $order->meta[WC_Twoinc_Brand::meta_key('order_state')] = 'FULFILLED';
+            if ($baseline) {
+                $order->meta[$hash_key] = WC_Twoinc_Helper::hash_order_pair($new_order($accepted), $twoinc_meta)[1];
+            }
+            if ($marked) {
+                $order->meta[$marker_key] = '2026-10-01 09:00';
+            }
+            if ($add_tracking) {
+                $order->meta['_wc_shipment_tracking_items'] = $tracking;
+            }
+            TinyAssert::same(false, $method->invoke($gateway, $order, $twoinc_meta, false, $trigger), "$desc: refused");
+            TinyAssert::same($notes, count($order->notes), "$desc: notes");
+            TinyAssert::same($marked_after, ($order->meta[$marker_key] ?? '') !== '', "$desc: marker");
+            TinyAssert::same($baseline_after, ($order->meta[$hash_key] ?? '') !== '', "$desc: baseline");
+        }
+
+        // The marker is shown on the order page.
+        $order = $new_order(125.0);
+        $order->payment_method = WC_Twoinc_Brand::get('gateway_id');
+        $order->meta[$marker_key] = '2026-10-01 09:00';
+        ob_start();
+        $gateway->add_invoice_credit_note_urls($order);
+        $html = ob_get_clean();
+        TinyAssert::true(strpos($html, 'since 2026-10-01 09:00 UTC were not sent to') !== false, 'marker shown: ' . $html);
+    }
+
+    /** TWO-26205: WooCommerce is told the plugin supports HPOS and the checkout blocks. */
+    private static function testDeclaresFeatureCompatibility(): void
+    {
+        $source = file_get_contents(__DIR__ . '/../../tillit-payment-gateway.php');
+        $cases = [
+            ["add_action('before_woocommerce_init', 'twoinc_declare_feature_compatibility');", 'declared before WooCommerce initialises'],
+            ["declare_compatibility('custom_order_tables', __FILE__, true)", 'High-Performance Order Storage'],
+            ["declare_compatibility('cart_checkout_blocks', __FILE__, true)", 'cart and checkout blocks'],
+        ];
+        foreach ($cases as [$needle, $desc]) {
+            TinyAssert::true(strpos($source, $needle) !== false, $desc);
+        }
+    }
+
+    /**
+     * TWO-27181: WordPress drops a stylesheet whose dependency is not
+     * registered, and logs it. The Checkout block stylesheet is enqueued only
+     * right after the stylesheet it depends on, never from the Blocks
+     * integration, which WooCommerce calls during init on every request.
+     */
+    private static function testBlocksStylesheetFollowsTheStylesheetItDependsOn(): void
+    {
+        $main = (string) file_get_contents(dirname(__DIR__, 2) . '/tillit-payment-gateway.php');
+        $blocks = (string) file_get_contents(dirname(__DIR__, 2) . '/class/WC_Twoinc_Blocks_Support.php');
+        preg_match('/function wc_twoinc_enqueue_styles\(\)\s*\{(.*?)\n\}/s', $main, $match);
+        $body = $match[1] ?? '';
+        $base = strpos($body, "wp_enqueue_style('twoinc-payment-gateway-css'");
+        $skin = strpos($body, "'twoinc-blocks-checkout'");
+        $cases = [
+            [$base !== false, 'the storefront enqueues the base stylesheet'],
+            [$base !== false && $skin !== false && $base < $skin, 'and the Checkout block stylesheet after it'],
+            [preg_match("/'twoinc-blocks-checkout',[^;]*\\['twoinc-payment-gateway-css'\\]/s", $body) === 1, 'naming it as its dependency'],
+            [strpos($blocks, 'wp_enqueue_style') === false, 'the Blocks integration enqueues no stylesheet'],
+        ];
+        foreach ($cases as [$holds, $description]) {
+            TinyAssert::true($holds, $description);
+        }
+    }
+
+    /** TWO-26175: the admin order-form save (legacy and HPOS screens) reaches the edit path for configured Two orders only. */
+    private static function testAdminOrderSaveReachesTheEditPath(): void
+    {
+        $source = file_get_contents(__DIR__ . '/../../tillit-payment-gateway.php');
+        TinyAssert::true(
+            strpos($source, "add_action('woocommerce_process_shop_order_meta', 'WC_Twoinc::on_admin_order_save', 45, 1);") !== false,
+            'registered at plugins_loaded, after WC_Meta_Box_Order_Data::save (priority 40)'
+        );
+        TinyAssert::true(
+            strpos(file_get_contents(__DIR__ . '/../../class/WC_Twoinc.php'), "'wp_after_insert_post'") === false,
+            'the post-screen-only hook is gone'
+        );
+        TinyAssert::true((new ReflectionMethod(WC_Twoinc::class, 'on_admin_order_save'))->isStatic(), 'static, so no gateway instance is needed to register it');
+
+        $make_gateway = function (string $api_key) {
+            return new class ($api_key) extends WC_Twoinc {
+                private $api_key;
+
+                public function __construct(string $api_key)
+                {
+                    $this->api_key = $api_key;
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $key === 'api_key' ? $this->api_key : ($empty_value ?? '');
+                }
+
+                public function get_merchant_id()
+                {
+                    return '42';
+                }
+            };
+        };
+        $marker_key = WC_Twoinc_Brand::meta_key('not_sent_at');
+
+        $two = WC_Twoinc_Brand::get('gateway_id');
+        // [payment method, order type, api key, order found, marked, description]
+        $cases = [
+            [$two, 'shop_order', 'key', true, true, 'a Two order edit is sent through the edit path'],
+            ['bacs', 'shop_order', 'key', true, false, 'another gateway\'s order is left alone'],
+            [$two, 'shop_subscription', 'key', true, false, 'another order type saved on its own screen is left alone'],
+            [$two, 'shop_order', '', true, false, 'an unconfigured gateway sends nothing'],
+            [$two, 'shop_order', 'key', false, false, 'an unknown order id is ignored'],
+        ];
+        foreach ($cases as [$payment_method, $type, $api_key, $found, $marked, $desc]) {
+            // A fulfilled order whose invoice changed since Two last accepted it: reaching the
+            // edit path as an admin edit is what sets the refused-edit marker (TWO-26171).
+            $order = new StubOrder();
+            $order->payment_method = $payment_method;
+            $order->type = $type;
+            $order->meta = [
+                WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order-1',
+                WC_Twoinc_Brand::meta_key('merchant_id') => '42',
+                WC_Twoinc_Brand::meta_key('order_state') => 'FULFILLED',
+                WC_Twoinc_Brand::meta_key('invoice_hash') => 'hash-of-an-earlier-invoice',
+                'vendor_name' => 'Vendor',
+                'company_id' => '912345678',
+            ];
+            $GLOBALS['__twoinc_test_wc_orders'] = $found ? [42 => $order] : [];
+            self::withGatewayInstance($make_gateway($api_key), function () {
+                WC_Twoinc::on_admin_order_save(42);
+            });
+            TinyAssert::same($marked, ($order->meta[$marker_key] ?? '') !== '', "$desc: marker");
+        }
+        $GLOBALS['__twoinc_test_wc_orders'] = [];
+    }
+
     private static function testShippingDetailsCarriedByCreateAndEditBodies(): void
     {
         $order = new StubOrder();
@@ -1916,7 +2333,7 @@ final class BrandConfigSpec
             '',
             []
         );
-        $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, 'IT', 'Project X', '', '');
+        $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, 'IT', 'Project X', '');
 
         TinyAssert::same('BR-7', $create['shipping_details']['tracking_number']);
         TinyAssert::same('bring', $create['shipping_details']['carrier_name']);
@@ -1958,151 +2375,348 @@ final class BrandConfigSpec
         TinyAssert::true(isset($body['shipping_details']['expected_delivery_date']));
     }
 
-    /**
-     * TWO-25498: "Default shipping tax class" fills the gap
-     * magento-plugin's configured shipping-tax-rate fallback and
-     * prestashop-plugin's PS_TWO_DEFAULT_SHIPPING_TAX_RULES_GROUP already
-     * close — a shipping method WooCommerce declares no tax rate for (e.g. a
-     * carrier/click-and-collect module with no tax class of its own) but
-     * which was genuinely charged tax. A declared rate always wins; a
-     * genuinely untaxed line stays untaxed; the fallback is consulted only
-     * in the gap between those two, and only a rate-table row flagged for
-     * shipping counts.
-     */
-    private static function testDefaultShippingTaxClassFallbackOnlyAppliesWhenNoRateIsDeclared(): void
+    /** TWO-26072: shipping rate from the order's tax rows, else (option on) WooCommerce's own shipping tax class, which must reconcile. */
+    private static function testShippingTaxRateComesFromShopRatesAndReconciles(): void
     {
-        $method = new ReflectionMethod(WC_Twoinc_Helper::class, 'get_shipping_tax_rate');
-        $method->setAccessible(true);
-        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
-        $prop->setAccessible(true);
-
-        $declaredTaxRow = new class () implements ArrayAccess {
-            public function get_rate_id()
-            {
-                return 7;
-            }
-            public function get_rate_percent()
-            {
-                return 20.0;
-            }
-            #[\ReturnTypeWillChange]
-            public function offsetExists($offset)
-            {
-                return false;
-            }
-            #[\ReturnTypeWillChange]
-            public function offsetGet($offset)
-            {
-                return null;
-            }
-            #[\ReturnTypeWillChange]
-            public function offsetSet($offset, $value)
-            {
-            }
-            #[\ReturnTypeWillChange]
-            public function offsetUnset($offset)
-            {
-            }
+        $row = static function (float $percent, string $shipping = 'yes', string $compound = 'no') {
+            return ['rate' => $percent, 'shipping' => $shipping, 'compound' => $compound, 'label' => 'VAT'];
         };
-
-        $shippingItem = static function (array $declaredTaxes, float $totalTax) {
-            return new class ($declaredTaxes, $totalTax) {
-                private $declaredTaxes;
-                private $totalTax;
-                public function __construct($declaredTaxes, $totalTax)
-                {
-                    $this->declaredTaxes = $declaredTaxes;
-                    $this->totalTax = $totalTax;
-                }
-                public function get_taxes()
-                {
-                    return ['total' => $this->declaredTaxes];
-                }
-                public function get_total_tax()
-                {
-                    return $this->totalTax;
-                }
-            };
-        };
-
-        $order = static function (array $orderTaxes) {
-            return new class ($orderTaxes) {
-                private $orderTaxes;
-                public function __construct($orderTaxes)
-                {
-                    $this->orderTaxes = $orderTaxes;
-                }
-                public function get_taxes()
-                {
-                    return $this->orderTaxes;
-                }
-                public function get_shipping_country()
-                {
-                    return 'NO';
-                }
-                public function get_shipping_state()
-                {
-                    return '';
-                }
-                public function get_shipping_postcode()
-                {
-                    return '0150';
-                }
-                public function get_shipping_city()
-                {
-                    return 'Oslo';
-                }
-                public function get_id()
-                {
-                    return 1;
-                }
-            };
-        };
-
+        $standard25 = ['' => [1 => $row(25.0)]];
+        $reduced12 = ['reduced-rate' => [2 => $row(12.0)]];
+        $compound = ['gst-qst' => [3 => $row(5.0), 4 => $row(10.0, 'yes', 'yes')]];
+        $rows25 = [[1, 25.0, false]];
+        $meta = WC_Twoinc_Brand::meta_key('shipping_tax_rate');
+        $stored12 = [$meta => ['rate' => 0.12, 'name' => 'VAT']];
+        $placed = [WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order'];
+        $base = ['country' => 'GB', 'state' => '', 'postcode' => 'EC1A', 'city' => 'London'];
+        $mismatch = 'refused: does not match';
+        $defaults = [
+            'fallback' => false, 'orderMeta' => [], 'orderTaxes' => [], 'lines' => [[10.0, 0.0, []]], 'shopClass' => null,
+            'filter' => null, 'itemClasses' => [], 'products' => 1, 'shopRates' => [], 'location' => null,
+        ];
+        // [overrides of $defaults; lines are [net, tax, item taxes by rate id, item meta], expected rate(s) or refusal, description]
         $cases = [
-            [[], [], 0.0, '', [], 0.0, 'NA', 'genuinely untaxed shipping stays untaxed, no fallback configured'],
-            [[7 => 5.0], [$declaredTaxRow], 5.0, 'reduced-rate', ['reduced-rate' => [['rate' => 12.0, 'shipping' => 'yes']]], 0.2, '', 'a declared rate always wins over the fallback'],
-            [[], [], 3.0, '', [], 0.0, 'NA', "taxed but unresolved, no fallback configured — stays untaxed (today's behaviour)"],
-            [[], [], 3.0, 'reduced-rate', [], 0.0, 'NA', 'taxed but unresolved, fallback class configured but no matching rate — stays untaxed'],
-            [[], [], 3.0, 'reduced-rate', ['reduced-rate' => [['rate' => 12.0, 'shipping' => 'no']]], 0.0, 'NA', 'a matching rate that excludes shipping is not used'],
-            [[], [], 3.0, 'reduced-rate', ['reduced-rate' => [['rate' => 12.0, 'shipping' => 'yes']]], 0.12, 'Default shipping tax class', 'taxed and unresolved, fallback class has a matching shipping rate'],
-            [[], [], 3.0, 'reduced-rate', ['reduced-rate' => [['rate' => 8.0, 'shipping' => 'yes'], ['rate' => 4.0, 'shipping' => 'yes']]], 0.12, 'Default shipping tax class', 'multiple matching shipping rates sum additively'],
+            [['lines' => [[10.0, 2.5, [1 => 2.5]]], 'orderTaxes' => $rows25], 0.25, 'WC-engine-taxed shipping keeps its declared rate'],
+            [['fallback' => true, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], 0.12, 'fallback on: third-party tax with no rate row resolves from the shop shipping tax class'],
+            [['lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], 0.0, 'fallback off: third-party tax with no rate row is sent as charged at 0%, for the API to validate'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, []]], 'shopClass' => '', 'shopRates' => $standard25], 0.25, 'shop shipping tax class Standard'],
+            [['fallback' => true, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'inherit', 'itemClasses' => ['reduced-rate'], 'shopRates' => $standard25 + $reduced12], 0.12, 'based on cart items takes the cart item class'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, []]], 'shopClass' => 'inherit', 'itemClasses' => ['reduced-rate', ''], 'shopRates' => $standard25 + $reduced12], 0.25, 'based on cart items prefers Standard when a cart item uses it, as core does'],
+            [['fallback' => true, 'lines' => [[10.0, 3.0, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], $mismatch, 'shop rate that does not match the tax charged is refused'],
+            [['fallback' => true, 'lines' => [[10.0, 2.52, []]], 'shopClass' => '', 'shopRates' => $standard25], 0.25, 'rounding within the 0.02 tolerance reconciles'],
+            [['lines' => [[10.0, 1.55, [1 => 0.5, 2 => 1.05]]], 'orderTaxes' => [[1, 5.0, false], [2, 10.0, true]]], 0.155, 'compound order tax rows combine as a + b + ab'],
+            [['fallback' => true, 'lines' => [[10.0, 1.55, []]], 'shopClass' => 'gst-qst', 'shopRates' => $compound], 0.155, 'compound shop rates combine as a + b + ab'],
+            [[], 0.0, 'zero-tax shipping stays untaxed'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, []]]], $mismatch, 'taxed line, shop setting unset and no matching rate: refused, never 0%'],
+            [['fallback' => true, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => ['reduced-rate' => [2 => $row(12.0, 'no')]]], $mismatch, 'taxed line whose only matching rate excludes shipping is refused'],
+            [['fallback' => true, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'inherit', 'shopRates' => $reduced12], $mismatch, 'based on cart items with no taxable cart item leaves shipping untaxed, so a taxed line is refused'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, []]], 'shopClass' => 'inherit', 'products' => 0, 'shopRates' => $standard25], 0.25, 'based on cart items with no product items falls back to Standard, as core does'],
+            [['fallback' => true, 'lines' => [[10.0, 1.2, []]], 'shopClass' => '', 'filter' => 'reduced-rate', 'shopRates' => $standard25 + $reduced12], 0.12, 'the woocommerce_shipping_tax_class filter overrides the class, as core applies it'],
+            [['lines' => [[0.0, 0.0, []]]], [], 'free shipping with a coupon sends no shipping line'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, [1 => 2.5]], [5.0, 0.6, []]], 'orderTaxes' => $rows25, 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], [0.25, 0.12], 'multiple shipping lines each resolve their own rate'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, []]], 'shopClass' => '', 'shopRates' => $standard25, 'location' => $base], 0.25, 'guest with no address resolves at the tax location core defaults to (shop base)'],
+            [['orderMeta' => $placed, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], 0.0, 'edit sync of a placed order with no stored rate is sent as charged at 0%, without reading the shop'],
+            [['fallback' => true, 'orderMeta' => $placed, 'lines' => [[10.0, 1.2, []]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], 0.0, 'edit sync of a placed order with no stored rate ignores the option turned on since'],
+            [['orderMeta' => $placed, 'lines' => [[10.0, 3.0, [], $stored12]], 'shopClass' => 'reduced-rate', 'shopRates' => $reduced12], $mismatch, 'edit sync of a fallback order whose tax no longer reconciles with the stored rate is refused'],
+            [['orderMeta' => $placed, 'lines' => [[10.0, 1.2, [], $stored12]], 'shopClass' => '', 'shopRates' => $standard25], 0.12, 'edit sync of a fallback order uses the rate stored at checkout, not live config'],
         ];
 
-        foreach ($cases as [$declaredTaxes, $orderTaxes, $totalTax, $taxClass, $findRates, $expectedRate, $expectedName, $description]) {
-            $GLOBALS['__twoinc_test_find_rates'] = $findRates;
-            $prop->setValue(null, self::fulfilmentTriggerGateway(['default_shipping_tax_class' => $taxClass]));
-
-            $result = $method->invoke(null, $shippingItem($declaredTaxes, $totalTax), $order($orderTaxes));
-
-            self::assertClose($expectedRate, (float) $result['rate'], $description);
-            TinyAssert::same($expectedName, $result['name'], $description);
-        }
-
-        $prop->setValue(null, null);
+        self::assertShippingRateCases($defaults, $cases);
     }
 
-    /** Same guard the surcharge tax class field already has: a stale/tampered selection must not silently save. */
-    private static function testDefaultShippingTaxClassFieldValidatesAgainstLiveTaxClasses(): void
+    /**
+     * TWO-26117: one row per cell of the shipping rate table. "Populated" is the shop-rates option on; the line's
+     * rate row, or its absence, is what the shop recorded. Rate provided, including 0%: sent as is, unchecked.
+     * No rate, control blank: sent as charged at 0%, unchecked. No rate, control populated: resolved from the
+     * control and reconciled, whatever the line's tax.
+     */
+    private static function testShippingRateFollowsTheControlTable(): void
     {
-        $GLOBALS['__twoinc_test_tax_classes'] = ['Reduced rate'];
+        $shop25 = ['' => [1 => ['rate' => 25.0, 'shipping' => 'yes', 'compound' => 'no', 'label' => 'VAT']]];
+        $rows = [[1, 25.0, false], [2, 0.0, false]];
+        $defaults = [
+            'fallback' => false, 'orderMeta' => [], 'orderTaxes' => $rows, 'lines' => [[10.0, 0.0, []]], 'shopClass' => '',
+            'filter' => null, 'itemClasses' => [], 'products' => 1, 'shopRates' => $shop25, 'location' => null,
+        ];
+        $mismatch = 'refused: does not match';
+        // [overrides of $defaults; lines are [net, tax, item taxes by rate id, item meta, tax status], expected rate or refusal, description]
+        $cases = [
+            [['lines' => [[10.0, 2.5, [1 => 2.5]]]], 0.25, 'rate provided, control blank: sent as declared'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, [1 => 2.5]]]], 0.25, 'rate provided, control populated: sent as declared'],
+            [['lines' => [[10.0, 2.0, [1 => 2.0]]]], 0.25, 'rate provided that does not reconcile, control blank: sent unchecked'],
+            [['fallback' => true, 'lines' => [[10.0, 2.0, [1 => 2.0]]]], 0.25, 'rate provided that does not reconcile, control populated: sent unchecked'],
+            [['lines' => [[10.0, 0.0, [2 => 0.0]]]], 0.0, 'explicit 0% rate, control blank: sent at 0%'],
+            [['fallback' => true, 'lines' => [[10.0, 0.0, [2 => 0.0]]]], 0.0, 'explicit 0% rate, control populated: sent at 0%, not resolved from the control'],
+            [['lines' => [[10.0, 1.2, [2 => 0.0]]]], 0.0, 'explicit 0% rate with tax charged, control blank: sent as charged, unchecked'],
+            [['fallback' => true, 'lines' => [[10.0, 1.2, [2 => 0.0]]]], 0.0, 'explicit 0% rate with tax charged, control populated: sent as charged, unchecked'],
+            [[], 0.0, 'no rate and no tax, control blank: sent at 0%'],
+            [['fallback' => true], $mismatch, 'no rate and no tax, control populated at 25%: resolved from the control and refused'],
+            [['lines' => [[10.0, 2.5, []]]], 0.0, 'no rate with tax charged, control blank: sent as charged at 0%, unchecked'],
+            [['fallback' => true, 'lines' => [[10.0, 2.5, []]]], 0.25, 'no rate with tax charged, control populated: resolved from the control'],
+            [['fallback' => true, 'lines' => [[10.0, 2.0, []]]], $mismatch, 'no rate with tax that does not reconcile, control populated: refused'],
+            [['fallback' => true, 'lines' => [[10.0, 0.0, [], [], 'none']]], 0.0, 'non-taxable shipping method, control populated: no rate, resolves to 0% and reconciles'],
+            [['fallback' => true, 'orderMeta' => ['is_vat_exempt' => 'yes']], 0.0, 'no rate, VAT-exempt buyer, control populated: resolves to 0%, as core charges it, and reconciles'],
+        ];
+        self::assertShippingRateCases($defaults, $cases);
+    }
+
+    private static function assertShippingRateCases(array $defaults, array $cases): void
+    {
+        $meta = WC_Twoinc_Brand::meta_key('shipping_tax_rate');
+        $GLOBALS['__twoinc_test_tax_classes'] = ['Reduced rate', 'GST QST'];
+        $failures = [];
+        foreach ($cases as [$overrides, $expected, $description]) {
+            $c = array_merge($defaults, $overrides);
+            self::setShippingTaxShop($c['fallback'], $c['shopClass'], $c['shopRates']);
+            remove_all_filters('woocommerce_shipping_tax_class');
+            if ($c['filter'] !== null) {
+                add_filter('woocommerce_shipping_tax_class', static function () use ($c) {
+                    return $c['filter'];
+                });
+            }
+            unset($GLOBALS['__twoinc_test_find_rates_args']);
+            $order = new StubTaxOrder(self::stubTaxRows($c['orderTaxes']), $c['orderMeta'], $c['itemClasses'], $c['products']);
+            $order->location = $c['location'] ?? $order->location;
+            $shippings = array_map(static function ($l) {
+                return new StubShippingItem(...$l);
+            }, $c['lines']);
+
+            $sent = null;
+            $failures[] = self::shippingRateCaseFailure($expected, static function () use ($shippings, $order, &$sent) {
+                $lines = WC_Twoinc_Helper::get_line_items([], $shippings, [], $order);
+                // With no merchant handler, the default handler applies the shop-match checks after the hook (TWO-26275).
+                $sent = WC_Twoinc_Helper::check_shop_match(['line_items' => $lines])['line_items'];
+                return implode(',', array_column($sent, 'tax_rate'));
+            }, $description);
+            // Every sent line carries its tax as charged; a rate is stored only when resolved from the control at checkout.
+            $placed = $c['orderMeta'][WC_Twoinc_Brand::prefixed_name('order_id')] ?? '';
+            $charged = array_map(static function ($l) {
+                return WC_Twoinc_Helper::round_amt($l[1]);
+            }, array_values(array_filter($c['lines'], static function ($l) {
+                return round($l[0], 2) || round($l[1], 2);
+            })));
+            if ($sent !== null && array_map('floatval', array_column($sent, 'tax_amount')) !== array_map('floatval', $charged)) {
+                $failures[] = $description . ': tax not sent as charged';
+            }
+            foreach ($c['lines'] as $i => $l) {
+                $store = $sent !== null && $c['fallback'] && !$placed && ($l[2] ?? []) === [] && !isset($l[3][$meta]) && (round($l[0], 2) || round($l[1], 2));
+                if ($store !== (isset($shippings[$i]->meta[$meta]) && !isset($l[3][$meta]))) {
+                    $failures[] = $description . ($store ? ': resolved rate not stored on the line' : ': rate stored on the line');
+                }
+            }
+            $looked_up = $GLOBALS['__twoinc_test_find_rates_args'] ?? null;
+            if ($looked_up !== null && $looked_up['country'] !== $order->location['country']) {
+                $failures[] = $description . ': shop rates looked up away from the order tax location';
+            }
+            $stored = isset($c['lines'][0][3][$meta]) ? null : ($shippings[0]->meta[$meta]['rate'] ?? null);
+            if (!is_string($expected) && $stored !== null && abs($stored - ((array) $expected)[0]) > 1e-9) {
+                $failures[] = $description . ': stored rate is not the rate sent';
+            }
+        }
+        remove_all_filters('woocommerce_shipping_tax_class');
+        self::setShippingTaxShop(false, null, []);
+
+        TinyAssert::same([], array_values(array_filter($failures)), "Failing cases:\n  " . implode("\n  ", array_filter($failures)));
+    }
+
+    /** TWO-26072: a refund line takes the rate of the parent line it refunds, never the refund's restamped rows. */
+    private static function testRefundTaxRatesComeFromTheParentOrder(): void
+    {
+        $parent24 = [[1, 24.0, false]];
+        $restamped = [[1, 25.5, false]];
+        $meta = WC_Twoinc_Brand::meta_key('shipping_tax_rate');
+        $mismatch = 'refused: does not match';
+        $noParent = 'refused: Shipping "Carrier" cannot be refunded';
+        $taxOnly = 'refused: "Carrier" cannot be refunded as tax alone';
+        $taxOnlyProduct = 'refused: "Stub product" cannot be refunded as tax alone';
+        $netOnly = 'refused: "Carrier" has no tax entered: Two refunds a line\'s net amount only together with its tax. Enter the tax refunded for this line as well.';
+        $netOnlyProduct = 'refused: "Stub product" has no tax entered';
+        $zeroRate = ['parentRows' => [[2, 0.0, false]], 'refundRows' => [], 'parent' => [10.0, 0.0, [2 => 0.0]], 'refund' => [-10.0, 0.0, [2 => 0.0]]];
+        $defaults = ['type' => 'shipping', 'refundedId' => 5, 'parentRows' => $parent24, 'refundRows' => $restamped, 'parent' => [10.0, 2.4, [1 => 2.4]], 'refund' => [-10.0, -2.4, [1 => -2.4]], 'create' => false, 'withProduct' => false, 'catalogue' => false, 'decimals' => null];
+        // [overrides of $defaults; parent and refund lines are [net, tax, item taxes by rate id, item meta], expected rate or refusal, description]
+        // create: the line is built for an order request, not a refund. withProduct: the refund also returns a whole
+        // product line, built first. catalogue: the product line's catalogue name differs from its order line name.
+        $cases = [
+            [['type' => 'line_item'], 0.24, 'product refund after a rate change keeps the charged rate'],
+            [['type' => 'fee'], 0.24, 'fee refund after a rate change keeps the charged rate'],
+            [[], 0.24, 'shipping refund after a rate change keeps the charged rate'],
+            [['type' => 'line_item', 'refundRows' => [[1, 0.0, false]]], 0.24, 'product refund after the rate row is deleted keeps the charged rate'],
+            [['type' => 'fee', 'refundRows' => [[1, 0.0, false]]], 0.24, 'fee refund after the rate row is deleted keeps the charged rate'],
+            [['refundRows' => [[1, 0.0, false]]], 0.24, 'shipping refund after the rate row is deleted keeps the charged rate'],
+            [['parentRows' => [[1, 5.0, false], [2, 10.0, true]], 'refundRows' => [[1, 5.0, false], [2, 0.0, false]], 'parent' => [10.0, 1.55, [1 => 0.5, 2 => 1.05]], 'refund' => [-10.0, -1.55, [1 => -0.5, 2 => -1.05]]], 0.155, 'compound shipping refund combines the parent rates'],
+            [['refund' => [-10.0, -5.0, [1 => -5.0]]], 0.24, 'refund of shipping with a rate provided is sent at the charged rate, unchecked'],
+            [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, [], [$meta => ['rate' => 0.12, 'name' => 'VAT']]], 'refund' => [-10.0, -3.0, []]], $mismatch, 'refund of a fallback order whose tax does not reconcile with the stored rate is refused'],
+            [['refund' => [-4.0, -0.96, [1 => -0.96]]], 0.24, 'partial shipping refund'],
+            [['refund' => [0.0, -2.4, [1 => -2.4]]], $taxOnly, 'tax-only shipping refund is refused by name (TWO-26541)'],
+            [['refund' => [-0.004, -2.4, [1 => -2.4]]], $taxOnly, 'shipping refund whose net rounds to zero is refused as tax-only'],
+            [['refund' => [-10.0, 0.0, []]], $netOnly, 'net-only shipping refund at 24% is refused by name (TWO-26638)'],
+            [['refund' => [-10.0, -0.004, [1 => -0.004]]], $netOnly, 'shipping refund whose tax rounds to zero is refused as net-only'],
+            [['refund' => [-0.01, 0.0, []]], 0.24, 'net-only shipping refund with a tiny tax due (0.01 at 24%) is sent'],
+            [['refund' => [-0.08, 0.0, []]], 0.24, 'net-only shipping refund whose tax due is within the 0.02 tolerance (0.08 at 24%: 0.0192) is sent'],
+            [['refund' => [-0.09, 0.0, []]], 0.24, 'net-only shipping refund whose tax due rounds to the 0.02 tolerance (0.09 at 24%: 0.0216) is sent'],
+            [['refund' => [-0.1045, 0.0, []]], 0.24, 'net-only shipping refund is measured on its rounded net (0.1045 sends 0.10: 0.024, not 0.0251)'],
+            [['parentRows' => [[1, 10.0, false]], 'parent' => [10.0, 1.0, [1 => 1.0]], 'refund' => [-0.20, 0.0, []]], 0.10, 'net-only refund at the tolerance (0.20 at 10%: float 0.020000000000000004) is sent'],
+            [['parentRows' => [[1, 25.0, false]], 'parent' => [10.0, 2.5, [1 => 2.5]], 'refund' => [-0.10, 0.0, []]], $netOnly, 'net-only refund of 0.10 at 25% (0.025, PHP rounds half up to 0.03) is refused'],
+            [['parentRows' => [[1, 25.0, false]], 'parent' => [10.0, 2.5, [1 => 2.5]], 'refund' => [-0.12, 0.0, []]], $netOnly, 'net-only refund of 0.12 at 25% (0.03) is refused'],
+            [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, [], [$meta => ['rate' => 0.12, 'name' => 'VAT']]], 'refund' => [-10.0, 0.0, []]], $netOnly, 'net-only refund of a fallback order is refused at the rate stored at checkout'],
+            [['refund' => [-0.6, 0.0, []], 'decimals' => 0], $netOnly, 'net-only shipping refund at 0 price decimals is measured on its rounded net (0.6 sends 1: 0.24)'],
+            [['type' => 'fee', 'refund' => [0.0, -2.4, [1 => -2.4]]], $taxOnly, 'tax-only fee refund is refused by name'],
+            [['type' => 'line_item', 'refund' => [0.0, -2.4, [1 => -2.4]]], $taxOnlyProduct, 'tax-only product refund is refused by name'],
+            [['type' => 'line_item', 'refund' => [0.0, -2.4, [1 => -2.4]], 'catalogue' => true], $taxOnlyProduct, 'tax-only product refund names the order line, not the catalogue product'],
+            [['type' => 'line_item', 'refund' => [0.0, -0.004, [1 => -0.004]]], 0.24, 'product refund of tax that rounds to zero is sent'],
+            [['refund' => [0.004, -2.4, [1 => -2.4]]], $taxOnly, 'shipping refund whose positive net rounds to zero is refused as tax-only'],
+            [['refund' => [-0.4, -2.0, [1 => -2.0]], 'decimals' => 0], $taxOnly, 'shipping refund whose net rounds to zero at the shop price decimals (0) is refused'],
+            [['refund' => [0.0, -2.4, [1 => -2.4]], 'withProduct' => true], $taxOnly, 'refund of a whole product line and a tax-only shipping line is refused as a whole'],
+            [['refund' => [0.0, 2.4, [1 => 2.4]], 'create' => true], 0.24, 'a zero-net taxed shipping line on an order request is not refused: the guard is refund-only'],
+            [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, [], [$meta => ['rate' => 0.12, 'name' => 'VAT']]], 'refund' => [-10.0, -1.2, []]], 0.12, 'refund of a fallback order uses the rate stored at checkout'],
+            [['parentRows' => [], 'refundRows' => [], 'parent' => [10.0, 1.2, []], 'refund' => [-10.0, -1.2, []]], 0.0, 'refund of an order placed with no rate and no stored rate is sent as charged at 0%, without reading the shop'],
+            [['parentRows' => [[2, 0.0, false]], 'refundRows' => [], 'parent' => [10.0, 0.0, [2 => 0.0]], 'refund' => [-10.0, 0.0, [2 => 0.0]]], 0.0, 'refund of shipping with an explicit 0% rate is sent at 0%, with the option on'],
+            [['refundedId' => null], $noParent, 'shipping refund with no parent line (another plugin built the refund) is refused by name'],
+            [['refundedId' => 6], $noParent, 'shipping refund whose parent line was deleted is refused by name'],
+            [['type' => 'line_item', 'refund' => [-10.0, 0.0, []]], $netOnlyProduct, 'net-only product refund at 24% is refused by name'],
+            [['type' => 'line_item', 'refund' => [-10.0, 0.0, []], 'catalogue' => true], $netOnlyProduct, 'net-only product refund names the order line, not the catalogue product'],
+            [['type' => 'fee', 'refund' => [-10.0, 0.0, []]], $netOnly, 'net-only fee refund at 24% is refused by name'],
+            [['type' => 'line_item', 'refund' => [-0.01, 0.0, []]], 0.24, 'net-only product refund too small to carry tax is sent'],
+            [['type' => 'line_item'] + $zeroRate, 0.0, 'net-only product refund of a line charged at 0% is sent'],
+            [['type' => 'fee'] + $zeroRate, 0.0, 'net-only fee refund of a line charged at 0% is sent'],
+            [['refund' => [-10.0, 0.0, []], 'withProduct' => true], $netOnly, 'refund of a whole product line and a net-only shipping line is refused as a whole'],
+            [['type' => 'line_item', 'refundedId' => null], 0.24, 'product refund with no parent line keeps its own tax rows'],
+        ];
+
+        // Option on: after placement only stored data decides, so it must change nothing.
+        self::setShippingTaxShop(true, 'reduced-rate', ['reduced-rate' => [2 => ['rate' => 12.0, 'shipping' => 'yes', 'compound' => 'no', 'label' => 'VAT']]]);
+        $failures = [];
+        foreach ($cases as [$overrides, $expected, $description]) {
+            $c = array_merge($defaults, $overrides);
+            [$net, $tax, $taxes] = $c['refund'];
+            $itemMeta = $c['refundedId'] ? ['_refunded_item_id' => $c['refundedId']] : [];
+            if ($c['type'] === 'line_item') {
+                $item = new StubProductLineItem(['line_total' => $net, 'line_subtotal' => $net, 'line_tax' => $tax, 'taxes' => $taxes, 'meta' => $itemMeta]);
+            } else {
+                $item = new StubShippingItem($net, $tax, $taxes, $itemMeta);
+            }
+            $parent = new StubTaxOrder(self::stubTaxRows($c['parentRows']), [WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order'], [], 1, [5 => new StubShippingItem(...$c['parent'])]);
+            if ($c['catalogue']) {
+                $item['data'] = new class () extends StubProduct {
+                    public function get_name()
+                    {
+                        return 'Catalogue name';
+                    }
+
+                    public function get_description()
+                    {
+                        return '';
+                    }
+
+                    public function get_sku()
+                    {
+                        return '';
+                    }
+                };
+            }
+            $refundItems = [$c['type'] => [$item]];
+            if ($c['withProduct']) {
+                $refundItems['line_item'] = [new StubProductLineItem(['line_total' => -10.0, 'line_subtotal' => -10.0, 'line_tax' => -2.4, 'taxes' => [1 => -2.4], 'meta' => ['_refunded_item_id' => 5]])];
+            }
+            $refund = new StubRefund($refundItems, self::stubTaxRows($c['refundRows']));
+            $GLOBALS['__twoinc_test_price_decimals'] = $c['decimals'];
+            if ($c['decimals'] === null) {
+                unset($GLOBALS['__twoinc_test_price_decimals']);
+            }
+
+            $failures[] = self::shippingRateCaseFailure($expected, static function () use ($refund, $parent, $item, $net, $tax, $c) {
+                $lines = $c['create']
+                    ? WC_Twoinc_Helper::get_line_items([], [$item], [], $parent, false, null, $rates, false)
+                    : WC_Twoinc_Helper::check_shop_match(WC_Twoinc_Helper::compose_twoinc_refund($refund, $net + $tax, $parent))['line_items'];
+                if (round(array_sum(array_column($lines, 'gross_amount')), 2) !== round($net + $tax, 2)) {
+                    return 'lines that do not sum to the refund';
+                }
+                return $lines[0]['tax_rate'];
+            }, $description);
+        }
+        unset($GLOBALS['__twoinc_test_price_decimals']);
+        self::setShippingTaxShop(false, null, []);
+
+        TinyAssert::same([], array_values(array_filter($failures)), "Failing cases:\n  " . implode("\n  ", array_filter($failures)));
+    }
+
+    /** TWO-26072: callers written against 2.x keep working after the 3.0.0 signature changes. */
+    private static function testTaxHelpersKeepTheirPre300CallForms(): void
+    {
+        $order = new StubTaxOrder(self::stubTaxRows([[1, 25.0, false]]), [], [], 1, [5 => new StubShippingItem(10.0, 2.5, [1 => 2.5])]);
+        $GLOBALS['__twoinc_test_wc_orders'][7] = $order;
+        $refund = new StubRefund(['shipping' => [new StubShippingItem(-10.0, -2.5, [1 => -2.5], ['_refunded_item_id' => 5])]], []);
+        try {
+            $subtotals = WC_Twoinc_Helper::get_tax_subtotals([], [new StubShippingItem(10.0, 2.5, [1 => 2.5])], [], $order);
+            $body = WC_Twoinc_Helper::compose_twoinc_refund($refund, -12.5, 'SEK');
+        } catch (Throwable $e) {
+            TinyAssert::same('no error', get_class($e) . ': ' . $e->getMessage(), 'pre-3.0.0 call forms');
+            return;
+        } finally {
+            unset($GLOBALS['__twoinc_test_wc_orders'][7]);
+        }
+        TinyAssert::same(WC_Twoinc_Helper::round_rate(0.25), $subtotals[0]['tax_rate'], 'get_tax_subtotals resolves shipping rates when none are passed');
+        TinyAssert::same('SEK', $body['currency'], 'a currency third argument is still the currency');
+        TinyAssert::same(WC_Twoinc_Helper::round_rate(0.25), $body['line_items'][0]['tax_rate'], 'a currency third argument still takes rates from the parent order');
+    }
+
+    private static function setShippingTaxShop(bool $fallback, ?string $shopClass, array $shopRates): void
+    {
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('shipping_tax_from_shop_rates')] = $fallback ? 'yes' : 'no';
+        $GLOBALS['__twoinc_test_find_rates'] = $shopRates;
+        unset($GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class']);
+        if ($shopClass !== null) {
+            $GLOBALS['__twoinc_test_options']['woocommerce_shipping_tax_class'] = $shopClass;
+        }
+    }
+
+    private static function stubTaxRows(array $rows): array
+    {
+        return array_map(static function ($r) {
+            return new StubOrderTaxItem(...$r);
+        }, $rows);
+    }
+
+    /** @param float|float[]|string $expected rate(s), or 'refused: <text>' */
+    private static function shippingRateCaseFailure($expected, callable $run, string $description): ?string
+    {
+        try {
+            $actual = $run();
+        } catch (Exception $e) {
+            $actual = 'refused: ' . $e->getMessage();
+        } catch (Throwable $e) {
+            $actual = get_class($e) . ': ' . $e->getMessage();
+        }
+        if (is_string($expected)) {
+            $ok = strpos($actual, 'refused: ') === 0 && strpos($actual, substr($expected, 9)) !== false;
+        } else {
+            $expected = implode(',', array_map([WC_Twoinc_Helper::class, 'round_rate'], (array) $expected));
+            $ok = $actual === $expected;
+        }
+        return $ok ? null : sprintf('%s: expected %s, got %s', $description, $expected, $actual);
+    }
+
+    /** TWO-26072: the plugin's own shipping tax class setting is gone, and an upgraded install drops its stored value. */
+    private static function testDefaultShippingTaxClassSettingIsRemoved(): void
+    {
         $gateway = new class () extends WC_Twoinc {
             public function __construct()
             {
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
             }
         };
+        $gateway->init_form_fields();
+        TinyAssert::same(false, array_key_exists('default_shipping_tax_class', $gateway->form_fields), 'no admin field');
 
-        TinyAssert::same('', $gateway->validate_default_shipping_tax_class_field('default_shipping_tax_class', ''), 'no selection is always valid');
-        TinyAssert::same('reduced-rate', $gateway->validate_default_shipping_tax_class_field('default_shipping_tax_class', 'reduced-rate'), 'a live tax class saves');
-
-        $threw = false;
-        try {
-            $gateway->validate_default_shipping_tax_class_field('default_shipping_tax_class', 'deleted-class');
-        } catch (Exception $e) {
-            $threw = true;
-        }
-        TinyAssert::true($threw, 'a tax class that no longer exists must be refused, not silently saved');
+        $key = $gateway->get_option_key();
+        $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
+        $drop->setAccessible(true);
+        $GLOBALS['__twoinc_test_options'][$key] = ['default_shipping_tax_class' => 'reduced-rate', 'api_key' => 'keep-me'];
+        $GLOBALS['__twoinc_test_logs'] = [];
+        $gateway->init_settings();
+        $drop->invoke($gateway);
+        TinyAssert::same(['api_key' => 'keep-me'], $GLOBALS['__twoinc_test_options'][$key], 'stored value dropped on upgrade');
+        self::assertLogged('notice', '"reduced-rate"');
     }
 
     private static function testLegacyOrderCreateFilterRunsBeforeOrderPayload(): void
@@ -2206,6 +2820,42 @@ final class BrandConfigSpec
         TinyAssert::true(!isset($result['woocommerce-gateway-testbrand']));
     }
 
+    /**
+     * TWO-27178: WooCommerce's Blocks registry asks the gate during init,
+     * before wp_loaded, when reading the cart is "called incorrectly". The
+     * gate leaves the cart alone then and judges what it can without it.
+     */
+    private static function testAvailabilityGateLeavesTheCartAloneBeforeWpLoaded(): void
+    {
+        self::useTestbrand();
+        $GLOBALS['__twoinc_test_currency'] = 'EUR';
+        $cases = [
+            // [wp_loaded fired, billing country, offered, cart read, description]
+            [false, 'NL', true, false, 'before wp_loaded a basket below the minimum is not judged'],
+            [false, 'DE', false, false, 'before wp_loaded the billing-country gate still judges'],
+            [true, 'NL', false, true, 'after wp_loaded the minimum judges the basket'],
+        ];
+        foreach ($cases as [$loaded, $country, $offered, $read, $description]) {
+            $GLOBALS['__twoinc_test_actions_done']['wp_loaded'] = $loaded ? 1 : 0;
+            WC()->cart = new class (100.0) extends StubCart {
+                public $read = false;
+
+                public function is_empty()
+                {
+                    $this->read = true;
+                    return parent::is_empty();
+                }
+            };
+            WC()->customer = new StubCustomer($country);
+
+            $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate(['woocommerce-gateway-testbrand' => 'gw']);
+
+            TinyAssert::same($offered, isset($result['woocommerce-gateway-testbrand']), $description . ': offered');
+            TinyAssert::same($read, WC()->cart->read, $description . ': cart read');
+        }
+        $GLOBALS['__twoinc_test_actions_done']['wp_loaded'] = 1;
+    }
+
     private static function testPaymentValidationErrorFilterVetoes(): void
     {
         TinyAssert::same(null, self::gateway()->get_brand_payment_validation_error(42));
@@ -2255,7 +2905,7 @@ final class BrandConfigSpec
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return array_shift($this->responses);
             }
@@ -2401,6 +3051,8 @@ final class BrandConfigSpec
             public $calls = [];
             /** Canned make_request() reply; null keeps the bare 200 below. */
             public $response = null;
+            /** The terms the account offers and the admin ticks; empty offers none. */
+            public $offered = [30];
             private $allowlist;
 
             public function __construct($allowlist)
@@ -2414,8 +3066,16 @@ final class BrandConfigSpec
                 return 'mid';
             }
 
+            public function get_merchant_available_terms(): array
+            {
+                return $this->offered;
+            }
+
             public function get_option($key, $empty_value = null)
             {
+                if ($key === 'payment_terms_days') {
+                    return $this->offered;
+                }
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
@@ -2424,7 +3084,7 @@ final class BrandConfigSpec
                 return $this->allowlist;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->calls[] = $endpoint;
                 return $this->response ?? ['response' => ['code' => 200], 'body' => '{}'];
@@ -2435,7 +3095,7 @@ final class BrandConfigSpec
     /**
      * Given the address-area company search mounts on WooCommerce's own
      * company row; When a store keeps that row hidden; Then it is revealed for
-     * the Blocks checkout alone (ABN-554).
+     * the Blocks checkout alone.
      */
     private static function testBlocksCompanyRowRevealedOnlyWhereTheSearchNeedsIt(): void
     {
@@ -2454,23 +3114,9 @@ final class BrandConfigSpec
             $GLOBALS['__twoinc_test_is_singular'] = $singular;
             $GLOBALS['__twoinc_test_page_blocks'] = $blocks ?: ['woocommerce/checkout'];
 
-            $gateway = new class ($enabled) extends WC_Twoinc {
-                public $search_enabled;
-
-                public function __construct($enabled)
-                {
-                    $this->search_enabled = $enabled;
-                }
-
-                public function get_enable_company_search()
-                {
-                    return $this->search_enabled;
-                }
-            };
-
             TinyAssert::same(
                 $expected,
-                (new WC_Twoinc_Checkout($gateway))->reveal_blocks_company_field($stored),
+                (new WC_Twoinc_Checkout(self::companySearchGateway($enabled)))->reveal_blocks_company_field($stored),
                 $description
             );
         }
@@ -2479,9 +3125,171 @@ final class BrandConfigSpec
     }
 
     /**
+     * Given a Checkout block that reads its company row from its own
+     * showCompanyField attribute (WooCommerce 7.6); When it renders; Then the
+     * row is revealed exactly where the option filter reveals it (TWO-27186).
+     */
+    private static function testBlocksCompanyAttributeRevealedOnlyWhereTheSearchNeedsIt(): void
+    {
+        $checkout = ['blockName' => 'woocommerce/checkout', 'attrs' => []];
+        $shown = ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => true, 'requireCompanyField' => false]];
+        $shownRequired = ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => true, 'requireCompanyField' => true]];
+        $cases = [
+            [$checkout, 'yes', true, [], $shown, 'an empty Checkout block with the search in the address'],
+            [
+                ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => false, 'requireCompanyField' => false]],
+                'yes', true, [], $shown, 'a saved block with the row hidden',
+            ],
+            [
+                ['blockName' => 'woocommerce/checkout', 'attrs' => ['showCompanyField' => false, 'requireCompanyField' => true]],
+                'yes', true, [], $shown, 'a saved block with the row hidden but required is revealed optional',
+            ],
+            [['blockName' => 'woocommerce/checkout'], 'yes', true, [], $shown, 'a parsed block with no attrs key'],
+            [$checkout, 'no', true, [], $checkout, 'search relocated to the payment tile'],
+            [$checkout, 'yes', false, [], $checkout, 'a page that is not a Blocks checkout'],
+            [$checkout, 'yes', true, ['woocommerce/cart'], $checkout, 'a Blocks page without the checkout block'],
+            [
+                ['blockName' => 'woocommerce/cart', 'attrs' => []], 'yes', true, [],
+                ['blockName' => 'woocommerce/cart', 'attrs' => []], 'another block on the checkout page',
+            ],
+            [$shownRequired, 'yes', true, [], $shownRequired, 'a block that already shows the row is left as the merchant saved it'],
+            ['<p>not a parsed block</p>', 'yes', true, [], '<p>not a parsed block</p>', 'a value that is not a parsed block'],
+            [$checkout, 'yes', true, [], $checkout, 'no API key', ['', 'mid']],
+            [$checkout, 'yes', true, [], $checkout, 'no merchant id', ['key', '']],
+        ];
+
+        // Registered at plugins_loaded, so the handler finds the gateway itself rather than being handed one.
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
+
+        foreach ($cases as $case) {
+            list($block, $enabled, $singular, $blocks, $expected, $description) = $case;
+            list($api_key, $merchant_id) = $case[6] ?? ['key', 'mid'];
+
+            $GLOBALS['__twoinc_test_is_singular'] = $singular;
+            $GLOBALS['__twoinc_test_page_blocks'] = $blocks ?: ['woocommerce/checkout'];
+            $prop->setValue(null, self::companySearchGateway($enabled, $api_key, $merchant_id));
+
+            TinyAssert::same($expected, WC_Twoinc_Checkout::reveal_blocks_company_attribute($block), $description);
+        }
+
+        $prop->setValue(null, null);
+        unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
+    }
+
+    /**
+     * TWO-27227: given a store's own company field setting; When the gateway
+     * is switched off; Then the Blocks option, the Checkout block's attributes
+     * and the classic billing and shipping fields are left as the merchant set
+     * them, hidden included; switching it back on reveals a hidden row again.
+     */
+    private static function testADisabledGatewayLeavesTheStoresCompanyFieldAsSet(): void
+    {
+        $GLOBALS['__twoinc_test_is_singular'] = true;
+        $GLOBALS['__twoinc_test_page_blocks'] = ['woocommerce/checkout'];
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
+
+        // Each store setting as the Checkout block's attributes and as the
+        // classic field WooCommerce core hands over (none when hidden).
+        $blockInput = ['hidden' => [false, false], 'optional' => [true, false], 'required' => [true, true]];
+        $classicInput = [
+            'hidden' => null,
+            'optional' => ['label' => 'Company', 'required' => false],
+            'required' => ['label' => 'Company', 'required' => true],
+        ];
+        $observe = static function (WC_Twoinc $gateway, string $setting) use ($prop, $blockInput, $classicInput): array {
+            $prop->setValue(null, $gateway);
+            $checkout = new WC_Twoinc_Checkout($gateway);
+            [$show, $require] = $blockInput[$setting];
+            $block = WC_Twoinc_Checkout::reveal_blocks_company_attribute([
+                'blockName' => 'woocommerce/checkout',
+                'attrs' => ['showCompanyField' => $show, 'requireCompanyField' => $require],
+            ]);
+            $fields = ['billing' => [], 'shipping' => []];
+            if ($classicInput[$setting] !== null) {
+                $fields['billing']['billing_company'] = $classicInput[$setting];
+                $fields['shipping']['shipping_company'] = $classicInput[$setting];
+            }
+            $fields = $checkout->update_company_fields($fields);
+            $classic = static function ($field) use ($classicInput, $setting): string {
+                if ($field === null) {
+                    return 'absent';
+                }
+                if ($field === $classicInput[$setting]) {
+                    return 'as set';
+                }
+                return $field['required'] === false ? 'added optional' : 'added required';
+            };
+
+            return [
+                $checkout->reveal_blocks_company_field($setting),
+                [$block['attrs']['showCompanyField'], $block['attrs']['requireCompanyField']],
+                $classic($fields['billing']['billing_company'] ?? null),
+                $classic($fields['shipping']['shipping_company'] ?? null),
+            ];
+        };
+
+        // [store setting, Turn on/off in order, Blocks option, Checkout block [show, require], classic fields, why].
+        $cases = [
+            ['hidden', ['yes'], 'optional', [true, false], 'added optional', 'on: a hidden row is revealed optional'],
+            ['optional', ['yes'], 'optional', [true, false], 'as set', 'on: an optional row is left as set'],
+            ['required', ['yes'], 'required', [true, true], 'as set', 'on: a required row is left as set'],
+            ['hidden', ['no'], 'hidden', [false, false], 'absent', 'off: a hidden row stays hidden'],
+            ['optional', ['no'], 'optional', [true, false], 'as set', 'off: an optional row is left as set'],
+            ['required', ['no'], 'required', [true, true], 'as set', 'off: a required row is left as set'],
+            ['hidden', ['no', 'yes'], 'optional', [true, false], 'added optional', 'switched back on: a hidden row is revealed again'],
+        ];
+        foreach ($cases as [$setting, $states, $option, $attrs, $classic, $description]) {
+            $gateway = self::companySearchGateway('yes');
+            foreach ($states as $state) {
+                $gateway->enabled = $state;
+                $observed = $observe($gateway, $setting);
+            }
+            TinyAssert::same([$option, $attrs, $classic, $classic], $observed, $description);
+        }
+
+        $prop->setValue(null, null);
+        unset($GLOBALS['__twoinc_test_is_singular'], $GLOBALS['__twoinc_test_page_blocks']);
+    }
+
+    /** A gateway switched on (Turn on/off) unless told otherwise, with company search $enabled. */
+    private static function companySearchGateway(string $enabled, string $api_key = 'key', string $merchant_id = 'mid'): WC_Twoinc
+    {
+        return new class ($enabled, $api_key, $merchant_id) extends WC_Twoinc {
+            public $search_enabled;
+            private $test_api_key;
+            private $test_merchant_id;
+
+            public function __construct($enabled, $api_key, $merchant_id)
+            {
+                $this->enabled = 'yes';
+                $this->search_enabled = $enabled;
+                $this->test_api_key = $api_key;
+                $this->test_merchant_id = $merchant_id;
+            }
+
+            public function get_enable_company_search()
+            {
+                return $this->search_enabled;
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'api_key' ? $this->test_api_key : ($empty_value ?? '');
+            }
+
+            public function get_merchant_id()
+            {
+                return $this->test_merchant_id;
+            }
+        };
+    }
+
+    /**
      * Given the surcharge cart fee only applies to the chosen payment method;
      * When a Blocks tile reports its own selection; Then the session follows
-     * it, and never another gateway's (ABN-554).
+     * it, and never another gateway's.
      */
     private static function testBlocksTileChoiceDrivesTheSurchargeGate(): void
     {
@@ -2513,7 +3321,7 @@ final class BrandConfigSpec
      * Given a guard in process_payment refuses the order; When the Store API
      * ran it; Then the return must be WooCommerce's failure array.
      *
-     * ABN-554: the Store API array_merge()s this return into its payment
+     * The Store API array_merge()s this return into its payment
      * details, so a null is a fatal TypeError and the buyer sees a critical
      * error instead of the reason.
      */
@@ -2524,6 +3332,8 @@ final class BrandConfigSpec
             ['not_two', [], null, 'cannot be paid with Two', 'order is not a Two order'],
             ['veto', $consent + ['company_id' => '923456789'], null, 'Brand says no.', 'brand overlay vetoed payment'],
             ['plain', ['company_id' => '923456789'], null, 'must accept payment terms', 'the terms consent was not given'],
+            ['currency', $consent + ['company_id' => '923456789'], null, 'not available for orders in CHF', 'the order is in a currency Two does not invoice in'],
+            ['no_terms', $consent + ['company_id' => '923456789'], null, 'has no payment term available', 'no payment term is offered, so no term anyone chose could be booked'],
             ['plain', $consent + ['company_id' => ''], null, 'select your company', 'no company captured'],
             ['country', $consent + ['company_id' => '923456789', 'billing_country' => 'DE'], null, 'not available for this order', 'buyer country off the allowlist'],
             ['declined', $consent + ['company_id' => '923456789'], null, 'not available for this order', 'order intent declined this company'],
@@ -2538,6 +3348,12 @@ final class BrandConfigSpec
 
             $order = new class extends StubOrder {
                 public $saved_meta = [];
+                public $currency = 'NOK';
+
+                public function get_currency()
+                {
+                    return $this->currency;
+                }
 
                 public function update_meta_data($key, $value)
                 {
@@ -2561,6 +3377,7 @@ final class BrandConfigSpec
                 }
             };
             $order->payment_method = $mode === 'not_two' ? 'cod' : WC_Twoinc_Brand::get('gateway_id');
+            $order->currency = $mode === 'currency' ? 'CHF' : 'NOK';
 
             $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
             $GLOBALS['__twoinc_test_notices'] = [];
@@ -2578,6 +3395,9 @@ final class BrandConfigSpec
 
             $gateway = self::buyerCountryGateway($mode === 'country' ? ['NL'] : null);
             $gateway->response = $response;
+            if ($mode === 'no_terms') {
+                $gateway->offered = [];
+            }
             $result = $gateway->process_payment(42);
 
             if ($mode === 'veto') {
@@ -2600,8 +3420,7 @@ final class BrandConfigSpec
      * Given a company captured on either address role; When the order is
      * created; Then the invoice role wins and the delivery role is only the
      * fallback (TWO-40) — the resolution a Blocks checkout relies on entirely,
-     * handing over both roles' carriers and resolving none of them itself
-     * (ABN-554).
+     * handing over both roles' carriers and resolving none of them itself.
      */
     private static function testOrderCreationResolvesTheCompanyAcrossBothAddressRoles(): void
     {
@@ -2612,6 +3431,9 @@ final class BrandConfigSpec
             [$invoice, '923456789', 'Invoice Holdings AS', 'the invoice role alone'],
             [$delivery, '912345678', 'Delivery Depot AS', 'the delivery role alone'],
             [array_merge($invoice, $delivery), '923456789', 'Invoice Holdings AS', 'both roles captured'],
+            // Refused before any meta is written: no number may go out under a manual name.
+            [['billing_company' => 'Typed By Hand AS', 'company_manual_entry' => '1'] + $delivery, null, null, 'billing in manual entry'],
+            [['billing_company' => 'Delivery Depot AS'] + $delivery, '912345678', 'Delivery Depot AS', 'billing mirroring the delivery address'],
         ];
 
         foreach ($cases as $case) {
@@ -2861,8 +3683,16 @@ final class BrandConfigSpec
                 return 'mid';
             }
 
+            public function get_merchant_available_terms(): array
+            {
+                return [30];
+            }
+
             public function get_option($key, $empty_value = null)
             {
+                if ($key === 'payment_terms_days') {
+                    return [30];
+                }
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
@@ -2871,7 +3701,7 @@ final class BrandConfigSpec
                 return null;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->calls[] = $endpoint;
                 return ['response' => ['code' => 200], 'body' => $this->body];
@@ -2896,7 +3726,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-554. A placed order leaves the buyer nothing left to decide, and a
+     * A placed order leaves the buyer nothing left to decide, and a
      * refusal is a credit or fraud verdict a retry must not reopen — so the
      * method is not offered on the pay-for-order page at all. Never in the
      * merchant's own admin, where an order is being composed rather than paid.
@@ -3144,9 +3974,9 @@ final class BrandConfigSpec
             [['payment_terms_days' => ['30', '60']], [30], [30], 'a term the backend withdrew drops out of a stale admin subset (TWO-24812)'],
             [['payment_terms_days' => ['30', '60']], [], [], 'an unresolved backend set offers no presets'],
             [['payment_terms_days' => ['30'], 'payment_terms_custom_days' => '45'], [14, 30, 45, 60, 90], [30, 45], 'an offered custom term is offered alongside the presets'],
-            [['payment_terms_days' => ['30'], 'payment_terms_custom_days' => '45'], [14, 30, 60, 90], [30], 'a custom term the backend does not offer drops out (ABN-521)'],
+            [['payment_terms_days' => ['30'], 'payment_terms_custom_days' => '45'], [14, 30, 60, 90], [30], 'a custom term the backend does not offer drops out'],
             [['payment_terms_custom_days' => '45'], [14, 30, 45, 60, 90], [45], 'an offered custom term alone still offers a term'],
-            [['payment_terms_custom_days' => '45'], [], [45], 'an unresolved backend set refuses nothing, so a stored custom term stands (ABN-521)'],
+            [['payment_terms_custom_days' => '45'], [], [45], 'an unresolved backend set refuses nothing, so a stored custom term stands'],
             [['payment_terms_custom_days' => '007'], [7, 14], [7], 'leading zeros denote the same term'],
             [['payment_terms_custom_days' => '0'], [14], [], 'a zero is not a term'],
             [['payment_terms_custom_days' => '30.0'], [14, 30], [], 'a stored value that is not a number of days offers nothing'],
@@ -3188,7 +4018,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->calls++;
                 if ($this->on_request) {
@@ -3377,7 +4207,7 @@ final class BrandConfigSpec
     /**
      * Given no last-known-good term list, when a fetch cannot resolve one, then the
      * state names the real cause and the copy blames the API key only where the API
-     * rejected it (ABN-513).
+     * rejected it.
      */
     /**
      * Gateway with a resolved term list already cached, so the state under test
@@ -3409,7 +4239,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 throw new RuntimeException('no fetch should be attempted with fresh clocks');
             }
@@ -3436,7 +4266,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-538. The state resolved before the recorded failure was ever read, so
+     * The state resolved before the recorded failure was ever read, so
      * figures served from cache while refreshes kept failing were indistinguishable
      * from figures read a moment ago.
      */
@@ -3480,7 +4310,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-538. `reason` is nulled once no API key is stored, to leave the
+     * `reason` is nulled once no API key is stored, to leave the
      * withhold log line's shape alone — so a display branching on it would
      * claim recent figures are out of date when the real cause is a failed
      * refresh.
@@ -3532,7 +4362,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-538. The install health summary marked the figures green on any check
+     * The install health summary marked the figures green on any check
      * timestamp above zero, so a merchant looking at values fetched days earlier
      * during an outage that was still going on saw them as current and healthy.
      */
@@ -3603,7 +4433,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return array_shift($this->responses);
             }
@@ -3659,7 +4489,7 @@ final class BrandConfigSpec
                 strpos($notice, 'rejected the saved API key') !== false,
                 $description . ': a rejection is claimed only where the API rejected it'
             );
-            // ABN-515: a read that failed names the fields to check; a
+            // A read that failed names the fields to check; a
             // successful read of an account offering nothing does not.
             TinyAssert::same(
                 in_array($expected_state, ['fetch_failed', 'never_fetched', 'not_configured'], true),
@@ -3692,7 +4522,7 @@ final class BrandConfigSpec
         TinyAssert::true($gateway->get_merchant_terms_state()['checked_on'] > 0, 'a resolved set still reports when it was read');
         TinyAssert::same(null, $GLOBALS['__twoinc_test_options'][$error_option] ?? null, 'a success clears the recorded cause');
 
-        // Last-known-good outranks a failed refresh (ABN-538).
+        // Last-known-good outranks a failed refresh.
         unset($GLOBALS['__twoinc_test_options'][$stamp], $GLOBALS['__twoinc_test_options'][$attempted]);
         WC_Twoinc::reset_merchant_record_memo();
         $gateway->responses = [new WP_Error('http_request_failed', 'down')];
@@ -3755,7 +4585,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return array_shift($this->responses);
             }
@@ -3808,8 +4638,9 @@ final class BrandConfigSpec
         $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
         $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_record_checked_on');
         $attempted_option = WC_Twoinc_Brand::prefixed_name('merchant_record_attempted_on');
+        $fallback_option = WC_Twoinc_Brand::prefixed_name('shipping_tax_from_shop_rates');
 
-        $seed = static function (?string $clear) use ($settings_option, $terms_option, $checked_option, $attempted_option) {
+        $seed = static function (?string $clear) use ($settings_option, $terms_option, $checked_option, $attempted_option, $fallback_option) {
             $settings = ['api_key' => 'key'];
             if ($clear !== null) {
                 $settings['clear_options_on_uninstall'] = $clear;
@@ -3819,6 +4650,7 @@ final class BrandConfigSpec
                 $terms_option => '[30,60]',
                 $checked_option => 999,
                 $attempted_option => 998,
+                $fallback_option => 'yes',
             ];
         };
 
@@ -3847,6 +4679,7 @@ final class BrandConfigSpec
         TinyAssert::same(false, array_key_exists($terms_option, $GLOBALS['__twoinc_test_options']));
         TinyAssert::same(false, array_key_exists($checked_option, $GLOBALS['__twoinc_test_options']));
         TinyAssert::same(false, array_key_exists($attempted_option, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::same(false, array_key_exists($fallback_option, $GLOBALS['__twoinc_test_options']));
     }
 
     /**
@@ -3891,7 +4724,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->calls++;
                 return array_shift($this->responses);
@@ -3928,6 +4761,71 @@ final class BrandConfigSpec
             );
             TinyAssert::same($expected_display, $gateway->get_merchant_due_in_days(), $description . ' (display)');
         }
+    }
+
+    /**
+     * A shop whose stored merchant id is missing or stale resolves it from the API key and refetches (TWO-26309):
+     * the record no longer 404s until the next key save.
+     */
+    private static function testMerchantRecordResolvesAMissingOrStaleMerchantId(): void
+    {
+        $ok = ['response' => ['code' => 200], 'body' => json_encode(['due_in_days' => 14])];
+        $verify = ['response' => ['code' => 200], 'body' => json_encode(['id' => 'new-mid', 'short_name' => 'acme'])];
+        $missing = ['response' => ['code' => 404], 'body' => '{}'];
+        // [stored id, responses in order, expected endpoints, expected stored id, record fetched, description]
+        $cases = [
+            ['mid', [$ok], ['/v1/merchant/mid'], 'mid', true, 'a good id is fetched once'],
+            ['', [$verify, $ok], ['/v1/merchant/verify_api_key', '/v1/merchant/new-mid'], 'new-mid', true, 'no id: resolved from the key, then fetched'],
+            ['mid', [$missing, $verify, $ok], ['/v1/merchant/mid', '/v1/merchant/verify_api_key', '/v1/merchant/new-mid'], 'new-mid', true, 'a 404: resolved and refetched'],
+            ['', [new WP_Error('http_request_failed', 'down')], ['/v1/merchant/verify_api_key'], '', false, 'no id and verify fails: no record, logged'],
+        ];
+        foreach ($cases as [$stored, $responses, $endpoints, $id, $fetched, $description]) {
+            WC_Twoinc::reset_merchant_record_memo();
+            $gateway = new class ($stored) extends WC_Twoinc {
+                public $options;
+                public $responses = [];
+                public $endpoints = [];
+
+                public function __construct($stored)
+                {
+                    $this->options = ['api_key' => 'key', 'merchant_id' => $stored];
+                }
+
+                public function get_twoinc_checkout_host()
+                {
+                    return 'https://api.example';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+
+                public function update_option($key, $value = '')
+                {
+                    $this->options[$key] = $value;
+                    return true;
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
+                {
+                    $this->endpoints[] = $endpoint;
+                    return array_shift($this->responses);
+                }
+            };
+            $gateway->responses = $responses;
+            $GLOBALS['__twoinc_test_logs'] = [];
+            $fetch = new ReflectionMethod(WC_Twoinc::class, 'fetch_merchant_record');
+            $fetch->setAccessible(true);
+            $record = $fetch->invoke($gateway);
+            TinyAssert::same($endpoints, $gateway->endpoints, "$description: requests");
+            TinyAssert::same($id, (string) $gateway->options['merchant_id'], "$description: stored id");
+            TinyAssert::same($fetched, is_array($record), "$description: record");
+            if ($stored !== $id || !$fetched) {
+                TinyAssert::true(strpos(json_encode($GLOBALS['__twoinc_test_logs']), 'Merchant record: ') !== false, "$description: logged");
+            }
+        }
+        WC_Twoinc::reset_merchant_record_memo();
     }
 
     private static function testMerchantRecordFetchSharedAcrossConsumersAndOffTheBlob(): void
@@ -4018,7 +4916,7 @@ final class BrandConfigSpec
                     return 'https://api.example';
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     $this->endpoints[] = $endpoint;
                     $this->timeouts[] = $timeout;
@@ -4300,7 +5198,7 @@ final class BrandConfigSpec
                     return $key === 'api_key' ? 'key' : ($empty_value ?? '');
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     return array_shift($this->responses);
                 }
@@ -4619,7 +5517,7 @@ final class BrandConfigSpec
         );
 
         // The reference is the resolved default, so an offered 30 is the basis
-        // even against a shorter offered term (ABN-548).
+        // even against a shorter offered term.
         $gateway = self::termsGateway([
             'payment_terms_days' => ['14', '30'],
             'surcharge_type' => 'percentage',
@@ -4887,7 +5785,7 @@ final class BrandConfigSpec
      *    gateway before the settings page renders — so that bucket belongs to
      *    an object that no longer exists, and a gateway calling
      *    display_errors() on itself prints nothing. A merchant who typed a
-     *    cap of 0 saw the grid edit revert under a success notice (ABN-552).
+     *    cap of 0 saw the grid edit revert under a success notice.
      *
      * 2. The save was PARTIAL. Core skips only the field that threw, so
      *    refusing the grid still saved surcharge_type: switching a shop with
@@ -4968,7 +5866,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-552. An invalid surcharge figure was refused correctly and reported
+     * An invalid surcharge figure was refused correctly and reported
      * nowhere: the save recorded the reason with WC_Settings_API::add_error,
      * and WooCommerce then re-instantiated every gateway before rendering the
      * settings page, so the bucket holding it belonged to an object that no
@@ -5042,7 +5940,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-553. Unticking every payment term reported success, put the previous
+     * Unticking every payment term reported success, put the previous
      * selection back, and changed the stored default term to Automatic —
      * because WooCommerce skips only the field that threw, so the refused term
      * list was preserved while default_payment_term was recomputed from the
@@ -5554,7 +6452,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return array_shift($this->responses);
             }
@@ -5604,7 +6502,7 @@ final class BrandConfigSpec
                     return $this->options[$key] ?? $empty_value ?? '';
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     $this->calls++;
                     return array_shift($this->responses);
@@ -5767,7 +6665,7 @@ final class BrandConfigSpec
                 return $this->options['__test_available_terms'] ?? [14, 30, 60, 90];
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 if (strpos($endpoint, '/v1/pricing/order/fee') === 0) {
                     return [
@@ -5787,21 +6685,22 @@ final class BrandConfigSpec
      * add_fee call. $options rides on top of a minimal enabled-surcharge
      * configuration.
      */
-    private static function runApplyCartFee(array $options): StubFeeCart
+    private static function runApplyCartFee(array $options, ?StubFeeCart $cart = null): StubFeeCart
     {
         $gateway = self::surchargeFeeGateway(array_merge([
             'surcharge_type' => 'percentage',
             'payment_terms_days' => [30],
             'surcharge_grid' => [30 => ['percentage' => 2.0]],
         ], $options));
-        return self::withGatewayInstance($gateway, static function () use ($gateway) {
+        return self::withGatewayInstance($gateway, static function () use ($gateway, $cart) {
             WC_Twoinc_Payment_Terms::reset_fee_cache();
             WC()->session = new StubSession();
             WC()->session->set('chosen_payment_method', $gateway->id);
             WC()->customer = new StubCustomer('US');
-            $cart = new StubFeeCart();
+            $cart = $cart ?? new StubFeeCart();
+            $before = count($cart->fees);
             WC_Twoinc_Payment_Terms::apply_cart_fee($cart);
-            TinyAssert::same(1, count($cart->fees), 'expected exactly one surcharge fee line');
+            TinyAssert::same($before + 1, count($cart->fees), 'expected exactly one surcharge fee line');
             return $cart;
         });
     }
@@ -5941,8 +6840,7 @@ final class BrandConfigSpec
 
     /**
      * The default fee-line wording spells the term the way the chip does, so
-     * an end-of-month order's summary cannot understate when it falls due
-     * (ABN-554).
+     * an end-of-month order's summary cannot understate when it falls due.
      */
     private static function testSurchargeFeeLabelDefaultWordingPerTermsBasis(): void
     {
@@ -6427,7 +7325,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-522. The one normalisation of a stored custom term: every consumer reads through it, so
+     * The one normalisation of a stored custom term: every consumer reads through it, so
      * a hand-edited row cannot be blank to one reading and a term to another.
      */
     private static function testStoredCustomTermNormalisation(): void
@@ -6455,7 +7353,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-522. The deprecated field renders as keep-or-remove — the only edit offered is the only
+     * The deprecated field renders as keep-or-remove: the only edit offered is the only
      * one the save accepts — and is hidden where nothing is stored or where the value folds into
      * an offered term's checkbox. Hidden, not dropped: the row still posts, which is what lets
      * that fold-in happen.
@@ -6517,7 +7415,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-522. Drives the real save loop. The stored value may be removed but never replaced;
+     * Drives the real save loop. The stored value may be removed but never replaced;
      * something that is not a number of days blocks the whole section save while it stands; and a
      * value the merchant record offers as a standard term is folded onto that term's checkbox
      * and announced, never cleared silently.
@@ -6633,7 +7531,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-522. The deprecated field's copy, in every catalogue that carries the admin locale —
+     * The deprecated field's copy, in every catalogue that carries the admin locale:
      * source copy edited without the catalogues following renders English however good the
      * msgstr is, and nothing else in the suite would report it.
      */
@@ -6717,7 +7615,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-554. The chip strip's buyer-facing copy, in EVERY catalogue the plugin ships.
+     * The chip strip's buyer-facing copy, in EVERY catalogue the plugin ships.
      * es_ES is thinner than the other three, so a string added to the checkout reaches it
      * only if somebody puts it there — and a Spanish shop then reads English beside a
      * Spanish PrestaShop shop, with nothing else in the suite reporting it.
@@ -6806,7 +7704,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-522. Every write to the settings row is held to remove-or-keep, not just the admin
+     * Every write to the settings row is held to remove-or-keep, not just the admin
      * form's: the REST settings endpoint runs none of the gateway's own field validators.
      */
     private static function testDeprecatedCustomTermWriteGuardHoldsEverySettingsWrite(): void
@@ -6871,7 +7769,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-522/ABN-493. An unresolvable offered set matches nothing rather than everything, so an
+     * An unresolvable offered set matches nothing rather than everything, so an
      * API outage cannot delete a value carried in by an upgrade.
      */
     private static function testDeprecatedCustomTermFoldsInOnlyAgainstAResolvedOfferedSet(): void
@@ -6927,7 +7825,7 @@ final class BrandConfigSpec
     /**
      * The empty option is what lets an admin leave the term to the checkout's
      * resolver; without it the select can only name a day count and posts one
-     * on every save (ABN-548).
+     * on every save.
      */
     private static function testDefaultTermOptionsLeadWithAutomatic(): void
     {
@@ -6985,7 +7883,7 @@ final class BrandConfigSpec
 
     /**
      * The fee the basket carries and the term the order is booked on must be
-     * the same term (ABN-554). The hidden checkout field follows a chip the
+     * the same term. The hidden checkout field follows a chip the
      * moment the buyer moves to it, while the session follows it a round trip
      * later, so a fee resolved from the session alone charges the term the
      * buyer left.
@@ -7014,7 +7912,7 @@ final class BrandConfigSpec
                 return [30, 60];
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->quoted_terms[] = $payload['order_terms']['duration_days'] ?? null;
                 return ['response' => ['code' => 200], 'body' => json_encode(['buyer_fee_share' => '7.00', 'currency' => 'EUR'])];
@@ -7043,13 +7941,13 @@ final class BrandConfigSpec
      * The chip copy the browser renders has to name the term type. An
      * end-of-month term falls due that many days after the end of the month,
      * so the bare day count states the wrong due date for it, and the
-     * accessible name has to contain the visible token WCAG 2.5.3 requires
-     * (ABN-554).
+     * accessible name has to contain the visible token WCAG 2.5.3 requires.
      */
     private static function testChipCopyStatesTheTermType(): void
     {
         $make_gateway = static function (string $type) {
             return new class ($type) extends WC_Twoinc {
+                public $enabled = 'yes';
                 public $options;
 
                 public function __construct($type)
@@ -7073,7 +7971,7 @@ final class BrandConfigSpec
                     return $this->options[$key] ?? $empty_value ?? '';
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     if (strpos($endpoint, 'verify_api_key') !== false) {
                         return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
@@ -7100,7 +7998,7 @@ final class BrandConfigSpec
 
             TinyAssert::same($eom, $copy['eom'] ?? null, $case . ' publishes whether the term is end of month');
             // A lone chip reads exactly as one of several does, so there is no
-            // second template for it to diverge through (ABN-554).
+            // second template for it to diverge through.
             foreach (['single_label', 'single_label_eom'] as $key) {
                 TinyAssert::true(
                     !array_key_exists($key, $copy),
@@ -7125,7 +8023,7 @@ final class BrandConfigSpec
         unset($GLOBALS['__twoinc_test_is_checkout'], $GLOBALS['__twoinc_test_transients']);
     }
 
-    private static function testOrderPayloadCarriesSelectedAndAvailableTerms(): void
+    private static function testOrderPayloadCarriesSelectedTermOnly(): void
     {
         $gateway = self::termsGateway(['payment_terms_days' => ['14', '30', '60', '90']]);
         $_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] = '60';
@@ -7150,7 +8048,7 @@ final class BrandConfigSpec
         );
 
         TinyAssert::same(['type' => 'NET_TERMS', 'duration_days' => 60], $body['terms']);
-        TinyAssert::same([14, 30, 60, 90], $body['available_terms']);
+        TinyAssert::same(false, array_key_exists('available_terms', $body), 'the create-order request does not define available_terms');
     }
 
     private static function testPaymentTermsInvalidPostFallsBackToDefault(): void
@@ -7198,7 +8096,7 @@ final class BrandConfigSpec
                 return $this->options[$key] ?? $empty_value ?? '';
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->requests[] = $endpoint;
                 foreach ($this->responses as $prefix => $response) {
@@ -7234,12 +8132,15 @@ final class BrandConfigSpec
      * Run the token-minting wc-ajax handler with $gateway installed as the
      * gateway singleton, and return the recorded JSON response.
      */
-    private static function runTokensHandler($gateway): array
+    private static function runTokensHandler($gateway, string $enabled = 'yes'): array
     {
+        $gateway->enabled = $enabled;
         $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
         $prop->setAccessible(true);
         $prop->setValue(null, $gateway);
         $GLOBALS['__twoinc_test_ajax_json'] = null;
+        // A wc-ajax request always carries the shopper's session, which keys the mint.
+        WC()->session = WC()->session ?? new StubSession();
         try {
             WC_Twoinc_Sole_Trader::ajax_tokens();
         } finally {
@@ -7301,7 +8202,7 @@ final class BrandConfigSpec
 
     private static function testSoleTraderTokensMintedForCapableCountry(): void
     {
-        $gateway = self::tokenMintingGateway(['SOLE_TRADER']);
+        $gateway = self::tokenMintingGateway(['SOLE_TRADER'], ['checkout_env' => 'production']);
         $_REQUEST = ['country' => 'GB'];
         $response = self::runTokensHandler($gateway);
         $_REQUEST = [];
@@ -7558,7 +8459,8 @@ final class BrandConfigSpec
         };
         $gateway->init_form_fields();
 
-        foreach (['vendor_name', 'fulfilment_trigger_statuses', 'enable_tax_subtotals'] as $key) {
+        // enable_tax_subtotals names no brand since TWO-26340: its help text is the other plugins'.
+        foreach (['vendor_name', 'fulfilment_trigger_statuses'] as $key) {
             $description = $gateway->form_fields[$key]['description'] ?? '';
             TinyAssert::true(
                 strpos($description, 'Testbrand') !== false,
@@ -7843,8 +8745,37 @@ final class BrandConfigSpec
         TinyAssert::same(2, count($gateway->requests));
     }
 
+    /**
+     * TWO-26173: the availability check fires with update_order_review on a country change, so it must not write
+     * the session, whose whole contents (the customer address loaded before the change included) it would write back.
+     */
+    private static function testSoleTraderTypesCachedOutsideTheSession(): void
+    {
+        $key = WC_Twoinc_Sole_Trader::CACHE_KEY_PREFIX . 'FR';
+        $fresh = ['types' => ['SOLE_TRADER'], 'fetched_at' => time()];
+        $expired = ['types' => [], 'fetched_at' => time() - WC_Twoinc_Sole_Trader::CACHE_TTL_SECONDS];
+        // [registry response, transient before, requests, available, transient after, description]
+        $cases = [
+            [self::registryOk(['SOLE_TRADER']), null, 1, true, ['SOLE_TRADER'], 'cold cache fetches and stores per country'],
+            [self::registryOk([]), $fresh, 0, true, ['SOLE_TRADER'], 'fresh entry from an earlier request is used'],
+            [self::registryOk(['SOLE_TRADER']), $expired, 1, true, ['SOLE_TRADER'], 'expired entry is refetched'],
+            [['response' => ['code' => 503], 'body' => ''], null, 1, false, null, 'registry error is not stored'],
+        ];
+        foreach ($cases as [$response, $before, $requests, $available, $after, $desc]) {
+            WC_Twoinc_Sole_Trader::reset_cache();
+            $GLOBALS['__twoinc_test_transients'] = null === $before ? [] : [$key => $before];
+            WC()->session = new StubSession();
+            $gateway = self::soleTraderGateway([], ['/registry/v1/supported-company-types/' => $response]);
+            TinyAssert::same($available, WC_Twoinc_Sole_Trader::is_available($gateway, 'fr'), "$desc: available");
+            TinyAssert::same($requests, count($gateway->requests), "$desc: requests");
+            TinyAssert::same($after, $GLOBALS['__twoinc_test_transients'][$key]['types'] ?? null, "$desc: stored");
+            TinyAssert::same(null, WC()->session->get($key), "$desc: session untouched");
+        }
+    }
+
     private static function testSoleTraderTokenMintReadsHeaderCaseInsensitively(): void
     {
+        WC()->session = new StubSession();
         $gateway = self::soleTraderGateway([], [
             '/registry/v1/delegation' => [
                 'response' => ['code' => 200],
@@ -7863,6 +8794,7 @@ final class BrandConfigSpec
 
     private static function testSoleTraderTokenMintFailsClosed(): void
     {
+        WC()->session = new StubSession();
         // Second mint failing voids the pair — never hand the browser half a flow
         $gateway = self::soleTraderGateway([], [
             '/registry/v1/delegation' => [
@@ -7886,7 +8818,7 @@ final class BrandConfigSpec
 
     private static function testSoleTraderSignupUrlFollowsEnvAndFilter(): void
     {
-        $gateway = self::soleTraderGateway([], []);
+        $gateway = self::soleTraderGateway(['checkout_env' => 'production'], []);
         TinyAssert::same('https://checkout.two.inc/soletrader/signup', WC_Twoinc_Sole_Trader::get_signup_page_url($gateway));
 
         $gateway = self::soleTraderGateway(['checkout_env' => 'SANDBOX'], []);
@@ -7902,17 +8834,17 @@ final class BrandConfigSpec
     private static function testEnvironmentModeNormalisesStoredCheckoutEnv(): void
     {
         $cases = [
-            ['', 'production'],
+            ['', 'sandbox'],
             ['PROD', 'production'],
             ['Production', 'production'],
             ['SANDBOX', 'sandbox'],
             ['staging', 'staging'],
-            // Outside the allowlist -> production (the pre-template host for
-            // every unrecognised value). The mode splices into the API
-            // hostname, so hostile admin input must not steer it off-domain.
-            ['evil.example/', 'production'],
-            ['api.evil.example/#', 'production'],
-            ['foo', 'production'],
+            // Outside the allowlist -> sandbox, never production (TWO-26604).
+            // The mode splices into the API hostname, so hostile admin input
+            // must not steer it off-domain.
+            ['evil.example/', 'sandbox'],
+            ['api.evil.example/#', 'sandbox'],
+            ['foo', 'sandbox'],
         ];
         foreach ($cases as [$stored, $expected]) {
             $gateway = self::soleTraderGateway(['checkout_env' => $stored], []);
@@ -7941,7 +8873,7 @@ final class BrandConfigSpec
     private static function testEnvironmentHostFollowsModeAndBrandTemplate(): void
     {
         // Two brand (default): production drops the mode suffix.
-        $gateway = self::soleTraderGateway([], []);
+        $gateway = self::soleTraderGateway(['checkout_env' => 'production'], []);
         TinyAssert::same('https://api.two.inc', WC_Twoinc_Helper::get_environment_host('api', $gateway));
 
         $gateway = self::soleTraderGateway(['checkout_env' => 'SANDBOX'], []);
@@ -7960,7 +8892,7 @@ final class BrandConfigSpec
         );
     }
 
-    private static function testCheckoutHostPrefersExplicitModeOverDevSniffing(): void
+    private static function testCheckoutHostFollowsStoredModeNotHostname(): void
     {
         $make = static function (array $options) {
             return new class ($options) extends WC_Twoinc {
@@ -7977,36 +8909,27 @@ final class BrandConfigSpec
             };
         };
 
-        // Non-dev hostname, default mode: production host.
+        // Hostname plays no part (TWO-26604): a stored production reaches
+        // production on a merchant domain and on a *.staging.two.inc one.
         $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
-        TinyAssert::same('https://api.two.inc', $make([])->get_twoinc_checkout_host());
-
-        // Dev-sniffed hostname (*.staging.two.inc) with the default mode: the
-        // free-text test-host override was removed (TWO-25386), so a
-        // dev-sniffed shop now always resolves to the brand's staging host.
+        TinyAssert::same('https://api.two.inc', $make(['checkout_env' => 'production'])->get_twoinc_checkout_host());
         $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
-        TinyAssert::same(
-            'https://api.staging.two.inc',
-            $make([])->get_twoinc_checkout_host()
-        );
+        TinyAssert::same('https://api.two.inc', $make(['checkout_env' => 'production'])->get_twoinc_checkout_host());
 
-        // An explicit mode beats the sniffer — even on a dev hostname.
+        // The stored mode decides, on any hostname.
         TinyAssert::same(
             'https://api.staging.two.inc',
             $make(['checkout_env' => 'staging'])->get_twoinc_checkout_host()
         );
-
-        // Non-dev brand shop with explicit staging mode: no sniffing needed.
         $GLOBALS['test_home_url'] = 'https://brand-shop.staging.brand.example';
         TinyAssert::same('https://api.staging.two.inc', $make(['checkout_env' => 'staging'])->get_twoinc_checkout_host());
     }
 
     /**
      * The invariant TWO-25170 violated: every service host the gateway emits
-     * resolves to the environment the API host resolves to. A dev-sniffed shop
-     * on the never-configured default mode reaches staging over the API, so its
-     * hosted signup page has to be staging's — a production page rejects the
-     * staging-minted delegation token with 401.
+     * resolves to the environment the API host resolves to, so a hosted
+     * signup page never rejects a delegation token minted in another
+     * environment.
      */
     private static function testServiceHostsShareTheApiHostsEnvironment(): void
     {
@@ -8025,10 +8948,10 @@ final class BrandConfigSpec
             };
         };
 
-        // Dev-sniffed shop, default mode: staging both ways (no test-host
-        // override to consult since TWO-25386 removed it).
+        // A stored staging puts every service host on staging, on any
+        // hostname (TWO-26604: no hostname detection).
         $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
-        $gateway = $make([]);
+        $gateway = $make(['checkout_env' => 'staging']);
         TinyAssert::same('https://api.staging.two.inc', $gateway->get_twoinc_checkout_host());
         TinyAssert::same(
             'https://checkout.staging.two.inc',
@@ -8040,8 +8963,7 @@ final class BrandConfigSpec
         );
         TinyAssert::same('https://checkout.staging.two.inc/terms', $gateway->get_terms_page_url());
 
-        // A dev-sniffed shop with an explicit mode follows that mode, not
-        // the staging fallback.
+        // A stored sandbox follows sandbox.
         $gateway = $make(['checkout_env' => 'sandbox']);
         TinyAssert::same('https://api.sandbox.two.inc', $gateway->get_twoinc_checkout_host());
         TinyAssert::same(
@@ -8049,9 +8971,9 @@ final class BrandConfigSpec
             WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
         );
 
-        // A real merchant shop is untouched: production API, production page.
+        // A production merchant shop: production API, production page.
         $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
-        $gateway = $make([]);
+        $gateway = $make(['checkout_env' => 'production']);
         TinyAssert::same('https://api.two.inc', $gateway->get_twoinc_checkout_host());
         TinyAssert::same(
             'https://checkout.two.inc',
@@ -8060,11 +8982,10 @@ final class BrandConfigSpec
         TinyAssert::same('https://checkout.two.inc/terms', $gateway->get_terms_page_url());
 
         // Brand-agnostic: an overlay's own domains follow the same rule, with
-        // no brand-specific branch — the resolution is template-driven.
+        // no brand-specific branch; the resolution is template-driven.
         WC_Twoinc_Brand::reset();
         self::useTestbrand();
-        $GLOBALS['test_home_url'] = 'https://woocom-brand.staging.two.inc';
-        $gateway = $make([]);
+        $gateway = $make(['checkout_env' => 'staging']);
         TinyAssert::same('https://api.staging.testbrand.example', $gateway->get_twoinc_checkout_host());
         TinyAssert::same(
             'https://checkout.staging.testbrand.example',
@@ -8135,7 +9056,7 @@ final class BrandConfigSpec
         TinyAssert::same('912345678', $create['buyer']['company']['organization_number']);
 
         // When: the same order is composed for an edit PUT
-        $edit = WC_Twoinc_Helper::compose_twoinc_edit_order(new StubOrder(), 'IT', 'Project X', '', '');
+        $edit = WC_Twoinc_Helper::compose_twoinc_edit_order(new StubOrder(), 'IT', 'Project X', '');
 
         // Then: no buyer block at all, so no organisation number to blank
         TinyAssert::same(false, array_key_exists('buyer', $edit));
@@ -8146,8 +9067,9 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-40. Three service hosts, three INDEPENDENT developer overrides,
-     * every one of them refused on anything that could be a production shop.
+     * TWO-40, TWO-27109. Three service hosts, three INDEPENDENT developer
+     * overrides under the names the other Two plugins use, honoured only
+     * where WordPress says the site is a developer's.
      *
      * The checkout-page override matters on its own rather than riding on the
      * API one: that host is loaded by the BUYER'S BROWSER (sole-trader signup,
@@ -8156,90 +9078,80 @@ final class BrandConfigSpec
      */
     private static function testDevHostOverridesAreIndependentAndProductionSafe(): void
     {
-        $make = static function (array $options) {
-            return new class ($options) extends WC_Twoinc {
-                private $options;
-                public function __construct($options)
+        $make = static function (string $mode) {
+            return new class ($mode) extends WC_Twoinc {
+                private $mode;
+                public function __construct($mode)
                 {
                     $this->id = WC_Twoinc_Brand::get('gateway_id');
-                    $this->options = $options;
+                    $this->mode = $mode;
                 }
                 public function get_option($key, $empty_value = null)
                 {
-                    return $this->options[$key] ?? $empty_value ?? '';
+                    return $key === 'checkout_env' ? $this->mode : ($empty_value ?? '');
                 }
             };
         };
+        $vars = ['TWO_API_BASE_URL', 'TWO_CHECKOUT_BASE_URL', 'TWO_PORTAL_BASE_URL', 'TWOINC_DEV_API_HOST', 'TWOINC_DEV_CHECKOUT_HOST', 'TWOINC_DEV_PORTAL_HOST'];
+        $prod = ['https://api.two.inc', 'https://checkout.two.inc', 'https://portal.two.inc/auth/merchant/signup'];
 
-        // Given: a dev-sniffed shop carrying the never-configured default mode
-        $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
-        putenv('TWOINC_DEV_API_HOST=http://portal.localhost/api');
-        $gateway = $make([]);
+        // [WordPress environment type, stored mode, variables set, API host, checkout host, signup URL, why]
+        $cases = [
+            ['local', 'production', ['TWO_API_BASE_URL' => 'http://portal.localhost/api'],
+                'http://portal.localhost/api', 'https://checkout.staging.two.inc', 'https://portal.two.inc/auth/merchant/signup',
+                'only the API host moves; the others follow its environment or fall back on their own'],
+            ['development', 'production', ['TWO_API_BASE_URL' => 'http://portal.localhost/api', 'TWO_CHECKOUT_BASE_URL' => 'https://checkout.tunnel.example'],
+                'http://portal.localhost/api', 'https://checkout.tunnel.example', 'https://portal.two.inc/auth/merchant/signup',
+                'the checkout page moves on its own variable'],
+            ['local', 'production', ['TWO_PORTAL_BASE_URL' => 'http://portal.localhost/'],
+                'https://api.two.inc', 'https://checkout.two.inc', 'http://portal.localhost/auth/merchant/signup',
+                'the portal override replaces the origin and keeps the brand\'s signup path'],
+            ['local', 'sandbox', ['TWO_API_BASE_URL' => 'https://api.staging.two.inc'],
+                'https://api.staging.two.inc', 'https://checkout.staging.two.inc', 'https://portal.two.inc/auth/merchant/signup',
+                'on a developer\'s site the override applies whatever environment is stored, as on Magento'],
+            ['local', 'production', ['TWOINC_DEV_API_HOST' => 'http://legacy.localhost/api'],
+                'http://legacy.localhost/api', 'https://checkout.staging.two.inc', 'https://portal.two.inc/auth/merchant/signup',
+                'the old name is still read for one release'],
+            ['local', 'production', ['TWOINC_DEV_API_HOST' => 'http://legacy.localhost/api', 'TWO_API_BASE_URL' => 'http://portal.localhost/api'],
+                'http://portal.localhost/api', 'https://checkout.staging.two.inc', 'https://portal.two.inc/auth/merchant/signup',
+                'the shared name wins over the old one'],
+            ['production', 'production', array_fill_keys($vars, 'http://leaked.example'),
+                $prod[0], $prod[1], $prod[2], 'a production site honours none, even when every variable leaks in'],
+            ['staging', 'production', array_fill_keys($vars, 'http://leaked.example'),
+                $prod[0], $prod[1], $prod[2], 'a staging site is not a developer\'s site'],
+        ];
+        foreach ($cases as [$type, $mode, $set, $api, $checkout, $signup, $description]) {
+            $GLOBALS['__twoinc_test_wp_environment_type'] = $type;
+            $GLOBALS['__twoinc_test_logs'] = [];
+            foreach ($vars as $var) {
+                putenv(isset($set[$var]) ? "$var={$set[$var]}" : $var);
+            }
+            $gateway = $make($mode);
+            TinyAssert::same(
+                [$api, $checkout, $signup],
+                [$gateway->get_twoinc_checkout_host(), WC_Twoinc_Helper::get_environment_host('checkout', $gateway), WC_Twoinc_Helper::get_merchant_portal_signup_url($gateway)],
+                $description
+            );
+        }
 
-        // When: only the API override is set
-        // Then: only the API host moves. The other two fall back on their own
-        // rather than inheriting it — the whole point of them being separate.
-        TinyAssert::same('http://portal.localhost/api', $gateway->get_twoinc_checkout_host());
-        TinyAssert::same(
-            'https://checkout.staging.two.inc',
-            WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
-        );
-        TinyAssert::same(
-            'https://portal.two.inc/auth/merchant/signup',
-            WC_Twoinc_Helper::get_merchant_portal_signup_url($gateway)
-        );
+        // The old name says what replaces it, once per request.
+        $GLOBALS['__twoinc_test_wp_environment_type'] = 'local';
+        foreach ($vars as $var) {
+            putenv($var);
+        }
+        putenv('TWOINC_DEV_CHECKOUT_HOST=https://checkout.legacy.example');
+        $GLOBALS['__twoinc_test_logs'] = [];
+        WC_Twoinc_Helper::get_dev_host_override('checkout', $make('production'));
+        WC_Twoinc_Helper::get_dev_host_override('checkout', $make('production'));
+        $logged = array_values(array_filter(array_column($GLOBALS['__twoinc_test_logs'], 'message'), static function ($m) {
+            return strpos($m, 'TWOINC_DEV_CHECKOUT_HOST is deprecated') !== false && strpos($m, 'set TWO_CHECKOUT_BASE_URL instead') !== false;
+        }));
+        TinyAssert::same(1, count($logged), 'the deprecation is logged once, naming the replacement');
+        putenv('TWOINC_DEV_CHECKOUT_HOST');
 
-        // When: the checkout-page override is set too
-        putenv('TWOINC_DEV_CHECKOUT_HOST=https://checkout.tunnel.example');
-        TinyAssert::same(
-            'https://checkout.tunnel.example',
-            WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
-        );
-        // And the sole-trader signup page follows it, because it is built from
-        // that same host rather than from a second resolution of its own.
-        TinyAssert::same(
-            'https://checkout.tunnel.example/soletrader/signup',
-            WC_Twoinc_Sole_Trader::get_signup_page_url($gateway)
-        );
-        // The API host is unmoved by it.
-        TinyAssert::same('http://portal.localhost/api', $gateway->get_twoinc_checkout_host());
-
-        // When: the portal override is set
-        // Then: the ORIGIN is replaced and the brand's own signup path kept.
-        putenv('TWOINC_DEV_PORTAL_HOST=http://portal.localhost/');
-        TinyAssert::same(
-            'http://portal.localhost/auth/merchant/signup',
-            WC_Twoinc_Helper::get_merchant_portal_signup_url($gateway)
-        );
-
-        // When: the same variables leak into a real merchant shop's process
-        // Then: not one of them is honoured. This is the gate that has to hold
-        // even if a deployment accidentally inherits a developer's env.
-        $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
-        $production = $make([]);
-        TinyAssert::same('https://api.two.inc', $production->get_twoinc_checkout_host());
-        TinyAssert::same(
-            'https://checkout.two.inc',
-            WC_Twoinc_Helper::get_environment_host('checkout', $production)
-        );
-        TinyAssert::same(
-            'https://portal.two.inc/auth/merchant/signup',
-            WC_Twoinc_Helper::get_merchant_portal_signup_url($production)
-        );
-
-        // And: a merchant who has explicitly chosen an environment has said
-        // which one they want, so an env var does not get to overrule that
-        // either — even back on the dev-sniffed hostname.
-        $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
-        $explicit = $make(['checkout_env' => 'sandbox']);
-        TinyAssert::same('https://api.sandbox.two.inc', $explicit->get_twoinc_checkout_host());
-        TinyAssert::same(
-            'https://checkout.sandbox.two.inc',
-            WC_Twoinc_Helper::get_environment_host('checkout', $explicit)
-        );
-
-        // And: an unknown service name never resolves to an override.
-        TinyAssert::same('', WC_Twoinc_Helper::get_dev_host_override('nonexistent', $gateway));
+        // An unknown service name never resolves to an override.
+        TinyAssert::same('', WC_Twoinc_Helper::get_dev_host_override('nonexistent', $make('production')));
+        unset($GLOBALS['__twoinc_test_wp_environment_type']);
     }
 
     /**
@@ -8293,16 +9205,15 @@ final class BrandConfigSpec
      * only on the hardcoded 'completed' hook, silently desyncing any
      * merchant whose workflow never reaches that status (e.g. a
      * custom-order-status plugin). A merchant-configured non-'completed'
-     * status must now dispatch fulfilment via the woocommerce_order_edit_status
-     * fallback hook, the same path the constructor's per-status add_action
-     * loop uses for the primary WooCommerce core status hooks.
+     * status must now dispatch fulfilment through the one status-change
+     * dispatcher (TWO-26291).
      */
     private static function testFulfilmentTriggerStatusHonoursMerchantConfiguredNonCompletedStatus(): void
     {
-        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['processing']]);
+        $gateway = self::fulfilmentTriggerGateway(self::CONFIGURED + ['fulfilment_trigger_statuses' => ['processing']]);
 
         self::withGatewayInstance($gateway, function () {
-            WC_Twoinc::on_order_edit_status(501, 'processing');
+            WC_Twoinc::on_order_status_changed(501, 'pending', 'processing');
         });
 
         TinyAssert::same(
@@ -8319,10 +9230,10 @@ final class BrandConfigSpec
      */
     private static function testFulfilmentTriggerStatusDoesNotFireForUnconfiguredStatus(): void
     {
-        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['processing']]);
+        $gateway = self::fulfilmentTriggerGateway(self::CONFIGURED + ['fulfilment_trigger_statuses' => ['processing']]);
 
         self::withGatewayInstance($gateway, function () {
-            WC_Twoinc::on_order_edit_status(502, 'completed');
+            WC_Twoinc::on_order_status_changed(502, 'processing', 'completed');
         });
 
         TinyAssert::same(
@@ -8360,21 +9271,149 @@ final class BrandConfigSpec
 
     /**
      * The actual safety net, independent of the multiselect's own options
-     * list: on_order_edit_status() checks cancelled/refunded FIRST and
+     * list: on_order_status_changed() checks cancelled/refunded FIRST and
      * unconditionally, ahead of the merchant-configured trigger set, so a
      * cancellation can never be mis-dispatched as a fulfilment even against
      * a stale settings row.
      */
     private static function testCancelledOrderNeverMisdispatchesAsFulfilmentEvenIfConfiguredAsTrigger(): void
     {
-        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['cancelled']]);
+        $gateway = self::fulfilmentTriggerGateway(self::CONFIGURED + ['fulfilment_trigger_statuses' => ['cancelled']]);
 
         self::withGatewayInstance($gateway, function () {
-            WC_Twoinc::on_order_edit_status(503, 'cancelled');
+            WC_Twoinc::on_order_status_changed(503, 'processing', 'cancelled');
         });
 
         TinyAssert::same([503], $gateway->cancelledCalls, 'cancelled must still dispatch on_order_cancelled');
         TinyAssert::same([], $gateway->completedCalls, 'cancelled must never dispatch on_order_completed');
+    }
+
+    /** A gateway with an API key and merchant id, so status changes are sent. */
+    private const CONFIGURED = ['api_key' => 'key', 'merchant_id' => 'merchant'];
+
+    /**
+     * TWO-26291: one status change sends one request. Fires the hooks
+     * WooCommerce 9.9 core fires, in its order, on each path that changes a
+     * status, against the dispatch hooks the plugin file registers. Before,
+     * the constructor's per-status hooks and the woocommerce_order_edit_status
+     * fallback both ran on a manual change, so Two got the fulfilment or
+     * cancellation twice (three times from an action button).
+     */
+    private static function testStatusChangeIsSentToTwoOnceOnEveryWooCommercePath(): void
+    {
+        TinyAssert::same(
+            0,
+            preg_match("/add_action\([^;]*'on_order_(completed|cancelled|refunded)'/", file_get_contents(__DIR__ . '/../../class/WC_Twoinc.php')),
+            'the gateway constructor binds no status hook of its own'
+        );
+
+        preg_match_all(
+            "/add_action\('(woocommerce_[a-z_]+)', 'WC_Twoinc::(on_order_[a-z_]+)', \d+, (\d+)\)/",
+            file_get_contents(__DIR__ . '/../../tillit-payment-gateway.php'),
+            $registrations,
+            PREG_SET_ORDER
+        );
+        $edit = static function ($id, $to) {
+            return ['woocommerce_order_edit_status', $id, $to];
+        };
+        $saved = static function ($id, $from, $to) {
+            return [
+                ['woocommerce_order_status_' . $to, $id],
+                ['woocommerce_order_status_' . $from . '_to_' . $to, $id],
+                ['woocommerce_order_status_changed', $id, $from, $to],
+            ];
+        };
+        // [hooks fired, each [hook, ...args], expected fulfilments, expected cancellations, description]
+        $paths = [
+            [array_merge([$edit(701, 'completed')], $saved(701, 'processing', 'completed')), [701], [], 'order screen save'],
+            [array_merge([$edit(702, 'completed')], $saved(702, 'processing', 'completed'), [$edit(702, 'completed')]), [702], [], 'action button or bulk action'],
+            [array_merge([$edit(703, 'cancelled')], $saved(703, 'processing', 'cancelled')), [], [703], 'order screen cancel'],
+            [array_merge($saved(704, 'pending', 'cancelled'), [['woocommerce_cancelled_order', 704]]), [], [704], 'customer cancel link'],
+            [$saved(705, 'processing', 'completed'), [705], [], 'REST or code'],
+        ];
+        $saved_filters = $GLOBALS['__twoinc_test_filters'] ?? [];
+        try {
+            foreach ($paths as [$fired, $expected_fulfilments, $expected_cancellations, $description]) {
+                $GLOBALS['__twoinc_test_filters'] = [];
+                foreach ($registrations as [, $hook, $method, $accepted_args]) {
+                    add_action($hook, 'WC_Twoinc::' . $method, 10, (int) $accepted_args);
+                }
+                $gateway = self::fulfilmentTriggerGateway(self::CONFIGURED);
+                self::withGatewayInstance($gateway, function () use ($fired) {
+                    foreach ($fired as $call) {
+                        do_action(...$call);
+                    }
+                });
+                TinyAssert::same($expected_fulfilments, $gateway->completedCalls, $description . ': fulfilments sent');
+                TinyAssert::same($expected_cancellations, $gateway->cancelledCalls, $description . ': cancellations sent');
+            }
+        } finally {
+            $GLOBALS['__twoinc_test_filters'] = $saved_filters;
+        }
+    }
+
+    /** As when the constructor bound the status hooks only once an API key and merchant id were set. */
+    private static function testStatusChangeSendsNothingForAnUnconfiguredGateway(): void
+    {
+        $cases = [
+            [[], 'no API key or merchant id'],
+            [['api_key' => 'key'], 'no merchant id'],
+            [['merchant_id' => 'merchant'], 'no API key'],
+        ];
+        foreach ($cases as [$options, $description]) {
+            $gateway = self::fulfilmentTriggerGateway($options);
+            self::withGatewayInstance($gateway, function () {
+                WC_Twoinc::on_order_status_changed(801, 'processing', 'completed');
+                WC_Twoinc::on_order_status_changed(802, 'processing', 'cancelled');
+            });
+            TinyAssert::same([], array_merge($gateway->completedCalls, $gateway->cancelledCalls), $description);
+        }
+    }
+
+    /**
+     * TWO-26291: the legacy list's bulk handler used to fulfil or cancel each
+     * order itself, on top of WooCommerce's own status change. It now reports
+     * what that status change returned and sends nothing.
+     */
+    private static function testLegacyBulkActionReportsTheStatusChangeWithoutSendingAgain(): void
+    {
+        $gateway = new class (self::CONFIGURED) extends WC_Twoinc {
+            private $options;
+            public $completedCalls = [];
+            public function __construct($options)
+            {
+                $this->options = $options;
+            }
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+            public function on_order_completed($order_id)
+            {
+                $this->completedCalls[] = $order_id;
+                return [901 => true, 902 => false][$order_id] ?? null;
+            }
+        };
+        $redirect = self::withGatewayInstance($gateway, function () {
+            foreach ([901, 902, 903] as $order_id) {
+                WC_Twoinc::on_order_status_changed($order_id, 'processing', 'completed');
+            }
+            return WC_Twoinc::on_order_bulk_edit_action('edit.php', 'mark_completed', ['901', '902', '903', '904']);
+        });
+        TinyAssert::same([901, 902, 903], $gateway->completedCalls, 'one send per status change, none from the bulk handler');
+        TinyAssert::same(
+            'edit.php?' . http_build_query(['bulk_action' => 'marked_completed', 'two_success' => '901', 'two_failure' => '902']),
+            $redirect,
+            'success and failure are the status change results'
+        );
+        TinyAssert::same('edit.php', WC_Twoinc::on_order_bulk_edit_action('edit.php', 'trash', ['901']), 'other bulk actions pass through');
+        TinyAssert::true(
+            strpos(
+                file_get_contents(__DIR__ . '/../../tillit-payment-gateway.php'),
+                "add_filter('handle_bulk_actions-edit-shop_order', 'WC_Twoinc::on_order_bulk_edit_action', 20, 3);"
+            ) !== false,
+            'registered after the WooCommerce handler (priority 10)'
+        );
     }
 
     /**
@@ -8507,6 +9546,42 @@ final class BrandConfigSpec
         $prop->setValue(null, null);
     }
 
+    /**
+     * TWO-26340: a refund sends tax_subtotals exactly when "Validate tax subtotals" is on, as order create and
+     * update do: its lines summed per rate, leaving out a rate that refunds nothing.
+     */
+    private static function testRefundTaxSubtotalsFollowTheValidateTaxSubtotalsSetting(): void
+    {
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
+        $line = static function (float $net, float $tax, int $rate_id, array $meta = []) {
+            return new StubProductLineItem(['line_total' => $net, 'line_subtotal' => $net, 'line_tax' => $tax, 'taxes' => [$rate_id => $tax], 'meta' => $meta]);
+        };
+        // A quantity-only refund line has no tax of its own: it takes its rate from the order line it refunds, item 7.
+        $parent = new StubTaxOrder(self::stubTaxRows([[1, 25.0, false], [2, 12.0, false]]), [], [], 1, [7 => $line(10.0, 1.2, 2)]);
+        $at25 = ['tax_amount' => '-25.00', 'tax_rate' => '0.250000', 'taxable_amount' => '-100.00'];
+        $at12 = ['tax_amount' => '-1.20', 'tax_rate' => '0.120000', 'taxable_amount' => '-10.00'];
+        $zeroAt12 = ['tax_amount' => '0.00', 'tax_rate' => '0.120000', 'taxable_amount' => '0.00'];
+        // [stored setting, refunded lines, expected tax_subtotals (null: not sent), description]
+        $cases = [
+            ['yes', [$line(-100.0, -25.0, 1)], [$at25], 'on: one rate'],
+            ['yes', [$line(-100.0, -25.0, 1), $line(-10.0, -1.2, 2)], [$at25, $at12], 'on: one subtotal per rate'],
+            ['yes', [$line(-100.0, -25.0, 1), $line(0.0, 0.0, 2, ['_refunded_item_id' => 7])], [$at25, $zeroAt12], 'on: a rate whose lines refund nothing (quantity only) keeps a zero subtotal'],
+            ['no', [$line(-100.0, -25.0, 1)], null, 'off: not sent'],
+        ];
+        foreach ($cases as [$stored, $lines, $expected, $description]) {
+            $prop->setValue(null, self::fulfilmentTriggerGateway(['enable_tax_subtotals' => $stored]));
+            $gross = 0.0;
+            foreach ($lines as $item) {
+                $gross += $item['line_total'] + $item['line_tax'];
+            }
+            $body = WC_Twoinc_Helper::compose_twoinc_refund(new StubRefund(['line_item' => $lines], []), abs($gross), $parent);
+            TinyAssert::same($expected, $body['tax_subtotals'] ?? null, $description);
+            TinyAssert::same($body, WC_Twoinc_Helper::recompute_totals_from_lines($body, $body), "$description: recomputing from the lines changes nothing");
+        }
+        $prop->setValue(null, null);
+    }
+
     private static function testTaxSubtotalsSettingIsOnByDefaultForNewInstalls(): void
     {
         $gateway = new class () extends WC_Twoinc {
@@ -8523,6 +9598,95 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos($field['description'], 'Sweden') === false,
             "description must not claim Sweden is unconditional, got: {$field['description']}"
+        );
+    }
+
+    /**
+     * TWO-26340: the fee apply_cart_fee() adds is marked on its order item at checkout and sent as BUYER_FEE, and so is
+     * a refund of it. Any other fee, and a fee placed before the marker existed, is still sent as SERVICE.
+     */
+    private static function testOnlyThePaymentTermsFeeIsSentAsBuyerFee(): void
+    {
+        $label = self::runApplyCartFee([])->fees[0]['name'];
+        $item = static function () {
+            return new class () {
+                public $meta = [];
+
+                public function add_meta_data($key, $value, $unique = false)
+                {
+                    $this->meta[$key] = $value;
+                }
+            };
+        };
+        $ours = $item();
+        WC_Twoinc_Payment_Terms::mark_buyer_fee_item($ours, sanitize_title($label), (object) ['id' => sanitize_title($label), 'name' => $label]);
+        $theirs = $item();
+        WC_Twoinc_Payment_Terms::mark_buyer_fee_item($theirs, 'handling', (object) ['id' => 'handling', 'name' => 'Handling']);
+        TinyAssert::same(1, count($ours->meta), 'the payment terms fee item is marked');
+        TinyAssert::same([], $theirs->meta, 'a third-party fee item is not marked');
+
+        // A fee by the same label added first takes the id, so WooCommerce refuses this one: the one by that id is not ours.
+        $cart = new StubFeeCart();
+        $cart->add_fee($label, 3.0);
+        self::runApplyCartFee([], $cart);
+        $first = $item();
+        WC_Twoinc_Payment_Terms::mark_buyer_fee_item($first, sanitize_title($label), (object) ['id' => sanitize_title($label), 'name' => $label]);
+        TinyAssert::same([], $first->meta, 'a fee that took the label first is not marked');
+
+        $order = new StubTaxOrder(self::stubTaxRows([[1, 25.0, false]]), [], [], 1, [5 => new StubShippingItem(10.0, 2.5, [1 => 2.5], $ours->meta)]);
+        $fee = static function (array $meta, float $sign = 1.0) {
+            return new StubShippingItem($sign * 10.0, $sign * 2.5, [1 => $sign * 2.5], $meta);
+        };
+        // [fee line, refund?, expected type, description]
+        $cases = [
+            [$fee($ours->meta), false, 'BUYER_FEE', 'the payment terms fee'],
+            [$fee($theirs->meta), false, 'SERVICE', 'a third-party fee'],
+            [$fee([]), false, 'SERVICE', 'a fee placed before the marker existed'],
+            [$fee(['_refunded_item_id' => 5], -1.0), true, 'BUYER_FEE', 'a refund of the payment terms fee'],
+        ];
+        foreach ($cases as [$line, $refund, $expected, $description]) {
+            $items = WC_Twoinc_Helper::get_line_items([], [], [$line], $order, $refund, $order);
+            TinyAssert::same($expected, $items[0]['type'], $description);
+        }
+
+        $source = (string) file_get_contents(dirname(__DIR__, 2) . '/tillit-payment-gateway.php');
+        TinyAssert::true(
+            strpos($source, "add_action('woocommerce_checkout_create_order_fee_item', ['WC_Twoinc_Payment_Terms', 'mark_buyer_fee_item'], 10, 3);") !== false,
+            'the fee item marker is registered, with the fee among its arguments'
+        );
+    }
+
+    /**
+     * TWO-26340: the control is PrestaShop's: the same label, help text and default, under a "Tax" heading that
+     * follows an "Order management" one.
+     */
+    private static function testTaxSubtotalsSettingMatchesTheOtherPlugins(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+        $headings = [];
+        foreach ($gateway->form_fields as $name => $field) {
+            if ($name === 'enable_tax_subtotals') {
+                break;
+            }
+            if (($field['type'] ?? '') === 'title') {
+                $headings[] = $field['title'];
+            }
+        }
+        $field = $gateway->form_fields['enable_tax_subtotals'];
+
+        TinyAssert::same(['Order management', 'Tax'], array_slice($headings, -2), 'the headings above the control');
+        TinyAssert::same('Validate tax subtotals', $field['title'], 'label');
+        TinyAssert::same('yes', $field['default'], 'default');
+        TinyAssert::same(
+            'When checked, a per-tax-rate tax_subtotals breakdown is sent with orders, order updates and refunds, for validation against the order lines. When unchecked, tax_subtotals is omitted from all of them.',
+            $field['description'],
+            'help text'
         );
     }
 
@@ -8551,7 +9715,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-548: the legacy row goes once, and the record's freshness stamp
+     * The legacy row goes once, and the record's freshness stamp
      * stays, because the admin's terms-state notice reads that.
      */
     private static function testFabricatedDueInDaysRowIsDroppedOnce(): void
@@ -8640,15 +9804,15 @@ final class BrandConfigSpec
         $key = $gateway->get_option_key();
 
         // Fresh install: no settings row at all.
-        TinyAssert::same(['PROD', 'SANDBOX'], array_keys($gateway->get_checkout_env_options()));
+        TinyAssert::same(['production', 'sandbox'], array_keys($gateway->get_checkout_env_options()));
 
-        // Stored custom allowlisted mode is preserved as an option.
+        // A stored staging is preserved as an option.
         $GLOBALS['__twoinc_test_options'][$key] = ['checkout_env' => 'staging'];
-        TinyAssert::same(['PROD', 'SANDBOX', 'staging'], array_keys($gateway->get_checkout_env_options()));
+        TinyAssert::same(['production', 'sandbox', 'staging'], array_keys($gateway->get_checkout_env_options()));
 
         // Garbage is NOT perpetuated as a selectable option.
         $GLOBALS['__twoinc_test_options'][$key] = ['checkout_env' => 'evil.example/'];
-        TinyAssert::same(['PROD', 'SANDBOX'], array_keys($gateway->get_checkout_env_options()));
+        TinyAssert::same(['production', 'sandbox'], array_keys($gateway->get_checkout_env_options()));
     }
 
     // ── Invoice download state check (TWO-25041) ────────────────────
@@ -8675,7 +9839,7 @@ final class BrandConfigSpec
                 return $empty_value ?? '';
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->requests[] = ['endpoint' => $endpoint, 'params' => $params, 'timeout' => $timeout];
                 foreach ($this->responses as $prefix => &$queue) {
@@ -9008,23 +10172,6 @@ final class BrandConfigSpec
         TinyAssert::same(1, count($items));
         TinyAssert::same('10.00', $items[0]['discount_amount']);
         TinyAssert::same('90.00', $items[0]['net_amount']);
-
-        // Order-level surface: zero discount composes as plain '0.00'.
-        $body = self::composeOrder();
-        TinyAssert::same('0.00', $body['discount_amount']);
-
-        // Order-level surface: a positive total discount passes untouched
-        // through both compose bodies.
-        $order = new class extends StubOrder {
-            public function get_total_discount()
-            {
-                return 12.5;
-            }
-        };
-        $body = WC_Twoinc_Helper::compose_twoinc_order($order, 'test-order-reference', '912345678', 'IT', 'Project X', '', []);
-        TinyAssert::same('12.50', $body['discount_amount']);
-        $body = WC_Twoinc_Helper::compose_twoinc_edit_order($order, 'IT', 'Project X', '', '');
-        TinyAssert::same('12.50', $body['discount_amount']);
     }
 
     private static function testNegativeDiscountGuardThrowsOnNegativeLineDiscount(): void
@@ -9055,36 +10202,37 @@ final class BrandConfigSpec
         );
     }
 
-    private static function testNegativeDiscountGuardThrowsOnNegativeOrderDiscount(): void
+    private static function testOrderDiscountIsFlooredAtZeroAndNeverRefused(): void
     {
-        // (b) Order-level surfaces: both compose bodies guard
-        // get_total_discount().
-        $order = new class extends StubOrder {
-            public function get_total_discount()
-            {
-                return -5.0;
-            }
-        };
-
-        $thrown = null;
-        try {
-            WC_Twoinc_Helper::compose_twoinc_order($order, 'test-order-reference', '912345678', 'IT', 'Project X', '', []);
-        } catch (Exception $e) {
-            $thrown = $e;
+        // TWO-26285: the order-level discount_amount is informational. It is
+        // get_total_discount() rounded once and floored at 0, on both compose
+        // bodies, and never refuses the order. A negative total is a markup,
+        // so it is not reported as a discount.
+        $cases = [
+            [0.0, '0.00', 'no discount'],
+            [12.5, '12.50', 'a positive discount, untouched'],
+            [-5.0, '0.00', 'a negative total (a markup), floored at zero, not refused'],
+            [-0.002, '0.00', 'negative sub-cent residue, plain zero'],
+            [0.004, '0.00', 'positive sub-cent residue, plain zero'],
+            [0.005, '0.01', 'half a cent rounds up before the floor'],
+        ];
+        foreach ($cases as [$native, $expected, $description]) {
+            $order = new class ($native) extends StubOrder {
+                private $total_discount;
+                public function __construct($total_discount)
+                {
+                    $this->total_discount = $total_discount;
+                }
+                public function get_total_discount()
+                {
+                    return $this->total_discount;
+                }
+            };
+            $create = WC_Twoinc_Helper::compose_twoinc_order($order, 'test-order-reference', '912345678', 'IT', 'Project X', '', []);
+            TinyAssert::same($expected, $create['discount_amount'], 'create: ' . $description);
+            $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, 'IT', 'Project X', '');
+            TinyAssert::same($expected, $edit['discount_amount'], 'edit: ' . $description);
         }
-        TinyAssert::true($thrown instanceof Exception, 'negative order discount must fail order create');
-        TinyAssert::true(
-            strpos($thrown->getMessage(), 'Negative discount amount calculated') !== false,
-            'create exception must name the negative-discount failure'
-        );
-
-        $thrown = null;
-        try {
-            WC_Twoinc_Helper::compose_twoinc_edit_order($order, 'IT', 'Project X', '', '');
-        } catch (Exception $e) {
-            $thrown = $e;
-        }
-        TinyAssert::true($thrown instanceof Exception, 'negative order discount must fail order edit');
     }
 
     private static function testNegativeDiscountGuardNoFalsePositiveFromEarlyRounding(): void
@@ -9109,17 +10257,6 @@ final class BrandConfigSpec
         // Once-rounded sub-cent residue is zero — and plain '0.00', never
         // a negative-zero '-0.00' artefact in the payload.
         TinyAssert::same('0.00', $items[0]['discount_amount']);
-
-        // Same shape at the order level: sub-cent float residue in
-        // get_total_discount() must not fail checkout.
-        $order = new class extends StubOrder {
-            public function get_total_discount()
-            {
-                return -0.002;
-            }
-        };
-        $body = WC_Twoinc_Helper::compose_twoinc_order($order, 'test-order-reference', '912345678', 'IT', 'Project X', '', []);
-        TinyAssert::same('0.00', $body['discount_amount']);
     }
 
     private static function testNegativeDiscountGuardSkipsRefundLineItems(): void
@@ -9187,7 +10324,7 @@ final class BrandConfigSpec
                 return [14, 30, 60, 90];
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 if (strpos($endpoint, '/refdata/v1/fx-rates') !== 0) {
                     $this->requests[] = ['endpoint' => $endpoint, 'payload' => $payload];
@@ -9849,7 +10986,7 @@ final class BrandConfigSpec
                 return null;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->make_request_calls++;
                 return array_shift($this->responses);
@@ -9971,7 +11108,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-539. A pricing quote that failed left the order with no surcharge
+     * A pricing quote that failed left the order with no surcharge
      * on it, no notice and no log line, so the lost revenue was discoverable
      * only by reconciling orders against expected fees afterwards.
      */
@@ -9999,7 +11136,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-539's line must not fire where nothing failed: a quote that resolved
+     * The failure line must not fire where nothing failed: a quote that resolved
      * to nothing to charge, and a term the merchant configured no surcharge
      * for, are both correct outcomes.
      */
@@ -10022,7 +11159,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-539. The cart-fee hook drops a quote echoing a currency the basket
+     * The cart-fee hook drops a quote echoing a currency the basket
      * is not in — correctly, rather than mischarging — but that drop was as
      * silent as a failed quote.
      */
@@ -10060,7 +11197,7 @@ final class BrandConfigSpec
                 return array_map('intval', $this->options['payment_terms_days'] ?? [30]);
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 if (strpos($endpoint, '/v1/pricing/order/fee') === false) {
                     return new WP_Error();
@@ -10072,7 +11209,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-546. Gate and charge quote on the same ceiling, and neither leaves
+     * Gate and charge quote on the same ceiling, and neither leaves
      * the timeout to the request helper's own default.
      */
     private static function testSurchargePricingCeilingIsSharedByEveryPath(): void
@@ -10103,7 +11240,7 @@ final class BrandConfigSpec
 
             // Defaults to null where the real helper defaults to a number: a
             // call site that passes nothing must be visible as nothing.
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = null)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = null, $idempotency_key = null)
             {
                 if (strpos($endpoint, '/v1/pricing/order/fee') === false) {
                     return new WP_Error();
@@ -10181,7 +11318,7 @@ final class BrandConfigSpec
                 return [30];
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return ['response' => ['code' => 200], 'body' => json_encode(['buyer_fee_share' => '12.50', 'currency' => 'GBP'])];
             }
@@ -10209,7 +11346,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-540. A rates answer with nothing priced, or with no currency for the
+     * A rates answer with nothing priced, or with no currency for the
      * amounts it does carry, was reported as a success, and the admin drew it
      * as a figure. Neither is renderable.
      */
@@ -10237,7 +11374,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-546: the term the basket would be charged for decides whether the
+     * The term the basket would be charged for decides whether the
      * payment method is offered. The gate quotes that term itself, so the
      * decision does not depend on another call site having quoted first.
      */
@@ -10326,7 +11463,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-540. The chip payload carried a formatted zero for the buyer script
+     * The chip payload carried a formatted zero for the buyer script
      * to show on any term whose quote did not resolve, which is a wrong figure
      * rather than a missing one.
      */
@@ -10353,7 +11490,7 @@ final class BrandConfigSpec
                 return [30, 60];
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 // The 60-day term does not resolve; the 30-day one does.
                 $days = (int) ($payload['order_terms']['duration_days'] ?? 0);
@@ -10587,7 +11724,7 @@ final class BrandConfigSpec
                 return [30, 60];
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return [
                     'response' => ['code' => 200],
@@ -10815,7 +11952,7 @@ final class BrandConfigSpec
     /**
      * The chip radiogroup takes its accessible name from the heading above it,
      * and that heading is not a `label`: a `label` names exactly one form
-     * control, and this one names a group (ABN-554).
+     * control, and this one names a group.
      */
     private static function testTermChipGroupIsNamedByANonLabelHeading(): void
     {
@@ -10838,7 +11975,7 @@ final class BrandConfigSpec
 
     /**
      * Given the consent block both checkouts emit; When it is built; Then it
-     * carries the checkbox, the brand's terms link and the refusal (ABN-554).
+     * carries the checkbox, the brand's terms link and the refusal.
      *
      * Deliberately NOT asserted against the gateway description: WooCommerce
      * runs that through wp_kses_post(), which drops the checkbox.
@@ -10872,14 +12009,14 @@ final class BrandConfigSpec
 
     /**
      * The brand descriptor is the whole configuration surface: it holds the
-     * link and the copy, and its absence is the off switch (ABN-554).
+     * link and the copy, and its absence is the off switch.
      */
     private static function testTermsConsentIsDrivenByTheBrandDescriptor(): void
     {
         // [brand fixture or null for Two, expected URL, copy the tile must
         // carry, whether a consent renders at all, description].
         $cases = [
-            [null, 'https://checkout.two.inc/terms', 'I accept the', true, 'the Two brand resolves its path against the checkout host'],
+            [null, 'https://checkout.sandbox.two.inc/terms', 'I accept the', true, 'the Two brand resolves its path against the checkout host (fresh install: sandbox)'],
             ['absolutetermsbrand', 'https://absolutetermsbrand.example/legal/terms', 'I agree to', true, "an absolute brand URL is taken verbatim, with the brand's own sentence"],
             ['notermsbrand', '', '', false, 'a brand declaring no terms page renders no consent'],
         ];
@@ -10915,7 +12052,7 @@ final class BrandConfigSpec
      *
      * The consent must never be built into the description string itself:
      * wp_kses_post() drops `<input>`, leaving a sentence the buyer cannot tick
-     * while process_payment() refuses every order (ABN-554). The unit harness
+     * while process_payment() refuses every order. The unit harness
      * stubs wp_kses_post() as a passthrough, so this models core's strip.
      */
     private static function testTermsConsentReachesTheTileAfterTheDescriptionIsSanitized(): void
@@ -10952,7 +12089,7 @@ final class BrandConfigSpec
 
     /**
      * An overlay still rendering its own consent suppresses the base one, so a
-     * staged rollout never shows two checkboxes (ABN-554).
+     * staged rollout never shows two checkboxes.
      */
     private static function testOverlayCanSuppressTheBaseTermsConsent(): void
     {
@@ -11077,7 +12214,7 @@ final class BrandConfigSpec
      * WooCommerce core prints get_icon() inside the method's <label for>,
      * where an interactive control is invalid markup and joins the radio's
      * accessible name. The override renders the control between </label>
-     * and the .payment_box instead - in neither (ABN-554).
+     * and the .payment_box instead - in neither.
      */
     private static function testAboutControlRendersBetweenTheLabelAndThePaymentBox(): void
     {
@@ -11102,7 +12239,7 @@ final class BrandConfigSpec
     /**
      * The override replaces one shared template, so it has to leave every
      * other gateway's markup exactly as core emits it, and leave a theme's
-     * own copy alone (ABN-554).
+     * own copy alone.
      */
     private static function testPaymentMethodTemplateOverrideIsScopedToThisGateway(): void
     {
@@ -11157,7 +12294,7 @@ final class BrandConfigSpec
 
     /**
      * Markup contract of the icon: it IS the link, so the tooltip it
-     * describes holds no anchor of its own (ABN-554).
+     * describes holds no anchor of its own.
      */
     private static function testAboutIconIsAnAnchorWrappedIcon(): void
     {
@@ -11189,7 +12326,7 @@ final class BrandConfigSpec
     /**
      * A brand with no about page, a brand whose about page is not http(s),
      * and a merchant who turned the control off all render nothing at all -
-     * never a bare icon, never an empty href (ABN-554).
+     * never a bare icon, never an empty href.
      */
     private static function testAboutControlIsWithheldWholeOrNotAtAll(): void
     {
@@ -11214,7 +12351,7 @@ final class BrandConfigSpec
 
     /**
      * The brand product name reaches the tooltip body as text, the same way
-     * it already reaches the icon's aria-label (ABN-554).
+     * it already reaches the icon's aria-label.
      */
     private static function testAboutTooltipEscapesTheBrandProductName(): void
     {
@@ -11240,7 +12377,7 @@ final class BrandConfigSpec
      * race and renders no about control at all, so the gateway description
      * carries it instead. The description renders inside .payment_box, which
      * core hides until the method is chosen, so on those themes the control
-     * degrades to an icon at the foot of a collapsed box (ABN-554).
+     * degrades to an icon at the foot of a collapsed box.
      */
     private static function testAboutControlFallsBackIntoTheHiddenPaymentBoxWhenATemplateOverrideWins(): void
     {
@@ -11272,9 +12409,9 @@ final class BrandConfigSpec
      * WooCommerce's own "outdated templates" report scans the active theme
      * only, so nothing upstream notices this filter-based copy going stale.
      * The core release it was taken from and the md5 of everything outside
-     * the TWOINC markers are pinned here instead; the support-matrix legs set
+     * the TWOINC markers are pinned here instead; the e2e legs set
      * WC_CORE_TEMPLATE_PATH and diff against the real installed core, which
-     * is what catches an upgrade that moves the template (ABN-554).
+     * is what catches an upgrade that moves the template.
      */
     private static function testPaymentMethodTemplateIsStillCoreVerbatim(): void
     {
@@ -11284,10 +12421,43 @@ final class BrandConfigSpec
         TinyAssert::true(strpos($copy, ' * @version     3.5.0') !== false, 'the copy must still declare the core template version it was taken from');
         TinyAssert::same('6ec50712413ce4050c37791f6e746512', md5($verbatim), 'everything outside the TWOINC markers must still be WooCommerce 9.9.5 core byte for byte');
 
+        // Comments are left out: a core release that only rewords its phpcs
+        // annotations (WooCommerce 11.2.0) changes nothing the template renders.
         $core = (string) getenv('WC_CORE_TEMPLATE_PATH');
         if ($core !== '' && is_readable($core)) {
-            TinyAssert::same(file_get_contents($core), $verbatim, 'the installed WooCommerce moved this template - re-diff the copy and repin');
+            TinyAssert::same(self::withoutPhpComments((string) file_get_contents($core)), self::withoutPhpComments($verbatim), 'the installed WooCommerce moved this template - re-diff the copy and repin');
         }
+    }
+
+    /** TWO-26215: the installed-core comparison ignores PHP comments and nothing else. */
+    private static function testTemplatePinIgnoresOnlyPhpComments(): void
+    {
+        $pinned = "<li class=\"m\">\n\t<?php echo \$t; /* phpcs:ignore WordPress.XSS.EscapeOutput.OutputNotEscaped */ ?>\n</li>\n";
+        $cases = [
+            [str_replace('WordPress.XSS', 'WordPress.Security', $pinned), true, 'reworded phpcs comment (WooCommerce 11.2.0)'],
+            [str_replace('/* phpcs:ignore WordPress.XSS.EscapeOutput.OutputNotEscaped */', '', $pinned), true, 'comment removed'],
+            [str_replace('class="m"', 'class="n"', $pinned), false, 'markup changed'],
+            [str_replace('$t', '$u', $pinned), false, 'PHP code changed'],
+            [$pinned, true, 'identical'],
+            [$pinned . "<!-- html comment -->\n", false, 'HTML comment is output, not a PHP comment'],
+        ];
+        foreach ($cases as [$core, $same, $description]) {
+            TinyAssert::same($same, self::withoutPhpComments($core) === self::withoutPhpComments($pinned), $description);
+        }
+    }
+
+    /** PHP source with its comments removed; markup outside PHP tags is kept. */
+    private static function withoutPhpComments(string $source): string
+    {
+        $kept = '';
+        foreach (token_get_all($source) as $token) {
+            if (is_array($token) && in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+                continue;
+            }
+            $kept .= is_array($token) ? $token[1] : $token;
+        }
+
+        return $kept;
     }
 
     /** The copy with every TWOINC-marked region removed, leaving core's own text. */
@@ -11453,7 +12623,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-554: the admin screen withdraws and unticks "Autofill company
+     * The admin screen withdraws and unticks "Autofill company
      * address" while "Enable company search in address entry" is off, so the
      * effective getter has to agree — a `yes` saved before company search was
      * switched off must not keep autofilling until the merchant next saves.
@@ -12338,7 +13508,7 @@ final class BrandConfigSpec
                 return $this->options[$key] ?? $empty_value ?? '';
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return $this->wp_error_response ? new WP_Error('http_request_failed', 'timed out') : false;
             }
@@ -12382,7 +13552,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-495. The settings save reverted the submitted API key to the
+     * The settings save reverted the submitted API key to the
      * stored one on EVERY non-200, a network failure included. On a fresh
      * install the stored key is empty, so a merchant could not configure
      * the plugin at all while Two was unreachable — and the key they were
@@ -12424,7 +13594,7 @@ final class BrandConfigSpec
                 $gateway->get_field_key('api_key') => 'new-key',
                 $gateway->get_field_key('title') => 'edited title',
                 // The settings form always posts the term checkboxes; an absent group is the
-                // merchant unticking every term, which is refused (ABN-553).
+                // merchant unticking every term, which is refused.
                 $gateway->get_field_key('payment_terms_days') => ['30'],
             ];
             $gateway->process_admin_options();
@@ -12440,6 +13610,158 @@ final class BrandConfigSpec
                 $description . ' — and say why in the right notice bucket'
             );
             TinyAssert::same([], $other, $description . ' — and nothing in the other bucket');
+        }
+    }
+
+    /**
+     * The key and environment are saved as one pair or not at all, and a pair
+     * Two could not judge never replaces one it last accepted (TWO-27109).
+     */
+    private static function testTheKeyAndEnvironmentSaveAsOnePair(): void
+    {
+        $down = new WP_Error('http_request_failed', 'could not resolve host');
+        $ok = ['response' => ['code' => 200], 'body' => '{"id":"merchant-1","short_name":"shop"}'];
+        $no = ['response' => ['code' => 401], 'body' => '{}'];
+        $sandbox = 'https://api.sandbox.two.inc';
+        $production = 'https://api.two.inc';
+        // [saved key, saved env, last verdict, typed key, posted env, Two's answer,
+        //  saved key after, saved env after, notice (null: the pair is not judged), blocking, host judged against, why]
+        $cases = [
+            ['old-key', 'sandbox', null, '', 'sandbox', $ok, 'old-key', 'sandbox', null, false, null, 'an empty key field keeps the saved key and judges nothing'],
+            ['old-key ', 'sandbox', null, '', 'sandbox', $ok, 'old-key', 'sandbox', null, false, null, 'a saved key with stray spaces is the same key'],
+            ['old-key', 'sandbox', null, '', 'production', $ok, 'old-key', 'production', 'API key verified', false, $production, 'a new environment is checked with the saved key against that environment'],
+            ['old-key', 'sandbox', null, '', 'production', $no, 'old-key', 'sandbox', 'rejected that API key', true, $production, 'a key the new environment rejects keeps the environment too'],
+            ['old-key', 'sandbox', null, ' new-key ', 'sandbox', $ok, 'new-key', 'sandbox', 'API key verified', false, $sandbox, 'a typed key is trimmed and checked against its environment'],
+            ['old-key', 'sandbox', 'ok', 'new-key', 'production', $down, 'old-key', 'sandbox', 'could not check', true, $production, 'an unjudged pair never replaces one Two last accepted'],
+            ['old-key', 'sandbox', 'legacy-ok', 'new-key', 'sandbox', $down, 'old-key', 'sandbox', 'could not check', true, $sandbox, 'a shop mid-upgrade keeps the verdict from the old cache'],
+            ['old-key', 'sandbox', 'invalid', 'new-key', 'sandbox', $down, 'new-key', 'sandbox', 'could not be reached', false, $sandbox, 'a pair Two last rejected may be replaced while Two is down'],
+            ['old-key', 'sandbox', null, 'new-key', 'sandbox', $down, 'new-key', 'sandbox', 'could not be reached', false, $sandbox, 'with no verdict at all the merchant can still save'],
+            ['old-key', 'SANDBOX ', 'ok', 'new-key', 'sandbox', $down, 'old-key', 'SANDBOX ', 'could not check', true, $sandbox, 'a legacy spelling of the environment finds its own verdict'],
+            ['', 'sandbox', null, 'new-key', 'production', $down, 'new-key', 'production', 'could not be reached', false, $production, 'a fresh install saves a pair Two could not judge'],
+        ];
+
+        foreach ($cases as [$key, $env, $verdict, $typed, $posted_env, $response, $want_key, $want_env, $notice, $blocking, $host, $description]) {
+            $GLOBALS['__twoinc_test_options'] = [];
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $GLOBALS['__twoinc_test_http_calls'] = [];
+            if ($verdict === 'legacy-ok') {
+                set_transient(WC_Twoinc::verification_cache_key($key), ['status' => 'ok', 'code' => 200]);
+            } elseif ($verdict !== null) {
+                update_option(WC_Twoinc_Brand::prefixed_name('api_key_verdicts'), [md5($key . '|sandbox') => $verdict]);
+            }
+            $gateway = self::save_gateway(true);
+            $gateway->init_form_fields();
+            $option_key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$option_key] = ['api_key' => $key, 'checkout_env' => $env, 'title' => 'stored title'];
+            $gateway->init_settings();
+            $GLOBALS['__twoinc_test_http_response'] = $response;
+            $GLOBALS['__twoinc_test_admin_messages'] = [];
+            $GLOBALS['__twoinc_test_admin_errors'] = [];
+            $gateway->test_post_data = [
+                $gateway->get_field_key('api_key') => $typed,
+                $gateway->get_field_key('checkout_env') => $posted_env,
+                $gateway->get_field_key('title') => 'edited title',
+                $gateway->get_field_key('payment_terms_days') => ['30'],
+            ];
+            $gateway->process_admin_options();
+            $saved = get_option($option_key, []);
+
+            TinyAssert::same([$want_key, $want_env], [$saved['api_key'] ?? null, $saved['checkout_env'] ?? null], $description);
+            TinyAssert::same('edited title', $saved['title'] ?? null, $description . ': other fields still save');
+            $verifies = array_values(array_filter(array_column($GLOBALS['__twoinc_test_http_calls'], 'url'), static function ($url) {
+                return strpos($url, '/v1/merchant/verify_api_key') !== false;
+            }));
+            // An unjudged save makes no check of its own (no notice says one ran); the tax code section may still read the saved key's profile.
+            if ($host !== null) {
+                TinyAssert::same($host, (string) preg_replace('#^(https://[^/]+).*$#', '$1', (string) ($verifies[0] ?? '')), $description . ': host the key was checked against');
+            }
+            $errors = implode("\n", $GLOBALS['__twoinc_test_admin_errors']);
+            $messages = implode("\n", $GLOBALS['__twoinc_test_admin_messages']);
+            if ($notice === null) {
+                TinyAssert::same(['', ''], [$errors, $messages], $description . ': no notice');
+            } else {
+                TinyAssert::true(strpos($blocking ? $errors : $messages, $notice) !== false, $description . ": notice [$errors|$messages]");
+                TinyAssert::same($blocking ? 1 : 0, count($GLOBALS['__twoinc_test_admin_errors']), $description . ": one error, the pair's [$errors]");
+                TinyAssert::same('', $blocking ? $messages : $errors, $description . ': nothing in the other bucket');
+            }
+        }
+        unset($GLOBALS['__twoinc_test_http_response']);
+
+        // Checks of other keys, however many, never push out the saved pair's verdict.
+        $GLOBALS['__twoinc_test_options'] = [];
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $gateway = self::save_gateway(true);
+        $gateway->init_form_fields();
+        $option_key = $gateway->get_option_key();
+        $GLOBALS['__twoinc_test_options'][$option_key] = ['api_key' => 'old-key', 'checkout_env' => 'sandbox', 'title' => 'stored title'];
+        $gateway->init_settings();
+        $gateway->cache_verification_result('old-key', ['code' => 200, 'body' => ['id' => 'merchant-1']]);
+        for ($i = 1; $i <= 12; $i++) {
+            $gateway->cache_verification_result('typed-key-' . $i, ['code' => 401, 'body' => []]);
+        }
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $GLOBALS['__twoinc_test_http_response'] = $down;
+        $GLOBALS['__twoinc_test_admin_errors'] = [];
+        $gateway->test_post_data = [
+            $gateway->get_field_key('api_key') => 'new-key',
+            $gateway->get_field_key('checkout_env') => 'sandbox',
+            $gateway->get_field_key('payment_terms_days') => ['30'],
+        ];
+        $gateway->process_admin_options();
+        TinyAssert::same('old-key', get_option($option_key, [])['api_key'] ?? null, 'twelve checks of other keys later, an outage save still keeps the pair Two accepted');
+        unset($GLOBALS['__twoinc_test_http_response']);
+    }
+
+    /** A vendor name is printable ASCII of at most 255 characters, refused alone, and a saved one is grandfathered (TWO-27109). */
+    private static function testTheVendorNameIsPrintableAsciiOfAtMost255(): void
+    {
+        // [saved, posted, saved after, refused, why]
+        $cases = [
+            ['', 'North Warehouse', 'North Warehouse', false, 'plain ASCII saves'],
+            ['', '  North Warehouse  ', 'North Warehouse', false, 'surrounding spaces are trimmed'],
+            ['Old', '', '', false, 'blank clears it'],
+            ['Old', str_repeat('a', 255), str_repeat('a', 255), false, '255 characters is the limit'],
+            ['Old', str_repeat('a', 256), 'Old', true, 'one more is refused'],
+            ['', 'Caf' . "\u{e9}" . ' Nord', '', true, 'an accented letter is refused'],
+            ['Old', "North\nWarehouse", 'Old', true, 'a line break is refused'],
+            ['Caf' . "\u{e9}" . ' Nord', 'Caf' . "\u{e9}" . ' Nord', 'Caf' . "\u{e9}" . ' Nord', false, 'a name saved before the rule, posted back unchanged, is let through'],
+            ['Caf' . "\u{e9}" . ' &amp; Co', 'Caf' . "\u{e9}" . ' & Co', 'Caf' . "\u{e9}" . ' &amp; Co', false, 'so is one with an ampersand, stored encoded and posted back decoded'],
+        ];
+        foreach ($cases as [$saved, $posted, $want, $refused, $description]) {
+            $GLOBALS['__twoinc_test_options'] = [];
+            $gateway = self::save_gateway(true);
+            $gateway->init_form_fields();
+            $option_key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$option_key] = ['vendor_name' => $saved, 'title' => 'stored title'];
+            $gateway->init_settings();
+            $GLOBALS['__twoinc_test_admin_messages'] = [];
+            $GLOBALS['__twoinc_test_admin_errors'] = [];
+            $gateway->test_post_data = [
+                $gateway->get_field_key('vendor_name') => $posted,
+                $gateway->get_field_key('title') => 'edited title',
+                $gateway->get_field_key('payment_terms_days') => ['30'],
+            ];
+            $gateway->process_admin_options();
+            $after = get_option($option_key, []);
+            TinyAssert::same($want, $after['vendor_name'] ?? null, $description);
+            TinyAssert::same('edited title', $after['title'] ?? null, $description . ': other fields still save');
+            $errors = implode("\n", $GLOBALS['__twoinc_test_admin_errors']);
+            TinyAssert::same($refused, strpos($errors, 'Enter a vendor name of at most 255 characters') !== false, $description . ": errors [$errors]");
+        }
+    }
+
+    /** The key field renders empty, with a note while a key is saved (TWO-27109). */
+    private static function testTheSavedKeyNeverReachesTheSettingsPage(): void
+    {
+        foreach ([['secret-key-1234', true, 'a saved key is noted, not shown'], ['', false, 'no key, no note']] as [$key, $noted, $description]) {
+            $GLOBALS['__twoinc_test_options'] = [];
+            $gateway = self::save_gateway(true);
+            $gateway->init_form_fields();
+            $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()] = ['api_key' => $key];
+            $gateway->init_settings();
+            $html = (string) $gateway->generate_api_key_with_verification_html('api_key', $gateway->form_fields['api_key']);
+            TinyAssert::true($key === '' || strpos($html, $key) === false, $description . ': the key is not in the page');
+            TinyAssert::same($noted, strpos($html, 'A key is saved. Leave this blank to keep it.') !== false, $description);
         }
     }
 
@@ -12476,7 +13798,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->make_request_calls++;
                 return array_shift($this->responses);
@@ -12520,7 +13842,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->make_request_calls++;
                 return array_shift($this->responses);
@@ -12533,8 +13855,8 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-533. Only a definitive rejection of the stored key — Two said no,
-     * or there is no key — takes the gateway off checkout. Every other
+     * Only a definitive rejection of the stored key (Two said no,
+     * or there is no key) takes the gateway off checkout. Every other
      * category is about the service, and an outage must leave a correctly
      * configured shop selling. Drives the real gate off the wire response
      * rather than a primed verdict.
@@ -12568,7 +13890,7 @@ final class BrandConfigSpec
                     return true;
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     return $this->response;
                 }
@@ -12637,7 +13959,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42', 'available_terms' => [30]])];
             }
@@ -12656,7 +13978,7 @@ final class BrandConfigSpec
     /**
      * A 200 from something that is not Two — a captive portal, a proxy, a
      * maintenance page — carries no merchant record, so it is categorised
-     * `error` and not `ok` (ABN-495). ABN-533: that is a statement about
+     * `error` and not `ok`. that is a statement about
      * what answered, not a rejection of the key, so it no longer withholds.
      * Drives the real gate off the wire response, with a full-record control
      * so the table cannot pass by offering everything.
@@ -12690,7 +14012,7 @@ final class BrandConfigSpec
                     return true;
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     return $this->response;
                 }
@@ -12717,7 +14039,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-533. A valid key with an unresolvable offerable term set offers
+     * A valid key with an unresolvable offerable term set offers
      * the tile with an EMPTY term set — the Magento behaviour every platform
      * now aligns on. No term chip renders, no term is sent on the order and
      * the account default applies; an invented term set never reaches the
@@ -12754,7 +14076,7 @@ final class BrandConfigSpec
                     return true;
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     if (strpos($endpoint, 'verify_api_key') !== false) {
                         return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
@@ -12812,12 +14134,78 @@ final class BrandConfigSpec
      * top-level `if (window.twoinc)` guard in twoinc.js) — so withholding
      * it on a REJECTED key is what stops company search from
      * rendering/enabling itself on an integration that cannot work
-     * (TWO-25326 follow-up, ABN-533).
+     * (TWO-25326 follow-up).
      */
     private static function testCheckoutWindowTwoincSuppressedOnVerificationFailure(): void
     {
         $GLOBALS['__twoinc_test_is_checkout'] = true;
 
+        $make_gateway = static function ($response) {
+            return new class ($response) extends WC_Twoinc {
+                public $enabled = 'yes';
+                public $options = ['api_key' => 'key'];
+                private $response;
+
+                public function __construct($response)
+                {
+                    $this->response = $response;
+                }
+
+                public function get_twoinc_checkout_host()
+                {
+                    return 'https://api.example';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+
+                public function update_option($key, $value = '')
+                {
+                    $this->options[$key] = $value;
+                    return true;
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
+                {
+                    return $this->response;
+                }
+            };
+        };
+
+        // [verify response, bootstrap printed, why]. an outage keeps
+        // company search alive; a rejected key still stands it down.
+        $cases = [
+            [['response' => ['code' => 401], 'body' => json_encode(['message' => 'invalid'])], false,
+                'a rejected key suppresses the bootstrap'],
+            [['response' => ['code' => 503], 'body' => '{}'], true,
+                'a 5xx still prints it, with a null merchant'],
+            [new WP_Error('http_request_failed', 'timed out'), true,
+                'an unreachable Two still prints it'],
+        ];
+
+        foreach ($cases as [$response, $printed, $description]) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            ob_start();
+            (new WC_Twoinc_Checkout($make_gateway($response)))->inject_cart_details();
+            $output = (string) ob_get_clean();
+
+            TinyAssert::same($printed, strpos($output, 'window.twoinc') !== false, $description);
+        }
+        unset($GLOBALS['__twoinc_test_is_checkout']);
+    }
+
+    /**
+     * TWO-27227: a disabled gateway stands company search down. The checkout
+     * bootstrap is withheld whatever the key verdict (so neither the tile nor
+     * the address-area search mounts), every proxy route and both sole-trader
+     * routes refuse before Two is called, and switching the gateway back on
+     * restores each.
+     */
+    private static function testADisabledGatewayStandsCompanySearchDown(): void
+    {
+        $GLOBALS['__twoinc_test_is_checkout'] = true;
         $make_gateway = static function ($response) {
             return new class ($response) extends WC_Twoinc {
                 public $options = ['api_key' => 'key'];
@@ -12844,33 +14232,77 @@ final class BrandConfigSpec
                     return true;
                 }
 
-                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
                 {
                     return $this->response;
                 }
             };
         };
+        $ok = ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
+        $rejected = ['response' => ['code' => 401], 'body' => json_encode(['message' => 'invalid'])];
 
-        // [verify response, bootstrap printed, why]. ABN-533: an outage keeps
-        // company search alive; a rejected key still stands it down.
+        // [Turn on/off, verify response, bootstrap printed, why].
         $cases = [
-            [['response' => ['code' => 401], 'body' => json_encode(['message' => 'invalid'])], false,
-                'a rejected key suppresses the bootstrap'],
-            [['response' => ['code' => 503], 'body' => '{}'], true,
-                'a 5xx still prints it, with a null merchant'],
-            [new WP_Error('http_request_failed', 'timed out'), true,
-                'an unreachable Two still prints it'],
+            ['yes', $ok, true, 'an enabled gateway with a verified key prints it'],
+            ['yes', $rejected, false, 'a rejected key withholds it, as before'],
+            ['no', $ok, false, 'a disabled gateway withholds it even with a verified key'],
+            ['no', $rejected, false, 'a disabled gateway with a rejected key withholds it'],
         ];
-
-        foreach ($cases as [$response, $printed, $description]) {
+        foreach ($cases as [$enabled, $response, $printed, $description]) {
             $GLOBALS['__twoinc_test_transients'] = [];
-            ob_start();
-            (new WC_Twoinc_Checkout($make_gateway($response)))->inject_cart_details();
-            $output = (string) ob_get_clean();
+            WC_Twoinc::reset_merchant_record_memo();
+            $gateway = $make_gateway($response);
+            $prints = static function () use ($gateway): bool {
+                ob_start();
+                (new WC_Twoinc_Checkout($gateway))->inject_cart_details();
+                return strpos((string) ob_get_clean(), 'window.twoinc') !== false;
+            };
 
-            TinyAssert::same($printed, strpos($output, 'window.twoinc') !== false, $description);
+            $gateway->enabled = $enabled;
+            TinyAssert::same($printed, $prints(), $description);
+            $gateway->enabled = 'yes';
+            TinyAssert::same($response === $ok, $prints(), $description . ' (switched back on)');
         }
         unset($GLOBALS['__twoinc_test_is_checkout']);
+
+        // Every proxy route refuses while disabled; the ones that reach Two
+        // with no request body call it again once switched back on.
+        $_REQUEST = ['q' => 'exampleco', 'country' => 'GB', 'lookup_id' => 'lookup-1'];
+        $relays = ['ajax_company_search', 'ajax_company_by_id', 'ajax_supported_countries', 'ajax_payment_terms'];
+        foreach (array_merge($relays, ['ajax_order_intent']) as $handler) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $gateway = self::proxyGateway();
+            $response = self::runProxyHandler($gateway, $handler, 'no');
+            TinyAssert::same(['success' => false, 'data' => 'Gateway unavailable', 'status' => null], $response, "$handler refuses while disabled");
+            TinyAssert::same([], $gateway->calls, "$handler reached Two while disabled");
+
+            if (in_array($handler, $relays, true)) {
+                self::runProxyHandler($gateway, $handler);
+                TinyAssert::same(1, count($gateway->calls), "$handler calls Two again once switched back on");
+            }
+        }
+        $_REQUEST = [];
+
+        // The sole-trader routes reach the registry too.
+        $_REQUEST = ['country' => 'GB'];
+        foreach (['no' => false, 'yes' => true] as $enabled => $served) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            WC_Twoinc_Sole_Trader::reset_cache();
+            $gateway = self::tokenMintingGateway(['SOLE_TRADER']);
+            $gateway->enabled = $enabled;
+            $GLOBALS['__twoinc_test_ajax_json'] = null;
+            self::withGatewayInstance($gateway, [WC_Twoinc_Sole_Trader::class, 'ajax_availability']);
+            TinyAssert::same($served, $GLOBALS['__twoinc_test_ajax_json']['success'] ?? null, "availability, Turn on/off \"$enabled\"");
+            TinyAssert::same($served, $gateway->requests !== [], "availability reaches the registry only when on, Turn on/off \"$enabled\"");
+            $gateway->requests = [];
+            TinyAssert::same(
+                $served,
+                self::runTokensHandler($gateway, $enabled)['success'] ?? null,
+                "token mint, Turn on/off \"$enabled\""
+            );
+            TinyAssert::same($served, $gateway->requests !== [], "token mint reaches Two only when on, Turn on/off \"$enabled\"");
+        }
+        $_REQUEST = [];
     }
 
     /**
@@ -12899,7 +14331,7 @@ final class BrandConfigSpec
                 return $this->options[$key] ?? $empty_value ?? '';
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 // Truthy, not a WP_Error, but no 'body' key — the
                 // malformed/unexpected shape under test.
@@ -12968,7 +14400,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->make_request_calls++;
                 $this->seen_timeout = $timeout;
@@ -12979,7 +14411,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-537. admin_enqueue_scripts fires on EVERY wp-admin request, so an
+     * admin_enqueue_scripts fires on EVERY wp-admin request, so an
      * unscoped verification blocked the whole of wp-admin for the duration of
      * one wire call while the API was unreachable. Only the gateway's own
      * settings section may spend a call.
@@ -13040,7 +14472,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-537. The cached verdict is written after the call, so it never
+     * The cached verdict is written after the call, so it never
      * spared a later page load: every reload of the settings page during an
      * outage paid its own wire call.
      */
@@ -13069,7 +14501,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-537. Only a live check of the STORED key persists merchant_id, so a
+     * Only a live check of the STORED key persists merchant_id, so a
      * cache read that honoured the Validate button's 'ok' for a TYPED key left
      * the identity unresolved on the one screen that can heal it.
      */
@@ -13101,7 +14533,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-537. An empty id passes isset(), so a 200 carrying one read as 'ok'
+     * An empty id passes isset(), so a 200 carrying one read as 'ok'
      * with nothing to resolve — and the settings screen, which re-verifies
      * precisely while the identity is unresolved, then called on every load
      * with nothing to converge on.
@@ -13150,7 +14582,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-537. wp_remote_request()'s 30s default stalled the settings page for
+     * wp_remote_request()'s 30s default stalled the settings page for
      * half a minute against an unreachable API.
      */
     private static function testSettingsScreenVerificationTimeoutIsBoundedForAPageRender(): void
@@ -13192,7 +14624,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->make_request_calls++;
                 return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42', 'short_name' => 'Acme'])];
@@ -13244,7 +14676,7 @@ final class BrandConfigSpec
                 return true;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->seen_timeout = $timeout;
                 return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
@@ -13257,7 +14689,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-536 on ABN-533's rule that the definitive-rejection categories live in
+     * Pins the rule that the definitive-rejection categories live in
      * exactly one place. admin.js decides whether to degrade the admin from a
      * flag the verdict carries, so the flag has to come from that predicate —
      * a JS-side list of categories would be the second listing the rule forbids.
@@ -13298,7 +14730,7 @@ final class BrandConfigSpec
         }
     }
 
-    /** ABN-536. The class is the only thing carrying the notice's colour now. */
+    /** The class is the only thing carrying the notice's colour now. */
     private static function testApiKeyNoticeElementCarriesTheClassItsColourComesFrom(): void
     {
         $gateway = self::gateway();
@@ -14190,6 +15622,8 @@ final class BrandConfigSpec
             ['name' => 'X-Forwarded-For', 'value' => '10.0.0.1', 'send_from_browser' => 'yes'],
             ['name' => 'x-real-ip', 'value' => '10.0.0.1', 'send_from_browser' => 'yes'],
             ['name' => 'Two-Delegated-Authority-Token', 'value' => 'forged', 'send_from_browser' => 'yes'],
+            ['name' => 'idempotency-key', 'value' => 'forged', 'send_from_browser' => 'yes'],
+            ['name' => 'X-IDEMPOTENCY-KEY', 'value' => 'forged', 'send_from_browser' => 'yes'],
             ['name' => 'Connection', 'value' => 'close', 'send_from_browser' => 'yes'],
             ['name' => 'keep-alive', 'value' => 'timeout=5', 'send_from_browser' => 'yes'],
             ['name' => 'PROXY-AUTHENTICATE', 'value' => 'Basic', 'send_from_browser' => 'yes'],
@@ -14206,14 +15640,15 @@ final class BrandConfigSpec
             ['name' => 'X-Blank', 'value' => '   ', 'send_from_browser' => 'yes'],
             ['name' => 'X-Tenant', 'value' => 'tenant-7', 'send_from_browser' => 'yes'],
         ]]);
-        $gateway->make_request('/v1/order_intent', ['a' => 1]);
+        $gateway->make_request('/v1/order_intent', ['a' => 1], 'POST', [], null, 30, 'intent_own');
         $headers = self::sentHeaders();
 
         TinyAssert::same('real-key', $headers['X-API-Key'] ?? null, 'a stored row must not clobber the API key');
         TinyAssert::same('application/json; charset=utf-8', $headers['Content-Type'] ?? null);
         TinyAssert::same('tenant-7', $headers['X-Tenant'] ?? null, 'the usable row still travels');
+        TinyAssert::same('intent_own', $headers['Idempotency-Key'] ?? null, 'a stored row must not replace the Idempotency-Key');
         $dropped_names = [
-            'X Bad Name', 'Host', 'Content-Length', 'X-Forwarded-For', 'x-real-ip', 'X-Unicode', 'X-Blank',
+            'idempotency-key', 'X-IDEMPOTENCY-KEY', 'X Bad Name', 'Host', 'Content-Length', 'X-Forwarded-For', 'x-real-ip', 'X-Unicode', 'X-Blank',
             'Two-Delegated-Authority-Token', 'Connection', 'keep-alive', 'PROXY-AUTHENTICATE',
             'Proxy-Authorization', 'TE', 'trailer', 'Transfer-Encoding', 'upgrade', 'Authorization', 'COOKIE',
         ];
@@ -14463,6 +15898,9 @@ final class BrandConfigSpec
             [[['name' => 'X-Bad:', 'value' => 'v']], 'not a valid HTTP header name', 'a colon would terminate the name'],
             [[['name' => '', 'value' => 'v']], 'needs a name', 'a value with no name is unusable'],
             [[['name' => 'X-API-Key', 'value' => 'v']], 'is reserved', 'the API key header is the plugin\'s own'],
+            [[['name' => 'idempotency-key', 'value' => 'v']], 'is reserved', 'each write composes its own Idempotency-Key'],
+            [[['name' => 'X-Idempotency-Key', 'value' => 'v']], 'is reserved', 'nor may a row send the X- form beside it'],
+            [[['name' => 'x-IDEMPOTENCY-key', 'value' => 'v']], 'is reserved', 'in any case'],
             [[['name' => 'content-type', 'value' => 'v']], 'is reserved', 'reserved names match case-insensitively'],
             [[['name' => 'Content-Type', 'value' => 'v']], 'is reserved', 'nor does the canonical casing slip through'],
             [[['name' => 'Host', 'value' => 'v']], 'is reserved', 'Host addresses the request itself'],
@@ -14718,18 +16156,27 @@ final class BrandConfigSpec
 
     /**
      * Run one proxy handler against a gateway double, as the wc_ajax hook
-     * would, and hand back what it sent to the browser.
+     * would, and hand back what it sent to the browser. The gateway is
+     * switched on unless a case says otherwise (TWO-27227).
      */
-    private static function runProxyHandler($gateway, string $handler): array
+    private static function runProxyHandler($gateway, string $handler, string $enabled = 'yes'): array
     {
+        $gateway->enabled = $enabled;
         $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
         $prop->setAccessible(true);
         $prop->setValue(null, $gateway);
         $GLOBALS['__twoinc_test_ajax_json'] = null;
+        // The intent is composed from the live cart, so every handler runs with one.
+        $cart = WC()->cart;
+        $customer = WC()->customer;
+        WC()->cart = $GLOBALS['__twoinc_test_intent_cart'] ?? new StubIntentCart();
+        WC()->customer = null;
         try {
             WC_Twoinc_Api_Proxy::$handler();
         } finally {
             $prop->setValue(null, null);
+            WC()->cart = $cart;
+            WC()->customer = $customer;
         }
         return $GLOBALS['__twoinc_test_ajax_json'] ?? [];
     }
@@ -14760,7 +16207,7 @@ final class BrandConfigSpec
                 return 'merchant-from-settings';
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 $this->calls[] = ['endpoint' => $endpoint, 'payload' => $payload, 'method' => $method, 'params' => $params];
                 return $this->reply;
@@ -14827,6 +16274,68 @@ final class BrandConfigSpec
                 TinyAssert::same(false, $response['success'] ?? null, $description);
                 TinyAssert::same([], $gateway->calls, $description);
             }
+        }
+    }
+
+    /** A registry postcode is written as its country writes it, and never invented (TWO-27159). */
+    private static function testPostcodeFormatFitsTheCountrysWrittenFormOrLeavesItAlone(): void
+    {
+        $cases = [
+            ['1234AB', 'NL', '1234 AB', 'a Dutch postcode gains its space'],
+            ['1234ab', 'nl', '1234 ab', 'letter case and a lower-case country are kept'],
+            ['1234 AB', 'NL', '1234 AB', 'a postcode already in form is unchanged'],
+            ['00950', 'PL', '00-950', 'a Polish postcode gains its hyphen'],
+            ['11122', 'SE', '111 22', 'a Swedish postcode gains its space'],
+            ['1000-001', 'PT', '1000-001', 'a Portuguese postcode keeps its hyphen'],
+            ['VLT1117', 'MT', 'VLT 1117', 'a Maltese postcode with letters and digits'],
+            ['1 0 1 1 5', 'DE', '10115', 'stray spaces are dropped where the format has none'],
+            ['1234A', 'NL', '1234A', 'too short to fill the format is relayed unchanged'],
+            ['1234ABC', 'NL', '1234ABC', 'too long for the format is relayed unchanged'],
+            ['12345', 'NL', '12345', 'a digit in a letter slot is relayed unchanged'],
+            ['SW1A1AA', 'GB', 'SW1A1AA', 'a country with no fixed format is relayed unchanged'],
+            ['1234AB', '', '1234AB', 'no country is relayed unchanged'],
+            ['', 'NL', '', 'an empty postcode stays empty'],
+        ];
+        foreach ($cases as [$postcode, $country, $expected, $description]) {
+            TinyAssert::same($expected, WC_Twoinc_Postcode_Format::fit($postcode, $country), $description);
+        }
+    }
+
+    /**
+     * The address lookup's postcodes reach the browser as their country writes
+     * them, judged by the address's own country, else the company's; an error
+     * body is relayed untouched (TWO-27159).
+     */
+    private static function testApiProxyCompanyLookupRelaysPostcodesAsTheirCountryWritesThem(): void
+    {
+        $body = [
+            'country' => 'NL',
+            'addresses' => [
+                ['postal_code' => '1234AB', 'phone_number' => '+31201234567'],
+                ['postal_code' => '00950', 'country' => 'PL'],
+                ['city' => 'Amsterdam'],
+            ],
+        ];
+        $cases = [
+            [200, $body, [
+                'country' => 'NL',
+                'addresses' => [
+                    ['postal_code' => '1234 AB', 'phone_number' => '+31201234567'],
+                    ['postal_code' => '00-950', 'country' => 'PL'],
+                    ['city' => 'Amsterdam'],
+                ],
+            ], 'each postcode is fitted by its own country, else the company\'s'],
+            [404, ['error' => 'not found'], ['error' => 'not found'], 'an error body is relayed verbatim'],
+            [500, $body, $body, 'a failed lookup is not reshaped'],
+        ];
+        foreach ($cases as [$status, $upstream, $expected, $description]) {
+            $gateway = self::proxyGateway(['response' => ['code' => $status], 'body' => json_encode($upstream)]);
+            $_REQUEST = ['lookup_id' => '12345678'];
+            $response = self::runProxyHandler($gateway, 'ajax_company_by_id');
+            $_REQUEST = [];
+
+            TinyAssert::same($expected, $response['relayed'] ?? null, $description);
+            TinyAssert::same($status, $response['status'] ?? null, $description);
         }
     }
 
@@ -14952,15 +16461,15 @@ final class BrandConfigSpec
         $payload = $gateway->calls[0]['payload'];
         TinyAssert::same('merchant-from-settings', $payload['merchant_id']);
         TinyAssert::same('shortname-from-settings', $payload['merchant_short_name']);
-        // Cart-derived fields still come from the form the buyer filled in.
-        TinyAssert::same('100.00', $payload['gross_amount']);
+        // Amounts come from the cart server-side, never from the request (TWO-26092).
+        TinyAssert::same('125.00', $payload['gross_amount']);
         TinyAssert::same('ACME', $payload['buyer']['company']['company_name']);
         // Anything outside the allowlist is dropped rather than relayed.
         TinyAssert::same(false, array_key_exists('invoice_details', $payload));
     }
 
     /**
-     * ABN-585: the buyer moves country without a page load, so the company
+     * The buyer moves country without a page load, so the company
      * search control's own gate reads the merchant's allowlist in the browser.
      * Absent has to arrive as null, which restricts nothing — never as an
      * empty list, which restricts everything.
@@ -14985,7 +16494,7 @@ final class BrandConfigSpec
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return array_shift($this->responses) ?: ['response' => ['code' => 200], 'body' => '{}'];
             }
@@ -16098,7 +17607,7 @@ final class AnchorOnlyHtmlSpec
     }
 
     /**
-     * The admin save gate (ABN-554). A value is rejected exactly when escaping
+     * The admin save gate. A value is rejected exactly when escaping
      * would change what the buyer sees - entity-encoding plain text is not a
      * change, so apostrophes and ampersands are not markup.
      */
@@ -16161,11 +17670,11 @@ final class AnchorOnlyHtmlSpec
 /**
  * The subtitle is emitted through the anchor-only escaper, so copy that escaper
  * drops used to vanish at checkout with no merchant feedback. The save refuses
- * it instead (ABN-554).
+ * it instead.
  */
 final class SubtitleSaveValidationSpec
 {
-    private const REJECTION = 'Subtitle accepts plain text and a single link only; "%s" would be shown as "%s".';
+    private const REJECTION = 'Subtitle accepts plain text only, with no links or other markup; "%s" would be shown as "%s".';
 
     public static function runAll(): void
     {
@@ -16173,6 +17682,7 @@ final class SubtitleSaveValidationSpec
             'testTheValidatorAcceptsOnlyWhatTheTileRendersUnchanged',
             'testARejectedSubtitleKeepsTheStoredValueAndReportsWhy',
             'testTheRejectionIsTranslated',
+            'testASavedSubtitleIsGrandfatheredAndShownAsPlainText',
         ];
         foreach ($tests as $test) {
             self::$test();
@@ -16199,13 +17709,9 @@ final class SubtitleSaveValidationSpec
             ['Pay later, interest free', 'Pay later, interest free', 'plain copy saves unchanged'],
             ['  Pay later  ', 'Pay later', 'surrounding whitespace is trimmed, as every other text field is'],
             ["Don't wait & save", "Don't wait & save", 'an apostrophe and an ampersand are plain text, not markup'],
-            [
-                '<a href="https://faq.example.test/x">read more</a>',
-                '<a href="https://faq.example.test/x">read more</a>',
-                'the one link the tile allows saves unchanged',
-            ],
-            ['<b>Pay</b> later', null, 'a dropped tag is refused'],
-            ['<a href="javascript:alert(1)">go</a>', null, 'so is a link the escaper would strip of its anchor'],
+            ['<a href="https://faq.example.test/x">read more</a>', null, 'a link is refused: the subtitle is plain text'],
+            ['<b>Pay</b> later', null, 'so is any other tag'],
+            ['<a href="javascript:alert(1)">go</a>', null, 'and a script link'],
         ];
 
         foreach ($cases as list($posted, $expected, $description)) {
@@ -16222,7 +17728,7 @@ final class SubtitleSaveValidationSpec
                     sprintf(
                         self::REJECTION,
                         esc_html($posted),
-                        esc_html(WC_Twoinc_Helper::escape_anchor_only_html($posted))
+                        esc_html(trim(strip_tags($posted)))
                     ),
                     $refusal,
                     $description
@@ -16267,11 +17773,45 @@ final class SubtitleSaveValidationSpec
         }
     }
 
+    /** A subtitle saved with a link before the rule saves again unchanged, and the tile shows its words escaped (TWO-27109). */
+    private static function testASavedSubtitleIsGrandfatheredAndShownAsPlainText(): void
+    {
+        $linked = 'Terms & <a href="https://faq.example.test/x">FAQ</a>';
+        // [saved, posted, saved after, refused, tile shows, why]
+        $cases = [
+            [$linked, $linked, $linked, false, 'Terms &amp; FAQ', 'a linked subtitle saved earlier is let through and shown as its words'],
+            [$linked, 'Terms & <b>FAQ</b>', $linked, true, 'Terms &amp; FAQ', 'an edit that still carries markup is refused'],
+            ['', "Pay later <script>x</script>", '', true, null, 'new markup is refused'],
+            ['', 'Pay later & save', 'Pay later & save', false, 'Pay later &amp; save', 'plain text is escaped, not interpreted'],
+        ];
+        foreach ($cases as [$saved, $posted, $want, $refused, $shown, $description]) {
+            $gateway = self::gateway();
+            $gateway->init_form_fields();
+            $key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$key] = ['payment_subtitle' => $saved];
+            $gateway->init_settings();
+            $gateway->test_post_data = [$gateway->get_field_key('payment_subtitle') => $posted];
+            $GLOBALS['__twoinc_test_admin_errors'] = [];
+            try {
+                $gateway->process_admin_options();
+                TinyAssert::same($want, $GLOBALS['__twoinc_test_options'][$key]['payment_subtitle'] ?? null, $description);
+                TinyAssert::same($refused, $GLOBALS['__twoinc_test_admin_errors'] !== [], $description . ': refusal');
+                if ($shown !== null) {
+                    $tile = self::gateway();
+                    $tile->init_settings();
+                    TinyAssert::same('<div class="twoinc-payment-subtitle">' . $shown . '</div>', $tile->get_pay_subtitle(), $description . ': tile');
+                }
+            } finally {
+                unset($GLOBALS['__twoinc_test_options'][$key]);
+            }
+        }
+    }
+
     /** A refusal the merchant cannot read is no better than the silent strip it replaces. */
     private static function testTheRejectionIsTranslated(): void
     {
         $languages = dirname(__DIR__, 2) . '/languages/';
-        $msgid = 'Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\".';
+        $msgid = 'Subtitle accepts plain text only, with no links or other markup; \"%1$s\" would be shown as \"%2$s\".';
 
         TinyAssert::true(
             strpos((string) file_get_contents($languages . 'twoinc-payment-gateway.pot'), $msgid) !== false,
@@ -16291,7 +17831,7 @@ final class SubtitleSaveValidationSpec
 }
 
 /**
- * ABN-554. A captured company is replayed for the cart it was captured in and
+ * A captured company is replayed for the cart it was captured in and
  * the order it was captured on, and for nothing else.
  */
 final class CaptureMemorySpec
@@ -16320,6 +17860,12 @@ final class CaptureMemorySpec
             'testAProfileSaveOmittingTheFieldsLeavesThemStanding',
             'testAProfileSaveStoresSanitisedText',
             'testAProfileSaveCanClearAField',
+            'testTheCaptureCountryIsRememberedWithIt',
+            'testACaptureRememberedWithNoCountryReplaysNone',
+            'testTheMerchantSetCompanyTakesTheBuyersSavedCountry',
+            'testTheOrderBeingPaidReplaysNoCountry',
+            'testTheCaptureFieldsAreNeverKeptOnTheCustomer',
+            'testTheCaptureFieldsAreNeverPrefilled',
         ];
         foreach ($tests as $test) {
             self::$test();
@@ -16515,6 +18061,116 @@ final class CaptureMemorySpec
         } finally {
             $_POST = $saved;
             self::reset();
+        }
+    }
+
+    /**
+     * [what is posted, the country replayed, description]. TWO-26286: a replay names the country it was captured
+     * under, so the browser never pairs the number with another one.
+     */
+    private static function testTheCaptureCountryIsRememberedWithIt(): void
+    {
+        $cases = [
+            ['es', 'ES', 'a posted country is replayed upper-cased'],
+            ['', '', 'no posted country replays none'],
+            ['Spain', '', 'anything but a two-letter code replays none'],
+        ];
+        foreach ($cases as [$posted, $expected, $description]) {
+            self::liveCart();
+            $saved = $_POST;
+            $_POST = self::CAPTURED + ['country' => $posted];
+            try {
+                WC_Twoinc_Checkout::ajax_remember_company();
+                TinyAssert::same($expected, self::bootstrap()['company_country'] ?? null, $description);
+            } finally {
+                $_POST = $saved;
+                self::reset();
+            }
+        }
+    }
+
+    /** Given a capture remembered before the country was kept; When the checkout renders; Then it names no country. */
+    private static function testACaptureRememberedWithNoCountryReplaysNone(): void
+    {
+        self::liveCart();
+        WC()->session->set(WC_Twoinc_Checkout::CAPTURED_COMPANY_SESSION_KEY, self::CAPTURED);
+
+        $rendered = self::bootstrap();
+        TinyAssert::same(self::CAPTURED['company_id'], $rendered['company_id'], 'the number still reaches the browser');
+        TinyAssert::same('', $rendered['company_country'] ?? null, 'with no country, which the browser refuses to replay');
+        self::reset();
+    }
+
+    /** Given a merchant-set company; When the checkout renders; Then it is taken as the buyer's saved billing country's. */
+    private static function testTheMerchantSetCompanyTakesTheBuyersSavedCountry(): void
+    {
+        self::liveCart();
+        $GLOBALS['__twoinc_test_user_id'] = 7;
+        $GLOBALS['__twoinc_test_user_meta'] = [7 => [
+            WC_Twoinc_Brand::prefixed_name('company_id') => '811223344',
+            WC_Twoinc_Brand::prefixed_name('billing_company') => 'Second Company AS',
+            'billing_country' => 'no',
+        ]];
+
+        TinyAssert::same('NO', self::bootstrap()['company_country'] ?? null, 'the buyer saved billing country');
+        self::reset();
+    }
+
+    /** Given the pay-for-order page, which has no billing country to judge against; When it renders; Then the order's company carries none. */
+    private static function testTheOrderBeingPaidReplaysNoCountry(): void
+    {
+        self::liveCart();
+        $order = new StubOrder();
+        $order->meta = ['company_id' => '811223344', 'company_name' => 'Second Company AS'];
+        $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+
+        try {
+            self::onTheOrderPayPage(42, $order);
+            $rendered = self::bootstrap();
+            TinyAssert::same('811223344', $rendered['company_id'], 'the order company is replayed');
+            TinyAssert::same('', $rendered['company_country'] ?? null, 'with no country');
+        } finally {
+            self::reset();
+        }
+    }
+
+    /**
+     * Given a checkout saving the customer; When core has copied the posted capture fields onto it; Then none of
+     * them is kept, so no later checkout can replay a company number under a moved address (TWO-26286).
+     */
+    private static function testTheCaptureFieldsAreNeverKeptOnTheCustomer(): void
+    {
+        $customer = new class () {
+            public $meta = [
+                'shipping_company_id' => '00000001',
+                'shipping_company_display' => 'Fake Widgets Test Ltd',
+                'billing_company_display' => 'Fake Widgets Test Ltd',
+                'shipping_company' => 'Fake Widgets Test Ltd',
+            ];
+
+            public function delete_meta_data($key)
+            {
+                unset($this->meta[$key]);
+            }
+        };
+
+        WC_Twoinc_Checkout::keep_capture_fields_off_customer($customer);
+
+        TinyAssert::same(['shipping_company' => 'Fake Widgets Test Ltd'], $customer->meta, 'only the native company line is kept');
+    }
+
+    /** [field, value core would prefill, value rendered, description] */
+    private static function testTheCaptureFieldsAreNeverPrefilled(): void
+    {
+        $cases = [
+            ['shipping_company_id', null, '', 'a delivery company number'],
+            ['shipping_company_display', null, '', 'the delivery company shown'],
+            ['billing_company_display', null, '', 'the billing company shown'],
+            ['shipping_company', null, null, 'the native company line is left to core'],
+            ['billing_email', 'buyer@example.test', 'buyer@example.test', 'any other field is left alone'],
+        ];
+        foreach ($cases as [$field, $value, $expected, $description]) {
+            TinyAssert::same($expected, WC_Twoinc_Checkout::never_prefill_capture_fields($value, $field), $description);
         }
     }
 
@@ -16814,8 +18470,16 @@ final class CaptureMemorySpec
                 return 'mid';
             }
 
+            public function get_merchant_available_terms(): array
+            {
+                return [30];
+            }
+
             public function get_option($key, $empty_value = null)
             {
+                if ($key === 'payment_terms_days') {
+                    return [30];
+                }
                 return $key === 'api_key' ? 'key' : ($empty_value ?? '');
             }
 
@@ -16824,7 +18488,7 @@ final class CaptureMemorySpec
                 return null;
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30, $idempotency_key = null)
             {
                 return $this->response;
             }
@@ -17739,192 +19403,18 @@ final class ProductButtonSpec
     }
 }
 
-/**
- * Saving the settings checks the API key against the environment chosen in
- * the same form, not the one already saved (TWO-27299, ABN-625). Driven
- * through the real process_admin_options() and make_request(); only the HTTP
- * transport is stubbed. The key field is a password input pre-filled with the
- * saved key, so leaving it untouched posts the saved key back.
- */
-final class KeyEnvironmentSaveSpec
-{
-    private const HOSTS = ['PROD' => 'https://api.two.inc/', 'SANDBOX' => 'https://api.sandbox.two.inc/'];
-
-    public static function runAll(): void
-    {
-        $tests = [
-            'testEverySaveTalksToTheChosenEnvironmentWithTheChosenKey',
-        ];
-        foreach ($tests as $test) {
-            self::$test();
-            print("PASS KeyEnvironmentSaveSpec::$test\n");
-        }
-    }
-
-    private const VERIFIED = 'API key verified.';
-    private const REFUSED = 'rejected that API key for the selected environment';
-    private const SERVICE_ERROR = 'returned an error while verifying it';
-    private const UNREACHABLE = 'could not be reached to verify it';
-
-    /**
-     * saved settings, posted key, posted environment, then the pair the save
-     * must leave, the notice the merchant sees, and a description. Where Two
-     * accepts the key, or gives no verdict on it, the posted pair is saved;
-     * where Two refuses it, the saved pair stands. Nothing saved reads as no
-     * key and the field's default environment, Sandbox.
-     *
-     * @return array<int, array{0: array, 1: string, 2: string, 3: string, 4: string, 5: string, 6: string}>
-     */
-    private static function cases(): array
-    {
-        $sandbox = ['api_key' => 'sandbox-key-old', 'checkout_env' => 'SANDBOX'];
-        $production = ['api_key' => 'production-key-old', 'checkout_env' => 'PROD'];
-        return [
-            [[], 'sandbox-key-new', 'SANDBOX', 'sandbox-key-new', 'SANDBOX', self::VERIFIED, 'first key, nothing saved, sandbox chosen'],
-            [[], 'production-key-new', 'PROD', 'production-key-new', 'PROD', self::VERIFIED, 'first key, nothing saved, production chosen'],
-            [$sandbox, 'sandbox-key-new', 'SANDBOX', 'sandbox-key-new', 'SANDBOX', self::VERIFIED, 'key changed in sandbox'],
-            [$production, 'production-key-new', 'PROD', 'production-key-new', 'PROD', self::VERIFIED, 'key changed in production'],
-            [$sandbox, 'production-key-new', 'PROD', 'production-key-new', 'PROD', self::VERIFIED, 'switched sandbox to production with a production key'],
-            [$production, 'sandbox-key-new', 'SANDBOX', 'sandbox-key-new', 'SANDBOX', self::VERIFIED, 'switched production to sandbox with a sandbox key'],
-            // A key belongs to one environment, so the other one refuses it and the saved pair stands.
-            [$sandbox, 'sandbox-key-old', 'PROD', 'sandbox-key-old', 'SANDBOX', self::REFUSED, 'switched sandbox to production, key left as saved: production refuses it'],
-            [$production, 'production-key-old', 'SANDBOX', 'production-key-old', 'PROD', self::REFUSED, 'switched production to sandbox, key left as saved: sandbox refuses it'],
-            [$sandbox, 'revoked-key', 'PROD', 'sandbox-key-old', 'SANDBOX', self::REFUSED, 'switched sandbox to production with a key Two refuses'],
-            [[], 'revoked-key', 'PROD', '', 'SANDBOX', self::REFUSED, 'first key, nothing saved, production chosen, key Two refuses'],
-            // No verdict on the key, so nothing is refused: the posted pair is saved, as before this fix.
-            [$sandbox, 'production-key-down', 'PROD', 'production-key-down', 'PROD', self::SERVICE_ERROR, 'switched sandbox to production while Two answers 503'],
-            [$sandbox, 'production-key-offline', 'PROD', 'production-key-offline', 'PROD', self::UNREACHABLE, 'switched sandbox to production while Two cannot be reached'],
-        ];
-    }
-
-    /**
-     * Answers as the API does: a key works only on its own environment's
-     * host, and anything else is refused with a 401. A key ending -down gets
-     * a 503 and one ending -offline never reaches Two. Public because the
-     * bootstrap's transport calls it.
-     *
-     * @return array|WP_Error
-     */
-    public static function api(string $url, array $args)
-    {
-        $key = (string) ($args['headers']['X-API-Key'] ?? '');
-        if (substr($key, -5) === '-down') {
-            return ['response' => ['code' => 503], 'body' => '', 'headers' => []];
-        }
-        if (substr($key, -8) === '-offline') {
-            return new WP_Error('http_request_failed', 'Could not resolve host');
-        }
-        $host_env = strpos($url, self::HOSTS['PROD']) === 0 ? 'production' : 'sandbox';
-        if ($key !== '' && strpos($key, $host_env . '-key-') === 0) {
-            return ['response' => ['code' => 200], 'body' => json_encode(['id' => 'merchant-1', 'short_name' => 'shop']), 'headers' => []];
-        }
-        return ['response' => ['code' => 401], 'body' => json_encode(['message' => 'Unauthorized']), 'headers' => []];
-    }
-
-    /** A gateway reading the settings as currently stored, with $post as the submitted form. */
-    private static function gateway(array $post = []): WC_Twoinc
-    {
-        $gateway = new class ($post) extends WC_Twoinc {
-            public $test_post_data = [];
-
-            public function __construct(array $post)
-            {
-                $this->id = WC_Twoinc_Brand::get('gateway_id');
-                $this->test_post_data = $post;
-            }
-        };
-        $gateway->init_form_fields();
-        $gateway->init_settings();
-        return $gateway;
-    }
-
-    private static function store(array $settings): void
-    {
-        $GLOBALS['__twoinc_test_options'] = [
-            'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings' => $settings,
-        ];
-    }
-
-    private static function testEverySaveTalksToTheChosenEnvironmentWithTheChosenKey(): void
-    {
-        $options_before = $GLOBALS['__twoinc_test_options'] ?? [];
-        $GLOBALS['__twoinc_test_http_responder'] = [self::class, 'api'];
-        $failures = [];
-        try {
-            foreach (self::cases() as [$saved, $key, $env, $kept_key, $kept_env, $notice, $description]) {
-                try {
-                    self::saveThenCheckout($saved, $key, $env, $kept_key, $kept_env, $notice, $description);
-                } catch (RuntimeException $e) {
-                    // Every row runs, so one report names every failing case.
-                    $failures[] = $e->getMessage();
-                }
-            }
-        } finally {
-            $GLOBALS['__twoinc_test_options'] = $options_before;
-            unset($GLOBALS['__twoinc_test_http_responder']);
-            $GLOBALS['__twoinc_test_http_calls'] = [];
-        }
-        if ($failures !== []) {
-            throw new RuntimeException(implode("\n", $failures));
-        }
-    }
-
-    private static function saveThenCheckout(array $saved, string $key, string $env, string $kept_key, string $kept_env, string $notice, string $description): void
-    {
-        self::store($saved);
-        $old_key = (string) ($saved['api_key'] ?? '');
-        $GLOBALS['__twoinc_test_http_calls'] = [];
-        $GLOBALS['__twoinc_test_admin_messages'] = [];
-        $GLOBALS['__twoinc_test_admin_errors'] = [];
-        $field = 'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_';
-        $gateway = self::gateway([$field . 'api_key' => $key, $field . 'checkout_env' => $env]);
-        $gateway->process_admin_options();
-        $calls = $GLOBALS['__twoinc_test_http_calls'];
-
-        // The key is checked first, against the environment chosen in the form.
-        $first = $calls[0] ?? null;
-        TinyAssert::true(
-            $first !== null && strpos((string) $first['url'], '/v1/merchant/verify_api_key') !== false,
-            "the save verified the key first: $description"
-        );
-        self::assertCall($first, $key, self::HOSTS[$env], "the check, $description");
-        $notices = implode("\n", array_merge($GLOBALS['__twoinc_test_admin_messages'], $GLOBALS['__twoinc_test_admin_errors']));
-        TinyAssert::true(strpos($notices, $notice) !== false, "notice '$notice' not shown (got: $notices), $description");
-
-        // The save leaves one pair: the posted one, or the saved one after a refusal.
-        $stored = self::gateway();
-        TinyAssert::same($kept_key, (string) $stored->get_option('api_key'), "saved key, $description");
-        TinyAssert::same($kept_env, (string) $stored->get_option('checkout_env'), "saved environment, $description");
-        TinyAssert::same($kept_env, (string) $gateway->get_option('checkout_env'), "environment read later in the same request, $description");
-
-        // Everything after the check, the refetch included, uses that pair, and
-        // so does the next checkout call. A changed key never sends the old one.
-        $GLOBALS['__twoinc_test_http_calls'] = [];
-        $stored->make_request('/v1/order_intent', ['a' => 1]);
-        $later = array_merge(array_slice($calls, 1), $GLOBALS['__twoinc_test_http_calls']);
-        TinyAssert::true($kept_key === '' || $GLOBALS['__twoinc_test_http_calls'] !== [], "a checkout call after the save: $description");
-        foreach ($later as $call) {
-            self::assertCall($call, $kept_key, self::HOSTS[$kept_env], "after the check, $description");
-            if ($kept_key !== $old_key && $old_key !== '') {
-                TinyAssert::true(($call['args']['headers']['X-API-Key'] ?? null) !== $old_key, "the old key was sent, $description");
-            }
-        }
-    }
-
-    private static function assertCall(?array $call, string $key, string $host, string $message): void
-    {
-        $url = (string) ($call['url'] ?? '');
-        $where = strtok($url, '?');
-        TinyAssert::same($key, (string) ($call['args']['headers']['X-API-Key'] ?? ''), "key sent to $where, $message");
-        TinyAssert::true(strpos($url, $host) === 0, "expected host $host, got $where, $message");
-    }
-}
-
 BrandConfigSpec::runAll();
 AnchorOnlyHtmlSpec::runAll();
 SubtitleSaveValidationSpec::runAll();
 CaptureMemorySpec::runAll();
 ProductPromoSpec::runAll();
 ProductButtonSpec::runAll();
-KeyEnvironmentSaveSpec::runAll();
+OrderPostprocessingSpec::runAll();
+TaxCodeSpec::runAll();
+TaxCodeAdminSpec::runAll();
+EnvironmentOptionsSpec::runAll();
+AllowedFieldsSpec::runAll();
+OrderTermWireSpec::runAll();
+PendingRecoverySpec::runAll();
+BuyerPhoneSpec::runAll();
 print("All tests passed.\n");

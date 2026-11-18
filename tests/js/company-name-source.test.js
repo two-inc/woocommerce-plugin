@@ -28,7 +28,7 @@ const SOLE_TRADER_CONFIG = {
   text: {
     registered_business: "Registered company",
     sole_trader: "Sole trader",
-    popup_prompt: "Click here to login or sign up as a sole trader.",
+    signup_panel: "Sign up or log in as a sole trader",
     select_different: "Select a different sole trader",
     error: "Something went wrong"
   }
@@ -92,6 +92,7 @@ describe("getCompanyName reads the posted field", () => {
       act: () => {
         ctx.twoinc.billing_company = "Returning Buyer Ltd";
         ctx.twoinc.company_id = "912345678";
+        ctx.twoinc.company_country = "GB";
         ctx.dom.loadUserMetaInputs();
       },
       mode: "search",

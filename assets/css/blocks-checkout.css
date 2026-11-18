@@ -16,7 +16,7 @@
   text-align: end;
 }
 
-/* Title, logo, about control on one row — the classic checkout's order (ABN-554). */
+/* Title, logo, about control on one row, the classic checkout's order. */
 .twoinc-blocks-label {
   display: inline-flex;
   align-items: center;

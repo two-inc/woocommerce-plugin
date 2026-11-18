@@ -5,7 +5,7 @@
 # dev/probe-hosts.php inside it and reformatting its output.
 #
 # Runs inside the `wordpress` container (not `wpcli`) because the
-# TWOINC_DEV_*_HOST overrides are only threaded into that service's process
+# TWO_*_BASE_URL overrides are only threaded into that service's process
 # environment by docker-compose.yaml - the container that actually serves
 # checkout requests. dev/probe-hosts.php is the one place that resolution
 # logic lives (WC_Twoinc_Helper::get_environment_host()); this script only

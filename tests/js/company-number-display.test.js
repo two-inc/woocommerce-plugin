@@ -474,6 +474,7 @@ describe("TWO:-prefixed organisation numbers", () => {
 
         ctx.twoinc.billing_company = "Example Ltd";
         ctx.twoinc.company_id = "11111111";
+        ctx.twoinc.company_country = "GB";
         ctx.dom.loadUserMetaInputs();
 
         const $summary = $("#" + ctx.helper.companySummaryId);

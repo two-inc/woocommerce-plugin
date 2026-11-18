@@ -56,7 +56,7 @@ const SOLE_TRADER_CONFIG = {
   text: {
     registered_business: "Registered company",
     sole_trader: "Sole trader",
-    popup_prompt: "Click here to login or sign up as a sole trader.",
+    signup_panel: "Sign up or log in as a sole trader",
     select_different: "Select a different sole trader",
     error: "Something went wrong"
   }
@@ -415,7 +415,7 @@ describe("TWO-40 — sole-trader flow", () => {
     );
 
     /**
-     * Symptom (ABN-526): the link took focus but opened nothing. The popup
+     * Symptom: the link took focus but opened nothing. The popup
      * that would answer the activation was already on screen, and a refusal
      * that does nothing at all leaves a buyer who cannot see it with a dead
      * control.
@@ -448,7 +448,7 @@ describe("TWO-40 — sole-trader flow", () => {
       jest.useFakeTimers();
       soleTrader.setMode("sole_trader");
       // The state the link is on screen in, and the one it was reported dead
-      // from (ABN-526).
+      // from.
       soleTrader.soleTraderAdopted = true;
       soleTrader.syncDifferentSoleTraderLink();
       soleTrader.launchSignup();
@@ -515,18 +515,20 @@ describe("TWO-40 — sole-trader flow", () => {
       },
       {
         arrangeAndAct: () => {
-          // Given: the note link, shown as the blocked-popup fallback.
+          // Given: the panel, drawn over the popover as the blocked-popup fallback.
+          $("#billing_company_display_field").removeClass("hidden");
+          harness.openCompanyPanel($, ctx.helper);
           soleTrader.render();
           soleTrader.setMode("sole_trader");
           const realOpen = window.open;
           window.open = jest.fn(() => null);
           soleTrader.launchSignup();
           window.open = realOpen;
-          // When: the buyer clicks the visible signup link.
-          $(".twoinc-sole-trader-note__link").trigger("click");
+          // When: the buyer clicks the panel's one button.
+          $(".two-company-dropdown__signup button").trigger("click");
         },
         expectedPopups: 1,
-        description: "the note link after a blocked popup"
+        description: "the panel's button after a blocked popup"
       },
       {
         arrangeAndAct: () => {
@@ -951,7 +953,7 @@ describe("TWO-40 — sole-trader flow", () => {
         adopted: false,
         tokens: true,
         shown: false,
-        description: "sole-trader mode with nothing adopted yet — ABN-526"
+        description: "sole-trader mode with nothing adopted yet"
       },
       {
         mode: "sole_trader",
@@ -1289,6 +1291,7 @@ describe("TWO-40 — sole-trader flow", () => {
           // a fiction.
           ctx.twoinc.billing_company = echo.metaName;
           ctx.twoinc.company_id = echo.metaId;
+          ctx.twoinc.company_country = "GB";
           $("#billing_company").val(dom.name);
           $("#company_id").val(dom.id);
 
@@ -1334,10 +1337,10 @@ describe("TWO-40 — sole-trader flow", () => {
       expect($("#billing_company").val()).toBe("Sole Trader Co");
     });
 
-    test("a completed signup that resolves no buyer at all surfaces the error", () => {
+    test("a completed signup that resolves no buyer at all offers the signup again (TWO-26775)", () => {
       // The authenticated path trusts the server, which means it also has to
-      // handle the server having nothing — otherwise this branch silently does
-      // nothing and the buyer is left staring at an unchanged checkout.
+      // handle the server having nothing: the signup is offered again, as a
+      // second popup, and nothing on the form is touched.
       soleTrader.render();
       soleTrader.mode = "sole_trader";
       jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
@@ -1345,8 +1348,22 @@ describe("TWO-40 — sole-trader flow", () => {
 
       postFromSignup("ACCEPTED");
 
-      expect($(".twoinc-sole-trader-toggle__error").text()).toBe("Something went wrong");
+      expect(opened).toHaveLength(1);
+      expect($(".twoinc-sole-trader-toggle__error").text()).toBe("");
       expect($("#company_id").val()).toBe("");
+    });
+
+    test("a completed signup whose lookup failed shows the error and leaves no Sole trader mode behind (TWO-26775)", () => {
+      soleTrader.render();
+      soleTrader.mode = "sole_trader";
+      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null, true));
+      soleTrader.bindPopupMessageListener();
+
+      postFromSignup("ACCEPTED");
+
+      expect(opened).toHaveLength(0);
+      expect($(".twoinc-sole-trader-toggle__error").text()).toBe("Something went wrong");
+      expect(soleTrader.mode).toBe("business");
     });
 
     test("the authenticated lookup settles its own flight", () => {
@@ -1423,6 +1440,35 @@ describe("TWO-40 — sole-trader flow", () => {
       soleTrader.render();
     }
 
+    // The held answer is applied unasked only under the checkout's own email (TWO-26775).
+    beforeEach(() => {
+      $("#billing_email").val("buyer@example.test");
+    });
+
+    test.each([
+      {
+        email: "Buyer@Example.test ",
+        adopts: true,
+        description: "the same email, any case or padding"
+      },
+      { email: "someone.else@example.test", adopts: false, description: "another email" },
+      { email: "", adopts: false, description: "no email entered" }
+    ])(
+      "a held registration under $description: adopted=$adopts (TWO-26775)",
+      ({ email, adopts, description }) => {
+        prefetched(ENROLLED);
+        $("#billing_email").val(email);
+
+        soleTrader.onModeChipClick("sole_trader");
+
+        expect({ description, popups: opened.length, id: $("#company_id").val() }).toEqual({
+          description,
+          popups: adopts ? 0 : 1,
+          id: adopts ? "TWO:ST9" : ""
+        });
+      }
+    );
+
     // Hands back `answer(buyer)`, so a test can assert what holds while the
     // prefetch is still out.
     function deferredPrefetch() {
@@ -1448,8 +1494,8 @@ describe("TWO-40 — sole-trader flow", () => {
       expect($("#billing_company").val()).toBe("Held Trader");
       expect(soleTrader.soleTraderAdopted).toBe(true);
       expect(soleTrader.mode).toBe("sole_trader");
-      // The blocked-popup fallback link stays down — nothing was blocked.
-      expect($(".twoinc-sole-trader-note").hasClass("hidden")).toBe(true);
+      // The blocked-popup panel stays down: nothing was blocked.
+      expect($(".two-company-dropdown__signup")).toHaveLength(0);
     });
 
     test("the prefetched buyer's own details land too, so the whole object is adopted", () => {
@@ -1880,7 +1926,11 @@ describe("TWO-40 — sole-trader flow", () => {
       prefetched(ENROLLED);
       soleTrader.setMode("sole_trader");
       soleTrader.bindPopupMessageListener();
-      const SIGNED_UP = { organization_number: "TWO:ST2", company_name: "Second Trader" };
+      const SIGNED_UP = {
+        organization_number: "TWO:ST2",
+        company_name: "Second Trader",
+        email: "buyer@example.test"
+      };
       jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(SIGNED_UP));
       window.dispatchEvent(
         new window.MessageEvent("message", {
@@ -2086,15 +2136,11 @@ describe("TWO-40 — sole-trader flow", () => {
   describe("TWO-40 — regressions found live", () => {
     describe("a chip click resolves to the popup or a populated company, never a note", () => {
       /**
-       * The note is the browser-blocked-popup fallback ONLY — never an outcome
-       * the chip click itself chooses. Asserted against a note that exists:
-       * `hasClass()` on an empty set reads back `false`, so a test that skips
-       * `render()` passes whatever the code does.
+       * The panel is the browser-blocked-popup fallback ONLY, never an outcome
+       * the chip click itself chooses.
        */
       function expectNoNote() {
-        const $note = $(".twoinc-sole-trader-note");
-        expect($note).toHaveLength(1);
-        expect($note.hasClass("hidden")).toBe(true);
+        expect($(".two-company-dropdown__signup")).toHaveLength(0);
       }
 
       /**
@@ -2425,16 +2471,10 @@ describe("TWO-40 — sole-trader flow", () => {
       }
 
       // Puts the flow in the state its re-signup launcher renders in: adopted,
-      // without a signup round trip (ABN-526).
+      // without a signup round trip.
       function adoptForResignup() {
         soleTrader.soleTraderAdopted = true;
         soleTrader.syncDifferentSoleTraderLink();
-      }
-
-      function noteLink() {
-        soleTrader.render();
-        soleTrader.showNote(true);
-        return document.querySelector(".twoinc-sole-trader-note__link");
       }
 
       // This role's own chips: a page-wide query finds the sibling role's (TWO-25554).
@@ -2484,7 +2524,7 @@ describe("TWO-40 — sole-trader flow", () => {
         openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         // A re-signup is reachable only from the adopted state — the same
-        // state its own launcher is on screen in (ABN-526).
+        // state its own launcher is on screen in.
         if (options && options.autoselect === false) adoptForResignup();
         if (arrange) arrange();
         const win = fakePopup();
@@ -2622,16 +2662,6 @@ describe("TWO-40 — sole-trader flow", () => {
             "rule 3: the re-signup button reached from outside closes the popover the same way"
         },
         {
-          target: noteLink,
-          popupOpen: true,
-          closes: 1,
-          raises: 0,
-          opens: 0,
-          panelOpen: false,
-          description:
-            "rule 2 + 3: the signup note link is not exempt, and sits outside the popover"
-        },
-        {
           target: queryTarget,
           popupOpen: false,
           closes: 0,
@@ -2642,7 +2672,7 @@ describe("TWO-40 — sole-trader flow", () => {
         },
         {
           target: companyField,
-          // The launch parks focus on the company field, so a row whose target is it fires no focusin (ABN-554).
+          // The launch parks focus on the company field, so a row whose target is it fires no focusin.
           beforeGesture: () => document.activeElement.blur(),
           popoverOpen: false,
           popupOpen: true,
@@ -2685,7 +2715,7 @@ describe("TWO-40 — sole-trader flow", () => {
           // The field held focus through a pointer chip click (mousedown prevented); the click back into it is a move, not a return.
           arrange: () => ctx.helper.panel.close({ returnFocus: true }),
           target: companyField,
-          // Off the field the launch parked focus on, so focusing it back is an arrival (ABN-554).
+          // Off the field the launch parked focus on, so focusing it back is an arrival.
           beforeGesture: () => document.activeElement.blur(),
           popoverOpen: false,
           popupOpen: true,
@@ -2709,8 +2739,11 @@ describe("TWO-40 — sole-trader flow", () => {
             "rule 3: a click back into the outside control that held focus at launch closes the popup and the popover"
         },
         {
-          // Launched from the note link, whose focus closed the popover (rule 3); the launch blurred it, so the return re-fires on nothing.
-          arrange: () => focusControl(noteLink()),
+          // Launched from the re-signup button, whose focus closed the popover (rule 3); the launch blurred it, so the return re-fires on nothing.
+          arrange: () => {
+            adoptForResignup();
+            focusControl(differentSoleTraderBtn());
+          },
           gesture: refireFocus,
           popoverOpen: false,
           popupOpen: true,
@@ -2802,7 +2835,7 @@ describe("TWO-40 — sole-trader flow", () => {
       /**
        * The popover stays on screen for the whole flight, and the launch blurs
        * whatever held focus, so without a park it surrounds a document focusing
-       * nothing and no keystroke reaches any control (ABN-554).
+       * nothing and no keystroke reaches any control.
        */
       test.each([
         {
@@ -2813,7 +2846,7 @@ describe("TWO-40 — sole-trader flow", () => {
           refire: true,
           description: "a window return re-firing focus there is not the buyer coming back"
         }
-      ])("$description (ABN-554)", ({ refire }) => {
+      ])("$description", ({ refire }) => {
         const win = launchFromChips();
         const field = ctx.helper.panel.getField()[0];
 
@@ -3032,11 +3065,14 @@ describe("TWO-40 — sole-trader flow", () => {
       test("a second click on the Sole trader chip after the first autofilled opens the popup", () => {
         openWidgetWithChips();
         armListeners();
-        jest
-          .spyOn(soleTrader, "fetchCurrentBuyer")
-          .mockImplementation((cb) =>
-            cb({ organization_number: "TWO:ST9", company_name: "Held Trader" })
-          );
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+          cb({
+            organization_number: "TWO:ST9",
+            company_name: "Held Trader",
+            email: "buyer@example.test"
+          })
+        );
+        $("#billing_email").val("buyer@example.test");
         soleTrader.render();
 
         clickChip("soletrader");
@@ -3125,6 +3161,26 @@ describe("TWO-40 — sole-trader flow", () => {
           jest.useRealTimers();
         }
       );
+
+      /** As Safari and Firefox on macOS press it: the chip takes no focus, so the press rule settles billing (TWO-26775). */
+      test("a press on the delivery Sole trader chip that moves no focus closes the billing popup and its popover, and launches the delivery one", () => {
+        openWidgetWithChips();
+        const chip = deliveryChip("soletrader");
+        ctx.shippingHelper.soleTrader.bindFocusinListener();
+        const win = launchFromChips();
+        const relaunched = fakePopup();
+        window.open = jest.fn(() => relaunched);
+
+        ["mousedown", "mouseup", "click"].forEach(function (type) {
+          chip.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true }));
+        });
+        jest.runOnlyPendingTimers();
+
+        expect(win.close).toHaveBeenCalledTimes(1);
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
+        expect(window.open).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
 
       // A host that morphs its markup over the live DOM rebuilds the popover and keeps the
       // field, and can take the wrap the panel built with it.
@@ -3278,8 +3334,7 @@ describe("TWO-40 — sole-trader flow", () => {
             win.closed = true;
           },
           focusedAfter: differentSoleTraderBtn,
-          description:
-            "closing a re-signup by hand while adopted gives the launcher its focus back (ABN-561)"
+          description: "closing a re-signup by hand while adopted gives the launcher its focus back"
         },
         {
           adopted: true,
@@ -3289,17 +3344,19 @@ describe("TWO-40 — sole-trader flow", () => {
           },
           // The chip is inside the dropdown the settle closes, so the adopted state's own launcher takes it.
           focusedAfter: differentSoleTraderBtn,
-          description: "the same, launched from the adopted chip rather than the link (ABN-561)"
+          description: "the same, launched from the adopted chip rather than the link"
         },
         {
-          // The settle closes the popover the chip lives in, so the holder is gone and the company field's opener lands focus in the query.
+          // The settle closes the popover the chip lives in, so the holder is gone: the company field takes focus, with the popover left closed (TWO-26775).
           adopted: false,
           launcher: () => chipNode("soletrader"),
           settle: (win) => {
             win.closed = true;
           },
-          focusedAfter: () => queryField()[0],
-          description: "closing a chip-launched signup by hand puts focus back in the search picker"
+          focusedAfter: () => ctx.helper.panel.getField()[0],
+          popoverOpen: false,
+          description:
+            "closing a chip-launched signup by hand puts focus on the company field, popover closed"
         },
         {
           adopted: true,
@@ -3315,10 +3372,11 @@ describe("TWO-40 — sole-trader flow", () => {
           settle: (win) => {
             win.closed = true;
           },
-          focusedAfter: () => queryField()[0],
-          description: "a launch from a query field already hidden falls back to the picker"
+          focusedAfter: () => ctx.helper.panel.getField()[0],
+          popoverOpen: false,
+          description: "a launch from a query field already hidden falls back to the company field"
         }
-      ])("$description", ({ adopted, launcher, settle, focusedAfter }) => {
+      ])("$description", ({ adopted, launcher, settle, focusedAfter, popoverOpen }) => {
         openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         if (adopted) {
@@ -3338,6 +3396,7 @@ describe("TWO-40 — sole-trader flow", () => {
 
         expect(document.activeElement).toBe(focusedAfter());
         expect(soleTrader.activePopupWatchers).toHaveLength(0);
+        if (popoverOpen !== undefined) expect(ctx.helper.panel.isOpen()).toBe(popoverOpen);
         jest.useRealTimers();
       });
 
@@ -3347,7 +3406,7 @@ describe("TWO-40 — sole-trader flow", () => {
        * leave it absent too, rather than inserting a hidden button into the
        * address form of a checkout that never shows one.
        */
-      test("a settle while adopted does not build the launcher it looks for (ABN-561)", () => {
+      test("a settle while adopted does not build the launcher it looks for", () => {
         openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         const win = fakePopup();
@@ -3409,37 +3468,40 @@ describe("TWO-40 — sole-trader flow", () => {
       test.each([
         { launcher: () => chipNode("soletrader"), description: "a keyboard chip launch" },
         {
-          launcher: () => {
-            ctx.helper.panel.close({ returnFocus: true });
-            return ctx.helper.panel.getField()[0];
-          },
+          // Closed before the mode switch: a popover closing over an idle, unadopted detour hands the mode back (TWO-26775).
+          prepare: () => ctx.helper.panel.close({ returnFocus: true }),
+          launcher: () => ctx.helper.panel.getField()[0],
           description: "a pointer launch with the company field holding focus"
         }
-      ])("an adopted signup settles with the popover closed after $description", ({ launcher }) => {
-        openWidgetWithChips();
-        soleTrader.setMode("sole_trader");
-        const signup = armUndecidedSignup();
-        const win = fakePopup();
-        window.open = jest.fn(() => win);
-        jest.useFakeTimers();
-        armListeners();
-        launcher().focus();
-        soleTrader.launchSignup();
+      ])(
+        "an adopted signup settles with the popover closed after $description",
+        ({ prepare, launcher }) => {
+          openWidgetWithChips();
+          if (prepare) prepare();
+          soleTrader.setMode("sole_trader");
+          const signup = armUndecidedSignup();
+          const win = fakePopup();
+          window.open = jest.fn(() => win);
+          jest.useFakeTimers();
+          armListeners();
+          launcher().focus();
+          soleTrader.launchSignup();
 
-        signup.settle({
-          organization_number: "TWO:ST1",
-          company_name: "A Sole Trader",
-          email: "buyer@example.test"
-        });
-        win.closed = true;
-        jest.advanceTimersByTime(300);
+          signup.settle({
+            organization_number: "TWO:ST1",
+            company_name: "A Sole Trader",
+            email: "buyer@example.test"
+          });
+          win.closed = true;
+          jest.advanceTimersByTime(300);
 
-        expect(soleTrader.soleTraderAdopted).toBe(true);
-        expect(soleTrader.activePopupWatchers).toHaveLength(0);
-        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
-        expect(document.activeElement).not.toBe(queryField()[0]);
-        jest.useRealTimers();
-      });
+          expect(soleTrader.soleTraderAdopted).toBe(true);
+          expect(soleTrader.activePopupWatchers).toHaveLength(0);
+          expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
+          expect(document.activeElement).not.toBe(queryField()[0]);
+          jest.useRealTimers();
+        }
+      );
 
       /** The launch's own blur is not the buyer leaving the field: the value is kept, the intent request is not made. */
       test.each([
@@ -3540,7 +3602,7 @@ describe("TWO-40 — sole-trader flow", () => {
       });
 
       /** The window and its visibility are deliberately not listened to at all (TWO-25658). */
-      test("binds the focusin listener and nothing on the window", () => {
+      test("binds the focusin and press listeners and nothing on the window", () => {
         soleTrader.unbindFocusinListener();
         const onWindow = jest.spyOn(window, "addEventListener");
         const onDocument = jest.spyOn(document, "addEventListener");
@@ -3548,7 +3610,11 @@ describe("TWO-40 — sole-trader flow", () => {
         soleTrader.bindFocusinListener();
 
         expect(onWindow).not.toHaveBeenCalled();
-        expect(onDocument.mock.calls.map((call) => call[0])).toEqual(["focusin"]);
+        expect(onDocument.mock.calls.map((call) => call[0])).toEqual([
+          "focusin",
+          "mousedown",
+          "mouseup"
+        ]);
       });
 
       /** Tab to the chip then Enter or Space: the chip's activation raises the popup, no mousedown and no `focusin` raise. */
@@ -4997,19 +5063,21 @@ describe("TWO-40 — sole-trader flow", () => {
   });
 
   /**
-   * Each chip declares a half-row flex basis so the row fills its full
-   * width, leaving no slack to the right. Asserted against the stylesheet
-   * source rather than a rendered box: jsdom does no flex layout, so a
+   * The chips share one row sized to their labels and grow to fill its full
+   * width, leaving no slack to the right; they wrap only when the width
+   * requires it, as on the other platforms' checkouts. Asserted against the
+   * stylesheet source rather than a rendered box: jsdom does no flex layout, so a
    * computed-width assertion here would be vacuous rather than wrong.
    */
   describe("the chip row fills its full width", () => {
-    test("each chip declares a half-row flex basis, so two share a row and a third grows to fill its own", () => {
+    test("each chip sizes to its label and grows, so all three share a row until the width runs out", () => {
       const rule = /^\.two-company-mode-chip\s*\{([^}]*)\}/m.exec(stylesheetSource());
 
       expect(rule).not.toBeNull();
-      // `flex-grow: 1` is what fills the row; the `calc(50% - <gap>)` basis is
-      // what decides how many chips land on it.
-      expect(rule[1]).toMatch(/flex:\s*1\s+1\s+calc\(50%\s*-\s*\d+px\)/);
+      // `flex-grow: 1` fills the row; the `auto` basis lets every chip that
+      // fits share it, and `min-width` decides when one has to wrap.
+      expect(rule[1]).toMatch(/flex:\s*1\s+1\s+auto\s*;/);
+      expect(rule[1]).toMatch(/min-width:\s*84px\s*;/);
     });
 
     test("the row itself wraps, or the third chip has nowhere to go", () => {

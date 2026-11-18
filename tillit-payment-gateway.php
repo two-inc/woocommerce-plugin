@@ -4,7 +4,7 @@
  * Plugin Name: Two - BNPL for businesses
  * Plugin URI: https://two.inc
  * Description: Integration between WooCommerce and Two
- * Version: 2.25.1
+ * Version: 3.0.0
  * Author: Two
  * Author URI: https://two.inc
  * Text Domain: twoinc-payment-gateway
@@ -12,6 +12,7 @@
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Requires Plugins: woocommerce
+ * WC requires at least: 7.6
  */
 
 // Make sure WooCommerce is active
@@ -32,6 +33,20 @@ define('WC_TWOINC_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
 add_filter('woocommerce_payment_gateways', 'wc_twoinc_add_to_gateways');
 add_action('plugins_loaded', 'load_twoinc_classes');
+add_action('before_woocommerce_init', 'twoinc_declare_feature_compatibility');
+
+/**
+ * Tell WooCommerce the plugin works with High-Performance Order Storage
+ * and with the cart and checkout blocks, so its admin does not list it as
+ * incompatible (TWO-26205).
+ */
+function twoinc_declare_feature_compatibility()
+{
+    if (class_exists(\Automattic\WooCommerce\Utilities\FeaturesUtil::class)) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('custom_order_tables', __FILE__, true);
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('cart_checkout_blocks', __FILE__, true);
+    }
+}
 
 // Must be registered from the MAIN plugin file: register_deactivation_hook()
 // keys the hook by this file's plugin basename. The old registration inside
@@ -75,9 +90,13 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_FX.php';
     require_once __DIR__ . '/class/WC_Twoinc_Rate_Limiter.php';
     require_once __DIR__ . '/class/WC_Twoinc_Surcharge_Method_Exception.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Order_Postprocessing_Exception.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Shop_Match_Exception.php';
     require_once __DIR__ . '/class/WC_Twoinc_Stored_Term.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Tax_Code_Section.php';
     require_once __DIR__ . '/class/WC_Twoinc_Payment_Terms.php';
     require_once __DIR__ . '/class/WC_Twoinc_Sole_Trader.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Postcode_Format.php';
     require_once __DIR__ . '/class/WC_Twoinc_Api_Proxy.php';
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
     require_once __DIR__ . '/class/WC_Twoinc_Storefront_Gate.php';
@@ -88,11 +107,20 @@ function load_twoinc_classes()
     WC_Twoinc_Product_Promo::init();
     WC_Twoinc_Product_Button::init();
     require_once __DIR__ . '/class/WC_Twoinc.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Pending_Recovery.php';
 
     // The option name is resolved inside the callback: reading the brand here would cache it
     // before an overlay loading at this same priority has registered its own.
     add_filter('pre_update_option', ['WC_Twoinc', 'keep_stored_custom_payment_term'], 10, 3);
     add_filter('woocommerce_locate_template', ['WC_Twoinc', 'locate_payment_method_template'], 10, 2);
+    // The default order postprocessing handler (TWO-26275): runs the shop-match checks unless a merchant handler
+    // is registered on the hook, and then stands down. Last, so it sees the payload every other callback returned.
+    add_filter(
+        WC_Twoinc_Helper::ORDER_POSTPROCESSING_HOOK,
+        ['WC_Twoinc_Helper', 'default_order_postprocessing'],
+        PHP_INT_MAX,
+        2
+    );
 
     // Checkout AJAX endpoints (term-fee chips, term selection, sole-trader
     // availability/tokens). Registered here at plugins_loaded — NOT in the
@@ -112,6 +140,8 @@ function load_twoinc_classes()
     // (enabled + chosen-payment-method + selected-term), so registering it on
     // every request is safe.
     add_action('woocommerce_cart_calculate_fees', ['WC_Twoinc_Payment_Terms', 'apply_cart_fee']);
+    // Marks the order item made from that fee, so it is sent as BUYER_FEE (TWO-26340).
+    add_action('woocommerce_checkout_create_order_fee_item', ['WC_Twoinc_Payment_Terms', 'mark_buyer_fee_item'], 10, 3);
 
     // FX rate cache (TWO-25104): a recurring 6h Action Scheduler refresh
     // keeps the spot table warm so checkout conversions (min-order gates,
@@ -136,6 +166,16 @@ function load_twoinc_classes()
         add_action(WC_Twoinc::merchant_record_refresh_hook(), ['WC_Twoinc', 'run_scheduled_merchant_record_refresh']);
         WC_Twoinc::schedule_merchant_record_refresh();
     });
+
+    // Orders the buyer verified but never returned from (TWO-26300): a check every 15 minutes, an order action
+    // and a check before WooCommerce's unpaid-order time limit cancels one. Deferred to init like the FX refresh.
+    add_action('init', static function () {
+        add_action(WC_Twoinc_Pending_Recovery::hook(), ['WC_Twoinc_Pending_Recovery', 'run_scheduled_check']);
+        add_action('woocommerce_order_action_' . WC_Twoinc_Pending_Recovery::order_action_key(), ['WC_Twoinc_Pending_Recovery', 'handle_order_action']);
+        WC_Twoinc_Pending_Recovery::maybe_schedule();
+    });
+    add_filter('woocommerce_order_actions', ['WC_Twoinc_Pending_Recovery', 'add_order_action'], 10, 2);
+    add_filter('woocommerce_cancel_unpaid_order', ['WC_Twoinc_Pending_Recovery', 'filter_cancel_unpaid'], WC_Twoinc_Pending_Recovery::UNPAID_FILTER_PRIORITY, 2);
     add_action('wc_ajax_two_term_fees', ['WC_Twoinc_Payment_Terms', 'ajax_term_fees']);
     add_action('wc_ajax_two_select_term', ['WC_Twoinc_Payment_Terms', 'ajax_select_term']);
     add_action('wc_ajax_two_sole_trader_availability', ['WC_Twoinc_Sole_Trader', 'ajax_availability']);
@@ -149,11 +189,17 @@ function load_twoinc_classes()
     add_action('wc_ajax_two_payment_terms', ['WC_Twoinc_Api_Proxy', 'ajax_payment_terms']);
     add_action('wc_ajax_two_supported_countries', ['WC_Twoinc_Api_Proxy', 'ajax_supported_countries']);
 
-    // Records the company the buyer captured against the cart this session holds (ABN-554).
+    // Records the company the buyer captured against the cart this session holds.
     add_action('wc_ajax_two_remember_company', ['WC_Twoinc_Checkout', 'ajax_remember_company']);
 
+    // WooCommerce 7.6's Checkout block reads its company row from its own
+    // attribute, which defaults to hidden (TWO-27186). Registered here, not in
+    // the gateway constructor: a block theme renders the page content before
+    // anything has built the gateway, so the handler looks it up lazily.
+    add_filter('render_block_data', ['WC_Twoinc_Checkout', 'reveal_blocks_company_attribute']);
+
     // A Blocks checkout builds its payment list from its own registry and
-    // never reads woocommerce_payment_gateways (ABN-554).
+    // never reads woocommerce_payment_gateways.
     add_action('woocommerce_blocks_payment_method_type_registration', static function ($registry) {
         require_once __DIR__ . '/class/WC_Twoinc_Blocks_Support.php';
         if (class_exists('WC_Twoinc_Blocks_Support')) {
@@ -197,6 +243,12 @@ function load_twoinc_classes()
     add_action('admin_init', ['WC_Twoinc_Rate_Limiter', 'maybe_raise_upgrade_notice']);
     add_action('admin_notices', ['WC_Twoinc_Rate_Limiter', 'render_upgrade_notice']);
 
+    // The 0% rates behind the tax code rows are memoised per request (TWO-26153); a rate change in that request
+    // must be seen.
+    foreach (['woocommerce_tax_rate_added', 'woocommerce_tax_rate_updated', 'woocommerce_tax_rate_deleted'] as $tax_rate_action) {
+        add_action($tax_rate_action, ['WC_Twoinc', 'reset_zero_tax_rates_memo'], 10, 0);
+    }
+
     // Confirm order after returning from Two's hosted checkout page, DO NOT CHANGE HOOKS
     add_action('template_redirect', 'WC_Twoinc::process_confirmation_header_redirect');
     // add_action('template_redirect', 'WC_Twoinc::before_process_confirmation');
@@ -208,10 +260,18 @@ function load_twoinc_classes()
     add_action('personal_options_update', 'WC_Twoinc::save_user_meta', 10, 1);
     add_action('edit_user_profile_update', 'WC_Twoinc::save_user_meta', 10, 1);
 
-    // Fallback in case woocommerce_order_status_xxx doesn't fire
-    add_action('woocommerce_order_edit_status', 'WC_Twoinc::on_order_edit_status', 10, 2);
+    // Status changes reach Two through this one hook, which WooCommerce fires once per saved
+    // transition; woocommerce_order_edit_status would send a manual change a second time (TWO-26291).
+    add_action('woocommerce_order_status_changed', 'WC_Twoinc::on_order_status_changed', 10, 3);
 
-    add_action('handle_bulk_actions-edit-shop_order', 'WC_Twoinc::on_order_bulk_edit_action', 10, 3);
+    // Admin order-form save, on both the legacy and the HPOS order screen.
+    // Priority 45: after WC_Meta_Box_Order_Data::save (40) has saved the
+    // addresses. Registered here, not in the gateway constructor, which only
+    // runs partway through that save (TWO-26175).
+    add_action('woocommerce_process_shop_order_meta', 'WC_Twoinc::on_admin_order_save', 45, 1);
+
+    // Priority 20: after WooCommerce's own handler (10) has changed the statuses.
+    add_filter('handle_bulk_actions-edit-shop_order', 'WC_Twoinc::on_order_bulk_edit_action', 20, 3);
     add_action('admin_notices', 'WC_Twoinc::on_order_bulk_edit_notices');
 }
 
@@ -230,6 +290,20 @@ function wc_twoinc_add_to_gateways($gateways)
 function wc_twoinc_enqueue_styles()
 {
     wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, twoinc_get_asset_version('assets/css/twoinc.css'));
+
+    // The Checkout block's stylesheet sits on top of the one above, so it is
+    // enqueued here, after it, where its dependency is always registered
+    // (TWO-27181). WooCommerce asks the Blocks integration for its handles
+    // during init on every request, admin included, where this never runs.
+    if (class_exists('WC_Twoinc_Blocks_Support')) {
+        $blocks_style = 'assets/css/blocks-checkout.css';
+        wp_enqueue_style(
+            'twoinc-blocks-checkout',
+            WC_TWOINC_PLUGIN_URL . $blocks_style,
+            ['twoinc-payment-gateway-css'],
+            twoinc_get_asset_version($blocks_style)
+        );
+    }
 }
 
 function wc_twoinc_enqueue_scripts()
@@ -374,7 +448,11 @@ function twoinc_ajax_verify_api_key()
         return;
     }
 
-    $api_key = sanitize_text_field($_POST['api_key']);
+    $twoinc_instance = WC_Twoinc::get_instance();
+    // The settings page never holds the saved key, so it asks for that one by reference (TWO-27109).
+    $api_key = empty($_POST['stored'])
+        ? trim(sanitize_text_field($_POST['api_key']))
+        : trim((string) $twoinc_instance->get_option('api_key'));
 
     if (empty($api_key)) {
         wp_send_json_error('API key is required');
@@ -387,7 +465,6 @@ function twoinc_ajax_verify_api_key()
     // this key has had, so a merchant who just fixed it here shouldn't have to
     // wait out the checkout cache's TTL to see it take effect (TWO-25326
     // follow-up).
-    $twoinc_instance = WC_Twoinc::get_instance();
     $result = $twoinc_instance->verify_api_key($api_key);
     $category = $twoinc_instance->cache_verification_result($api_key, $result);
 
@@ -411,8 +488,8 @@ function twoinc_ajax_verify_api_key()
             'status' => $category['status'],
             'code' => $category['code'],
             // Travels with the verdict rather than being re-listed in JS: the
-            // categories live in exactly one place (ABN-533), and the admin
-            // degrades nothing on a verdict that judged no key (ABN-536).
+            // categories live in exactly one place, and the admin
+            // degrades nothing on a verdict that judged no key.
             'definitive' => WC_Twoinc::is_definitive_key_failure($category['status']),
         ]);
     }

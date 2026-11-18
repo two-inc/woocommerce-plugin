@@ -1,0 +1,64 @@
+[
+  {
+    "country": "GB",
+    "name": "RESTAURANT 53 LTD",
+    "national_identifier": { "id": "15717462" },
+    "lookup_id": "e2e-gb-15717462",
+    "addresses": [
+      {
+        "type": "REGISTERED",
+        "street_address": "53 Test Street",
+        "city": "London",
+        "postal_code": "EC1A 1BB",
+        "country": "GB"
+      }
+    ]
+  },
+  {
+    "country": "GB",
+    "name": "FAKE WIDGETS TEST LTD",
+    "national_identifier": { "id": "00000001" },
+    "lookup_id": "gb-fake-1",
+    "addresses": [
+      {
+        "type": "REGISTERED",
+        "street_address": "1 Fake Street",
+        "city": "London",
+        "postal_code": "N1 1AA",
+        "country": "GB"
+      }
+    ]
+  },
+  {
+    "country": "GB",
+    "name": "OTHER FAKE TEST LTD",
+    "national_identifier": { "id": "00000002" },
+    "lookup_id": "gb-fake-2",
+    "addresses": [
+      {
+        "type": "REGISTERED",
+        "street_address": "2 Fake Street",
+        "city": "Leeds",
+        "postal_code": "LS1 1AA",
+        "country": "GB"
+      }
+    ]
+  },
+  {
+    "country": "ES",
+    "name": "EMPRESA FICTICIA PRUEBA SL",
+    "national_identifier": { "id": "B00000001" },
+    "lookup_id": "es-fake-1",
+    "addresses": [
+      {
+        "type": "REGISTERED",
+        "street_address": "Calle Falsa 1",
+        "city": "Madrid",
+        "postal_code": "28001",
+        "region": "Madrid",
+        "country": "ES",
+        "phone_number": "+34910000001"
+      }
+    ]
+  }
+]
