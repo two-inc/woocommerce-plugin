@@ -251,8 +251,8 @@ upstream on every run, and its header states the policy and sources:
   `WC requires at least` in the plugin header).
 
 The e2e suite changes one factor at a time from the newest stack: the newest
-WordPress, WooCommerce and PHP together, with the classic and the blocks
-checkout; then, with the blocks checkout and the other two at their newest,
+WordPress and WooCommerce with the newest PHP that WordPress declares, on the
+classic and the blocks checkout; then, with the blocks checkout and the other two at their newest,
 each other WooCommerce series in the window, each other supported PHP minor
 and each other WordPress series. The declared WordPress, WooCommerce and PHP
 floors also run together on both checkouts, as one blocking combination, even

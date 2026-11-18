@@ -50,8 +50,9 @@
 #   php_unit  Every PHP minor from the declared floor to the newest supported
 #             one. setup-php resolves the newest patch of each.
 #   e2e       One factor at a time from the newest stack (TWO-27314): the
-#             newest WordPress series, WooCommerce series and supported PHP
-#             minor together, on the blocks and the classic checkout; then,
+#             newest WordPress series and WooCommerce series, with the newest
+#             supported PHP minor that WordPress series declares, together on
+#             the blocks and the classic checkout; then,
 #             on the blocks checkout only, every other WooCommerce series in
 #             the window, every other supported PHP minor and every other
 #             WordPress series, each with the other two at their newest; and
@@ -273,13 +274,20 @@ classify() {
 
 wp_newest=$(tail -1 <<<"$wp_window")
 wc_newest=$(tail -1 <<<"$wc_window")
+# The newest stack's PHP is the newest minor the newest WordPress declares, so
+# a PHP that ships before WordPress declares it gets its own non-blocking leg
+# instead of turning the newest stack, and every leg built on it, non-blocking.
+php_top=$php_newest
+for php in $php_supported; do
+    if wp_declares "$wp_newest" "$php"; then php_top=$php; fi
+done
 # away <wordpress series> <woocommerce series> <php minor>: how many of the
 # three differ from the newest stack.
 away() {
     local n=0
     [ "$1" = "$wp_newest" ] || n=$((n + 1))
     [ "$2" = "$wc_newest" ] || n=$((n + 1))
-    [ "$3" = "$php_newest" ] || n=$((n + 1))
+    [ "$3" = "$php_top" ] || n=$((n + 1))
     echo "$n"
 }
 for wps in $wp_window; do
