@@ -17780,15 +17780,16 @@ final class KeyEnvironmentSaveSpec
         ];
     }
 
-    /** A gateway reading the settings as currently stored. */
-    private static function gateway(): WC_Twoinc
+    /** A gateway reading the settings as currently stored, with $post as the submitted form. */
+    private static function gateway(array $post = []): WC_Twoinc
     {
-        $gateway = new class () extends WC_Twoinc {
+        $gateway = new class ($post) extends WC_Twoinc {
             public $test_post_data = [];
 
-            public function __construct()
+            public function __construct(array $post)
             {
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->test_post_data = $post;
             }
         };
         $gateway->init_form_fields();
@@ -17836,12 +17837,8 @@ final class KeyEnvironmentSaveSpec
     {
         self::store($saved);
         $GLOBALS['__twoinc_test_http_calls'] = [];
-        $gateway = self::gateway();
-        $gateway->test_post_data = [
-            $gateway->get_field_key('api_key') => $key,
-            $gateway->get_field_key('checkout_env') => $env,
-        ];
-        $gateway->process_admin_options();
+        $field = 'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_';
+        self::gateway([$field . 'api_key' => $key, $field . 'checkout_env' => $env])->process_admin_options();
 
         $calls = $GLOBALS['__twoinc_test_http_calls'];
         TinyAssert::true(self::verifyCalls($calls) !== [], "the save verified the key: $description");
