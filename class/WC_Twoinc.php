@@ -80,6 +80,9 @@ if (!class_exists('WC_Twoinc')) {
         // api_key/checkout_env as stored when a settings save began; null outside a save.
         private ?array $identity_before_save = null;
 
+        // The environment posted in a settings save while its key is checked against it; null otherwise.
+        private ?string $environment_under_judgement = null;
+
         public function __construct()
         {
 
@@ -7575,7 +7578,7 @@ if (!class_exists('WC_Twoinc')) {
             ];
 
             if ($api_key_in_post && $api_key) {
-                $verification = self::categorize_verification_result($this->verify_api_key($api_key));
+                $verification = self::categorize_verification_result($this->verify_api_key_for_posted_environment($api_key, $post_data));
                 $product_name = WC_Twoinc_Brand::get('product_name');
                 if ($verification['status'] === 'ok') {
                     WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'twoinc-payment-gateway'), $product_name));
@@ -7601,6 +7604,48 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Admin_Settings::add_error($error);
             }
             $this->refetch_merchant_record_on_identity_save();
+        }
+
+        /**
+         * Check a key against the environment posted with it, not the saved
+         * one, so a first key or a change of environment is judged by the
+         * host it will be used with (TWO-27299). Where no environment is
+         * posted, the saved one stands.
+         *
+         * @param string $api_key
+         * @param array  $post_data the posted settings
+         *
+         * @return array|null verify_api_key()'s return value
+         */
+        private function verify_api_key_for_posted_environment($api_key, array $post_data)
+        {
+            $posted_env = $post_data[$this->get_field_key('checkout_env')] ?? null;
+            if (!is_scalar($posted_env)) {
+                return $this->verify_api_key($api_key);
+            }
+            $this->environment_under_judgement = (string) $posted_env;
+            try {
+                return $this->verify_api_key($api_key);
+            } finally {
+                $this->environment_under_judgement = null;
+            }
+        }
+
+        /**
+         * While a save checks a key, the environment being judged is the
+         * one posted, so every host resolver reads it (TWO-27299).
+         *
+         * @param string $key
+         * @param mixed  $empty_value
+         *
+         * @return mixed
+         */
+        public function get_option($key, $empty_value = null)
+        {
+            if ($key === 'checkout_env' && $this->environment_under_judgement !== null) {
+                return $this->environment_under_judgement;
+            }
+            return parent::get_option($key, $empty_value);
         }
 
         /** After the save, so the refetch authenticates with the persisted key and a re-resolved merchant_id. */
