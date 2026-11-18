@@ -4,8 +4,8 @@
  * while company search is on.
  *
  * Company search OFF withdraws the autofill row and unticks it, so the next
- * save stores it off and a stale `yes` cannot outlive the checkbox (ABN-554).
- * Company search ticked ON by hand switches autofill on with it (ABN-562) —
+ * save stores it off and a stale `yes` cannot outlive the checkbox.
+ * Company search ticked ON by hand switches autofill on with it:
  * that direction stays edge-triggered: driving an ON from the level showed a
  * stored off as on, and the next save of any unrelated setting posted that tick
  * back. Neither is ever `disabled`, since a disabled input posts nothing, which
@@ -61,6 +61,13 @@ describe("company-lookup toggles", () => {
       autofillAfter: false,
       rowShown: false,
       description: "both off stay off, row withdrawn"
+    },
+    {
+      storedSearch: null,
+      storedAutofill: true,
+      autofillAfter: true,
+      rowShown: true,
+      description: "company search withheld by the brand leaves a saved autofill as saved"
     }
   ])("$description", async ({ storedSearch, storedAutofill, autofillAfter, rowShown }) => {
     const { $ } = await loadAdmin({
@@ -68,7 +75,7 @@ describe("company-lookup toggles", () => {
       addressLookup: storedAutofill
     });
 
-    expect($(search()).prop("checked")).toBe(storedSearch);
+    expect($(search()).prop("checked")).toBe(storedSearch === null ? undefined : storedSearch);
     expect($(autofill()).prop("checked")).toBe(autofillAfter);
     expect(autofillRowShown($)).toBe(rowShown);
     expect($(autofill()).prop("disabled")).toBe(false);

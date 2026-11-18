@@ -65,6 +65,19 @@
     const CHIP_CLASS = 'two-company-mode-chip';
     const CHIP_SELECTED_CLASS = 'two-company-mode-chip--selected';
     const LIVE_CLASS = 'two-company-dropdown__status';
+    const SIGNUP_PANEL_CLASS = 'two-company-dropdown__signup';
+
+    /**
+     * Inline, like LIVE_STYLE and for the same reason: the two checkouts ship
+     * separate stylesheets, and the panel has to cover the popover on both.
+     * `background: inherit` draws it in the popover's own colour, and
+     * `padding: inherit` keeps the button inside the gutter the chips sit in.
+     */
+    const SIGNUP_PANEL_STYLE = 'position:absolute;top:0;right:0;bottom:0;left:0;z-index:1;'
+        + 'display:flex;align-items:center;justify-content:center;background:inherit;padding:inherit;';
+
+    /** The chip rule grows a chip to fill its row; the lone button keeps its own width, centred. */
+    const SIGNUP_BUTTON_STYLE = 'flex:0 1 auto;';
 
     /** Off-screen without `display: none`, which takes a region out of the tree. */
     const LIVE_STYLE = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;'
@@ -143,7 +156,7 @@
     /**
      * The one popover that may be open, page-wide.
      *
-     * ABN-510: a pointer click on another mount need not deliver a focus event
+     * A pointer click on another mount need not deliver a focus event
      * to the control it hits, so the first popover never sees focus leave it.
      * Enforced here, at open time, rather than inferred from a focus signal.
      */
@@ -194,6 +207,7 @@
      *        when the panel is closed — the captured company, or ''.
      * @param {function()} [options.onExitManualEntry] the buyer used the return
      *        link to come back out of manual entry.
+     * @param {function()} [options.onClose] the popover has just closed.
      */
     function CompanySearchPanel(options) {
         const self = this;
@@ -215,6 +229,7 @@
         this.onSelect = options.onSelect || function () {};
         this.getDisplayText = options.getDisplayText || function () { return ''; };
         this.onExitManualEntry = options.onExitManualEntry || function () {};
+        this.onClose = options.onClose || function () {};
 
         assertSearchApi(this.search);
 
@@ -239,6 +254,8 @@
         this._closing = false;
         /** Suppresses it for a whole signup flight; see `holdFieldOpener()`. */
         this._openerHeld = false;
+        /** Answers whether the signup flight is still up, so a window return keeps the hold. */
+        this._openerFlight = null;
         /** A window-level focus is in hand, so the field focus beside it is that window's. */
         this._openerReturnPending = false;
         /** The `focus` half of that pair seen, waiting on the `focusin` that ends it. */
@@ -260,12 +277,15 @@
         /** @see _announce */
         this._live = null;
         this._liveTimerId = null;
+        /** @see showSignupPanel */
+        this._signup = null;
+        this._signupMode = null;
     }
 
     // ----------------------------------------------------------- announcing
 
     /**
-     * The panel's live region, built on first use and parked on `<body>`.
+     * The panel's live region, built when the panel first attaches and parked on `<body>`.
      *
      * Outside the panel because the panel carries `hidden` between opens, and a
      * live region inside a hidden subtree is not in the accessibility tree to
@@ -512,6 +532,9 @@
         }
         this._field = field;
         this._buildPanel(this._ensureWrap(field));
+        // Empty, ahead of its first sentence: a screen reader can miss a change
+        // to a region that arrived with it.
+        this._liveRegion();
         this.syncChips();
 
         // Manual entry owns the field: it is a plain text input holding what
@@ -679,8 +702,7 @@
 
         // On the panel, not the query field: outside registered-company mode
         // the query row is withdrawn and a chip is what holds focus, and the
-        // panel drawn over the next control left that buyer no way out
-        // (ABN-554).
+        // panel drawn over the next control left that buyer no way out.
         this._bindEvent(this._panel, 'keydown', function (event) {
             if (event.key !== 'Escape') return;
             event.preventDefault();
@@ -689,7 +711,7 @@
 
         // A chip is a `<button>`, which swallows typing, and a mode with no
         // query row leaves nothing else in the panel to hold the caret — so a
-        // printable key belongs in the company-name field (ABN-554).
+        // printable key belongs in the company-name field.
         this._bindEvent(this._panel, 'keydown', function (event) {
             if (!self._queryRowIsHidden()) return;
             if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -701,7 +723,7 @@
 
         // A press on the panel's own dead space is not a gesture: its default
         // action would blur the caret out of the query field and leave the open
-        // popover holding nothing (ABN-554).
+        // popover holding nothing.
         this._bindEvent(this._panel, 'mousedown', function (event) {
             if (pressIsDeadSpace(event)) event.preventDefault();
         });
@@ -789,7 +811,7 @@
         this._unbind(field);
 
         // A press or a click on the field is the buyer asking for the panel, whatever
-        // else is in flight (ABN-554).
+        // else is in flight.
         this._bindEvent(field, 'pointerdown', function () {
             if (!self._closing) self.holdFieldOpener(false);
         });
@@ -811,7 +833,7 @@
             if (self._closing) return;
             if (self._openerHeld) {
                 // A pair with a window focus beside it is that window's return; one without
-                // is the buyer arriving by Tab. The `focusin` below acts on either (ABN-554).
+                // is the buyer arriving by Tab. The `focusin` below acts on either.
                 if (self._openerReturnPending) self._openerReturnFocusSeen = true;
                 else self._openerArrivalFocusSeen = true;
                 return;
@@ -821,6 +843,12 @@
         this._bindEvent(field, 'focusin', function () {
             if (!self._openerHeld) return;
             if (self._openerReturnFocusSeen) {
+                // One return of many while the flight is up: the next is the same pair again.
+                if (self._openerFlight && self._openerFlight()) {
+                    self._openerReturnPending = false;
+                    self._openerReturnFocusSeen = false;
+                    return;
+                }
                 self.holdFieldOpener(false);
                 return;
             }
@@ -832,8 +860,7 @@
             if (event.ctrlKey || event.metaKey || event.altKey) return;
             self.holdFieldOpener(false);
             // Bound here as well: the panel's own Escape sits on a node this
-            // field is only a sibling of, and a mode change parks focus here
-            // (ABN-554).
+            // field is only a sibling of, and a mode change parks focus here.
             if (event.key === 'Escape') {
                 if (!self._open) return;
                 event.preventDefault();
@@ -845,7 +872,7 @@
             self.open();
             // The open puts the caret on a chip wherever the mode leaves no
             // query row, and the character this keystroke is about to insert
-            // would land on a button (ABN-554).
+            // would land on a button.
             if (self._queryRowIsHidden()) self.restoreFieldFocus();
         });
         this._bindEvent(field, 'input', function () {
@@ -855,15 +882,15 @@
             // With the search withdrawn there is no query row to move the
             // keystrokes into and no search they could reach, so they stay
             // where the buyer put them and the panel offers manual entry
-            // instead (ABN-525). The open above put the caret on a chip, where
-            // the next character would land on a button (ABN-554).
+            // instead. The open above put the caret on a chip, where
+            // the next character would land on a button.
             if (self._disabled) {
                 self.restoreFieldFocus();
                 return;
             }
             // A mode can withdraw the query row too, and then the field is the
             // only box the buyer can see: their text stays in it, and the query
-            // holds a copy for the row the next mode change reveals (ABN-554).
+            // holds a copy for the row the next mode change reveals.
             if (self._queryRowIsHidden()) {
                 self._query.value = typed;
                 self.restoreFieldFocus();
@@ -935,7 +962,7 @@
      *
      * The query field is inside the panel and carried a hardcoded `true`, so
      * while the panel was `hidden` it claimed an expanded list that was not on
-     * screen at all (ABN-554).
+     * screen at all.
      */
     CompanySearchPanel.prototype._syncExpanded = function () {
         const expanded = this._open ? 'true' : 'false';
@@ -953,7 +980,7 @@
      * at a search box nothing put the caret in.
      *
      * Opens even while `setDisabled()` has withdrawn the search: the chips
-     * inside are the buyer's only route to manual entry (ABN-525).
+     * inside are the buyer's only route to manual entry.
      */
     CompanySearchPanel.prototype.open = function () {
         if (!this._panel) return;
@@ -982,7 +1009,7 @@
     /**
      * The query field where it is shown, else the first offered chip: a mode
      * that suppresses the query row would otherwise open the panel with focus
-     * nowhere (ABN-525).
+     * nowhere.
      *
      * @returns {boolean} whether it found anything to focus
      */
@@ -1008,8 +1035,8 @@
      * Close the panel and drop whatever the last search left in it.
      *
      * Focus goes back to the company field however the close was reached, so
-     * the buyer is never left standing on a control that has just gone
-     * (ABN-554). The field's own open-on-focus opener is held off for that one
+     * the buyer is never left standing on a control that has just gone.
+     * The field's own open-on-focus opener is held off for that one
      * programmatic focus alone, so the next keystroke, click or Tab arrival
      * reopens.
      *
@@ -1033,23 +1060,104 @@
         this._items = [];
         this._activeIndex = -1;
         this._syncExpanded();
+        this.hideSignupPanel();
         if (!options || options.returnFocus !== false) this.restoreFieldFocus();
+        this.onClose();
+    };
+
+    /**
+     * Cover the popover with one centred button: the route on when the signup
+     * popup was blocked (TWO-26775). Its click is a fresh gesture, which a
+     * blocker allows. Opens the popover first where it is closed, and moves
+     * focus to the button.
+     *
+     * The rest of the popover is `inert` underneath it, so Tab cannot reach a
+     * chip the panel is drawn over; Escape and focus leaving still close the
+     * popover, and the panel with it.
+     *
+     * @param {string} caption the button's text, already translated
+     * @param {function()} onActivate
+     */
+    CompanySearchPanel.prototype.showSignupPanel = function (caption, onActivate) {
+        const self = this;
+        if (!this._panel) return;
+        if (!this._open) this.open();
+        this.hideSignupPanel();
+        const cover = document.createElement('div');
+        // A plain container, with no role or name of its own: the focus move
+        // says the caption once, as the button's name, and the status region
+        // stays empty, so nothing says it twice.
+        cover.className = SIGNUP_PANEL_CLASS;
+        cover.style.cssText = SIGNUP_PANEL_STYLE;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.style.cssText = SIGNUP_BUTTON_STYLE;
+        // The selected chip's look, so the button reads as part of the popover.
+        button.className = `${CHIP_CLASS} ${CHIP_SELECTED_CLASS}`;
+        button.textContent = caption;
+        this._bindEvent(button, 'click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            onActivate();
+        });
+        cover.appendChild(button);
+        Array.prototype.forEach.call(this._panel.children, function (child) {
+            child.setAttribute('inert', '');
+        });
+        // The popover is the containing block the cover is drawn against. Both
+        // stylesheets position it already; a theme that does not gets one here.
+        const view = this._panel.ownerDocument.defaultView;
+        if (view && view.getComputedStyle(this._panel).position === 'static') {
+            this._panel.style.position = 'relative';
+            cover.setAttribute('data-two-positioned', 'true');
+        }
+        this._panel.appendChild(cover);
+        this._signup = cover;
+        this._signupMode = this.getSelectedMode();
+        button.focus();
+    };
+
+    /** Take the signup panel down, giving the popover back. */
+    CompanySearchPanel.prototype.hideSignupPanel = function () {
+        const cover = this._signup;
+        if (!cover) return;
+        this._signup = null;
+        this._signupMode = null;
+        const panel = cover.parentNode;
+        const hadFocus = cover.contains(document.activeElement);
+        this._unbind(cover);
+        cover.remove();
+        if (!panel) return;
+        Array.prototype.forEach.call(panel.children, function (child) {
+            child.removeAttribute('inert');
+        });
+        if (cover.getAttribute('data-two-positioned')) panel.style.position = '';
+        // The button went from under the caret, and an open popover keeps it.
+        if (hadFocus && this._open) this._focusOnOpen();
     };
 
     /**
      * A browser re-fires `focus` on the control the opener window still holds
      * when that window regains focus, and nothing read at that moment tells it
-     * from the buyer (ABN-554).
+     * from the buyer.
      *
      * The return is bound to the WINDOW's focus, not to the popup's close —
      * measured a second to a minute after it, however long the buyer stays away
      * — so the hold is unbounded in time and ends on the pair itself.
      *
+     * A hold given a `flight` outlasts every window return while that flight
+     * is up: the buyer can move between the popup and the checkout any number
+     * of times, and only the return after it has ended releases the hold
+     * (TWO-26775).
+     *
      * @param {boolean} held
+     * @param {object} [options] `{ flight: function(): boolean }`, whether the
+     *        signup the hold stands for is still up
      */
-    CompanySearchPanel.prototype.holdFieldOpener = function (held) {
+    CompanySearchPanel.prototype.holdFieldOpener = function (held, options) {
         if (!held && !this._openerHeld) return;
         this._openerHeld = !!held;
+        this._openerFlight = (held && options && typeof options.flight === 'function') ? options.flight : null;
         this._openerReturnPending = false;
         this._openerReturnFocusSeen = false;
         this._openerArrivalFocusSeen = false;
@@ -1105,8 +1213,8 @@
     /**
      * Withdraw the registry search over a country it does not cover: the query
      * row goes and the registered-company chip with it, while the panel stays
-     * openable so manual entry and the sole-trader route are still reachable
-     * (ABN-525). Never writes the field's native `disabled` flag — a buyer
+     * openable so manual entry and the sole-trader route are still reachable.
+     * Never writes the field's native `disabled` flag — a buyer
      * must always be able to type a company name by hand.
      *
      * @param {boolean} disabled
@@ -1298,14 +1406,17 @@
      *
      * The row is hidden unless it offers at least one mode the buyer is not
      * already in: a lone chip for the current mode is no choice, a lone chip
-     * for a different one is the buyer's whole way out (ABN-525). Hidden
+     * for a different one is the buyer's whole way out. Hidden
      * rather than removed, so the panel keeps its three children in order.
      */
     CompanySearchPanel.prototype.syncChips = function () {
         const self = this;
         if (!this._chips) return;
         const selected = this.getSelectedMode();
-        // The node, read before the sync that takes it away (ABN-554).
+        // The signup panel answers for the mode it was raised in, and any
+        // other mode, from a chip or a country reset, takes it down.
+        if (this._signup && selected !== this._signupMode) this.hideSignupPanel();
+        // The node, read before the sync that takes it away.
         const heldFocus = this._holdsFocus() ? document.activeElement : null;
         this._syncQueryVisibility(selected);
         this._unbind(this._chips);
@@ -1334,7 +1445,8 @@
                 // Propagation stops here because one-page checkouts bind
                 // collapse handlers above this node.
                 event.stopPropagation();
-                chip.onActivate();
+                self.hideSignupPanel();
+                chip.onActivate(button);
             });
             self._chips.appendChild(button);
         });
@@ -1351,8 +1463,8 @@
     /**
      * Whether the sync has taken away the node that held focus.
      *
-     * Asks the NODE, not where focus is now: a rebuilt chip row deletes it
-     * (ABN-561), while a withdrawn query row only hides it and the browser's
+     * Asks the NODE, not where focus is now: a rebuilt chip row deletes it,
+     * while a withdrawn query row only hides it and the browser's
      * own blur for that lands after this handler — so `activeElement` still
      * names an input the buyer can no longer see or type into.
      *
@@ -1371,8 +1483,7 @@
      * The search row belongs to registered-company mode alone. A sole trader is
      * enrolled through the hosted signup and a manual entry is typed into the
      * company field, so a query box in either mode offers a search that answers
-     * for neither. Nor does a country the registry search does not cover
-     * (ABN-525).
+     * for neither. Nor does a country the registry search does not cover.
      *
      * @param {string} mode the selected capture mode
      */
@@ -1386,7 +1497,7 @@
         this._renderMessage('');
         // Only on the withdrawal itself: a later sync of an already-hidden row
         // would also drop the character the field's opener has just moved
-        // across, ahead of the mode change that reveals the row (ABN-554).
+        // across, ahead of the mode change that reveals the row.
         if (wasHidden) return;
         // Blanking the value fires no event, so the rows the dropped term
         // produced would stay painted and clickable under a search row that is

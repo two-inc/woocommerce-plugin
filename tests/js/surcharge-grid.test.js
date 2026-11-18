@@ -133,7 +133,7 @@ describe("grid rows follow the merchant's offered terms", () => {
   });
 
   // Same rule as the server's one normalisation of the stored value: anything but a run of
-  // digits over zero denotes no term, so it can add no row of its own (ABN-522).
+  // digits over zero denotes no term, so it can add no row of its own.
   test.each([
     ["45", [30, 45], "a run of digits is that term"],
     ["045", [30, 45], "leading zeros denote the same term"],

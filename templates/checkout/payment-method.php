@@ -13,7 +13,7 @@
  * @see         https://woocommerce.com/document/template-structure/
  * @package     WooCommerce\Templates
  * @version     3.5.0
- * TWOINC ADDITION (ABN-554): everything outside the TWOINC markers is
+ * TWOINC ADDITION: everything outside the TWOINC markers is
  * WooCommerce 9.9.5 core byte-for-byte, and tests/unit/run.php pins both that
  * core version and the md5 of the remainder.
  * END TWOINC ADDITION
@@ -29,7 +29,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	<label for="payment_method_<?php echo esc_attr( $gateway->id ); ?>">
 		<?php echo $gateway->get_title(); /* phpcs:ignore WordPress.XSS.EscapeOutput.OutputNotEscaped */ ?> <?php echo $gateway->get_icon(); /* phpcs:ignore WordPress.XSS.EscapeOutput.OutputNotEscaped */ ?>
 	</label>
-	<?php // TWOINC ADDITION (ABN-554): core prints get_icon() inside the <label for>, where an interactive control is invalid markup and joins the radio's accessible name; this is the only seam beside the title that is outside it. No-op for every other gateway - only this plugin's gateway defines the method. ?>
+	<?php // TWOINC ADDITION: core prints get_icon() inside the <label for>, where an interactive control is invalid markup and joins the radio's accessible name; this is the only seam beside the title that is outside it. No-op for every other gateway - only this plugin's gateway defines the method. ?>
 	<?php if ( is_callable( array( $gateway, 'get_about_block_html' ) ) ) : ?>
 		<?php echo $gateway->get_about_block_html(); /* phpcs:ignore WordPress.XSS.EscapeOutput.OutputNotEscaped */ ?>
 	<?php endif; ?>

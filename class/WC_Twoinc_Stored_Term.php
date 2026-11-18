@@ -4,7 +4,7 @@ if (!class_exists('WC_Twoinc_Stored_Term')) {
     /**
      * The one normalisation of a stored custom payment term, shared by the admin field's
      * visibility, its renderer and every consumer that reads it — two readings would disagree
-     * on a hand-edited row and one of them would then delete it (ABN-522).
+     * on a hand-edited row and one of them would then delete it.
      */
     class WC_Twoinc_Stored_Term
     {
@@ -43,7 +43,7 @@ if (!class_exists('WC_Twoinc_Stored_Term')) {
 
         /**
          * Whether the term is one checkout will offer. An unresolved offered set refuses nothing,
-         * so a stored term stands through an outage (ABN-521).
+         * so a stored term stands through an outage.
          *
          * @param int|null $days
          * @param int[] $offered

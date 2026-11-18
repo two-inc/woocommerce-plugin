@@ -8,14 +8,18 @@
 
 # Internal Two devs (@two.inc gcloud account) point at staging; everyone else
 # at sandbox. Mirrors the PrestaShop/Magento plugin convention. Override via
-# .env or `make ... TWO_ENV=...`. These are NOT read directly by the plugin -
-# docker-compose.yaml threads them through as the TWOINC_DEV_{API,CHECKOUT,
-# PORTAL}_HOST env vars that WC_Twoinc_Helper::get_environment_host() reads.
+# .env or `make ... TWO_ENV=...`. docker-compose.yaml passes them to the
+# wordpress container, where WC_Twoinc_Helper::get_environment_host() reads
+# them on a site whose WordPress environment type is local or development.
 TWO_ENV               := $(shell gcloud config get-value account 2>/dev/null | grep -q '@two\.inc$$' && echo staging || echo sandbox)
 TWO_API_BASE_URL      ?= https://api.$(TWO_ENV).two.inc
 TWO_PORTAL_BASE_URL   ?= https://portal.$(TWO_ENV).two.inc
 TWO_CHECKOUT_BASE_URL ?= https://checkout.$(TWO_ENV).two.inc
 export TWO_API_BASE_URL TWO_PORTAL_BASE_URL TWO_CHECKOUT_BASE_URL
+# Offers the Staging environment in the admin (TWO-26604). Set for internal
+# Two devs, the same people TWO_ENV points at staging.
+TWO_INTERNAL_ENVIRONMENTS ?= $(if $(filter staging,$(TWO_ENV)),1,)
+export TWO_INTERNAL_ENVIRONMENTS
 
 # Host port the shop publishes. Two stacks on one daemon need different values.
 #
@@ -40,7 +44,7 @@ help:
 # Docker Desktop resolves a WSL bind source when the container is CREATED, and
 # a restart in between can leave that mapping stale: the plugin mounts as an
 # EMPTY directory, the shop comes up healthy serving no plugin, and nothing
-# reports it. `up -d` cannot repair it - nothing is recreated (ABN-554).
+# reports it. `up -d` cannot repair it - nothing is recreated.
 check-plugin-mount:
 	@docker compose exec -T wordpress \
 		test -f /var/www/html/wp-content/plugins/tillit-payment-gateway/tillit-payment-gateway.php \
@@ -92,8 +96,10 @@ proxy:
 	./start-proxy.sh
 
 ## Update Two payment gateway config from TWO_* env vars
+## (from .env, or passed on the command line: make configure TWO_API_KEY=...)
+CONFIGURE_VARS := TWO_API_KEY TWO_API_BASE_URL TWO_GATEWAY_ID
 configure:
-	docker compose exec -T wpcli bash /opt/tillit-payment-gateway/dev/configure
+	docker compose exec -T $(foreach v,$(CONFIGURE_VARS),$(if $($(v)),-e $(v)='$($(v))')) wpcli bash /opt/tillit-payment-gateway/dev/configure
 
 ## Tail WordPress container logs
 logs:
