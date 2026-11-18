@@ -63,7 +63,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 
 = 2.25.1 =
 
-* Saving your API key now checks it against the environment you choose in the same save. Before, a production key saved as your first key, or together with a switch from Sandbox to Production, was checked against Sandbox and rejected, and the key was not saved. This applies under WooCommerce > Settings > Payments > Two.
+* Saving your API key now checks it against the environment you choose in the same save. Before, a production key saved as your first key, or together with a switch from Sandbox to Production, was checked against Sandbox and rejected, and the key was not saved. When Two does reject a key, your saved key and environment are now both kept, where before the new environment was saved beside the old key. This applies under WooCommerce > Settings > Payments > Two.
 
 = 2.25.0 =
 
