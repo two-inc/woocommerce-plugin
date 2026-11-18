@@ -1139,6 +1139,10 @@ class WP_Error
 function wp_remote_request($url, $args = [])
 {
     $GLOBALS['__twoinc_test_http_calls'][] = ['url' => $url, 'args' => $args];
+    // A test that needs a different answer per request sets a responder instead.
+    if (isset($GLOBALS['__twoinc_test_http_responder'])) {
+        return ($GLOBALS['__twoinc_test_http_responder'])($url, $args);
+    }
     return $GLOBALS['__twoinc_test_http_response']
         ?? ['response' => ['code' => 200], 'body' => '{}', 'headers' => []];
 }
