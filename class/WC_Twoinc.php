@@ -7583,8 +7583,15 @@ if (!class_exists('WC_Twoinc')) {
                 if ($verification['status'] === 'ok') {
                     WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'twoinc-payment-gateway'), $product_name));
                 } elseif ($verification['status'] === 'invalid_key') {
+                    // The key was judged against the posted environment, so both halves stay as saved (TWO-27299).
+                    // Posted back rather than dropped: a select missing from the post is saved empty.
                     $post_data[$api_key_field] = $this->get_option('api_key');
-                    WC_Admin_Settings::add_error(sprintf(__('%s rejected that API key, so the previously saved key was kept.', 'twoinc-payment-gateway'), $product_name));
+                    $post_data[$this->get_field_key('checkout_env')] = $this->get_option('checkout_env');
+                    WC_Admin_Settings::add_error(sprintf(
+                        /* translators: %s: the payment method's product name */
+                        __('%s rejected that API key for the selected environment, so the previously saved API key and environment were kept.', 'twoinc-payment-gateway'),
+                        $product_name
+                    ));
                 } elseif ($verification['status'] === 'unreachable') {
                     // ABN-495: a fresh install's stored key is empty, so reverting an unverifiable key locks the merchant out of saving the one that would work.
                     WC_Admin_Settings::add_message(sprintf(__('API key saved, but %s could not be reached to verify it.', 'twoinc-payment-gateway'), $product_name));
