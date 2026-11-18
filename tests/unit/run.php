@@ -17761,41 +17761,59 @@ final class KeyEnvironmentSaveSpec
         }
     }
 
+    private const VERIFIED = 'API key verified.';
+    private const REFUSED = 'rejected that API key for the selected environment';
+    private const SERVICE_ERROR = 'returned an error while verifying it';
+    private const UNREACHABLE = 'could not be reached to verify it';
+
     /**
      * saved settings, posted key, posted environment, then the pair the save
-     * must leave (the posted one where Two accepts the key, the saved one
-     * where it refuses it), and a description. Nothing saved reads as no key
-     * and the field's default environment, Sandbox.
+     * must leave, the notice the merchant sees, and a description. Where Two
+     * accepts the key, or gives no verdict on it, the posted pair is saved;
+     * where Two refuses it, the saved pair stands. Nothing saved reads as no
+     * key and the field's default environment, Sandbox.
      *
-     * @return array<int, array{0: array, 1: string, 2: string, 3: string, 4: string, 5: string}>
+     * @return array<int, array{0: array, 1: string, 2: string, 3: string, 4: string, 5: string, 6: string}>
      */
     private static function cases(): array
     {
         $sandbox = ['api_key' => 'sandbox-key-old', 'checkout_env' => 'SANDBOX'];
         $production = ['api_key' => 'production-key-old', 'checkout_env' => 'PROD'];
         return [
-            [[], 'sandbox-key-new', 'SANDBOX', 'sandbox-key-new', 'SANDBOX', 'first key, nothing saved, sandbox chosen'],
-            [[], 'production-key-new', 'PROD', 'production-key-new', 'PROD', 'first key, nothing saved, production chosen'],
-            [$sandbox, 'sandbox-key-new', 'SANDBOX', 'sandbox-key-new', 'SANDBOX', 'key changed in sandbox'],
-            [$production, 'production-key-new', 'PROD', 'production-key-new', 'PROD', 'key changed in production'],
-            [$sandbox, 'production-key-new', 'PROD', 'production-key-new', 'PROD', 'switched sandbox to production with a production key'],
-            [$production, 'sandbox-key-new', 'SANDBOX', 'sandbox-key-new', 'SANDBOX', 'switched production to sandbox with a sandbox key'],
+            [[], 'sandbox-key-new', 'SANDBOX', 'sandbox-key-new', 'SANDBOX', self::VERIFIED, 'first key, nothing saved, sandbox chosen'],
+            [[], 'production-key-new', 'PROD', 'production-key-new', 'PROD', self::VERIFIED, 'first key, nothing saved, production chosen'],
+            [$sandbox, 'sandbox-key-new', 'SANDBOX', 'sandbox-key-new', 'SANDBOX', self::VERIFIED, 'key changed in sandbox'],
+            [$production, 'production-key-new', 'PROD', 'production-key-new', 'PROD', self::VERIFIED, 'key changed in production'],
+            [$sandbox, 'production-key-new', 'PROD', 'production-key-new', 'PROD', self::VERIFIED, 'switched sandbox to production with a production key'],
+            [$production, 'sandbox-key-new', 'SANDBOX', 'sandbox-key-new', 'SANDBOX', self::VERIFIED, 'switched production to sandbox with a sandbox key'],
             // A key belongs to one environment, so the other one refuses it and the saved pair stands.
-            [$sandbox, 'sandbox-key-old', 'PROD', 'sandbox-key-old', 'SANDBOX', 'switched sandbox to production, key left as saved: production refuses it'],
-            [$production, 'production-key-old', 'SANDBOX', 'production-key-old', 'PROD', 'switched production to sandbox, key left as saved: sandbox refuses it'],
-            [$sandbox, 'revoked-key', 'PROD', 'sandbox-key-old', 'SANDBOX', 'switched sandbox to production with a key Two refuses'],
-            [[], 'revoked-key', 'PROD', '', 'SANDBOX', 'first key, nothing saved, production chosen, key Two refuses'],
+            [$sandbox, 'sandbox-key-old', 'PROD', 'sandbox-key-old', 'SANDBOX', self::REFUSED, 'switched sandbox to production, key left as saved: production refuses it'],
+            [$production, 'production-key-old', 'SANDBOX', 'production-key-old', 'PROD', self::REFUSED, 'switched production to sandbox, key left as saved: sandbox refuses it'],
+            [$sandbox, 'revoked-key', 'PROD', 'sandbox-key-old', 'SANDBOX', self::REFUSED, 'switched sandbox to production with a key Two refuses'],
+            [[], 'revoked-key', 'PROD', '', 'SANDBOX', self::REFUSED, 'first key, nothing saved, production chosen, key Two refuses'],
+            // No verdict on the key, so nothing is refused: the posted pair is saved, as before this fix.
+            [$sandbox, 'production-key-down', 'PROD', 'production-key-down', 'PROD', self::SERVICE_ERROR, 'switched sandbox to production while Two answers 503'],
+            [$sandbox, 'production-key-offline', 'PROD', 'production-key-offline', 'PROD', self::UNREACHABLE, 'switched sandbox to production while Two cannot be reached'],
         ];
     }
 
     /**
      * Answers as the API does: a key works only on its own environment's
-     * host, and anything else is refused with a 401. Public because the
+     * host, and anything else is refused with a 401. A key ending -down gets
+     * a 503 and one ending -offline never reaches Two. Public because the
      * bootstrap's transport calls it.
+     *
+     * @return array|WP_Error
      */
-    public static function api(string $url, array $args): array
+    public static function api(string $url, array $args)
     {
         $key = (string) ($args['headers']['X-API-Key'] ?? '');
+        if (substr($key, -5) === '-down') {
+            return ['response' => ['code' => 503], 'body' => '', 'headers' => []];
+        }
+        if (substr($key, -8) === '-offline') {
+            return new WP_Error('http_request_failed', 'Could not resolve host');
+        }
         $host_env = strpos($url, self::HOSTS['PROD']) === 0 ? 'production' : 'sandbox';
         if ($key !== '' && strpos($key, $host_env . '-key-') === 0) {
             return ['response' => ['code' => 200], 'body' => json_encode(['id' => 'merchant-1', 'short_name' => 'shop']), 'headers' => []];
@@ -17833,9 +17851,9 @@ final class KeyEnvironmentSaveSpec
         $GLOBALS['__twoinc_test_http_responder'] = [self::class, 'api'];
         $failures = [];
         try {
-            foreach (self::cases() as [$saved, $key, $env, $kept_key, $kept_env, $description]) {
+            foreach (self::cases() as [$saved, $key, $env, $kept_key, $kept_env, $notice, $description]) {
                 try {
-                    self::saveThenCheckout($saved, $key, $env, $kept_key, $kept_env, $description);
+                    self::saveThenCheckout($saved, $key, $env, $kept_key, $kept_env, $notice, $description);
                 } catch (RuntimeException $e) {
                     // Every row runs, so one report names every failing case.
                     $failures[] = $e->getMessage();
@@ -17851,11 +17869,13 @@ final class KeyEnvironmentSaveSpec
         }
     }
 
-    private static function saveThenCheckout(array $saved, string $key, string $env, string $kept_key, string $kept_env, string $description): void
+    private static function saveThenCheckout(array $saved, string $key, string $env, string $kept_key, string $kept_env, string $notice, string $description): void
     {
         self::store($saved);
         $old_key = (string) ($saved['api_key'] ?? '');
         $GLOBALS['__twoinc_test_http_calls'] = [];
+        $GLOBALS['__twoinc_test_admin_messages'] = [];
+        $GLOBALS['__twoinc_test_admin_errors'] = [];
         $field = 'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_';
         $gateway = self::gateway([$field . 'api_key' => $key, $field . 'checkout_env' => $env]);
         $gateway->process_admin_options();
@@ -17868,6 +17888,8 @@ final class KeyEnvironmentSaveSpec
             "the save verified the key first: $description"
         );
         self::assertCall($first, $key, self::HOSTS[$env], "the check, $description");
+        $notices = implode("\n", array_merge($GLOBALS['__twoinc_test_admin_messages'], $GLOBALS['__twoinc_test_admin_errors']));
+        TinyAssert::true(strpos($notices, $notice) !== false, "notice '$notice' not shown (got: $notices), $description");
 
         // The save leaves one pair: the posted one, or the saved one after a refusal.
         $stored = self::gateway();
