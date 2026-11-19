@@ -152,6 +152,14 @@ describe("company search country gate", () => {
       allowlist: [],
       row: "billing_company_field",
       description: "an allowlist naming nothing falls back everywhere"
+    },
+    {
+      country: "",
+      registry: ["GB"],
+      allowlist: ["GB"],
+      row: "billing_company_display_field",
+      description:
+        "no country is not an excluded one, so the control stays to ask for one (TWO-27235)"
     }
   ])(
     "the company-name surface in $country: $description",
