@@ -125,6 +125,10 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 * Fixed: on WordPress 6.9.1 and later, the plugin no longer writes a notice that the "twoinc-blocks-checkout" style "was enqueued with dependencies that are not registered" to the PHP log. The checkout looks the same.
 * Fixed: on WooCommerce 7.6 with the Checkout block, the checkout address form now shows the Company field when company search sits in the address, as it already does on newer WooCommerce. Before, the field stayed hidden, so company search never appeared and buyers could not choose their company to pay with Two.
 
+= 2.25.1 =
+
+* Saving your API key now checks it against the environment you choose in the same save. Before, a production key saved as your first key, or together with a switch from Sandbox to Production, was checked against Sandbox and rejected, and the key was not saved. When Two does reject a key, your saved key and environment are now both kept, where before the new environment was saved beside the old key. This applies under WooCommerce > Settings > Payments > Two.
+
 = 2.25.0 =
 
 * You can now show a short line about paying by invoice on your product pages, under the add to cart button, so a buyer sees the option before filling a basket. It is off until you switch it on under WooCommerce > Settings > Payments > Two, where you can also replace the wording with your own. Where exactly the line lands on the page depends on your theme.
@@ -226,6 +230,9 @@ Older releases are listed at https://github.com/two-inc/woocommerce-plugin/relea
 
 = 3.0.0 =
 Removes the "Default shipping tax class" setting, with no migration. See the changelog for the WP-CLI option that takes the shipping tax rate from WooCommerce's shipping tax class. Spanish merchants: set "Tax codes for 0% lines" under WooCommerce > Settings > Payments > Two, or Two refuses your 0% order lines.
+
+= 2.25.1 =
+Fixes saving a production API key, which could be rejected because it was checked against Sandbox. If a key was refused when you moved to Production, save it again after updating.
 
 = 2.25.0 =
 Adds an optional line about paying by invoice on your product pages, and an optional buy button beside Add to cart. Nothing changes until you switch them on under WooCommerce > Settings > Payments > Two.
