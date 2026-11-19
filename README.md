@@ -250,13 +250,16 @@ upstream on every run, and its header states the policy and sources:
   plugin's declared minimums (`Requires at least` in `readme.txt`,
   `WC requires at least` in the plugin header).
 
-The e2e suite runs on every WordPress x WooCommerce x PHP combination in that
-window, once with the classic and once with the blocks checkout. Every PHP
-minor gets legs from its first GA release; where WordPress's own PHP
-compatibility table (in the core handbook) does not mark that PHP as supported
-for the series, the legs run non-blocking, with a warning. The declared
-WordPress, WooCommerce and PHP floors also run together as one blocking
-combination, even where php.net has ended support for that PHP. A combination
+The e2e suite changes one factor at a time from the newest stack: the newest
+WordPress and WooCommerce with the newest PHP that WordPress declares, on the
+classic and the blocks checkout; then, with the blocks checkout and the other two at their newest,
+each other WooCommerce series in the window, each other supported PHP minor
+and each other WordPress series. The declared WordPress, WooCommerce and PHP
+floors also run together on both checkouts, as one blocking combination, even
+where php.net has ended support for that PHP. Every PHP minor gets legs from
+its first GA release; where WordPress's own PHP compatibility table (in the
+core handbook) does not mark that PHP as supported for the series, the legs
+run non-blocking, with a warning. A picked combination
 that cannot run (WooCommerce requires a newer WordPress, or no runtime or
 wp-cli image exists for that PHP) is listed in the discover job's summary with
 a warning rather than dropped. Each leg builds `docker/wordpress-core` (the
