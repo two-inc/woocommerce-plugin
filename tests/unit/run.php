@@ -399,6 +399,7 @@ final class BrandConfigSpec
             'testApiProxyRelaysUpstreamBodyAndStatusVerbatim',
             'testApiProxyRelaysAnEmptyUpstreamBodyAsAnObject',
             'testApiProxyCompanyLookupKeepsTheIdToOnePathSegment',
+            'testApiProxyCompanySearchRefusesAnEmptyCountry',
             'testPostcodeFormatFitsTheCountrysWrittenFormOrLeavesItAlone',
             'testApiProxyCompanyLookupRelaysPostcodesAsTheirCountryWritesThem',
             'testApiProxyEveryEndpointAuthenticatesWithTheApiKey',
@@ -16272,6 +16273,30 @@ final class BrandConfigSpec
                 TinyAssert::same($endpoint, $gateway->calls[0]['endpoint'], $description);
             } else {
                 TinyAssert::same(false, $response['success'] ?? null, $description);
+                TinyAssert::same([], $gateway->calls, $description);
+            }
+        }
+    }
+
+    /** With no country there is no registry to search, so Two is never asked (TWO-27235). */
+    private static function testApiProxyCompanySearchRefusesAnEmptyCountry(): void
+    {
+        $cases = [
+            [['q' => 'exampleco', 'country' => 'GB'], true, 'a country is searched'],
+            [['q' => 'exampleco', 'country' => ''], false, 'an empty country is refused'],
+            [['q' => 'exampleco', 'country' => '   '], false, 'a blank country is refused'],
+            [['q' => 'exampleco'], false, 'a missing country is refused'],
+        ];
+        foreach ($cases as [$request, $served, $description]) {
+            $gateway = self::proxyGateway();
+            $_REQUEST = $request;
+            $response = self::runProxyHandler($gateway, 'ajax_company_search');
+            $_REQUEST = [];
+
+            if ($served) {
+                TinyAssert::same('GB', $gateway->calls[0]['params']['country'] ?? null, $description);
+            } else {
+                TinyAssert::same(['success' => false, 'data' => 'Country required', 'status' => 400], $response, $description);
                 TinyAssert::same([], $gateway->calls, $description);
             }
         }

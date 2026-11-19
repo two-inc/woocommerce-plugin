@@ -718,6 +718,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // times out or comes back degraded (TWO-25232) — never
                     // for a search that simply matched nothing.
                     'company_search_unavailable' => __('Company search is temporarily unavailable. Please try again.', 'twoinc-payment-gateway'),
+                    // What a search answers while no country is selected,
+                    // in place of asking the registry (TWO-27235).
+                    'company_search_no_country' => __('Select your country above to search for your company.', 'twoinc-payment-gateway'),
                     // Watermark inside the dropdown's own query field, stating
                     // the search threshold (TWO-25288). The %d is
                     // deliberately LEFT UNRESOLVED here: the JS

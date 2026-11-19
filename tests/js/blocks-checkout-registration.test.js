@@ -165,7 +165,7 @@ function baseGlobals(location, billing, shipping) {
     companyFieldSelector() {
       return this.isTileLocation() ? "#twoinc_tile_company_name" : this.addressFieldSelector;
     },
-    countryDidChange() {
+    seedCountry() {
       calls.order.push("seed:" + role);
       return false;
     },
