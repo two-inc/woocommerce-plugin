@@ -74,9 +74,10 @@ jobs:
     strategy:
       fail-fast: false
       # Capped so the legs do not all place orders on Two staging at once; the
-      # cap costs wall time, never coverage. 12 at once overran checkout-api
-      # staging's single pod (TWO-27314), so 6.
-      max-parallel: 6
+      # cap costs wall time, never coverage. 6 at once still failed checkout-api
+      # staging's probes and got its pods restarted, while 4 ran clean
+      # (TWO-27314).
+      max-parallel: 4
       matrix:
         include: ${{ fromJSON(needs.discover.outputs.legs) }}
     # Namespace the Compose project per leg, the same way upgrade-smoke.yaml
