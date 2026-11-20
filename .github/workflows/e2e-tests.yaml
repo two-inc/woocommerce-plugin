@@ -174,7 +174,7 @@ jobs:
             # Staging in the admin (TWO-26604).
             echo "TWO_INTERNAL_ENVIRONMENTS=1"
             echo "WORDPRESS_IMAGE=$COMPOSE_PROJECT_NAME-wordpress"
-            echo "WPCLI_IMAGE=wordpress:cli-php${{ matrix.combo.php }}"
+            echo "WPCLI_IMAGE=europe-north1-docker.pkg.dev/two-artifacts/docker/library/wordpress:cli-php${{ matrix.combo.php }}"
             echo "WOOCOM_VERSION=${{ matrix.combo.woocommerce }}"
             echo "TWO_DEBUG_LOG_ONLY=1"
             # Company search and lookup are answered by the e2e fake, not Two

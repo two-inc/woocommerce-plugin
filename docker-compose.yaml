@@ -21,7 +21,7 @@ services:
     # docker/wordpress-core, one per WordPress x PHP combination that
     # dev/support-matrix.sh discovers (TWO-27171).
     # upgrade-smoke.yaml mirrors this default; move both together.
-    image: ${WORDPRESS_IMAGE:-wordpress:${WORDPRESS_VERSION:-6.8}-php8.2-apache}
+    image: ${WORDPRESS_IMAGE:-europe-north1-docker.pkg.dev/two-artifacts/docker/library/wordpress:${WORDPRESS_VERSION:-6.8}-php8.2-apache}
     restart: always
     ports:
       - "${WORDPRESS_PORT:-8888}:80"
@@ -109,7 +109,7 @@ services:
     # CI's e2e legs set WPCLI_IMAGE to wordpress:cli-php<minor> for the leg's
     # PHP minor, so install, activation and provisioning run on the PHP under
     # test (TWO-27171). upgrade-smoke.yaml mirrors this default.
-    image: ${WPCLI_IMAGE:-wordpress:cli-2.11.0-php8.2}
+    image: ${WPCLI_IMAGE:-europe-north1-docker.pkg.dev/two-artifacts/docker/library/wordpress:cli-2.11.0-php8.2}
     user: "33:33"
     entrypoint: /opt/tillit-payment-gateway/docker/wpcli.sh
     restart: always
@@ -144,7 +144,7 @@ services:
         condition: service_healthy
 
   mariadb:
-    image: mariadb:10.2
+    image: europe-north1-docker.pkg.dev/two-artifacts/docker/library/mariadb:10.2
     restart: always
     environment:
       MYSQL_DATABASE: twocommerce

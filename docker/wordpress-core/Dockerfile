@@ -8,7 +8,7 @@
 # published checksum. The image's entrypoint copies /usr/src/wordpress into a
 # fresh volume on first boot, as it does for the stock image.
 ARG PHP_MINOR
-FROM wordpress:php${PHP_MINOR}-apache
+FROM europe-north1-docker.pkg.dev/two-artifacts/docker/library/wordpress:php${PHP_MINOR}-apache
 
 ARG WORDPRESS_CORE
 RUN set -eux; \
