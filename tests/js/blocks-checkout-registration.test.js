@@ -145,6 +145,9 @@ function baseGlobals(location, billing, shipping) {
   const subscribers = {};
   const activeMethod = { name: null };
   const resolution = { finished: true, customerData: true };
+  // Blocks' "Use same address for billing" box, unticked unless a test ticks it, and
+  // whether a dispatch notifies subscribers before it returns, as wp.data's does.
+  const checkout = { useShippingAsBilling: false, notifies: false };
   const captureValues = { company: "", company_id: "", mode: "search" };
   const shippingCaptureValues = { company: "", company_id: "" };
   const valuesFor = (role) => (role === "shipping" ? shippingCaptureValues : captureValues);
@@ -285,6 +288,18 @@ function baseGlobals(location, billing, shipping) {
     publish("wc/store/cart");
   }
 
+  /** An edit Blocks sets on the delivery address alone. */
+  function editShipping(change) {
+    shippingAddress = Object.assign({}, shippingAddress, change);
+    publish("wc/store/cart");
+  }
+
+  /** An edit that reaches the billing address alone. */
+  function editBilling(change) {
+    address = Object.assign({}, address, change);
+    publish("wc/store/cart");
+  }
+
   return {
     calls,
     control,
@@ -299,30 +314,38 @@ function baseGlobals(location, billing, shipping) {
     },
     activeMethod,
     resolution,
+    checkout,
     publish,
     receiveCart,
     edit,
+    editShipping,
+    editBilling,
 
     data: {
       select: (store) =>
         store === "wc/store/payment"
           ? { getActivePaymentMethod: () => activeMethod.name }
-          : {
-              getCartData: () => ({}),
-              getCustomerData: () =>
-                resolution.customerData ? { billingAddress: address, shippingAddress } : {},
-              getCartTotals: () => totals,
-              // Only the resolver-backed selector ever finishes.
-              hasFinishedResolution: (selector) => selector === "getCartData" && resolution.finished
-            },
+          : store === "wc/store/checkout"
+            ? { getUseShippingAsBilling: () => checkout.useShippingAsBilling }
+            : {
+                getCartData: () => ({}),
+                getCustomerData: () =>
+                  resolution.customerData ? { billingAddress: address, shippingAddress } : {},
+                getCartTotals: () => totals,
+                // Only the resolver-backed selector ever finishes.
+                hasFinishedResolution: (selector) =>
+                  selector === "getCartData" && resolution.finished
+              },
       dispatch: () => ({
         setBillingAddress(patch) {
           calls.patches.push(patch);
           address = Object.assign({}, address, patch);
+          if (checkout.notifies) publish("wc/store/cart");
         },
         setShippingAddress(patch) {
           calls.shippingPatches.push(patch);
           shippingAddress = Object.assign({}, shippingAddress, patch);
+          if (checkout.notifies) publish("wc/store/cart");
         }
       }),
       subscribe: (fn, store) => {
@@ -570,6 +593,174 @@ describe("blocks-checkout.js reuses the classic controller", () => {
       expect(document.getElementById("billing_" + key).value).toBe(expectShadow[key]);
     });
     expect(base.calls.patches).toEqual(expectPatches);
+  });
+
+  test.each([
+    {
+      ticked: true,
+      steps: [["pick", { address_1: "Second House" }]],
+      expectBilling: { address_1: "Second House" },
+      description: "a first pick reaches billing too while the same-address box is ticked"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { address_1: "First House" }],
+        ["form", { address_1: "First House" }],
+        ["pick", { address_1: "Second House" }]
+      ],
+      expectBilling: { address_1: "Second House" },
+      description: "a re-pick replaces the first company's billing while the box is ticked"
+    },
+    {
+      ticked: false,
+      steps: [
+        ["pick", { address_1: "First House" }],
+        ["form", { address_1: "First House" }],
+        ["pick", { address_1: "Second House" }]
+      ],
+      expectBilling: { address_1: "First House" },
+      description: "a re-pick leaves a separately entered billing address alone"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["shippingPhone", "07700 900002"]
+      ],
+      expectBilling: { phone: "07700 900002" },
+      description: "a phone the buyer types after a pick reaches billing over the registered one"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["form", { phone: "01632 960001" }],
+        ["pick", { phone: "01632 960002" }]
+      ],
+      expectBilling: { phone: "01632 960002" },
+      description: "a re-pick replaces the first company's registered phone on billing"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { address_1: "First House" }],
+        ["form", { address_1: "First House" }],
+        ["pick", { address_1: "Second House" }],
+        ["stale", { address_1: "First House" }]
+      ],
+      expectBilling: { address_1: "Second House" },
+      description: "a stale cart answer reverting both addresses is re-sent to billing too"
+    },
+    {
+      ticked: true,
+      seed: { billing: { phone: "01632 960009" } },
+      steps: [["form", { city: "Oslo" }]],
+      expectBilling: { phone: "01632 960009" },
+      description: "with no pick a saved billing phone is left alone"
+    },
+    {
+      ticked: true,
+      seed: { billing: { phone: "07700 900009" }, shipping: { phone: "07700 900009" } },
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["shippingPhone", ""]
+      ],
+      expectBilling: { phone: "07700 900009" },
+      description: "a shipping phone cleared after a pick puts billing's own phone back"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["form", { phone: "07700 900001" }],
+        ["pick", { phone: "01632 960001" }],
+        ["pick", { phone: "" }]
+      ],
+      expectBilling: { phone: "07700 900001" },
+      description: "a guest's typed phone comes back when a re-pick has no registered phone"
+    },
+    {
+      ticked: true,
+      seed: { billing: { phone: "07700 900009" }, shipping: { phone: "07700 900009" } },
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["pick", { phone: "" }]
+      ],
+      expectBilling: { phone: "07700 900009" },
+      description: "a saved billing phone comes back when a re-pick has no registered phone"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["form", { phone: "01632 960001" }],
+        ["pick", { phone: "01632 960002" }],
+        ["stale", { phone: "01632 960001" }]
+      ],
+      expectBilling: { phone: "01632 960002" },
+      description: "a stale cart answer reverting the phone is re-sent to billing too"
+    },
+    {
+      ticked: true,
+      notifies: true,
+      steps: [
+        ["form", { phone: "07700 900001" }],
+        ["pick", { phone: "01632 960001" }],
+        ["form", { phone: "01632 960001" }],
+        ["pick", { phone: "01632 960002" }],
+        ["stale", { phone: "01632 960001" }],
+        ["pick", { phone: "" }]
+      ],
+      expectBilling: { phone: "07700 900001" },
+      description: "billing's own phone survives a stale answer when every dispatch notifies"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["billingPhone", "07700 900003"],
+        ["shippingPhone", "07700 900002"]
+      ],
+      expectBilling: { phone: "07700 900003" },
+      description: "a billing phone someone else wrote after the mirror is not followed"
+    }
+  ])("$description", async ({ ticked, notifies = false, seed, steps, expectBilling }) => {
+    // WooCommerce 7.6's phone, outside the address form: the buyer's only phone with the box ticked.
+    document.body.innerHTML = '<input id="shipping-phone">';
+    const base = baseGlobals("address_area", (seed || {}).billing, (seed || {}).shipping);
+    base.checkout.useShippingAsBilling = ticked;
+    base.checkout.notifies = notifies;
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    const act = {
+      // How the delivery control writes a pick: onto shipping only (TWO-27358).
+      pick: (fields) =>
+        Object.keys(fields).forEach((key) => {
+          document.getElementById("shipping_" + key).value = fields[key];
+        }),
+      // Blocks' own form, or the buyer, setting both addresses.
+      form: (change) => base.edit(change),
+      // The buyer typing a phone on WooCommerce 7.6, which Blocks sets on shipping only.
+      shippingPhone: (phone) => {
+        document
+          .getElementById("shipping-phone")
+          .dispatchEvent(new window.Event("input", { bubbles: true }));
+        base.editShipping({ phone });
+      },
+      billingPhone: (phone) => base.editBilling({ phone }),
+      // A cart answer older than the last write.
+      stale: (answer) => base.receiveCart(answer)
+    };
+    for (const [step, arg] of steps) {
+      act[step](arg);
+      await Promise.resolve();
+    }
+
+    Object.keys(expectBilling).forEach((key) => {
+      expect(base.address[key]).toBe(expectBilling[key]);
+    });
   });
 
   test("a pull never overwrites a write that has not reached the store yet", async () => {
