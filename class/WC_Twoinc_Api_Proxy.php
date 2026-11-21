@@ -173,7 +173,7 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
                 wp_send_json_error('Buyer country not supported');
                 return;
             }
-            // The session follows a term chip a round trip late, and the cart's surcharge fee reads it.
+            // The term chip posted with the intent, so the cart's surcharge fee can read it this request.
             $term = (int) ($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] ?? 0);
             if ($term > 0 && in_array($term, WC_Twoinc_Payment_Terms::get_available_terms($gateway), true)) {
                 WC_Twoinc_Payment_Terms::set_selected_term($gateway, $term);

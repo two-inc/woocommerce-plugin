@@ -2020,9 +2020,38 @@ class StubWpdb
         $this->queries[] = $query;
         return 1;
     }
+
+    public $options = 'wp_options';
+
+    public function esc_like($text)
+    {
+        return addcslashes($text, '_%\\');
+    }
+
+    /** Answers a "option_name LIKE '<prefix>%'" read of wp_options from the stubbed options, values serialised as stored. */
+    public function get_results($query)
+    {
+        $this->queries[] = $query;
+        if (!preg_match("/FROM wp_options WHERE option_name LIKE '(.*)%'$/", $query, $match)) {
+            return [];
+        }
+        $prefix = stripcslashes($match[1]);
+        $rows = [];
+        foreach ($GLOBALS['__twoinc_test_options'] ?? [] as $name => $value) {
+            if (strpos((string) $name, $prefix) === 0) {
+                $rows[] = (object) ['option_name' => (string) $name, 'option_value' => is_scalar($value) ? (string) $value : serialize($value)];
+            }
+        }
+        return $rows;
+    }
 }
 
 $GLOBALS['wpdb'] = new StubWpdb();
+
+function maybe_unserialize($value)
+{
+    return is_string($value) && preg_match('/^(a|O|s|i|b|d):/', $value) ? unserialize($value) : $value;
+}
 
 // A minimal but representative status list — enough for the fulfilment-
 // trigger multiselect options builder (TWO-25386) to run during

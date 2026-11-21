@@ -6464,16 +6464,40 @@ if (!class_exists('WC_Twoinc')) {
             return $session && method_exists($session, 'get_customer_id') ? (string) $session->get_customer_id() : '';
         }
 
+        /** Every buyer's verdict row is named with this, then an md5 of their session customer id. */
+        private static function intent_verdict_prefix(): string
+        {
+            return WC_Twoinc_Brand::prefixed_name('intent_verdicts_');
+        }
+
         /**
-         * Transient holding one buyer's verdicts, keyed by the session's customer id
-         * as the session itself is. Not the WooCommerce session: saving that from the
-         * order intent request, which waits on Two, makes WooCommerce 11.3.1 refuse a
-         * checkout request that overlaps it (TWO-27353). Null without an id to key it by.
+         * The wp_options row holding one buyer's verdicts, keyed by the session's
+         * customer id as the session itself is. Not the WooCommerce session: saving that
+         * from the order intent request, which waits on Two, makes WooCommerce 11.3.1
+         * refuse a checkout request that overlaps it (TWO-27353). Not a transient
+         * either: a persistent object cache keeps those only in the cache, and an
+         * eviction there would let a declined company through. Null without an id.
          */
         private static function intent_verdict_store(?string $customer_id = null): ?string
         {
             $customer_id = $customer_id ?? self::session_customer_id();
-            return $customer_id === '' ? null : WC_Twoinc_Brand::prefixed_name('intent_' . md5($customer_id));
+            return $customer_id === '' ? null : self::intent_verdict_prefix() . md5($customer_id);
+        }
+
+        /** The row's verdicts, or none once it has expired. */
+        private static function read_intent_verdicts(?string $store): array
+        {
+            $row = $store === null ? false : get_option($store, false);
+            if (!is_array($row) || !is_array($row['verdicts'] ?? null) || (int) ($row['expires'] ?? 0) <= time()) {
+                return [];
+            }
+            return $row['verdicts'];
+        }
+
+        /** Not autoloaded: one buyer's row is never needed on another's request. */
+        private static function write_intent_verdicts(string $store, array $verdicts): void
+        {
+            update_option($store, ['expires' => time() + self::INTENT_VERDICT_TTL, 'verdicts' => $verdicts], false);
         }
 
         /** Banked so order creation can refuse a declined company (TWO-25657). */
@@ -6484,49 +6508,68 @@ if (!class_exists('WC_Twoinc')) {
             if ($key === '' || $store === null) {
                 return;
             }
-            $verdicts = get_transient($store);
-            $verdicts = is_array($verdicts) ? $verdicts : [];
+            $verdicts = self::read_intent_verdicts($store);
             $verdicts[$key] = $approved;
-            set_transient($store, $verdicts, self::INTENT_VERDICT_TTL);
+            self::write_intent_verdicts($store, $verdicts);
         }
 
         /**
          * Carries a guest's verdicts to the user id WooCommerce switches the session to
          * when the guest logs in or creates an account at checkout, before payment is
          * processed. Hooked to woocommerce_guest_session_to_user_id (WooCommerce 8.8+).
-         * Verdicts the account already holds are kept unless the guest's replace them.
+         * A guest verdict replaces the account's own for the same company.
          */
         public static function carry_intent_verdicts($guest_id, $user_id): void
         {
             $from = self::intent_verdict_store((string) $guest_id);
             $to = self::intent_verdict_store((string) $user_id);
-            $verdicts = $from === null ? false : get_transient($from);
-            if ($to === null || $from === $to || !is_array($verdicts) || $verdicts === []) {
+            $verdicts = self::read_intent_verdicts($from);
+            if ($to === null || $from === $to || $verdicts === []) {
                 return;
             }
-            $held = get_transient($to);
-            set_transient($to, $verdicts + (is_array($held) ? $held : []), self::INTENT_VERDICT_TTL);
+            self::write_intent_verdicts($to, $verdicts + self::read_intent_verdicts($to));
         }
 
         /**
-         * The same for an account created at checkout on WooCommerce before 8.8: fired
-         * while the session still holds the guest id.
+         * The same from the session's current id, for WooCommerce before 8.8, while the
+         * session still holds the guest id: woocommerce_created_customer passes the new
+         * user's id, wp_login the login name and then the user.
          */
-        public static function carry_intent_verdicts_to_new_customer($customer_id): void
+        public static function carry_session_intent_verdicts_to($user_id, $user = null): void
         {
-            self::carry_intent_verdicts(self::session_customer_id(), $customer_id);
+            self::carry_intent_verdicts(self::session_customer_id(), is_object($user) && isset($user->ID) ? $user->ID : $user_id);
+        }
+
+        /** On WooCommerce's session cleanup. Takes no argument: an action fired without any passes ''. */
+        public static function delete_expired_intent_verdicts(): void
+        {
+            self::delete_intent_verdicts(true);
+        }
+
+        /** Removes the verdict rows that have expired, or all of them on uninstall. */
+        private static function delete_intent_verdicts(bool $expired_only): void
+        {
+            global $wpdb;
+            $rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s",
+                $wpdb->esc_like(self::intent_verdict_prefix()) . '%'
+            ));
+            foreach ((array) $rows as $row) {
+                $value = maybe_unserialize($row->option_value);
+                // delete_option, not one DELETE: it also drops the object cache's copy, which
+                // would otherwise make the next update_option of that row write nothing.
+                if (!$expired_only || !is_array($value) || (int) ($value['expires'] ?? 0) <= time()) {
+                    delete_option($row->option_name);
+                }
+            }
         }
 
         /** @return bool|null Null = no answer, never a decline. */
         public static function get_order_intent_verdict(string $company_id): ?bool
         {
             $key = self::intent_verdict_key($company_id);
-            $store = self::intent_verdict_store();
-            if ($key === '' || $store === null) {
-                return null;
-            }
-            $verdicts = get_transient($store);
-            if (!is_array($verdicts) || !array_key_exists($key, $verdicts)) {
+            $verdicts = self::read_intent_verdicts(self::intent_verdict_store());
+            if ($key === '' || !array_key_exists($key, $verdicts)) {
                 return null;
             }
             return (bool) $verdicts[$key];
@@ -9043,6 +9086,8 @@ if (!class_exists('WC_Twoinc')) {
          */
         public static function maybe_clear_settings_on_uninstall(): void
         {
+            // Buyers' order intent verdicts are not settings, and nothing would expire them once the plugin is gone.
+            self::delete_intent_verdicts(false);
             $gateway_id = WC_Twoinc_Brand::get('gateway_id');
             $settings_option = 'woocommerce_' . $gateway_id . '_settings';
             $settings = get_option($settings_option, []);

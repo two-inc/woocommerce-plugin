@@ -99,6 +99,8 @@ final class BrandConfigSpec
             'testOrderCreationRefusesADeclinedOrderIntent',
             'testOrderIntentRecordsItsVerdictForOrderCreation',
             'testOrderIntentVerdictFollowsTheBuyer',
+            'testAnExpiredOrderIntentVerdictIsNoAnswer',
+            'testExpiredOrderIntentVerdictsAreDeletedWithGuestSessions',
             'testAvailabilityGateSkipsMinimumsOnEmptyCart',
             'testGatewayIsWithheldOnThePayForOrderPage',
             'testMerchantMinimumRaisesTheBar',
@@ -3385,7 +3387,7 @@ final class BrandConfigSpec
             $GLOBALS['__twoinc_test_notices'] = [];
             $GLOBALS['__twoinc_test_logs'] = [];
             // Verdicts outlive the session object (TWO-27353): each case starts clean.
-            $GLOBALS['__twoinc_test_transients'] = [];
+            self::clearIntentVerdicts();
             WC()->session = new StubSession();
             if ($mode === 'declined') {
                 WC_Twoinc::record_order_intent_verdict('923456789', false);
@@ -3592,7 +3594,7 @@ final class BrandConfigSpec
             list($verdicts, $posted_company_id, $refused, $description) = $case;
 
             // Verdicts outlive the session object (TWO-27353): each case starts clean.
-            $GLOBALS['__twoinc_test_transients'] = [];
+            self::clearIntentVerdicts();
             WC()->session = new StubSession();
             foreach ($verdicts as $company_id => $approved) {
                 WC_Twoinc::record_order_intent_verdict((string) $company_id, $approved);
@@ -3647,14 +3649,15 @@ final class BrandConfigSpec
 
     /**
      * TWO-27353: a verdict follows the buyer, as it did in the session: through a change to the cart's totals,
-     * and onto the account a guest creates at checkout, which WooCommerce switches the session to before payment.
+     * and onto the account a guest logs in to or creates at checkout, which WooCommerce switches the session to.
      */
     private static function testOrderIntentVerdictFollowsTheBuyer(): void
     {
         $source = (string) file_get_contents(dirname(__DIR__, 2) . '/tillit-payment-gateway.php');
         $registrations = [
             'woocommerce_guest_session_to_user_id' => [['WC_Twoinc', 'carry_intent_verdicts'], 2, "add_action('woocommerce_guest_session_to_user_id', ['WC_Twoinc', 'carry_intent_verdicts'], 10, 2);"],
-            'woocommerce_created_customer' => [['WC_Twoinc', 'carry_intent_verdicts_to_new_customer'], 1, "add_action('woocommerce_created_customer', ['WC_Twoinc', 'carry_intent_verdicts_to_new_customer']);"],
+            'woocommerce_created_customer' => [['WC_Twoinc', 'carry_session_intent_verdicts_to'], 1, "add_action('woocommerce_created_customer', ['WC_Twoinc', 'carry_session_intent_verdicts_to']);"],
+            'wp_login' => [['WC_Twoinc', 'carry_session_intent_verdicts_to'], 2, "add_action('wp_login', ['WC_Twoinc', 'carry_session_intent_verdicts_to'], 10, 2);"],
         ];
         foreach ($registrations as $hook => [$callback, $accepted_args, $line]) {
             add_action($hook, $callback, 10, $accepted_args);
@@ -3691,14 +3694,20 @@ final class BrandConfigSpec
                 $as('7');
             }, [$declined => false], 'an account created at checkout on WooCommerce before 8.8'],
             [[], $switch_session, [$declined => false], 'a guest session switched to the user id'],
+            [[], static function () use ($as): void {
+                // The login form's request still holds the guest id; the next one holds the user id.
+                do_action('wp_login', 'buyer', (object) ['ID' => 7]);
+                $as('7');
+            }, [$declined => false], 'a guest logging in at checkout on WooCommerce before 8.8'],
             [[$other => true], static function () use ($create_account, $switch_session): void {
                 $create_account();
                 $switch_session();
             }, [$declined => false, $other => true], 'an account holding a verdict for another company, on WooCommerce 8.8 and later'],
+            [[$declined => true], $switch_session, [$declined => false], 'an account that approved the company the guest was declined for'],
         ];
 
         foreach ($cases as [$account_verdicts, $after_intent, $expected, $description]) {
-            $GLOBALS['__twoinc_test_transients'] = [];
+            self::clearIntentVerdicts();
             WC()->session = new StubSession();
             WC()->cart = $cart;
             $cart->hash = 'before';
@@ -3726,8 +3735,77 @@ final class BrandConfigSpec
         unset($GLOBALS['__twoinc_test_session_customer']);
         WC()->session = null;
         WC()->cart = null;
-        $GLOBALS['__twoinc_test_transients'] = [];
+        self::clearIntentVerdicts();
         $_POST = [];
+    }
+
+    private static function clearIntentVerdicts(): void
+    {
+        $prefix = WC_Twoinc_Brand::prefixed_name('intent_verdicts_');
+        foreach (array_keys($GLOBALS['__twoinc_test_options'] ?? []) as $name) {
+            if (strpos((string) $name, $prefix) === 0) {
+                unset($GLOBALS['__twoinc_test_options'][$name]);
+            }
+        }
+    }
+
+    /** TWO-27353: a verdict lasts as long as a guest session, then reads as no answer. */
+    private static function testAnExpiredOrderIntentVerdictIsNoAnswer(): void
+    {
+        WC()->session = new StubSession();
+        // [seconds from now the row expires, the verdict read, why]
+        $cases = [
+            [60, false, 'a row within its lifetime'],
+            [0, null, 'a row expiring now'],
+            [-60, null, 'an expired row'],
+            [null, null, 'a row with no expiry'],
+        ];
+        foreach ($cases as [$expires_in, $expected, $description]) {
+            self::clearIntentVerdicts();
+            WC_Twoinc::record_order_intent_verdict('923456789', false);
+            $name = WC_Twoinc_Brand::prefixed_name('intent_verdicts_') . md5('t_stubshopper');
+            TinyAssert::true(isset($GLOBALS['__twoinc_test_options'][$name]['expires']), "$description: the row was not written where expected");
+            $GLOBALS['__twoinc_test_options'][$name]['expires'] = $expires_in === null ? null : time() + $expires_in;
+            TinyAssert::same($expected, WC_Twoinc::get_order_intent_verdict('923456789'), $description);
+        }
+        self::clearIntentVerdicts();
+        WC()->session = null;
+    }
+
+    /** TWO-27353: WooCommerce's session cleanup deletes expired verdict rows and nothing else; uninstall deletes the rest. */
+    private static function testExpiredOrderIntentVerdictsAreDeletedWithGuestSessions(): void
+    {
+        $line = "add_action('woocommerce_cleanup_sessions', ['WC_Twoinc', 'delete_expired_intent_verdicts']);";
+        TinyAssert::true(
+            strpos((string) file_get_contents(dirname(__DIR__, 2) . '/tillit-payment-gateway.php'), $line) !== false,
+            'expired verdicts are not deleted on the session cleanup'
+        );
+        $prefix = WC_Twoinc_Brand::prefixed_name('intent_verdicts_');
+        $expired = ['expires' => time() - 1, 'verdicts' => ['923456789' => false]];
+        $live = ['expires' => time() + 60, 'verdicts' => ['923456789' => false]];
+        // [option name, value, kept by the cleanup, kept by uninstall, why]
+        $rows = [
+            [$prefix . 'expired', $expired, false, false, 'an expired verdict row'],
+            [$prefix . 'live', $live, true, false, 'a verdict row within its lifetime'],
+            [$prefix . 'corrupt', 'not a row', false, false, 'a verdict row that is not one'],
+            [WC_Twoinc_Brand::prefixed_name('other'), $expired, true, true, 'an expired-looking row of another name'],
+        ];
+        $GLOBALS['__twoinc_test_options'] = array_column($rows, 1, 0);
+
+        add_action('woocommerce_cleanup_sessions', ['WC_Twoinc', 'delete_expired_intent_verdicts']);
+        // As WordPress calls a callback for an action fired without arguments.
+        do_action('woocommerce_cleanup_sessions', '');
+        unset($GLOBALS['__twoinc_test_filters']['woocommerce_cleanup_sessions']);
+        foreach ($rows as [$name, , $kept, , $description]) {
+            TinyAssert::same($kept, array_key_exists($name, $GLOBALS['__twoinc_test_options']), "cleanup: $description");
+        }
+
+        $GLOBALS['__twoinc_test_options'] = array_column($rows, 1, 0);
+        WC_Twoinc::maybe_clear_settings_on_uninstall();
+        foreach ($rows as [$name, , , $kept, $description]) {
+            TinyAssert::same($kept, array_key_exists($name, $GLOBALS['__twoinc_test_options']), "uninstall: $description");
+        }
+        $GLOBALS['__twoinc_test_options'] = [];
     }
 
     private static function testOrderIntentRecordsItsVerdictForOrderCreation(): void
@@ -3743,6 +3821,7 @@ final class BrandConfigSpec
             list($body, $expected, $description) = $case;
 
             $GLOBALS['__twoinc_test_transients'] = [];
+            self::clearIntentVerdicts();
             WC()->session = new StubSession();
             $gateway = self::intentVerdictGateway($body);
             $_POST = ['intent' => json_encode([
@@ -3772,6 +3851,7 @@ final class BrandConfigSpec
 
         WC()->session = null;
         $GLOBALS['__twoinc_test_transients'] = [];
+        self::clearIntentVerdicts();
         $_POST = [];
     }
 
