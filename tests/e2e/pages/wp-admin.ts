@@ -51,6 +51,13 @@ export async function changeOrderStatus(page: Page, status: string) {
   await page.waitForLoadState("load");
 }
 
+/** Runs an entry from the order screen's "Order actions" box, which WooCommerce applies on save. */
+export async function runOrderAction(page: Page, label: string) {
+  await page.locator('select[name="wc_order_action"]').selectOption({ label });
+  await page.locator("button.save_order").click();
+  await page.waitForLoadState("load");
+}
+
 export async function refundOrder(page: Page, quantity: number) {
   await page.locator("button.refund-items").click();
 

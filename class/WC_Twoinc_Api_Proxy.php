@@ -8,20 +8,6 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
      */
     class WC_Twoinc_Api_Proxy
     {
-        /**
-         * The order-intent fields the browser is trusted to supply. Everything
-         * else it sends is dropped: the relay spends the merchant's API key.
-         */
-        private const INTENT_FIELDS = [
-            'gross_amount',
-            'net_amount',
-            'tax_amount',
-            'invoice_type',
-            'buyer',
-            'currency',
-            'line_items',
-        ];
-
         /** @return WC_Twoinc|null Null when the request was already refused. */
         private static function authorize(string $handler, string $route)
         {
@@ -36,6 +22,13 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
             $gateway = WC_Twoinc::get_instance();
             if (!$gateway) {
                 self::log_refusal($handler, 'gateway instance unavailable');
+                wp_send_json_error('Gateway unavailable');
+                return null;
+            }
+            // TWO-27227: a disabled gateway stands company search down, and
+            // nothing else these routes serve is offered either.
+            if ($gateway->enabled !== 'yes') {
+                self::log_refusal($handler, 'the payment method is disabled');
                 wp_send_json_error('Gateway unavailable');
                 return null;
             }
@@ -57,8 +50,11 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
             return isset($_REQUEST[$key]) ? sanitize_text_field(wp_unslash($_REQUEST[$key])) : '';
         }
 
-        /** Unenveloped: the browser handlers parse the API's own response shape. */
-        private static function relay($response): void
+        /**
+         * Unenveloped: the browser handlers parse the API's own response shape.
+         * A successful body may be reshaped first by `$shape`.
+         */
+        private static function relay($response, ?callable $shape = null): void
         {
             if (is_wp_error($response) || !is_array($response)) {
                 wp_send_json_error('Upstream request failed', 502);
@@ -66,6 +62,9 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
             }
             $status = (int) wp_remote_retrieve_response_code($response);
             $decoded = json_decode((string) wp_remote_retrieve_body($response), true);
+            if ($shape && is_array($decoded) && $status >= 200 && $status < 300) {
+                $decoded = $shape($decoded);
+            }
             // An empty or unparseable body would reach `.done` as literal null,
             // which every handler dereferences.
             wp_send_json(is_array($decoded) ? $decoded : [], $status > 0 ? $status : 502);
@@ -78,8 +77,17 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
             if (!$gateway) {
                 return;
             }
+            // TWO-27235: with no country there is no registry to search. The
+            // checkout says so without asking; this refuses anything else that
+            // gets here, before Two is called.
+            $country = self::req('country');
+            if ($country === '') {
+                self::log_refusal('company search', 'no country to search in');
+                wp_send_json_error('Country required', 400);
+                return;
+            }
             $params = [
-                'country' => self::req('country'),
+                'country' => $country,
                 'limit' => absint(self::req('limit')),
                 'offset' => absint(self::req('offset')),
                 'q' => self::req('q'),
@@ -102,7 +110,10 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
             self::relay($gateway->make_request('/companies/v2/supported-countries', [], 'GET'));
         }
 
-        /** wc-ajax handler: registry address lookup for one company. */
+        /**
+         * wc-ajax handler: registry address lookup for one company. Each
+         * address's postcode is relayed as its country writes it (TWO-27159).
+         */
         public static function ajax_company_by_id(): void
         {
             $gateway = self::authorize('company lookup', 'company_by_id');
@@ -116,7 +127,10 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
                 wp_send_json_error('Invalid company id');
                 return;
             }
-            self::relay($gateway->make_request('/companies/v2/company/' . rawurlencode($lookup_id), [], 'GET'));
+            self::relay(
+                $gateway->make_request('/companies/v2/company/' . rawurlencode($lookup_id), [], 'GET'),
+                [WC_Twoinc_Postcode_Format::class, 'fit_company']
+            );
         }
 
         /** wc-ajax handler: the buyer's payment terms for the due-in-days copy. */
@@ -139,6 +153,7 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
         /** wc-ajax handler: the order intent availability check. */
         public static function ajax_order_intent(): void
         {
+            self::leave_session_unsaved();
             $gateway = self::authorize('order intent', 'order_intent');
             if (!$gateway) {
                 return;
@@ -158,13 +173,49 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
                 wp_send_json_error('Buyer country not supported');
                 return;
             }
-            $payload = array_intersect_key($posted, array_flip(self::INTENT_FIELDS));
-            // Merchant identity is resolved here, never read from the request.
-            $payload['merchant_id'] = (string) $gateway->get_merchant_id();
-            $payload['merchant_short_name'] = (string) $gateway->get_option('merchant_short_name');
-            $response = $gateway->make_request('/v1/order_intent', $payload, 'POST');
+            // The term chip posted with the intent, so the cart's surcharge fee can read it this request.
+            $term = (int) ($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] ?? 0);
+            if ($term > 0 && in_array($term, WC_Twoinc_Payment_Terms::get_available_terms($gateway), true)) {
+                WC_Twoinc_Payment_Terms::set_selected_term($gateway, $term);
+            }
+            // 5xx, not a 200 error: the browser reads a 200 as a decline and caches it (TWO-25657).
+            try {
+                $order = WC_Twoinc_Helper::build_intent_order_from_cart();
+                if (!$order) {
+                    self::log_refusal('order intent', 'no cart to compose the intent from');
+                    wp_send_json_error('Invalid order intent payload', 500);
+                    return;
+                }
+                // Only the buyer comes from the browser: the relay spends the merchant's API key.
+                $buyer = is_array($posted['buyer'] ?? null) ? $posted['buyer'] : [];
+                $payload = WC_Twoinc_Helper::compose_twoinc_intent($order, $buyer);
+                // Merchant identity is resolved here, never read from the request.
+                $payload['merchant_id'] = (string) $gateway->get_merchant_id();
+                $payload['merchant_short_name'] = (string) $gateway->get_option('merchant_short_name');
+                $response = $gateway->make_order_request('order_intent', 'checkout', '/v1/order_intent', $payload, 'POST', $order);
+            } catch (Exception $e) {
+                self::log_refusal('order intent', $e->getMessage());
+                wp_send_json_error('Order intent refused', 500);
+                return;
+            }
             self::record_verdict($company, $response);
             self::relay($response);
+        }
+
+        /**
+         * The intent waits on Two for seconds, and its session copy is stale by
+         * the time it would save: WooCommerce 11.3.1 refuses a checkout request
+         * another request saved the session under, and the save would put back
+         * an address the buyer has since changed (TWO-27353). Nothing it changes
+         * there needs keeping: the cart is recomputed on every request, the term
+         * is saved by its own select-term call, and the verdict is banked apart.
+         */
+        private static function leave_session_unsaved(): void
+        {
+            $session = function_exists('WC') ? (WC()->session ?? null) : null;
+            if ($session) {
+                remove_action('shutdown', [$session, 'save_data'], 20);
+            }
         }
 
         /** Only an explicit `approved` counts — an error is not a decline (TWO-25657). */

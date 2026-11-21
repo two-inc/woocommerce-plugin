@@ -1,5 +1,5 @@
 /**
- * ABN-554 — closing the popover hands the buyer back to the company-name
+ * Closing the popover hands the buyer back to the company-name
  * field, and the field's own open-on-focus opener is held off for that one
  * programmatic focus alone.
  *

@@ -1,5 +1,5 @@
 /**
- * Company-search tab stop (TWO-25503, ABN-499).
+ * Company-search tab stop (TWO-25503).
  *
  * The company field opens the popover on focus and the opener puts the caret
  * in the popover's query input. Left as a tab stop, the field catches Shift+Tab
@@ -31,7 +31,7 @@ const TEXT = {
  * A visible, focusable field of the host's outside the control. The real
  * `#billing_company` is NOT that: company search hides its row, so a buyer can
  * never put focus there and an assertion that focus settled on it is fiction
- * jsdom happens to allow (ABN-499).
+ * jsdom happens to allow.
  */
 const OUTSIDE_FIELD = "#billing_country";
 

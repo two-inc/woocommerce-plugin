@@ -108,6 +108,12 @@ TWO\_\* env values to the gateway settings after you edit `.env` (run
 `make logs`, `make stop`, `make clean` (full reset), `make test-unit`,
 `make format`.
 
+The first provision shapes the shop (theme, products, permalinks, currency,
+country, gateway settings JSON) and records that it has. Later starts only repair what
+is missing (WooCommerce, the admin user, the gateway plugin's activation) and
+re-apply the TWO\_\* env values, so shop settings changed by hand survive a
+restart. To reshape from `.env`, start from a clean stack (`make clean`).
+
 The default `.env` targets a locally running Checkout API backend
 (`portal.localhost`) — no additional setup required.
 
@@ -134,21 +140,28 @@ docker compose up -d --force-recreate
 
 ### Environment selector, key and hosts have to agree
 
-`docker/config/local.json` pins `checkout_env` to `PROD`, which
-`WC_Twoinc_Helper::get_environment_mode()` resolves to `production`. On a
-localhost shop that is not the environment the gateway talks to:
-`get_effective_environment_mode()` treats a dev-sniffed shop still carrying the
-default mode as non-production and resolves it from `TWOINC_DEV_API_HOST`
-instead — `https://api.staging.two.inc` gives `staging`, and an unset variable
-falls back to `staging` as well. So a `secret_test_` staging merchant key is
-the key that belongs in `TWO_API_KEY` here, and a production key would never
-be used even if it were set.
+The Environment setting offers Production and Sandbox, with Sandbox the
+default; an unrecognised stored value resolves to Sandbox. There are also
+internal environments for the use of Two employees only. The stored mode is the
+environment the gateway talks to; the shop's hostname plays no part.
+
+`docker/config/local.json` seeds `checkout_env` as `sandbox`, so a bare
+`docker compose up` talks to sandbox. The developer overrides
+`TWO_API_BASE_URL`, `TWO_CHECKOUT_BASE_URL` and `TWO_PORTAL_BASE_URL`, the
+names the other Two plugins use, apply only on a site whose WordPress
+environment type (`WP_ENVIRONMENT_TYPE`) is `local` or `development`;
+docker-compose sets `local` (TWO-27109). `get_effective_environment_mode()`
+then resolves the environment from `TWO_API_BASE_URL`, so
+`https://api.staging.two.inc` gives `staging`. Use the merchant key for
+whichever environment that resolves to. The old `TWOINC_DEV_API_HOST`,
+`TWOINC_DEV_CHECKOUT_HOST` and `TWOINC_DEV_PORTAL_HOST` names are still read
+for this release, with a deprecation line in the log.
 
 `make run` exports `TWO_API_BASE_URL` (staging for an `@two.inc` gcloud
-account, sandbox otherwise) and docker-compose threads it through as
-`TWOINC_DEV_API_HOST`. A bare `docker compose up -d` does not, which leaves
-that variable empty in the container — harmless on localhost, but check it with
-`docker compose exec -T wordpress env | grep TWOINC_DEV` before concluding the key is
+account, sandbox otherwise) and docker-compose passes it to the wordpress
+container. A bare `docker compose up -d` does not, which leaves that variable
+empty in the container. That is harmless on localhost, but check it with
+`docker compose exec -T wordpress env | grep TWO_` before concluding the key is
 wrong.
 
 ### Clearing a cached API-key verdict
@@ -174,6 +187,16 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 
 `200` is a good key for that environment; `401` means the key and the resolved
 environment disagree.
+
+Saving the settings treats the API key and the Environment as one pair
+(TWO-27109). The key field always renders empty, and leaving it empty keeps the
+saved key. A changed pair is checked against the environment it would be saved
+with: a pair Two accepts is saved, and one Two rejects keeps both saved values.
+When Two cannot judge the new pair, it replaces the saved one only if Two's last
+definitive answer about the saved pair was not ok. That answer is kept per key
+and environment in the `twoinc_api_key_verdicts` option, which is not cleared by
+`wp transient delete`. A shop upgraded from an earlier build reads the transient
+above until its first answer is recorded there. Other fields save either way.
 
 If you wish to use the staging site,
 
@@ -213,6 +236,41 @@ verification.
 Identity verification / SCA, merchant-portal flows and multi-country coverage
 are out of scope here — they live in the `e2e-tests` repo.
 
+### Versions CI tests
+
+Nothing in CI lists versions by hand. `dev/support-matrix.sh` reads them from
+upstream on every run, and its header states the policy and sources:
+
+- **PHP**: every minor php.net still supports (active or security support).
+  The unit tests, a lint of every shipped PHP file, phpcs and phpstan also run
+  on each older minor down to the plugin's declared floor (`Requires PHP` in
+  `readme.txt`). Their discovery reads only php.net and `readme.txt`.
+- **WordPress and WooCommerce**: WooCommerce's published L-1 policy, the
+  current and previous release series of each at their newest patch, plus the
+  plugin's declared minimums (`Requires at least` in `readme.txt`,
+  `WC requires at least` in the plugin header).
+
+The e2e suite changes one factor at a time from the newest stack: the newest
+WordPress and WooCommerce with the newest PHP that WordPress declares, on the
+classic and the blocks checkout; then, with the blocks checkout and the other two at their newest,
+each other WooCommerce series in the window, each other supported PHP minor
+and each other WordPress series. The declared WordPress, WooCommerce and PHP
+floors also run together on both checkouts, as one blocking combination, even
+where php.net has ended support for that PHP. Every PHP minor gets legs from
+its first GA release; where WordPress's own PHP compatibility table (in the
+core handbook) does not mark that PHP as supported for the series, the legs
+run non-blocking, with a warning. A picked combination
+that cannot run (WooCommerce requires a newer WordPress, or no runtime or
+wp-cli image exists for that PHP) is listed in the discover job's summary with
+a warning rather than dropped. Each leg builds `docker/wordpress-core` (the
+maintained `wordpress:php<minor>-apache` runtime with the WordPress core under
+test), installs and provisions the shop with `wordpress:cli-php<minor>`, and
+warns if either runs a PHP behind php.net's newest patch
+(`dev/check-php-patch.sh`).
+PHP notices go to the shop's debug log rather than the page; one from this
+plugin's code fails the leg. Run `bash dev/support-matrix.sh` to see what CI
+will test today.
+
 ### Environment
 
 - Store: <http://localhost:8888>, admin at `/wp-admin` (`exampleuser@two.inc` / `examplepassword123`).
@@ -228,6 +286,15 @@ are out of scope here — they live in the `e2e-tests` repo.
   has accumulated too much e2e order volume to pass fraud velocity checks, so
   every order it places is declined. It goes back to `tillittestuk` once CI is
   trusted again.
+- Company search: the suite tests the plugin, not Two's registry search, so
+  with `TWO_E2E_FAKE_COMPANY_SEARCH=1` the shop's company search and company
+  lookup are answered by a fake, `docker/mu-plugins/two-e2e-company-search.php`,
+  from the companies in `tests/e2e/fake/companies.json` (TWO-27195). It answers
+  at the shop's outbound HTTP layer, so the plugin's own proxy, rate limiter,
+  parsing and checkout UI still run. Every other call (order create, fulfil,
+  refund, cancel and the rest) goes to Two staging, and each CI leg fails if a
+  search reached Two or the fake answered anything else. A spec that searches
+  for a new company adds it to the fixtures
 
 ### Prerequisites
 
@@ -242,8 +309,11 @@ are out of scope here — they live in the `e2e-tests` repo.
 # The compose default seeds the LOCAL dev config; e2e runs against the
 # staging shop, so pin the staging config first (CI does the same):
 echo WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-demostoregb.json > .env
+# Company search and lookup go to the e2e fake, as in CI (see below):
+echo TWO_E2E_FAKE_COMPANY_SEARCH=1 >> .env
 docker compose up -d
-# wait ~90s for wpcli bootstrap to finish (installs WooCommerce, creates products, activates plugin)
+# wait ~90s for wpcli bootstrap to finish (installs WooCommerce, creates products, activates plugin).
+# An existing stack keeps its gateway settings: run `make clean` first so the staging config is applied
 
 make e2e-install
 ```
@@ -273,13 +343,14 @@ export MERCHANT_API_KEY=$(python3 -c "import json; print(json.load(open('docker/
 
 ### Tests
 
-| Test                               | What it does                                                                                       |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `order-flow.spec.ts`               | Place order → verify CONFIRMED → fulfil via WP admin → verify FULFILLED → refund → verify REFUNDED |
-| `cancel-order.spec.ts`             | Place order → cancel via WP admin → verify CANCELLED                                               |
-| `max-limit.spec.ts`                | Add "Expensive Product" → expect rejection on checkout                                             |
-| `sole-trader-availability.spec.ts` | Sole-trader chooser appears only where the registry supports it (GB yes, NO no)                    |
-| `checkout-renderer.spec.ts`        | `/checkout/` renders the configured renderer and only it, and offers Two there                     |
+| Test                               | What it does                                                                                                                                                           |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `order-flow.spec.ts`               | Place order → verify CONFIRMED → fulfil via WP admin → verify FULFILLED → refund → verify REFUNDED                                                                     |
+| `cancel-order.spec.ts`             | Place order → cancel via WP admin → verify CANCELLED                                                                                                                   |
+| `max-limit.spec.ts`                | Add "Expensive Product" → expect rejection on checkout                                                                                                                 |
+| `sole-trader-availability.spec.ts` | Sole-trader chooser appears only where the registry supports it (GB yes, NO no)                                                                                        |
+| `checkout-renderer.spec.ts`        | `/checkout/` renders the configured renderer and only it, and offers Two there                                                                                         |
+| `pending-recovery.spec.ts`         | A buyer who verifies but never returns: the scheduled check and the admin order action confirm it; an order Two cancelled is cancelled here without a cancel sent back |
 
 ### Clean restart
 
@@ -288,6 +359,764 @@ If products stop showing or the store behaves oddly between runs:
 ```bash
 make clean && make run
 ```
+
+## Shipping tax from the shop's rates
+
+The plugin sends each shipping line at the tax rate the shop recorded for it.
+A shipping line either has a rate provided (WooCommerce stored a tax rate row
+on it, including a 0% rate) or has none (for example a non-taxable shipping
+method, or a third-party shipping module that adds tax without a WooCommerce
+rate row).
+
+What the plugin does depends on the shipping tax control, a hidden per-shop
+option. It is blank by default. There is no admin setting; populate it with
+WP-CLI:
+
+```bash
+wp option update twoinc_shipping_tax_from_shop_rates yes
+```
+
+`wp option delete twoinc_shipping_tax_from_shop_rates` makes it blank again.
+When populated, the rate comes from WooCommerce's own "Shipping tax class"
+setting under WooCommerce > Settings > Tax, including "based on cart items", at
+the order's tax location.
+
+| Shipping line                                            | Control blank (the default)                                                                                                   | Control populated                                                                                                                                                                                                                                                                     |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rate provided by the shop, including an explicit 0% rate | Sent at the recorded rate as is. No plugin check. Then the `twoinc_order_postprocessing` hook runs, then Two's API validates. | Same as control blank.                                                                                                                                                                                                                                                                |
+| No rate provided (whatever the line's tax, including 0)  | Sent as is: rate 0, tax as charged. No plugin check. Then the hook runs, then Two's API validates.                            | The rate is resolved from the control, and the line is sent at that rate. Its tax must reconcile with it (within 0.02): unless a merchant handler is registered, the default handler checks that after the hook and refuses the request with an error naming the line if it does not. |
+
+The reconcile check is a shop-match check. It runs after the
+`twoinc_order_postprocessing` hook, in the plugin's default handler, on the
+shipping line as the plugin built it, and only when no merchant handler is
+registered on the hook (see "What the plugin checks" below). With the control
+blank, the plugin never refuses a request over shipping tax. Each time the
+control supplies a shipping rate, a warning in the WooCommerce log names the
+line, the shipping tax class and the rate. A refund line (product, shipping
+or fee) that returns only one of its net and its tax is refused with a named
+error and the refund is not sent, because Two's refund validation requires a
+line's tax to match its net at the line's rate. The plugin never fills in the
+missing half. A line returning tax with no net amount cannot be refunded: to
+correct a wrong tax rate, refund the whole order and rebook it with the
+correct rates (TWO-26541). A line returning its net with no tax is refused
+when its tax due at the line's rate, rounded to cents, is more than 0.02, the
+difference Two's refund validation allows (TWO-26638). A line charged at 0% is
+sent. For a refused line, the admin enters the tax refunded for it as well.
+WooCommerce fills in a line's tax when the refund quantity is set, but not when
+a refund total is typed, and shipping and fee rows have no quantity, so their
+tax is always typed by hand.
+
+A rate resolved from the control is recorded on the shipping line at checkout.
+Order edits, captures and refunds decide from that record, not from the
+option or the shop's rates as they are later: a line with a recorded rate uses
+it and must still reconcile with it, and a line with no rate row and no
+recorded rate is sent as is. Refunds take the rate the parent line was charged
+at.
+
+**Note for integrators.** A `twoinc_order_postprocessing` subscriber that
+re-splits a shipping line with no rate (for example, treating untaxed shipping
+as VAT-inclusive) owns that line's figures: while it is registered, the
+reconcile check stands down. A populated control still decides the rate the
+line arrives at the hook with.
+
+If an upgrade removes a non-empty "Default shipping tax class" value, the plugin
+logs a notice naming the old class (source `twoinc-payment-gateway`).
+
+## Tax subtotals
+
+"Validate tax subtotals" (Order management > Tax, on by default) decides
+whether `tax_subtotals` is sent. On, order create, order edit and refund bodies
+carry it; off, none of them do. A refund's `tax_subtotals` are its lines summed
+per rate, including a rate whose lines refund nothing, at zero.
+
+## Tax codes for 0% lines
+
+Two's API accepts a `tax_code` on each order line. For a Spanish merchant a line
+at 0% tax must carry one, because a 0% rate on its own does not say why the
+line is untaxed. The plugin adds the code the merchant mapped to each line it
+sends at 0%: order create, order edit and refund lines. Fulfilment sends no lines, so there is
+nothing to add. The availability check (order intent) carries no codes, because
+the buyer's details, such as the VAT number, may still be incomplete then. A
+line at any other rate is sent exactly as before, and so is every line of a
+merchant who has mapped nothing.
+
+It is the merchant's job to set the shop's taxes up correctly. The plugin does
+not decide how a line is taxed: it sends the code the merchant chose for the
+case the shop's own tax setup puts the line in, and never picks a code itself
+(TWO-26153).
+
+**Mapping.** Under WooCommerce > Settings > Payments > Two, the "Tax" section
+holds "Tax codes for 0% lines" across the full width of the form, and "Status
+mapping" holds the fulfilment trigger statuses. The mapping is a table with one
+row per tax class (the standard class and every class the shop defines) and the
+cases as columns:
+
+- "VAT-registered buyer, other EU state".
+- "Your 0% tax rates": one dropdown per 0% tax rate of the class, labelled as
+  WooCommerce's tax rate table shows it: country, state, postcodes, cities, rate
+  and name, for example `ES 35*;38* 0% (IVA 0%)`. Rates above 0% are not listed,
+  because they never give a 0% line. A class with none says so.
+- "Buyer's address does not match a tax rate (no tax charged, e.g. exports)".
+
+Each dropdown offers "(none)", the default, and the codes Two lists at rate 0
+for the merchant's country, as `CODE - name`: Two refuses any other code on a
+0% line. A code that needs an exemption reason Two cannot supply itself (one
+with no default reason) is not offered. A saved code that is no longer offered
+stays selected and is marked "not valid on 0% lines" or "no longer listed", so
+nothing saved disappears unseen. A changed row must take an offered code. The
+form sends the whole mapping as one field, so a large rate table cannot be cut
+short by the server's input limits; if the field arrives incomplete, the save
+is refused and the saved codes stay as they were.
+
+**When the table shows.** The section shows its rows only when Two requires a
+code on 0% lines for the merchant's country: the country's code list says
+mandatory codes are enabled and one of the mandatory rates is 0. The settings
+page finds that country itself: it verifies the stored API key, reads the
+merchant's country from Two, and holds the answer for a day per key and
+environment. It never falls back to the shop's base country, and it never
+writes the merchant details checkout uses. The code list is held for a day per
+country, and a country with no code registry is held as an empty list. After a
+failure, each lookup waits at least five minutes before trying again, and the
+last answer is shown meanwhile. "Refresh merchant profile" under Diagnostics
+expires both and reloads the page there.
+
+Otherwise the section shows only what needs attention:
+
+- No API key: nothing.
+- The merchant details or the code list cannot be read: why, with the HTTP
+  status, or that the stored API key was rejected.
+- Saved codes while the rows are hidden: a notice that they still apply at
+  checkout, or that some are not valid on 0% lines for the country, with
+  "Clear saved tax codes".
+- A saved mapping that cannot be read: a notice that Two is hidden at checkout,
+  with "Clear saved tax codes". The payment method row of the health checklist
+  points there too.
+- Checkout holding another merchant id or country than the settings page
+  found: a notice to press "Refresh merchant profile".
+
+"Clear saved tax codes" empties the mapping and ignores any rows posted with
+it. Rows posted while the section does not show them change nothing.
+
+If the stored mapping is not one the settings form writes, Two is withheld
+from checkout and an error is logged until it is replaced; it is never read as
+"nothing mapped". Saving the table replaces it while the rows show; otherwise
+use "Clear saved tax codes". An order placed before then is sent as placed: an
+update reads the mapping only for a 0% line placed with no code (and is refused
+if it cannot), and a refund is never refused, sending its lines with the codes
+they were placed with and any other 0% line with none.
+
+If the merchant details or the code list cannot be read when the form is
+saved, edits to the table are not saved and a notice says why.
+
+**Which row a line takes.** For each 0% line the first match wins:
+
+1. **Exempt buyer.** The billing address and the tax address (the address
+   WooCommerce taxes the order on, per its "Calculate tax based on" setting)
+   are both in the EU VAT area and neither is in the Two merchant's country,
+   and the buyer's VAT number is not empty once trimmed. The number is read only
+   from the order meta keys listed below and the `twoinc_buyer_vat_number`
+   filter: a number your VAT plugin stores under any other key does not make
+   the buyer exempt until the filter supplies it. The line takes
+   its tax class's exempt row. A tax address outside the EU VAT area is an
+   export, so it skips this step and takes step 2 or 3. The EU VAT area is the
+   27 member states, Monaco, and Northern Ireland (GB with a postcode starting
+   `BT`). Until the merchant record has given the merchant's country, no buyer
+   is exempt.
+2. **The shop's 0% rate.** The 0% tax rate WooCommerce applied to the line (the
+   first, if it applied several). A line whose rates are not all 0% gets no
+   code.
+3. **No rule.** No rate of the line's class covers the address, or the line's
+   tax status is not taxable: the class's no-rule row. A taxable line that a
+   VAT-exempt order left untaxed is looked up in the shop's rates at the tax
+   address, as WooCommerce would have applied them, and takes step 2 or 3 from
+   that. With taxes switched off shop-wide, a line gets no code.
+4. **No tax class.** Shipping whose tax class follows the cart items and finds
+   none takes the one code shared by the 0% lines in the request being sent
+   that steps 1 to 3 coded. If they carry different codes, or none, it gets no
+   code. On an edit or refund only the lines that request carries count: a line
+   an edit removed, or one a refund leaves out, shares nothing.
+
+A row left on "(none)" gives no code: it never falls through to a later row. A
+product or fee line belongs to its own tax class, and a shipping line to the
+class WooCommerce's "Shipping tax class" setting gives it. Goods and services
+are told apart only by the classes the merchant puts products in and the codes
+mapped to them. Northern Ireland is in the EU VAT area for goods only, and the
+plugin cannot tell goods from services: if you sell services there, do not map
+a services class's exempt row to an intra-community services code.
+
+**Placement record.** When the order is created with Two, the plugin records
+the code each 0% line was sent with on the order, only where the line got one
+(through the order API, so it works with High-Performance Order Storage).
+Edits and refunds send a recorded code, so a changed address, mapping or tax
+rate never moves a coded line. A line the record does not cover (a line placed
+with no code, or added by an edit) is resolved again against the mapping at the
+time, and step 4 shares only the step 1 to 3 codes of the lines being sent,
+recorded or resolved now. An order with no code recorded (placed with none,
+placed while no row was mapped, or placed before the record existed) has all its
+lines resolved again on each edit or refund, and shipping with no tax class
+takes the one code all the other 0% lines in the request being sent get, and
+none when they disagree or one has none.
+
+**Upgrading.** A mapping saved per tax class by an earlier build is moved once
+to the rows: each class's code is copied to its exempt row, its no-rule row and
+every 0% rate it has at that moment, so every line the old mapping covered
+keeps its code. Rates added later start on "(none)".
+
+**Upgrading from a build that derived codes.** Earlier pre-release builds
+worked out a code for a Spanish merchant's 0% line whose tax class had no row
+mapped (exports, the Canary Islands, Ceuta and Melilla, intra-community goods
+and services, and services to buyers outside the EU). This plugin does not. A
+Spanish merchant must map the rows their 0% lines fall on: typically each
+class's exempt row, its no-rule row and any 0% rate rows, including the class
+shipping is taxed under. A 0% line with no row set goes out without a code, and
+Two refuses it.
+
+**The buyer's VAT number.** The plugin collects no VAT number of its own; it
+reads the first of these order meta keys that holds a number, which the common
+EU VAT plugins store: `_billing_vat_number`, `_vat_number`, `vat_number`,
+`VAT Number`, `_billing_eu_vat_number`, then passes it through the
+`twoinc_buyer_vat_number` filter (see below). The number is used and sent as
+entered, trimmed of leading and trailing whitespace and nothing else; only a
+value that is empty once trimmed is skipped for the next key. Step 1 needs only
+a number: its prefix is not checked.
+
+Where a VAT plugin records that its check got an answer and the answer was
+"invalid", that number is not used, and the later keys are not tried either,
+since they often hold the same number. A check that could not run (the VAT
+service down or unreachable) keeps the number. This applies to Aelia EU VAT
+Assistant (`vat_number` with `_vat_number_validated` set to `not-valid`). The
+other plugins are not covered: WooCommerce EU VAT Number stores the same
+result for an invalid number and for a failed check, EU VAT for WooCommerce
+stores no result, and EU/UK VAT Compliance records its result only in its
+premium edition. Use the filter to drop a number another source marks
+invalid.
+
+A Spanish merchant's order create also sends that number as the top-level
+`buyer_vat_number`, unless the buyer company's country is Spain: Two requires a
+Spanish buyer's VAT number to equal its organisation number, so it is never
+sent for one. Edits leave it out, which keeps the number Two stored, and
+refunds use the stored number. Other merchants' payloads are unchanged, and
+nothing is sent until the merchant record has given the merchant's country (the
+shop's base country does not stand in for this). A VAT number changed after the
+order is placed is not sent again: an edit cannot change the number Two holds.
+
+A line no row codes is sent without a code. **The plugin never refuses; the
+API does.** Two's API checks every code it receives, and refuses a Spanish
+merchant's 0% line that has none, with a reason the plugin logs and writes to
+the order note. To send those lines, map their rows. The codes are added in the
+line builder, before `twoinc_payment_terms_line`, `twoinc_order_payload` and
+`twoinc_order_postprocessing`, so any of them can change or remove a code. A
+code that needs an exemption reason, such as `ES_IVA_EXEMPT_OTHER`, can be sent
+from `twoinc_order_postprocessing` with `tax_exemption_reason_code` set beside
+it.
+
+## Extension point: buyer VAT number
+
+`twoinc_buyer_vat_number` lets a shop supply the buyer's VAT number from any
+source the plugin does not read itself, such as a block checkout additional
+field (stored as order meta `_wc_billing/<namespace>/<field>`) or a theme's
+custom field. It receives the number the keys above give, or `''` for none,
+and the order; return the number, or `''` for none. It runs before the tax
+codes are chosen, so the number decides the exempt-buyer row as well as the
+`buyer_vat_number` sent.
+`twoinc_order_postprocessing` runs after that, so setting `buyer_vat_number`
+there cannot change the code.
+The filter can run several times per request, so keep it pure and cheap.
+
+```php
+add_filter('twoinc_buyer_vat_number', function ($vat, $order) {
+    return '' !== $vat ? $vat : (string) $order->get_meta('_wc_billing/my-shop/vat-number');
+}, 10, 2);
+```
+
+## Stable extension contract: order postprocessing
+
+`twoinc_order_postprocessing` is the one place for merchant code to change what
+is sent to Two. It presents the complete request body and lets a subscriber edit
+any of it: lines, net/tax splits, gross amounts, totals, fields the plugin does
+not send itself. The plugin fires it and sends the payload exactly as it is
+returned. Two's API validates whatever arrives; if it passes, Two accepts what
+the merchant declared. The merchant owns what their code declares: with a
+subscriber that changes amounts, the Two invoice can differ from what the shop
+itself recorded.
+
+```php
+add_filter('twoinc_order_postprocessing', function (array $payload, array $context): array {
+    // ...edit $payload...
+    return $payload;
+}, 10, 2);
+```
+
+**Parameters**
+
+- `$payload` (array): the request body exactly as it would be sent, amounts as
+  2dp decimal strings. `[]` for `order_confirm` and `cancel`, which the API
+  defines with no body (see "Requests with no body" below).
+- `$context` (array):
+
+  | Key                          | Type                      | Meaning                                                                                                                                                                                                                                                                                                |
+  | ---------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+  | `request_type`               | string                    | `order_intent`, `order_create`, `order_update`, `order_confirm`, `capture`, `refund` or `cancel`                                                                                                                                                                                                       |
+  | `trigger`                    | string                    | What caused it, for diagnosis: `checkout`, `change_hash`, `admin_edit`, `tracking_number`, `confirmation_redirect`, `scheduled_check`, `admin_check`, `unpaid_order_cancel`, `status_change`, `order_refund`                                                                                           |
+  | `endpoint`                   | string                    | The API path, e.g. `/v1/order/<id>/refund`                                                                                                                                                                                                                                                             |
+  | `order`                      | `WC_Order`                | The order; for `order_intent` an unsaved order built from the cart                                                                                                                                                                                                                                     |
+  | `refund`                     | `WC_Order_Refund` or null | The refund being sent, for `refund`                                                                                                                                                                                                                                                                    |
+  | `shipping_tax_rate`          | float or null             | The rate WooCommerce's shipping tax class setting applies at the order's tax address, whether or not the shipping line was taxed. `0.21` means 21%. Null when none is configured                                                                                                                       |
+  | `fallback_shipping_tax_rate` | float or null             | The same rate when the shop-rate shipping tax fallback above is on, else null                                                                                                                                                                                                                          |
+  | `fallback_shipping_tax_code` | string or null            | With the fallback on, the code steps 1 to 3 of "Tax codes for 0% lines" give a 0% shipping line taxed by the shipping tax class at the order's addresses. Else null, and null when the rate there is not 0%, the row is "(none)" or the mapping cannot be read                                         |
+  | `contract_version`           | int                       | `1`                                                                                                                                                                                                                                                                                                    |
+  | `order_lines`                | array or null             | On `order_update` and `refund` with a merchant handler registered: the order's `line_items` as Two's `GET /v1/order/<id>` returns them, with Two's line ids. Null otherwise, and when the read fails. Read-only                                                                                        |
+  | `order_tenders`              | array                     | The order's tenders, see "Tenders" below. `[]` when there are none                                                                                                                                                                                                                                     |
+  | `order_refunds`              | array or null             | From the same read: Two's refunds on the order, each refund line's `prototype_id` naming the order line it credited. Two leaves it empty, so the plugin fills it with the best match on name, description, type, tax code and rate; a line that matches none keeps it empty. Null as for `order_lines` |
+
+**Return**: the full payload. Callbacks chain in priority order; the final
+payload is sent.
+
+**Requests with no body**. `order_confirm` and `cancel` take no request body,
+and the shop has already confirmed or cancelled the order when they are sent.
+The hook still runs for them, with `$payload` `[]` and the usual context, but
+the request is always sent with no body. A body a subscriber returns is
+dropped and logged at error level with the code
+`TWO_ORDER_POSTPROCESSING_BODY_NOT_ACCEPTED`, naming the paths it added and
+never their values. A subscriber that throws, or returns something other than
+an array, does not hold the request back: it is logged with the code
+`TWO_ORDER_POSTPROCESSING_HOOK_FAILED`, naming the exception's class and where
+it was thrown, and the request is sent.
+
+**When it fires**: once for every request the plugin sends to an order endpoint:
+
+| `request_type`  | When                                                                                                                                                                                     |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `order_intent`  | Every availability check at checkout. The plugin composes the intent itself from the cart, with the same line builder as the order; the browser supplies only the buyer                  |
+| `order_create`  | Placing the order; also, with `trigger` `change_hash`, whenever the plugin recomposes the order to detect an edit (nothing is sent then)                                                 |
+| `order_update`  | An admin edit or a tracking number reaching the order. An admin edit Two would refuse (the order is cancelled, refunded or otherwise closed) is built and runs the hook, but is not sent |
+| `order_confirm` | Two reporting the order VERIFIED: on the buyer's return, or when the buyer never returned (see "Orders the buyer verified but never returned from")                                      |
+| `capture`       | The fulfilment trigger status                                                                                                                                                            |
+| `refund`        | A refund                                                                                                                                                                                 |
+| `cancel`        | Cancellation                                                                                                                                                                             |
+
+To build the intent, the plugin has WooCommerce copy the cart onto an unsaved
+order, so third-party `woocommerce_checkout_create_order_line_item`,
+`woocommerce_checkout_create_order_shipping_item`,
+`woocommerce_checkout_create_order_fee_item`,
+`woocommerce_checkout_create_order_tax_item` and
+`woocommerce_checkout_create_order_coupon_item` actions fire on every intent check,
+with an order whose id is `0`. Code on those actions that writes elsewhere
+should skip an order with id `0`.
+
+**Tenders**. A tender is anything that has already paid part of the order
+without being an order line, such as a gift card, store credit or loyalty
+points. Its amount is in the order's lines but not in what is left to pay, so
+the order total WooCommerce records is the lines less the tenders. Coupons and
+negative fees are not tenders: they are order lines already.
+
+An order with tenders is sent to Two as an invoice for its full lines, with
+the tenders declared as already paid. Its `order_create` and `order_update`
+bodies carry:
+
+| Field            | Value                                                                   |
+| ---------------- | ----------------------------------------------------------------------- |
+| `net_amount`     | The lines' net: the order total plus the tenders, less the order's tax  |
+| `tax_amount`     | The order's tax, which a tender does not reduce                         |
+| `invoice_amount` | `net_amount` plus `tax_amount`                                          |
+| `prepaid_amount` | The sum of the tenders                                                  |
+| `payable_amount` | `invoice_amount` less `prepaid_amount`: the order total, what Two funds |
+| `gross_amount`   | The order total, equal to `payable_amount`                              |
+
+`tax_subtotals` and the lines are built as for any order. A `refund` body on
+such an order carries `prepaid_amount` too: the part of the refunded lines
+beyond the refund's `amount`, up to what of the tenders earlier refunds left,
+so `amount` plus `prepaid_amount` is the refunded lines. `amount` is always
+the refund WooCommerce recorded, so a cent of rounding between the lines and
+the refund is part of `prepaid_amount` too. A `capture` fulfils the whole order,
+prepaid part included, and carries no amounts. The `order_intent` body is
+unchanged: its totals are what is left to pay.
+
+An order with no tenders carries none of `invoice_amount`, `payable_amount`
+and `prepaid_amount`, and its bodies are as they always were. So does every
+update and refund of an order placed with Two before its tenders were sent as
+prepaid: Two holds no prepaid amount for it. The plugin tells them apart by the
+prepaid amount it records on the order when it creates it. The tenders
+themselves are given to subscribers, and used by the plugin's own whole-order
+check, so the gap between the lines and the order total is explained rather
+than refused.
+
+`$context['order_tenders']` lists them, each an array:
+
+| Key      | Type   | Meaning                                                                                            |
+| -------- | ------ | -------------------------------------------------------------------------------------------------- |
+| `type`   | string | `gift_card`, `store_credit` or `other`                                                             |
+| `label`  | string | A name for logs and display. A gift card is labelled `Gift card`, never with its redeemable number |
+| `amount` | string | The amount it paid, positive, 2dp, in the order's currency                                         |
+| `source` | string | Where it was read from: an order item type, or the filter                                          |
+
+The plugin reads gift card redemptions that gift card plugins record as order
+items of type `gift_card` or `pw_gift_card`, which reduce the order total by
+the item's amount. For the availability check, before those items exist, it
+reads the gift cards those plugins hold in the buyer's session. Any other tender is declared with the `twoinc_order_tenders`
+filter, which receives the list and the order and returns the list. The list
+it receives already holds the gift cards the plugin read: add only what is not
+in it. A gift card declared again is counted twice, so the lines no longer add
+up and the order is refused.
+
+```php
+add_filter('twoinc_order_tenders', function (array $tenders, WC_Order $order): array {
+    $credit = (float) $order->get_meta('_my_store_credit_used');
+    if ($credit > 0) {
+        $tenders[] = ['type' => 'store_credit', 'label' => 'Store credit', 'amount' => $credit, 'source' => 'my-store-credit'];
+    }
+    return $tenders;
+}, 10, 2);
+```
+
+An entry whose `amount` is zero is skipped. One whose `amount` is negative or
+not a number is dropped and logged with its type, source and amount, never its
+label. An unknown `type` is reported as `other`. A tender is a payment, so it reduces what the
+order has left to pay, not its tax. When the whole-order check
+finds a gap the tenders do not explain, the log names the gap and this filter.
+
+**What the plugin checks**. The plugin registers its own handler on the hook,
+`WC_Twoinc_Helper::default_order_postprocessing`, at priority `PHP_INT_MAX`.
+It runs the shop-match checks: whether what the request sends matches what
+the shop worked out. On a single line: a shipping line with no rate row, sent
+at the rate the shipping tax control resolves, must carry the tax that rate
+gives, within 0.02 (see "Shipping tax from the shop's rates"). On the whole
+order: the lines, less the order's tenders (see "Tenders" below), must add up
+to the order's own total and net, and the lines' tax to the order's tax, each
+within 0.02, or half a unit of the shop's price decimals per line, plus half for the
+order, if that is more (each line is rounded on its own, the order's totals once). A create or an update that fails it is refused with "The order
+lines do not add up to the order total."; the availability check only logs a
+warning, since the create checks it again. Each check is made on the lines as
+the plugin built them, and the default handler refuses the request if any
+check made for that request failed: with the same error, at the same level, as
+when the builders checked it. A request that will be
+refused now runs the deprecated filters below before it is refused.
+
+The default handler stands down when any other callback is registered on
+`twoinc_order_postprocessing`. That merchant handler then owns shop-match
+correctness: the plugin does not compare what it returns with the shop's
+figures, whether or not it changed them. Each request sent says so in one
+line in the WooCommerce log at info level, naming the handler (a function,
+`Class::method`, or where a closure was defined). The change hash, which
+sends nothing, logs nothing.
+
+What always runs, with or without a merchant handler: the builders' own
+refusals where they cannot build a payload at all (a negative line discount, a
+shipping refund with no order line to take its rate from), the code-fault
+checks below, and Two's API. Beyond the whole-order check above, the plugin
+has no internal-consistency checks of its own: whether a line's gross is its
+net plus tax, and whether the subtotals agree, is validated by Two's API, and a request the API refuses is logged at error level with the
+API's reason and, on a saved order, the reason is written to an order note.
+
+**Opting back in**. A merchant handler can run the shop-match checks itself
+with
+`WC_Twoinc_Helper::check_shop_match(array $payload, string $scope = WC_Twoinc_Helper::SHOP_MATCH_ALL): array`.
+It returns the payload unchanged, or throws `WC_Twoinc_Shop_Match_Exception`
+with the error the default handler would have raised; the plugin lets it
+through unwrapped. It applies each check to the line it was made for while
+that line's name, type, amounts and rate are as built. Called on the payload
+the handler returns, it checks every line the handler left as built. Called on
+the payload it received, before any edit, it checks them all. Register a
+handler that calls it at a priority below `PHP_INT_MAX`: the plugin's default
+handler runs at `PHP_INT_MAX` and clears the record of the build's refusals,
+so a call from a handler that runs after it finds nothing to refuse.
+
+`$scope` chooses which checks run. `SHOP_MATCH_ALL`, the default, runs every
+shop-match check. `SHOP_MATCH_PER_LINE` runs only the checks made for single
+lines, on the lines the handler left as built: use it when the handler
+declares its own split of the order, so that the whole-order comparison with
+the shop's totals cannot refuse that split. `SHOP_MATCH_ALL` also compares the
+lines of the payload it is given with the order's totals.
+
+The example sends a cost the shop adds to the cart total outside any carrier
+as its own line, taxed at 21%. It splits off only what the order total
+carries beyond the lines, so a create and a later update of the same order
+send the same lines, and an order with nothing beyond its lines is left alone.
+
+```php
+add_filter('twoinc_order_postprocessing', function (array $payload, array $context): array {
+    if (!isset($payload['gross_amount']) || empty($payload['line_items'])) {
+        return $payload;
+    }
+    // invoice_amount when the order has tenders: gross_amount is then only what is left to pay.
+    $beyond = (float) ($payload['invoice_amount'] ?? $payload['gross_amount'])
+        - array_sum(array_map('floatval', array_column($payload['line_items'], 'gross_amount')));
+    if (round($beyond, 2) > 0) {
+        $net = round($beyond / 1.21, 2);
+        $payload['line_items'][] = [
+            'name' => 'Handling',
+            'type' => 'SERVICE',
+            'quantity' => 1,
+            'quantity_unit' => 'fee',
+            'unit_price' => number_format($net, 2, '.', ''),
+            'net_amount' => number_format($net, 2, '.', ''),
+            'tax_amount' => number_format($beyond - $net, 2, '.', ''),
+            'gross_amount' => number_format($beyond, 2, '.', ''),
+            'discount_amount' => '0',
+            'tax_rate' => '0.210000',
+            'tax_class_name' => 'VAT 21%',
+        ];
+        // The edited lines are passed as the original, with no totals, so no residual is carried over:
+        // the line just added already holds the cost, and every total becomes the sum of the lines.
+        $payload = WC_Twoinc_Helper::recompute_totals_from_lines($payload, ['line_items' => $payload['line_items']]);
+    }
+    // The shop's own lines, which this handler did not touch, are still checked against the shop.
+    return WC_Twoinc_Helper::check_shop_match($payload, WC_Twoinc_Helper::SHOP_MATCH_PER_LINE);
+}, 10, 2);
+```
+
+On any other request, a subscriber that throws, or returns something other than
+an array or something that cannot be encoded as JSON, is a code fault rather
+than a declaration: the request is not sent, and the failure is logged at error
+level with the stable code `TWO_ORDER_POSTPROCESSING_HOOK_FAILED`, naming
+`twoinc_order_postprocessing`, the request type and its trigger. The log, the
+order note and the refund error name the exception's class and where it was
+thrown, never the subscriber's own message, which can carry buyer data.
+Checkout then shows the buyer the usual "not available" message; a failed
+intent check is answered as an error rather than a decline, so the next check
+asks again; admin actions leave an order note; a refund returns the error to
+the refund screen.
+
+The plugin never recomputes anything after the hook: a subscriber that changes
+a line also updates the totals and subtotals it affects. It can do that with
+the opt-in helper
+`WC_Twoinc_Helper::recompute_totals_from_lines(array $payload, array $original, array $tenders = []): array`.
+`$original` is required: the payload as the subscriber received it. The helper
+sets each order total, each per-rate entry in `tax_subtotals` and a refund
+`amount` to the sum over the payload's lines plus the residual `$original`
+carried beyond its lines, such as rounding. Pass `$context['order_tenders']` as
+`$tenders`: net and tax then stay the full lines, and `invoice_amount`,
+`prepaid_amount` and `payable_amount` are set as in "Tenders" above, with
+`gross_amount` equal to `payable_amount`, even when `$original` carries no
+totals. A refund keeps the `prepaid_amount` it was built with, and its `amount`
+is its lines less that. Apart from those prepaid fields on an order with
+tenders, it touches only the fields the payload already carries. A total the
+subscriber edited by hand
+before calling it is overwritten: the helper's result wins.
+
+**The buyer surcharge is priced before the hook**. The plugin's fee
+calculations operate on the order as WooCommerce built it, before any
+subscriber runs. The surcharge for a payment term is quoted on the cart's
+contents after discounts and its shipping, including their tax, and enters the
+order as a WooCommerce fee. Every request (create, update, refund) sends that
+fee as recorded on the order or refund. The plugin does not re-price the
+surcharge on the payload a subscriber returns, so a subscriber that adds a line
+or changes gross, net or tax does not change it. The order's own fee item stays
+at the plugin's price, so a subscriber that changes the fee line re-applies
+that change on every request.
+Any fee consequence of the amounts a subscriber declares is the merchant's,
+and their subscriber handles it. With a percentage surcharge, for example, no
+surcharge is charged on a line the subscriber adds; a merchant who wants it
+charged changes the fee line in their subscriber, together with the totals it
+affects.
+
+When a subscriber changes a payload, the change is logged at debug level, so
+it is recorded only when the WooCommerce log threshold includes debug. The
+line names the request and its trigger, the merchant handlers, and the number
+of changes, with at most 40 of them as JSON-pointer paths. Before and after
+values are kept only for the totals, `currency`, `discount_amount`,
+`discount_rate`, `amount`, `/line_items` and `/tax_subtotals`; any other value
+can carry buyer data, so it is logged as `redacted`. Strings are cut to 120
+bytes.
+
+**Determinism**: a subscriber must be a pure function of its inputs. The plugin
+recomposes the order and compares hashes of the post-hook payload to detect
+edits; a subscriber that answers differently each time makes every order save
+send an update.
+
+**Performance**: it runs on every intent check during checkout. Keep it cheap.
+
+**A subscriber that is switched off** (a deactivated plugin, a removed
+snippet, a callback taken off with `remove_filter()`) is indistinguishable
+from none: orders then go out with the shop's figures, and the default
+handler's checks apply again. Removing the default handler itself switches the
+shop-match checks off.
+
+**Example**: the shop records shipping as untaxed, while the business books
+VAT inside that charge at the shop's configured shipping rate. For 29.00 of
+shipping at 21%, the line goes out as 23.97 net + 5.03 tax, gross unchanged.
+
+```php
+add_filter('twoinc_order_postprocessing', function (array $payload, array $context): array {
+    $rate = $context['shipping_tax_rate'];
+    if (!$rate || empty($payload['line_items'])) {
+        return $payload;
+    }
+    $original = $payload;
+    foreach ($payload['line_items'] as &$line) {
+        if ($line['type'] !== 'SHIPPING_FEE' || (float) $line['tax_amount'] != 0.0) {
+            continue;
+        }
+        $gross = (float) $line['gross_amount'];
+        $net = round($gross / (1 + $rate), 2);
+        $line['net_amount'] = number_format($net, 2, '.', '');
+        $line['tax_amount'] = number_format($gross - $net, 2, '.', '');
+        $line['unit_price'] = $line['net_amount'];
+        $line['tax_rate'] = number_format($rate, 6, '.', '');
+        $line['tax_class_name'] = 'VAT ' . number_format($rate * 100, 2) . '%';
+    }
+    unset($line);
+    return WC_Twoinc_Helper::recompute_totals_from_lines($payload, $original);
+}, 10, 2);
+```
+
+The CI fixture `tests/unit/fixtures/orderpostprocessing.php` is a working
+subscriber. The unit suite drives it through every request type, and the e2e
+suite loads it as an mu-plugin to place a real order with re-split shipping.
+
+**The older filters are deprecated** in favour of this one:
+`twoinc_payment_terms_line`, `two_order_create`, `two_order_edit` and
+`twoinc_order_payload` (see `docs/two-order-hook.md`). They still run, inside
+the order builders and before `twoinc_order_postprocessing`, so their output is
+the plugin's payload and goes out as it always has. They are not merchant
+handlers: with no merchant handler, a request whose build failed a shop-match
+check is refused whatever they did to its lines, as when the builders checked
+before they ran.
+
+**Versioning**: this hook must remain for all time and must fire consistently
+in response to the same events.
+
+- It is never removed or renamed, and its version 1 context keys and
+  `request_type` values keep their meaning.
+- Allowed without a new version: new context keys, new `request_type` or
+  `trigger` values.
+- Never allowed: removing or renaming a context key, changing units (rates stay
+  decimal fractions), checking the figures a merchant handler returns unless
+  it calls `check_shop_match()`, or firing on fewer requests.
+- An incompatible version 2 would be a new hook name, with this one still
+  firing alongside it. Any contract change is recorded in the changelog, and the
+  CI fixture pins version 1.
+
+## Orders the buyer verified but never returned from
+
+An order placed with Two waits for payment until it is confirmed. The buyer's
+return from Two's checkout used to be the only thing that confirmed it, so a
+buyer who verified and then closed the tab left an order Two would honour
+sitting unpaid in the shop. The plugin now checks waiting orders with Two
+itself, through one resolver (`WC_Twoinc_Pending_Recovery::resolve()`) that
+four triggers share. An order is waiting while it is Pending payment. The
+buyer's return and the admin action also take a Failed order as waiting:
+WooCommerce's classic checkout resumes a failed order without setting it back
+to pending, so a buyer can pay a failed order with Two. The scheduled check and
+the unpaid-order time limit leave a Failed order alone, since a merchant may
+have set that status by hand.
+
+| Trigger                 | When                                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `confirmation_redirect` | The buyer returns from Two's checkout                                                                                  |
+| `scheduled_check`       | The Action Scheduler action `twoinc_check_pending_orders`, every 15 minutes (WooCommerce > Status > Scheduled Actions) |
+| `admin_check`           | The order screen's Order actions box: **Check status with Two**, offered for a Pending payment or Failed Two order     |
+| `unpaid_order_cancel`   | WooCommerce's unpaid-order time limit (Hold stock) would cancel the order; see below                                   |
+
+The resolver reads the order from Two (`GET /v1/order/<id>`) and acts on its
+state:
+
+| Two reports                                                                                           | The shop                                                                                                                                      |
+| ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| UNVERIFIED                                                                                            | Nothing changes, except at the unpaid-order time limit (below). The buyer's return goes to the cancel page, as before                         |
+| VERIFIED                                                                                              | Confirms with Two, then marks the order paid exactly as the return does (`payment_complete()`)                                                |
+| CONFIRMED, FULFILLING, FULFILLED, DELIVERED, FULFILMENT_NEEDS_MANUAL_RESOLUTION                       | Marks the order paid without confirming again                                                                                                 |
+| CANCELLED (including Two's own cancellation of an unverified order), or a REJECTED or DECLINED status | Cancels the order here without sending a cancel to Two: the order state is stored as CANCELLED first, so the cancel handler treats it as done |
+| Any other state                                                                                       | Nothing changes; logged, and noted on the order once per state                                                                                |
+| A failed read                                                                                         | Nothing changes, except at the unpaid-order time limit (below); logged, and the next run retries                                              |
+
+At the unpaid-order time limit the resolver takes WooCommerce's place, under the
+order's lock and on the order as stored at that moment. It cancels the order,
+with the cancel sent to Two as before, while Two still reports it UNVERIFIED.
+It cancels it without a cancel sent to Two when Two answers that it does not
+hold the order (HTTP 404 with its `ORDER_NOT_FOUND` error code) on two checks
+at least 15 minutes apart; the first is kept in order meta
+`_twoinc_pending_not_found_at`, and any other answer clears it. When Two cannot
+be read for any other reason, it holds the cancel while the order is under 7
+days old and cancels it as WooCommerce would after that. An order with no Two
+order id was never created at Two (refused or failed at checkout), so
+WooCommerce cancels it as it would any other unpaid order.
+
+WooCommerce picks unpaid orders by when they were last modified, and on HPOS
+the scheduled check's own save counts as a change, so WooCommerce would never
+reach an order the check keeps reading. The scheduled check therefore applies
+the time limit itself, counted from when the order was created, with
+WooCommerce's own conditions: stock management on, a Hold stock time set (60
+minutes when none is stored), and `woocommerce_cancel_unpaid_order` agreeing,
+which by default means an order made by the checkout. The plugin's own handler
+for that filter runs last, so a shop whose filter turns the automatic cancel
+off keeps it off for Two orders on both paths. On every run, the scheduled
+check runs the shop's `woocommerce_cancel_unpaid_order` filters once for each
+order it checks that is past the hold time, before reading it from Two, so a
+filter there should be quick and free of side effects.
+
+Order notes are merchant-only. The scheduled check, the admin action and the
+unpaid-order time limit each add one naming what they found when they change an
+order; the admin action also notes a check that changed nothing or failed, and
+shows its outcome as a notice on the order screen. The buyer's return keeps the
+notes it always added. Every check logs one line (shop order, Two order,
+trigger, state, action) to the `twoinc-payment-gateway` log. A read that keeps
+failing for an order is logged as an error once a day, and at debug level in
+between.
+
+The scheduled check takes Pending payment Two orders with a Two order id, created
+between 30 minutes and 7 days ago (UTC), and skips any checked in the last 15
+minutes (order meta `_twoinc_pending_checked_at`). It asks WooCommerce for order
+ids only: up to 50 never checked, newest first, then up to 50 checked before,
+oldest check first, and checks at most 50 a run in that order. It starts no new
+check once 60 seconds have passed; the rest wait for the next run. Seven days
+covers Two's own cancellation of unverified orders (2 days by default, set per
+merchant). Action Scheduler runs off site traffic, so a low-traffic shop should
+run WP-Cron from a system cron.
+
+All four triggers take one MySQL named lock per order (`GET_LOCK`) and re-read
+the order once they hold it, so whichever arrives second finds it no longer
+waiting. A buyer returning after the scheduled check confirmed their order lands
+on the order-received page and nothing is sent. One returning to an order that
+has been cancelled meanwhile lands on the cart with WooCommerce's own "Your
+order was cancelled." notice. One returning while another check still holds the
+lock lands on the order-received page, which empties the cart so a second order
+cannot be placed by mistake, told the order is still being confirmed until it
+is paid. The scheduled check and the unpaid-order time limit never wait for a
+held lock; the return and the admin action wait up to 10 seconds. A confirm
+sends the same `confirm_<Two order id>` key whichever trigger sends it.
+
+## Idempotency keys
+
+Every write the plugin sends to Two (anything but a GET) carries an
+`Idempotency-Key` header naming the operation. A retry of the same operation
+sends the same key, and every other operation a different one. Keys are built
+only from ids the shop already holds, never from the time or a random value, are
+lowercase ASCII and are at most 100 characters.
+
+| Request                             | Key                                                                                                                                                                                                      |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Order create                        | `create_<WooCommerce order id>_<hash>`: one per checkout attempt, hashed from the order reference each attempt mints, so paying again (with the same or another company) sends a new key                 |
+| Order edit                          | `edit_<Two order id>_<hash>`, hashed from this edit and the key of the last edit Two accepted (the create key before the first), so no two edits in a sequence share a key while a retry repeats its own |
+| Confirm                             | `confirm_<Two order id>`                                                                                                                                                                                 |
+| Fulfil                              | `fulfil_<Two order id>`                                                                                                                                                                                  |
+| Cancel                              | `cancel_<Two order id>`                                                                                                                                                                                  |
+| Refund                              | `refund_<Two order id>_<WooCommerce refund id>`                                                                                                                                                          |
+| Order intent                        | `intent_`, then a hash of the shopper's session and the request; with no session the intent is sent with no key                                                                                          |
+| Surcharge quote, merchant fee rates | `fee_quote_` or `merchant_rates_`, then a hash of the request                                                                                                                                            |
+| Sole-trader token mints             | `registry_delegation_` or `autofill_delegation_`, then a hash of the shopper's session and the request; with no session the mint is not sent                                                             |
+
+Every order create, edit, confirm, fulfil, cancel and refund writes a line to
+the WooCommerce log naming the key it sent and the outcome (the HTTP status, or
+no response), whatever the debug setting, so a request can be matched with
+Two's records. With debug logging on, every request's log line names its key
+too. `Idempotency-Key` and `X-Idempotency-Key` are reserved in any case: a
+Diagnostics custom header row cannot set either.
+
+## Payment terms offered at checkout
+
+An order is refused at create when no payment term is offered (TWO-27109), as on
+Two's other plugins. The offered terms are the ones ticked under Payment terms
+that Two also offers the merchant. A shop with no selection has the merchant account's
+default term ticked for it, once its record has been read: at construction,
+which is the upgrade step, and after every merchant record read. That is the
+term such a shop's orders were booked on before. A selection is a non-empty
+`payment_terms_days` or a custom term; the settings form refuses an empty one,
+so a stored `[]` or blank is not a choice. A selection is never changed. When
+the upgrade has dropped the stored default, the record is read again by a
+queued Action Scheduler action, never inline in the request that builds the
+gateway. When the account default is not among the terms Two offers, nothing is
+ticked and a warning is logged once per change.
 
 ## Post installation optional steps
 

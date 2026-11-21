@@ -24,10 +24,46 @@ define('WC_TWOINC_PLUGIN_URL', 'https://shop.example/wp-content/plugins/tillit-p
 
 $GLOBALS['__twoinc_test_filters'] = [];
 
+/** WordPress keeps each hook's callbacks in $wp_filter as a WP_Hook; the plugin reads it to find who is registered. */
+if (!class_exists('WP_Hook')) {
+    class WP_Hook
+    {
+        /** @var array<int, array<int, array{function: mixed, accepted_args: int}>> */
+        public $callbacks = [];
+    }
+}
+$GLOBALS['wp_filter'] = [];
+
+/** Mirrors the stub registry into $wp_filter, by priority, as WordPress holds it. */
+function __twoinc_test_sync_wp_filter($tag): void
+{
+    $hook = new WP_Hook();
+    foreach ($GLOBALS['__twoinc_test_filters'][$tag] ?? [] as $entry) {
+        $hook->callbacks[$entry['priority']][] = ['function' => $entry['cb'], 'accepted_args' => $entry['args']];
+    }
+    ksort($hook->callbacks);
+    if ($hook->callbacks === []) {
+        unset($GLOBALS['wp_filter'][$tag]);
+    } else {
+        $GLOBALS['wp_filter'][$tag] = $hook;
+    }
+}
+
 function add_filter($tag, $callback, $priority = 10, $accepted_args = 1)
 {
-    $GLOBALS['__twoinc_test_filters'][$tag][] = ['cb' => $callback, 'args' => $accepted_args];
+    $GLOBALS['__twoinc_test_filters'][$tag][] = ['cb' => $callback, 'args' => $accepted_args, 'priority' => $priority];
+    __twoinc_test_sync_wp_filter($tag);
     return true;
+}
+
+function remove_filter($tag, $callback, $priority = 10)
+{
+    $before = $GLOBALS['__twoinc_test_filters'][$tag] ?? [];
+    $GLOBALS['__twoinc_test_filters'][$tag] = array_values(array_filter($before, static function ($entry) use ($callback, $priority) {
+        return $entry['cb'] !== $callback || $entry['priority'] !== $priority;
+    }));
+    __twoinc_test_sync_wp_filter($tag);
+    return count($before) !== count($GLOBALS['__twoinc_test_filters'][$tag]);
 }
 
 function add_action($tag, $callback, $priority = 10, $accepted_args = 1)
@@ -35,17 +71,37 @@ function add_action($tag, $callback, $priority = 10, $accepted_args = 1)
     return add_filter($tag, $callback, $priority, $accepted_args);
 }
 
+function remove_action($tag, $callback, $priority = 10)
+{
+    return remove_filter($tag, $callback, $priority);
+}
+
 function apply_filters($tag, $value, ...$extra)
 {
-    foreach ($GLOBALS['__twoinc_test_filters'][$tag] ?? [] as $entry) {
+    // By priority, then in the order added, as WordPress runs them.
+    $entries = $GLOBALS['__twoinc_test_filters'][$tag] ?? [];
+    usort($entries, static function ($a, $b) {
+        return $a['priority'] <=> $b['priority'];
+    });
+    foreach ($entries as $entry) {
         $params = array_slice(array_merge([$value], $extra), 0, max(1, $entry['args']));
         $value = call_user_func_array($entry['cb'], $params);
     }
     return $value;
 }
 
+// A plain request is past wp_loaded, so specs start there; one that runs
+// earlier unsets the entry.
+$GLOBALS['__twoinc_test_actions_done'] = ['wp_loaded' => 1];
+
+function did_action($tag)
+{
+    return $GLOBALS['__twoinc_test_actions_done'][$tag] ?? 0;
+}
+
 function do_action($tag, ...$args)
 {
+    $GLOBALS['__twoinc_test_actions_done'][$tag] = did_action($tag) + 1;
     foreach ($GLOBALS['__twoinc_test_filters'][$tag] ?? [] as $entry) {
         call_user_func_array($entry['cb'], array_slice($args, 0, max(1, $entry['args'])));
     }
@@ -59,6 +115,7 @@ function has_filter($tag)
 function remove_all_filters($tag)
 {
     unset($GLOBALS['__twoinc_test_filters'][$tag]);
+    __twoinc_test_sync_wp_filter($tag);
     return true;
 }
 
@@ -173,6 +230,12 @@ function wp_parse_args($args, $defaults = [])
         $args = get_object_vars($args);
     }
     return is_array($args) ? array_merge($defaults, $args) : $defaults;
+}
+
+/** WordPress's default is production; a spec sets the global for a developer's site. */
+function wp_get_environment_type()
+{
+    return $GLOBALS['__twoinc_test_wp_environment_type'] ?? 'production';
 }
 
 function get_home_url()
@@ -356,6 +419,11 @@ function WC()
             public $session;
 
             /** The gateways this checkout offers; a spec sets the global. */
+            public function checkout()
+            {
+                return new WC_Checkout();
+            }
+
             public function payment_gateways()
             {
                 return new class () {
@@ -372,6 +440,11 @@ function WC()
                     public function get_base_country()
                     {
                         return $GLOBALS['__twoinc_test_base_country'] ?? 'NO';
+                    }
+
+                    public function get_countries()
+                    {
+                        return $GLOBALS['__twoinc_test_countries'] ?? [];
                     }
                 };
             }
@@ -410,7 +483,7 @@ class StubSession
 
     public function get_customer_id()
     {
-        return $GLOBALS['__twoinc_test_session_customer'] ?? '';
+        return $GLOBALS['__twoinc_test_session_customer'] ?? 't_stubshopper';
     }
 
     public function get($key, $default = null)
@@ -488,18 +561,45 @@ class WC_Tax
     }
 
     /**
-     * Address-aware rate lookup (the shipping-tax-fallback seam), unlike
-     * get_rates_for_class() above which resolves against the current
-     * customer rather than an arbitrary address. Row shape mirrors core:
-     * ['rate' => percent float, 'shipping' => 'yes'|'no', ...]. Controlled
-     * by $GLOBALS['__twoinc_test_find_rates'], keyed by tax_class ('' =
-     * Standard); absent/unset means no matching rate, same as core with no
-     * rate table row for that destination.
+     * Address-aware rate lookup, unlike get_rates_for_class() above which
+     * resolves against the current customer rather than an arbitrary
+     * address. Row shape mirrors core: ['rate' => percent float,
+     * 'shipping' => 'yes'|'no', 'compound' => 'yes'|'no', 'label' => ...].
+     * Controlled by $GLOBALS['__twoinc_test_find_rates'], keyed by tax_class
+     * ('' = Standard; core casts false to ''); absent/unset means no
+     * matching rate, same as core with no rate table row for that
+     * destination. The last args are recorded for location assertions.
      */
     public static function find_rates($args = [])
     {
+        $GLOBALS['__twoinc_test_find_rates_args'] = $args;
         $class = (string) ($args['tax_class'] ?? '');
         return $GLOBALS['__twoinc_test_find_rates'][$class] ?? [];
+    }
+
+    /**
+     * Every rate row of a tax class ('' = Standard), keyed by tax_rate_id, as objects carrying tax_rate_id, tax_rate,
+     * tax_rate_country, tax_rate_state, tax_rate_name and, when set, postcode and city lists. Controlled by
+     * $GLOBALS['__twoinc_test_class_rates'], keyed by class.
+     *
+     * @return array<int, object>
+     */
+    public static function get_rates_for_tax_class($tax_class)
+    {
+        $GLOBALS['__twoinc_test_class_rate_reads'] = ($GLOBALS['__twoinc_test_class_rate_reads'] ?? 0) + 1;
+        $rows = [];
+        foreach ($GLOBALS['__twoinc_test_class_rates'][(string) $tax_class] ?? [] as $id => $row) {
+            $rows[$id] = (object) ($row + ['tax_rate_id' => $id, 'tax_rate_country' => '', 'tax_rate_state' => '', 'tax_rate_name' => '']);
+        }
+        return $rows;
+    }
+
+    /** Core's filter: only rows flagged for shipping. */
+    public static function find_shipping_rates($args = [])
+    {
+        return array_filter(self::find_rates($args), static function ($rate) {
+            return 'yes' === $rate['shipping'];
+        });
     }
 }
 
@@ -526,6 +626,16 @@ class StubFeeCart
 {
     public $fees = [];
     public $empty = false;
+
+    /** WC_Cart::get_fees(): keyed by fee id, which add_fee() makes sanitize_title() of the name. */
+    public function get_fees()
+    {
+        $fees = [];
+        foreach ($this->fees as $fee) {
+            $fees[sanitize_title($fee['name'])] = (object) ['id' => sanitize_title($fee['name']), 'name' => $fee['name']];
+        }
+        return $fees;
+    }
 
     public function is_empty()
     {
@@ -763,6 +873,12 @@ class WC_Payment_Gateway
         return $this->form_fields;
     }
 
+    // Mirrors WC_Settings_API::get_field_default.
+    public function get_field_default($field)
+    {
+        return empty($field['default']) ? '' : $field['default'];
+    }
+
     // Mirrors WC_Settings_API::get_tooltip_html / get_description_html /
     // get_custom_attribute_html closely enough for the custom field
     // renderers under test: desc_tip true shows the description as a
@@ -907,8 +1023,227 @@ class StubProductLineItem implements ArrayAccess
 
     public function get_taxes()
     {
-        return ['total' => []];
+        return ['total' => $this->data['taxes'] ?? []];
     }
+
+    public function get_tax_status()
+    {
+        return $this->data['tax_status'] ?? 'taxable';
+    }
+
+    public function get_meta($key)
+    {
+        return $this->data['meta'][$key] ?? '';
+    }
+}
+
+/** WC_Order_Item_Tax stub: one order-level tax row, read both as an object and via ['label']. */
+class StubOrderTaxItem implements ArrayAccess
+{
+    private $rate_id;
+    private $percent;
+    private $compound;
+
+    public function __construct(int $rate_id, float $percent, bool $compound = false)
+    {
+        $this->rate_id = $rate_id;
+        $this->percent = $percent;
+        $this->compound = $compound;
+    }
+
+    public function get_rate_id()
+    {
+        return $this->rate_id;
+    }
+
+    public function get_rate_percent()
+    {
+        return $this->percent;
+    }
+
+    public function get_compound()
+    {
+        return $this->compound;
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetExists($offset)
+    {
+        return $offset === 'label';
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetGet($offset)
+    {
+        return $offset === 'label' ? 'Tax ' . $this->rate_id : null;
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetSet($offset, $value)
+    {
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetUnset($offset)
+    {
+    }
+}
+
+/** WC_Order_Item_Shipping stub: $taxes is the per-rate-id 'total' map core stores on the item. */
+class StubShippingItem
+{
+    public $meta;
+    private $net;
+    private $tax;
+    private $taxes;
+    private $tax_status;
+
+    public function __construct(float $net, float $tax, array $taxes = [], array $meta = [], string $tax_status = 'taxable')
+    {
+        $this->net = $net;
+        $this->tax = $tax;
+        $this->taxes = $taxes;
+        $this->meta = $meta;
+        $this->tax_status = $tax_status;
+    }
+
+    public function get_name()
+    {
+        return 'Carrier';
+    }
+
+    public function get_total()
+    {
+        return $this->net;
+    }
+
+    public function get_total_tax()
+    {
+        return $this->tax;
+    }
+
+    public function get_taxes()
+    {
+        return ['total' => $this->taxes];
+    }
+
+    public function get_tax_status()
+    {
+        return $this->tax_status;
+    }
+
+    public function get_meta($key)
+    {
+        return $this->meta[$key] ?? '';
+    }
+
+    public function update_meta_data($key, $value)
+    {
+        $this->meta[$key] = $value;
+    }
+}
+
+/** WC_Order_Refund stub: its own tax rows, as core's update_taxes() restamps them from the live rate table. */
+class StubRefund
+{
+    private $items;
+    private $taxes;
+
+    public function __construct(array $items, array $taxes)
+    {
+        $this->items = $items;
+        $this->taxes = $taxes;
+    }
+
+    public function get_items($type = 'line_item')
+    {
+        return $this->items[$type] ?? [];
+    }
+
+    public function get_taxes()
+    {
+        return $this->taxes;
+    }
+
+    public function get_id()
+    {
+        return 99;
+    }
+
+    public function get_parent_id()
+    {
+        return 7;
+    }
+
+    public function get_item_subtotal($item, $inc_tax = false, $round = true)
+    {
+        return $item['line_subtotal'];
+    }
+}
+
+/** WC_Order stub for tax resolution: tax rows, meta, cart item classes, product count and items by id. */
+class StubTaxOrder
+{
+    public $location = ['country' => 'NO', 'state' => '', 'postcode' => '0150', 'city' => 'Oslo'];
+    private $taxes;
+    private $meta;
+    private $item_classes;
+    private $products;
+    private $items;
+
+    public function __construct(array $taxes, array $meta = [], array $item_classes = [], int $products = 1, array $items = [])
+    {
+        $this->taxes = $taxes;
+        $this->meta = $meta;
+        $this->item_classes = $item_classes;
+        $this->products = $products;
+        $this->items = $items;
+    }
+
+    public function get_taxes()
+    {
+        return $this->taxes;
+    }
+
+    public function get_meta($key)
+    {
+        return $this->meta[$key] ?? '';
+    }
+
+    public function get_taxable_location()
+    {
+        return $this->location;
+    }
+
+    public function get_items_tax_classes()
+    {
+        return $this->item_classes;
+    }
+
+    public function get_items()
+    {
+        return array_fill(0, $this->products, null);
+    }
+
+    public function get_item($id)
+    {
+        return $this->items[$id] ?? false;
+    }
+
+    public function get_currency()
+    {
+        return 'EUR';
+    }
+
+    public function get_id()
+    {
+        return 7;
+    }
+}
+
+function wc_tax_enabled()
+{
+    return $GLOBALS['__twoinc_test_tax_enabled'] ?? true;
 }
 
 class StubOrder
@@ -933,6 +1268,18 @@ class StubOrder
     public function get_meta($key, $single = true)
     {
         return $this->meta[$key] ?? '';
+    }
+
+    public function update_meta_data($key, $value)
+    {
+        $this->meta[$key] = $value;
+    }
+
+    public $saves = 0;
+
+    public function save()
+    {
+        $this->saves++;
     }
 
     public function get_billing_company()
@@ -988,6 +1335,11 @@ class StubOrder
     public function get_billing_phone()
     {
         return '+4712345678';
+    }
+
+    public function get_shipping_phone()
+    {
+        return '';
     }
 
     public function get_shipping_company()
@@ -1063,6 +1415,13 @@ class StubOrder
     // Settable per test: '' means "not a Two order" (is_twoinc_order false).
     public $payment_method = '';
 
+    public $type = 'shop_order';
+
+    public function get_type()
+    {
+        return $this->type;
+    }
+
     public function get_payment_method()
     {
         return $this->payment_method;
@@ -1095,6 +1454,118 @@ class StubOrder
     public function get_edit_order_url()
     {
         return 'https://shop.example/edit';
+    }
+
+    public function get_taxable_location()
+    {
+        return ['country' => 'NO', 'state' => '', 'postcode' => '0150', 'city' => 'Oslo'];
+    }
+
+    public function get_items_tax_classes()
+    {
+        return [];
+    }
+}
+
+/**
+ * The unsaved order WC_Checkout::set_data_from_cart() fills for an order intent (TWO-26092): unsaved, so id 0,
+ * and items and totals are whatever the checkout stub sets.
+ */
+class WC_Order extends StubOrder
+{
+    public $items = [];
+    public $props = [];
+
+    public function __call($name, $args)
+    {
+        if (strpos($name, 'set_') === 0) {
+            $this->props[substr($name, 4)] = $args[0];
+            return;
+        }
+        throw new BadMethodCallException($name);
+    }
+
+    public function get_items($type = 'line_item')
+    {
+        return $this->items[$type] ?? [];
+    }
+
+    public function get_taxes()
+    {
+        return $this->items['tax'] ?? [];
+    }
+
+    public function get_id()
+    {
+        return 0;
+    }
+
+    public function get_currency()
+    {
+        return $this->props['currency'] ?? '';
+    }
+
+    public function get_total()
+    {
+        return $this->props['total'] ?? 0.0;
+    }
+
+    public function get_total_tax()
+    {
+        return ($this->props['cart_tax'] ?? 0.0) + ($this->props['shipping_tax'] ?? 0.0);
+    }
+}
+
+/**
+ * A live cart for the intent builder: $contents holds what core's checkout would copy onto the order.
+ * The default is a plain cart, one product at 100.00 net plus 25% VAT.
+ */
+class StubIntentCart
+{
+    public $contents;
+    public $calculated = 0;
+    /** The buyer's term in the session when the totals (and so the surcharge fee) were calculated. */
+    public $term_at_totals;
+
+    public function __construct(?array $contents = null)
+    {
+        $this->contents = $contents ?? [
+            'line_item' => [new StubProductLineItem(['name' => 'Widget', 'line_total' => 100.0, 'line_subtotal' => 100.0, 'line_tax' => 25.0, 'taxes' => [1 => 25.0]])],
+            'tax' => [new StubOrderTaxItem(1, 25.0)],
+            'total' => 125.0,
+            'cart_tax' => 25.0,
+            'shipping_tax' => 0.0,
+        ];
+    }
+
+    public function is_empty()
+    {
+        return false;
+    }
+
+    public function calculate_totals()
+    {
+        $this->calculated++;
+        $this->term_at_totals = WC()->session ? WC()->session->get('two_selected_term') : null;
+    }
+}
+
+class WC_Checkout
+{
+    public function set_data_from_cart(&$order)
+    {
+        /** @var StubIntentCart $cart */
+        $cart = WC()->cart;
+        $contents = $cart->contents;
+        if (!empty($contents['throws'])) {
+            throw new Exception('the cart could not be copied onto the order');
+        }
+        foreach (['line_item', 'shipping', 'fee', 'tax'] as $type) {
+            $order->items[$type] = $contents[$type] ?? [];
+        }
+        $order->set_total($contents['total']);
+        $order->set_cart_tax($contents['cart_tax']);
+        $order->set_shipping_tax($contents['shipping_tax']);
     }
 }
 
@@ -1139,10 +1610,6 @@ class WP_Error
 function wp_remote_request($url, $args = [])
 {
     $GLOBALS['__twoinc_test_http_calls'][] = ['url' => $url, 'args' => $args];
-    // A test that needs a different answer per request sets a responder instead.
-    if (isset($GLOBALS['__twoinc_test_http_responder'])) {
-        return ($GLOBALS['__twoinc_test_http_responder'])($url, $args);
-    }
     return $GLOBALS['__twoinc_test_http_response']
         ?? ['response' => ['code' => 200], 'body' => '{}', 'headers' => []];
 }
@@ -1352,6 +1819,17 @@ function wp_add_inline_script($handle, $data, $position = 'after')
     return true;
 }
 
+/** The product lookups the line builder makes for a product it was given (TWO-24877). */
+function wp_get_post_terms($post_id, $taxonomy = 'post_tag', $args = [])
+{
+    return [];
+}
+
+function get_the_post_thumbnail_url($post = null, $size = 'post-thumbnail')
+{
+    return false;
+}
+
 class StubProduct
 {
     private $purchasable;
@@ -1493,6 +1971,97 @@ function wc_get_order($order_id)
     return $GLOBALS['__twoinc_test_wc_orders'][$order_id] ?? false;
 }
 
+/** Records the query arguments; answers each call in turn from $GLOBALS['__twoinc_test_wc_get_orders'] (lists of ids). */
+function wc_get_orders($args)
+{
+    $GLOBALS['__twoinc_test_wc_get_orders_args'][] = $args;
+    $GLOBALS['__twoinc_test_wc_get_orders'] = $GLOBALS['__twoinc_test_wc_get_orders'] ?? [];
+    return array_shift($GLOBALS['__twoinc_test_wc_get_orders']) ?? [];
+}
+
+function clean_post_cache($post)
+{
+}
+
+function wc_get_cart_url()
+{
+    return 'https://shop.example/cart';
+}
+
+/**
+ * The MySQL named locks the pending-order resolver takes (TWO-26300): GET_LOCK answers 1 unless the name is in
+ * $held, and every query is recorded.
+ */
+class StubWpdb
+{
+    public $dbname = 'wordpress';
+    public $prefix = 'wp_';
+    public $queries = [];
+    public $held = [];
+
+    public function prepare($query, ...$args)
+    {
+        return vsprintf(str_replace(['%s', '%d'], ["'%s'", '%d'], $query), $args);
+    }
+
+    public function get_var($query)
+    {
+        $this->queries[] = $query;
+        if ($this->option_rows_sql($query, $result)) {
+            return $result;
+        }
+        foreach ($this->held as $name) {
+            if (strpos($query, "GET_LOCK('$name'") !== false) {
+                return '0';
+            }
+        }
+        return '1';
+    }
+
+    public function query($query)
+    {
+        $this->queries[] = $query;
+        return $this->option_rows_sql($query, $result) ? $result : 1;
+    }
+
+    public $options = 'wp_options';
+
+    public function esc_like($text)
+    {
+        return addcslashes($text, '_%\\');
+    }
+
+    /**
+     * The order intent verdict rows' SQL (WC_Twoinc_Intent_Verdicts) against the stubbed options: a row read,
+     * an upsert, and a delete by name prefix, optionally only of rows whose "<expiry>|" lead is due.
+     * Answers whether it handled the query.
+     */
+    private function option_rows_sql(string $query, &$result): bool
+    {
+        $options = &$GLOBALS['__twoinc_test_options'];
+        if (preg_match("/^SELECT option_value FROM wp_options WHERE option_name = '([^']*)' LIMIT 1$/", $query, $m)) {
+            $result = $options[$m[1]] ?? null;
+        } elseif (preg_match("/^INSERT INTO wp_options \(option_name, option_value, autoload\) VALUES \('([^']*)', '([^']*)', 'no'\) ON DUPLICATE KEY UPDATE option_value = VALUES\(option_value\)$/", $query, $m)) {
+            $options[$m[1]] = $m[2];
+            $result = 1;
+        } elseif (preg_match("/^DELETE FROM wp_options WHERE option_name LIKE '([^']*)%'(?: AND CAST\(SUBSTRING_INDEX\(option_value, '\|', 1\) AS UNSIGNED\) <= (\d+))?$/", $query, $m)) {
+            $result = 0;
+            foreach (array_keys($options ?? []) as $name) {
+                $due = !isset($m[2]) || (int) explode('|', (string) $options[$name], 2)[0] <= (int) $m[2];
+                if (strpos((string) $name, stripcslashes($m[1])) === 0 && $due) {
+                    unset($options[$name]);
+                    $result++;
+                }
+            }
+        } else {
+            return false;
+        }
+        return true;
+    }
+}
+
+$GLOBALS['wpdb'] = new StubWpdb();
+
 // A minimal but representative status list — enough for the fulfilment-
 // trigger multiselect options builder (TWO-25386) to run during
 // init_form_fields() without a full WC install.
@@ -1586,6 +2155,13 @@ function as_schedule_recurring_action($timestamp, $interval, $hook, $args = [], 
     return 1;
 }
 
+function as_enqueue_async_action($hook, $args = [], $group = '', $unique = false)
+{
+    $GLOBALS['__twoinc_test_as_schedule_calls'][] = ['hook' => $hook, 'unique' => $unique, 'async' => true];
+    $GLOBALS['__twoinc_test_as_scheduled'][$hook] = true;
+    return 1;
+}
+
 function as_unschedule_all_actions($hook, $args = [], $group = '')
 {
     unset($GLOBALS['__twoinc_test_as_scheduled'][$hook]);
@@ -1670,16 +2246,22 @@ require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Brand.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Helper.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_FX.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Rate_Limiter.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Intent_Verdicts.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Surcharge_Method_Exception.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Order_Postprocessing_Exception.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Shop_Match_Exception.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Stored_Term.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Tax_Code_Section.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Payment_Terms.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Sole_Trader.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Postcode_Format.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Api_Proxy.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Checkout.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Storefront_Gate.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Product_Promo.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Product_Button.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Pending_Recovery.php';
 
 // Snapshotted before any spec resets the hook registry: loading
 // WC_Twoinc_Checkout is what registers the cart-ending hooks, and that is the

@@ -9,7 +9,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The PHP minors to test, read from php.net on every run by
+  # dev/support-matrix.sh --php-unit (TWO-27171): every minor from the plugin's
+  # declared floor (readme.txt "Requires PHP") to the newest one php.net
+  # supports. It reads nothing else, so only a php.net outage can hold the unit
+  # jobs up, and a transport or parse failure fails discovery rather than
+  # skipping green.
+  discover:
+    name: Discover PHP versions
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      php: ${{ steps.gen.outputs.php }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve the PHP minors
+        id: gen
+        run: |
+          set -o pipefail
+          php=$(bash dev/support-matrix.sh --php-unit)
+          echo "PHP minors: $php"
+          echo "php=$php" >> "$GITHUB_OUTPUT"
+
   unit-tests:
+    name: Unit tests (PHP ${{ matrix.php-version }})
+    needs: discover
     runs-on: ${{ vars.RUNNER_STANDARD }}
     timeout-minutes: 10
     permissions:
@@ -17,18 +44,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The PHP axis of the support matrix (TWO-25016): the plugin's
-        # declared floor (7.4 — the oldest syntax the code targets) through
-        # every currently-supported PHP minor. The suite is dependency-free
-        # and runs in seconds, so full-span legs are effectively free; the
-        # WooCommerce axis lives in support-matrix.yaml.
-        php-version: ["7.4", "8.0", "8.1", "8.2", "8.3", "8.4"]
+        # The suite is dependency-free and runs in seconds, so every minor is a
+        # leg. A minor-only pin: setup-php resolves the newest patch.
+        php-version: ${{ fromJSON(needs.discover.outputs.php) }}
     steps:
       - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
+          coverage: none
+
+      # Every PHP file merchants receive parses on this minor, including the
+      # ones the unit suite never loads. The file list is the package itself
+      # (git archive honours .gitattributes export-ignore), so it cannot drift.
+      - name: Lint the shipped PHP files
+        run: |
+          set -o pipefail
+          files=$(git archive --format tar --worktree-attributes HEAD | tar -t | grep '\.php$')
+          echo "Linting $(wc -l <<<"$files") files on PHP $(php -r 'echo PHP_VERSION;')"
+          tr '\n' '\0' <<<"$files" | xargs -0 -n 1 php -d display_errors=1 -l | { grep -v '^No syntax errors detected' || true; }
 
       - name: Run unit tests
         run: php tests/unit/run.php

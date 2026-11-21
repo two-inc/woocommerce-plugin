@@ -1,5 +1,5 @@
 /**
- * ABN-548. The Default Payment Term dropdown the admin JS rebuilds leads with
+ * The Default Payment Term dropdown the admin JS rebuilds leads with
  * an empty Automatic option and never selects a day count the admin did not
  * choose. The select posts on save, so a synthesised one is stored and becomes
  * the checkout resolver's first step, making every later step unreachable.

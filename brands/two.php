@@ -28,7 +28,7 @@ return [
     // Buyer-facing terms page behind the checkout consent. A path is resolved
     // against the brand's checkout host, so it follows checkout_env the way
     // every other service URL does; an absolute URL is used verbatim. Absent
-    // or empty renders no consent at all (ABN-554).
+    // or empty renders no consent at all.
     'payment_terms_link' => '/terms',
     // Consent sentence override: a sprintf template taking %1$s the terms
     // anchor and %2$s the provider's legal full name. null uses the base's
@@ -45,9 +45,9 @@ return [
     // basket (total minus tax) — matches the funding partner's risk rule.
     // null = no gate.
     'availability_gate' => null,
-    // Default for the payment-method Title setting on fresh installs
-    // (merchant-saved titles always win). Rendered verbatim at checkout, so
-    // a placeholder here would reach the buyer as literal text.
+    // Title shown while the merchant has saved none, in the shop's language.
+    // Never stored (TWO-27109); a saved title always wins. Rendered verbatim
+    // at checkout, so a placeholder here would reach the buyer as literal text.
     'title_default' => 'Business invoice',
     // NOTE: the offerable payment-term list is sourced per merchant from
     // the merchant record Two's API returns (TWO-24812) — an overlay
@@ -82,4 +82,13 @@ return [
     'intent_approved_notice' => null,
     // On/off for the declined notice, independent of the approved one; explicit bool only, else true (TWO-25224).
     'intent_declined_notice_enabled' => true,
+    // Allowlist of base settings field keys the admin form shows
+    // (TWO-26610). null shows every field. An unlisted field is withheld:
+    // not rendered and not saved, but its stored value or declared default
+    // still applies. A section title goes when no field under it is
+    // listed, fields a merchant adds via wc_two_form_fields always show,
+    // and so does `enabled`, the gateway's on/off switch. A list naming no
+    // other base field ([] included) withholds the rest, logged as a warning.
+    // WC_Twoinc::init_form_fields is the only reader.
+    'allowed_fields' => null,
 ];

@@ -76,7 +76,7 @@ a.setting-dropdown {
   padding-right: 10px;
 }
 
-/* A rejected key is an error; a check that never completed is not (ABN-536). */
+/* A rejected key is an error; a check that never completed is not. */
 .twoinc-merchant-notice {
   color: #dc3232;
 }

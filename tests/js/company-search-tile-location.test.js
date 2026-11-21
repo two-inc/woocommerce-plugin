@@ -376,8 +376,8 @@ describe("company-search tile location (TWO-25326)", () => {
       expect(helper.panel.getField()[0]).toBe($("#twoinc_tile_company_name")[0]);
     });
 
-    // No company input is required in tile placement, whatever the country
-    // (ABN-554) — the tile's own guidance is the signal.
+    // No company input is required in tile placement, whatever the country:
+    // the tile's own guidance is the signal.
     test.each([
       { country: "GB", description: "a country with a registry" },
       { country: "US", description: "a country with no registry" }
@@ -392,7 +392,7 @@ describe("company-search tile location (TWO-25326)", () => {
     });
   });
 
-  describe("the address-area control is not required either (ABN-554)", () => {
+  describe("the address-area control is not required either", () => {
     test("the display field carries no required flag when the control is in the address area", () => {
       ctx = harness.loadTwoinc({
         gateway_id: GATEWAY_ID,

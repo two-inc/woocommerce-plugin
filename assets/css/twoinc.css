@@ -246,7 +246,7 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   position: relative;
 }
 
-/* Class-driven because the links are shown with inline `display`, which no selector can read (ABN-554). */
+/* Class-driven because the links are shown with inline `display`, which no selector can read. */
 #billing_company_display_field.twoinc-affordance-shown,
 #billing_company_field.twoinc-affordance-shown {
   margin-bottom: 0;
@@ -403,7 +403,7 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
 .twoinc-term-chips.hidden {
   display: none;
 }
-/* Two classes, same idiom as `.twoinc-term-chips.hidden` above (ABN-554). */
+/* Two classes, same idiom as `.twoinc-term-chips.hidden` above. */
 .twoinc-term-chips.twoinc-withheld,
 .twoinc-term-chips-heading.twoinc-withheld {
   display: none;
@@ -437,7 +437,7 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
  * padding absorbs the thinner border so the chip does not resize, and the sole
  * chip is disabled, where the affordance would promise a click that does nothing.
  * The label colour is restated because a host theme rule at 0-1-1, such as a
- * bare `button:hover`, out-specifies the base class rule (ABN-597).
+ * bare `button:hover`, out-specifies the base class rule.
  */
 .twoinc-term-chip:not(.twoinc-term-chip--selected):not(:disabled):hover,
 .twoinc-term-chip:not(.twoinc-term-chip--selected):not(:disabled):focus {
@@ -590,7 +590,7 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
   display: none;
 }
 
-/* ABN-554: host themes space `.form-row` inside the payment box, so the tile row cancels it. */
+/* Host themes space `.form-row` inside the payment box, so the tile row cancels it. */
 .twoinc-company-search-tile-slot
   #twoinc_tile_company_row.twoinc-inp-container.form-row.form-row-wide {
   padding-bottom: 0;
@@ -761,7 +761,8 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
  * The chips, inside the panel and after the results — the tab order the DOM
  * already describes, and the reason the panel exists in this shape at all.
  * `white-space: normal` deliberately, not nowrap/ellipsis: a chip label may
- * wrap onto two lines and must not truncate.
+ * wrap onto two lines and must not truncate. The chips share one row and wrap
+ * only when the width requires it, as on the other platforms' checkouts.
  */
 .two-company-mode-chips {
   display: flex;
@@ -773,17 +774,20 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
 }
 
 .two-company-mode-chip {
-  flex: 1 1 calc(50% - 8px);
+  flex: 1 1 auto;
+  min-width: 84px;
   box-sizing: border-box;
   text-align: center;
-  padding: 5px 12px;
-  border-radius: 5px;
+  padding: 6px 10px;
+  border-radius: 6px;
   border: 2px solid #e3e3e3;
   color: #091030;
   background-color: #fff;
   cursor: pointer;
   user-select: none;
   font: inherit;
+  font-size: 13px;
+  line-height: 1.3;
   white-space: normal;
   word-break: break-word;
   text-transform: none !important;
@@ -800,42 +804,21 @@ li.wc_payment_method:has(> .abt-twoinc) > .payment_box {
 /* The chosen chip is excluded so neither pointer nor keyboard disturbs it; the
    padding absorbs the thinner border so the chip does not resize. The label
    colour is restated because a host theme rule at 0-1-1, such as a bare
-   `button:hover`, out-specifies the base class rule (ABN-597). */
+   `button:hover`, out-specifies the base class rule. */
 .two-company-mode-chip:not(.two-company-mode-chip--selected):hover,
 .two-company-mode-chip:not(.two-company-mode-chip--selected):focus {
-  padding: 6px 13px;
+  padding: 7px 11px;
   border: 1px solid #091030;
   background-color: #e3e3e3;
   color: #091030;
 }
 /* Offset outside so the ring stays visible against the selected chip's own
-   fill (ABN-554). */
+   fill. */
 .two-company-mode-chip:focus-visible {
   outline: 2px solid #091030;
   outline-offset: 2px;
 }
 
-.twoinc-sole-trader-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  color: #6b6b6b;
-}
-.twoinc-sole-trader-note.hidden {
-  display: none;
-}
-.twoinc-sole-trader-note svg {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
-.twoinc-sole-trader-note__link {
-  color: #3043d1;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
 .twoinc-sole-trader-toggle__error {
   flex-basis: 100%;
   color: #b00020;

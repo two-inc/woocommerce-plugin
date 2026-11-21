@@ -63,7 +63,7 @@ jobs:
             -e MYSQL_RANDOM_ROOT_PASSWORD=1 \
             --health-cmd="mysqladmin ping -h localhost -u wp -pwp" \
             --health-interval=5s --health-timeout=5s --health-retries=30 \
-            mariadb:10.6
+            europe-north1-docker.pkg.dev/two-artifacts/docker/library/mariadb:10.6
           tries=0
           until [ "$(docker inspect -f '{{.State.Health.Status}}' "db-$SFX")" = "healthy" ]; do
             tries=$((tries + 1))
@@ -78,12 +78,12 @@ jobs:
           docker run --detach --name "wp-$SFX" --network "wpnet-$SFX" -v "wpdata-$SFX":/var/www/html \
             -e WORDPRESS_DB_HOST="db-$SFX" -e WORDPRESS_DB_USER=wp \
             -e WORDPRESS_DB_PASSWORD=wp -e WORDPRESS_DB_NAME=wp \
-            wordpress:6.8-php8.2-apache
+            europe-north1-docker.pkg.dev/two-artifacts/docker/library/wordpress:6.8-php8.2-apache
           docker run --detach --name "cli-$SFX" --network "wpnet-$SFX" -v "wpdata-$SFX":/var/www/html \
             --user 33:33 \
             -e WORDPRESS_DB_HOST="db-$SFX" -e WORDPRESS_DB_USER=wp \
             -e WORDPRESS_DB_PASSWORD=wp -e WORDPRESS_DB_NAME=wp \
-            --entrypoint sleep wordpress:cli-2.11.0-php8.2 infinity
+            --entrypoint sleep europe-north1-docker.pkg.dev/two-artifacts/docker/library/wordpress:cli-2.11.0-php8.2 infinity
           # The wordpress image copies core + wp-config into the shared
           # volume on first start; wait for that before wp-cli touches it.
           tries=0
