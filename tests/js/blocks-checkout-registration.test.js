@@ -287,6 +287,12 @@ function baseGlobals(location, billing, shipping) {
     publish("wc/store/cart");
   }
 
+  /** An edit Blocks sets on the delivery address alone. */
+  function editShipping(change) {
+    shippingAddress = Object.assign({}, shippingAddress, change);
+    publish("wc/store/cart");
+  }
+
   return {
     calls,
     control,
@@ -305,6 +311,7 @@ function baseGlobals(location, billing, shipping) {
     publish,
     receiveCart,
     edit,
+    editShipping,
 
     data: {
       select: (store) =>
@@ -580,43 +587,88 @@ describe("blocks-checkout.js reuses the classic controller", () => {
   test.each([
     {
       ticked: true,
-      first: null,
-      expectBilling: "Second House",
+      steps: [["pick", { address_1: "Second House" }]],
+      expectBilling: { address_1: "Second House" },
       description: "a first pick reaches billing too while the same-address box is ticked"
     },
     {
       ticked: true,
-      first: "First House",
-      expectBilling: "Second House",
+      steps: [
+        ["pick", { address_1: "First House" }],
+        ["form", { address_1: "First House" }],
+        ["pick", { address_1: "Second House" }]
+      ],
+      expectBilling: { address_1: "Second House" },
       description: "a re-pick replaces the first company's billing while the box is ticked"
     },
     {
       ticked: false,
-      first: "First House",
-      expectBilling: "First House",
+      steps: [
+        ["pick", { address_1: "First House" }],
+        ["form", { address_1: "First House" }],
+        ["pick", { address_1: "Second House" }]
+      ],
+      expectBilling: { address_1: "First House" },
       description: "a re-pick leaves a separately entered billing address alone"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["shippingPhone", "07700 900002"]
+      ],
+      expectBilling: { phone: "07700 900002" },
+      description: "a phone the buyer types after a pick reaches billing over the registered one"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["form", { phone: "01632 960001" }],
+        ["pick", { phone: "01632 960002" }]
+      ],
+      expectBilling: { phone: "01632 960002" },
+      description: "a re-pick replaces the first company's registered phone on billing"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { address_1: "First House" }],
+        ["form", { address_1: "First House" }],
+        ["pick", { address_1: "Second House" }],
+        ["stale", { address_1: "First House" }]
+      ],
+      expectBilling: { address_1: "Second House" },
+      description: "a stale cart answer reverting both addresses is re-sent to billing too"
     }
-  ])("$description", async ({ ticked, first, expectBilling }) => {
+  ])("$description", async ({ ticked, steps, expectBilling }) => {
     const base = baseGlobals("address_area");
     base.checkout.useShippingAsBilling = ticked;
     const { env } = globals({});
     env.wp.data = base.data;
     evaluate(env);
 
-    // How the delivery control writes a pick: onto shipping only (TWO-27358).
-    const pick = async (line) => {
-      document.getElementById("shipping_address_1").value = line;
-      await Promise.resolve();
+    const act = {
+      // How the delivery control writes a pick: onto shipping only (TWO-27358).
+      pick: (fields) =>
+        Object.keys(fields).forEach((key) => {
+          document.getElementById("shipping_" + key).value = fields[key];
+        }),
+      // Blocks' own form, or the buyer, setting both addresses.
+      form: (change) => base.edit(change),
+      // The buyer typing a phone on WooCommerce 7.6, which Blocks sets on shipping only.
+      shippingPhone: (phone) => base.editShipping({ phone }),
+      // A cart answer older than the last write.
+      stale: (answer) => base.receiveCart(answer)
     };
-    if (first) {
-      await pick(first);
-      // Billing holds the first company, as Blocks' own form or the buyer left it.
-      base.edit({ address_1: first });
+    for (const [step, arg] of steps) {
+      act[step](arg);
+      await Promise.resolve();
     }
-    await pick("Second House");
 
-    expect(base.shippingAddress.address_1).toBe("Second House");
-    expect(base.address.address_1).toBe(expectBilling);
+    Object.keys(expectBilling).forEach((key) => {
+      expect(base.address[key]).toBe(expectBilling[key]);
+    });
   });
 
   test("a pull never overwrites a write that has not reached the store yet", async () => {

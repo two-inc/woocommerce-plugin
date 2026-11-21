@@ -398,8 +398,8 @@
         if (!patch) return;
         var cart = wp.data.dispatch("wc/store/cart");
         cart[entry.setter](patch);
-        // Blocks copies delivery into billing from its own form's change only, never
-        // from a store write: without this a re-pick leaves the last company's billing (TWO-27358).
+        // Blocks copies delivery into billing on its own form's change, on the tick and once on
+        // mount, never on a store write: without this a re-pick leaves the last company's billing (TWO-27358).
         if (entry.store === "shippingAddress" && shippingIsBilling()) cart.setBillingAddress(patch);
       });
     } finally {
@@ -411,6 +411,22 @@
   function shippingIsBilling() {
     var checkout = wp.data && wp.data.select && wp.data.select("wc/store/checkout");
     return !!(checkout && checkout.getUseShippingAsBilling && checkout.getUseShippingAsBilling());
+  }
+
+  /**
+   * Billing's phone, kept on the delivery phone while the box is ticked. On older
+   * WooCommerce (7.6 among them) the phone sits outside Blocks' address form and a
+   * buyer's typing reaches the delivery address alone, so a company's registered
+   * phone `push()` gave billing would otherwise reach Two over the buyer's own.
+   */
+  function followShippingPhone() {
+    if (!shippingIsBilling()) return;
+    var shipping = storedAddress("shippingAddress");
+    var billing = storedAddress("billingAddress");
+    if (!shipping || !billing) return;
+    var phone = shipping.phone == null ? "" : String(shipping.phone);
+    if ((billing.phone == null ? "" : String(billing.phone)) === phone) return;
+    wp.data.dispatch("wc/store/cart").setBillingAddress({ phone: phone });
   }
 
   // -------------------------------------------------------------- mounting
@@ -778,6 +794,7 @@
     }
     // Before `pull()`, so a key this pass releases is repainted from the store in it.
     push();
+    followShippingPhone();
     var moved = pull();
     restore();
     if (moved) resync();
