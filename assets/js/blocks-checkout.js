@@ -103,6 +103,8 @@
   /** The cap on how often one write is dispatched, its first send included. */
   var SENDS = 3;
   var pushing = false;
+  /** The billing phone `push()` last mirrored from a pick, until billing holds another. */
+  var mirroredPhone = null;
   var saveScheduled = false;
   var restored = false;
   /** Seeded from the session, so a mount that changes nothing sends nothing (TWO-27353). */
@@ -400,7 +402,11 @@
         cart[entry.setter](patch);
         // Blocks copies delivery into billing on its own form's change, on the tick and once on
         // mount, never on a store write: without this a re-pick leaves the last company's billing (TWO-27358).
-        if (entry.store === "shippingAddress" && shippingIsBilling()) cart.setBillingAddress(patch);
+        if (entry.store === "shippingAddress" && shippingIsBilling()) {
+          // Ahead of the dispatch, whose notification runs `followShippingPhone()`.
+          if ("phone" in patch) mirroredPhone = patch.phone;
+          cart.setBillingAddress(patch);
+        }
       });
     } finally {
       pushing = false;
@@ -414,19 +420,30 @@
   }
 
   /**
-   * Billing's phone, kept on the delivery phone while the box is ticked. On older
-   * WooCommerce (7.6 among them) the phone sits outside Blocks' address form and a
-   * buyer's typing reaches the delivery address alone, so a company's registered
-   * phone `push()` gave billing would otherwise reach Two over the buyer's own.
+   * The billing phone `push()` mirrored, kept on the delivery phone while the box
+   * is ticked. On older WooCommerce (7.6 among them) the phone sits outside Blocks'
+   * address form and a buyer's typing reaches the delivery address alone, so the
+   * registered phone a pick gave billing would otherwise reach Two over the
+   * buyer's own. Only that phone: a billing phone anyone else wrote is theirs, and
+   * an empty one would leave Two no phone at all.
    */
   function followShippingPhone() {
-    if (!shippingIsBilling()) return;
+    if (mirroredPhone === null || !shippingIsBilling()) return;
     var shipping = storedAddress("shippingAddress");
     var billing = storedAddress("billingAddress");
     if (!shipping || !billing) return;
-    var phone = shipping.phone == null ? "" : String(shipping.phone);
-    if ((billing.phone == null ? "" : String(billing.phone)) === phone) return;
+    if (asText(billing.phone) !== mirroredPhone) {
+      mirroredPhone = null;
+      return;
+    }
+    var phone = asText(shipping.phone);
+    if (!phone || phone === mirroredPhone) return;
+    mirroredPhone = phone;
     wp.data.dispatch("wc/store/cart").setBillingAddress({ phone: phone });
+  }
+
+  function asText(value) {
+    return value == null ? "" : String(value);
   }
 
   // -------------------------------------------------------------- mounting

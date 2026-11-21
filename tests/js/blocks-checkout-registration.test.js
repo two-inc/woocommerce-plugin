@@ -293,6 +293,12 @@ function baseGlobals(location, billing, shipping) {
     publish("wc/store/cart");
   }
 
+  /** An edit that reaches the billing address alone. */
+  function editBilling(change) {
+    address = Object.assign({}, address, change);
+    publish("wc/store/cart");
+  }
+
   return {
     calls,
     control,
@@ -312,6 +318,7 @@ function baseGlobals(location, billing, shipping) {
     receiveCart,
     edit,
     editShipping,
+    editBilling,
 
     data: {
       select: (store) =>
@@ -640,9 +647,37 @@ describe("blocks-checkout.js reuses the classic controller", () => {
       ],
       expectBilling: { address_1: "Second House" },
       description: "a stale cart answer reverting both addresses is re-sent to billing too"
+    },
+    {
+      ticked: true,
+      seed: { billing: { phone: "01632 960009" } },
+      steps: [["form", { city: "Oslo" }]],
+      expectBilling: { phone: "01632 960009" },
+      description: "with no pick a saved billing phone is left alone"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["shippingPhone", ""]
+      ],
+      expectBilling: { phone: "01632 960001" },
+      description: "a shipping phone cleared after a pick never blanks billing"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["billingPhone", "07700 900003"],
+        ["shippingPhone", "07700 900002"]
+      ],
+      expectBilling: { phone: "07700 900003" },
+      description: "a billing phone someone else wrote after the mirror is not followed"
     }
-  ])("$description", async ({ ticked, steps, expectBilling }) => {
-    const base = baseGlobals("address_area");
+  ])("$description", async ({ ticked, seed, steps, expectBilling }) => {
+    // WooCommerce 7.6's phone, outside the address form: the buyer's only phone with the box ticked.
+    document.body.innerHTML = '<input id="shipping-phone">';
+    const base = baseGlobals("address_area", (seed || {}).billing, (seed || {}).shipping);
     base.checkout.useShippingAsBilling = ticked;
     const { env } = globals({});
     env.wp.data = base.data;
@@ -657,7 +692,13 @@ describe("blocks-checkout.js reuses the classic controller", () => {
       // Blocks' own form, or the buyer, setting both addresses.
       form: (change) => base.edit(change),
       // The buyer typing a phone on WooCommerce 7.6, which Blocks sets on shipping only.
-      shippingPhone: (phone) => base.editShipping({ phone }),
+      shippingPhone: (phone) => {
+        document
+          .getElementById("shipping-phone")
+          .dispatchEvent(new window.Event("input", { bubbles: true }));
+        base.editShipping({ phone });
+      },
+      billingPhone: (phone) => base.editBilling({ phone }),
       // A cart answer older than the last write.
       stale: (answer) => base.receiveCart(answer)
     };
