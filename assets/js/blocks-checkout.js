@@ -395,11 +395,22 @@
           patch[key] = input.value;
         });
 
-        if (patch) wp.data.dispatch("wc/store/cart")[entry.setter](patch);
+        if (!patch) return;
+        var cart = wp.data.dispatch("wc/store/cart");
+        cart[entry.setter](patch);
+        // Blocks copies delivery into billing from its own form's change only, never
+        // from a store write: without this a re-pick leaves the last company's billing (TWO-27358).
+        if (entry.store === "shippingAddress" && shippingIsBilling()) cart.setBillingAddress(patch);
       });
     } finally {
       pushing = false;
     }
+  }
+
+  /** "Use same address for billing" is ticked. The checkout store exists only where Blocks' checkout does. */
+  function shippingIsBilling() {
+    var checkout = wp.data && wp.data.select && wp.data.select("wc/store/checkout");
+    return !!(checkout && checkout.getUseShippingAsBilling && checkout.getUseShippingAsBilling());
   }
 
   // -------------------------------------------------------------- mounting

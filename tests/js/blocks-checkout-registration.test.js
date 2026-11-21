@@ -145,6 +145,8 @@ function baseGlobals(location, billing, shipping) {
   const subscribers = {};
   const activeMethod = { name: null };
   const resolution = { finished: true, customerData: true };
+  // Blocks' "Use same address for billing" box, unticked unless a test ticks it.
+  const checkout = { useShippingAsBilling: false };
   const captureValues = { company: "", company_id: "", mode: "search" };
   const shippingCaptureValues = { company: "", company_id: "" };
   const valuesFor = (role) => (role === "shipping" ? shippingCaptureValues : captureValues);
@@ -299,6 +301,7 @@ function baseGlobals(location, billing, shipping) {
     },
     activeMethod,
     resolution,
+    checkout,
     publish,
     receiveCart,
     edit,
@@ -307,6 +310,8 @@ function baseGlobals(location, billing, shipping) {
       select: (store) =>
         store === "wc/store/payment"
           ? { getActivePaymentMethod: () => activeMethod.name }
+          : store === "wc/store/checkout"
+          ? { getUseShippingAsBilling: () => checkout.useShippingAsBilling }
           : {
               getCartData: () => ({}),
               getCustomerData: () =>
@@ -570,6 +575,48 @@ describe("blocks-checkout.js reuses the classic controller", () => {
       expect(document.getElementById("billing_" + key).value).toBe(expectShadow[key]);
     });
     expect(base.calls.patches).toEqual(expectPatches);
+  });
+
+  test.each([
+    {
+      ticked: true,
+      first: null,
+      expectBilling: "Second House",
+      description: "a first pick reaches billing too while the same-address box is ticked"
+    },
+    {
+      ticked: true,
+      first: "First House",
+      expectBilling: "Second House",
+      description: "a re-pick replaces the first company's billing while the box is ticked"
+    },
+    {
+      ticked: false,
+      first: "First House",
+      expectBilling: "First House",
+      description: "a re-pick leaves a separately entered billing address alone"
+    }
+  ])("$description", async ({ ticked, first, expectBilling }) => {
+    const base = baseGlobals("address_area");
+    base.checkout.useShippingAsBilling = ticked;
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    // How the delivery control writes a pick: onto shipping only (TWO-27358).
+    const pick = async (line) => {
+      document.getElementById("shipping_address_1").value = line;
+      await Promise.resolve();
+    };
+    if (first) {
+      await pick(first);
+      // Billing holds the first company, as Blocks' own form or the buyer left it.
+      base.edit({ address_1: first });
+    }
+    await pick("Second House");
+
+    expect(base.shippingAddress.address_1).toBe("Second House");
+    expect(base.address.address_1).toBe(expectBilling);
   });
 
   test("a pull never overwrites a write that has not reached the store yet", async () => {
