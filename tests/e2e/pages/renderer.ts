@@ -59,6 +59,16 @@ const blocksDriver: CheckoutDriver = {
   root: blocks.CHECKOUT_ROOT,
   paymentRadio: blocks.PAYMENT_RADIO,
   goto: async (page) => {
+    // TWO-27353: the TWO-27177 reload below must not overlap our mount write, as WooCommerce 11.3.1's session check refuses it.
+    const mountWrite = page
+      // The bound starts before page.goto, so it covers a slow page load on CI as well as the write.
+      // Only a visit with no write waits it out in full.
+      .waitForResponse((r) => (r.request().postData() ?? "").includes('"twoinc-payment-gateway"'), {
+        timeout: 20_000
+      })
+      // Finished, not just answered: the session is saved as the request ends.
+      .then((r) => r.finished())
+      .catch(() => null); // No write when the session already holds the tile's choice.
     await page.goto("/checkout/");
     await page.locator(blocksDriver.root).waitFor({ state: "visible" });
     // TWO-27177: before WooCommerce 11.4 the Checkout block can mount its
@@ -73,6 +83,7 @@ const blocksDriver: CheckoutDriver = {
         () =>
           !!window.wp?.data?.select("wc/store/cart")?.getCustomerData?.()?.shippingAddress?.country
       );
+      await mountWrite;
       await page.reload();
       await page.locator(blocksDriver.root).waitFor({ state: "visible" });
     }

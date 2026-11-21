@@ -894,6 +894,37 @@ describe("blocks-checkout.js reaches the rest of the tile's surfaces", () => {
     updates.forEach((u) => expect(u.namespace).toBe("twoinc-payment-gateway"));
   });
 
+  // TWO-27353: every announcement saves the session, which WooCommerce 11.3.1
+  // will not let overlap a checkout request, so a mount that changes nothing sends nothing.
+  test.each([
+    {
+      chosen: true,
+      active: "woocommerce-gateway-tillit",
+      expected: [],
+      description: "already chosen, still chosen"
+    },
+    { chosen: false, active: "cod", expected: [], description: "not chosen, still not chosen" },
+    {
+      chosen: false,
+      active: "woocommerce-gateway-tillit",
+      expected: [{ active: true }],
+      description: "newly chosen"
+    },
+    { chosen: true, active: "cod", expected: [{ active: false }], description: "no longer chosen" }
+  ])(
+    "the session's own choice is announced only on a change: $description",
+    ({ chosen, active, expected }) => {
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      env.wc.wcSettings.getSetting = (key) =>
+        key === "woocommerce-gateway-tillit_data" ? { ...METHOD_DATA, chosen } : null;
+      base.activeMethod.name = active;
+      evaluate(env);
+
+      expect(updates.map((u) => u.data)).toEqual(expected);
+    }
+  );
+
   /**
    * TWO-25800. A buyer arriving from the product-page buy button has the
    * gateway named in the session, so the tile selects itself on mount. The

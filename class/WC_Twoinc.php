@@ -6445,39 +6445,71 @@ if (!class_exists('WC_Twoinc')) {
             return apply_filters('twoinc_payment_validation_error', null, $order_id);
         }
 
-        /** WC session key: the last order-intent verdict per company id. */
-        public const INTENT_VERDICT_SESSION_KEY = 'twoinc_order_intent_verdicts';
-
         /** Compared across a hand-typed field and an API payload, so formatting is not significant. */
         private static function intent_verdict_key(string $company_id): string
         {
             return strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $company_id));
         }
 
-        /** Banked so order creation can refuse a declined company (TWO-25657). */
+        /** The current WooCommerce session's customer id, or '' without a session. */
+        private static function session_customer_id(): string
+        {
+            $session = function_exists('WC') ? (WC()->session ?? null) : null;
+            return $session && method_exists($session, 'get_customer_id') ? (string) $session->get_customer_id() : '';
+        }
+
+        /** Banked so order creation can refuse a declined company (TWO-25657), per buyer as the session was (TWO-27353). */
         public static function record_order_intent_verdict(string $company_id, bool $approved): void
         {
             $key = self::intent_verdict_key($company_id);
-            $session = function_exists('WC') ? (WC()->session ?? null) : null;
-            if ($key === '' || !$session) {
+            $customer_id = self::session_customer_id();
+            if ($key === '' || $customer_id === '') {
                 return;
             }
-            $verdicts = $session->get(self::INTENT_VERDICT_SESSION_KEY);
-            $verdicts = is_array($verdicts) ? $verdicts : [];
+            $verdicts = WC_Twoinc_Intent_Verdicts::read($customer_id);
             $verdicts[$key] = $approved;
-            $session->set(self::INTENT_VERDICT_SESSION_KEY, $verdicts);
+            WC_Twoinc_Intent_Verdicts::write($customer_id, $verdicts);
+        }
+
+        /**
+         * Carries a guest's verdicts to the user id WooCommerce switches the session to
+         * when the guest logs in or creates an account at checkout, before payment is
+         * processed. Hooked to woocommerce_guest_session_to_user_id (WooCommerce 8.8+).
+         * A guest verdict replaces the account's own for the same company. Only a
+         * guest's, as WooCommerce migrates only a guest session: a signed-in user's
+         * verdicts are their own, never another account's. A user id is all digits;
+         * a guest id is a generated hash.
+         */
+        public static function carry_intent_verdicts($guest_id, $user_id): void
+        {
+            $from = (string) $guest_id;
+            $to = (string) $user_id;
+            if ($from === '' || $to === '' || $from === $to || (string) (int) $from === $from) {
+                return;
+            }
+            $verdicts = WC_Twoinc_Intent_Verdicts::read($from);
+            if ($verdicts !== []) {
+                WC_Twoinc_Intent_Verdicts::write($to, $verdicts + WC_Twoinc_Intent_Verdicts::read($to));
+            }
+        }
+
+        /**
+         * The same from the session's current id, for WooCommerce before 8.8, while the
+         * session still holds the guest id: woocommerce_created_customer passes the new
+         * user's id, wp_login the login name and then the user.
+         */
+        public static function carry_session_intent_verdicts_to($user_id, $user = null): void
+        {
+            self::carry_intent_verdicts(self::session_customer_id(), is_object($user) && isset($user->ID) ? $user->ID : $user_id);
         }
 
         /** @return bool|null Null = no answer, never a decline. */
         public static function get_order_intent_verdict(string $company_id): ?bool
         {
             $key = self::intent_verdict_key($company_id);
-            $session = function_exists('WC') ? (WC()->session ?? null) : null;
-            if ($key === '' || !$session) {
-                return null;
-            }
-            $verdicts = $session->get(self::INTENT_VERDICT_SESSION_KEY);
-            if (!is_array($verdicts) || !array_key_exists($key, $verdicts)) {
+            $customer_id = self::session_customer_id();
+            $verdicts = $customer_id === '' ? [] : WC_Twoinc_Intent_Verdicts::read($customer_id);
+            if ($key === '' || !array_key_exists($key, $verdicts)) {
                 return null;
             }
             return (bool) $verdicts[$key];

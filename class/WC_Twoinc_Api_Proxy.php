@@ -153,6 +153,7 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
         /** wc-ajax handler: the order intent availability check. */
         public static function ajax_order_intent(): void
         {
+            self::leave_session_unsaved();
             $gateway = self::authorize('order intent', 'order_intent');
             if (!$gateway) {
                 return;
@@ -172,7 +173,7 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
                 wp_send_json_error('Buyer country not supported');
                 return;
             }
-            // The session follows a term chip a round trip late, and the cart's surcharge fee reads it.
+            // The term chip posted with the intent, so the cart's surcharge fee can read it this request.
             $term = (int) ($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] ?? 0);
             if ($term > 0 && in_array($term, WC_Twoinc_Payment_Terms::get_available_terms($gateway), true)) {
                 WC_Twoinc_Payment_Terms::set_selected_term($gateway, $term);
@@ -199,6 +200,22 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
             }
             self::record_verdict($company, $response);
             self::relay($response);
+        }
+
+        /**
+         * The intent waits on Two for seconds, and its session copy is stale by
+         * the time it would save: WooCommerce 11.3.1 refuses a checkout request
+         * another request saved the session under, and the save would put back
+         * an address the buyer has since changed (TWO-27353). Nothing it changes
+         * there needs keeping: the cart is recomputed on every request, the term
+         * is saved by its own select-term call, and the verdict is banked apart.
+         */
+        private static function leave_session_unsaved(): void
+        {
+            $session = function_exists('WC') ? (WC()->session ?? null) : null;
+            if ($session) {
+                remove_action('shutdown', [$session, 'save_data'], 20);
+            }
         }
 
         /** Only an explicit `approved` counts — an error is not a decline (TWO-25657). */

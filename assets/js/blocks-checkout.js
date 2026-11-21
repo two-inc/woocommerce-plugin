@@ -105,7 +105,8 @@
   var pushing = false;
   var saveScheduled = false;
   var restored = false;
-  var announcedActive = null;
+  /** Seeded from the session, so a mount that changes nothing sends nothing (TWO-27353). */
+  var announcedActive = data && typeof data.chosen === "boolean" ? data.chosen : null;
   /**
    * One per cart-extensions request out whose answer may overwrite the
    * addresses: what the buyer has entered, put back over that answer (TWO-27188).
