@@ -326,15 +326,16 @@ function baseGlobals(location, billing, shipping) {
         store === "wc/store/payment"
           ? { getActivePaymentMethod: () => activeMethod.name }
           : store === "wc/store/checkout"
-          ? { getUseShippingAsBilling: () => checkout.useShippingAsBilling }
-          : {
-              getCartData: () => ({}),
-              getCustomerData: () =>
-                resolution.customerData ? { billingAddress: address, shippingAddress } : {},
-              getCartTotals: () => totals,
-              // Only the resolver-backed selector ever finishes.
-              hasFinishedResolution: (selector) => selector === "getCartData" && resolution.finished
-            },
+            ? { getUseShippingAsBilling: () => checkout.useShippingAsBilling }
+            : {
+                getCartData: () => ({}),
+                getCustomerData: () =>
+                  resolution.customerData ? { billingAddress: address, shippingAddress } : {},
+                getCartTotals: () => totals,
+                // Only the resolver-backed selector ever finishes.
+                hasFinishedResolution: (selector) =>
+                  selector === "getCartData" && resolution.finished
+              },
       dispatch: () => ({
         setBillingAddress(patch) {
           calls.patches.push(patch);
