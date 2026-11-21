@@ -6445,8 +6445,11 @@ if (!class_exists('WC_Twoinc')) {
             return apply_filters('twoinc_payment_validation_error', null, $order_id);
         }
 
-        /** WC session key: the last order-intent verdict per company id. */
-        public const INTENT_VERDICT_SESSION_KEY = 'twoinc_order_intent_verdicts';
+        /**
+         * How long a banked verdict lasts: a guest session's default lifetime,
+         * which is how long the session held it before TWO-27353.
+         */
+        private const INTENT_VERDICT_TTL = 2 * 24 * 60 * 60;
 
         /** Compared across a hand-typed field and an API payload, so formatting is not significant. */
         private static function intent_verdict_key(string $company_id): string
@@ -6454,29 +6457,47 @@ if (!class_exists('WC_Twoinc')) {
             return strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $company_id));
         }
 
+        /**
+         * Transient holding one buyer's verdicts for one cart. Not the WooCommerce
+         * session: saving that from the order intent request, which waits on Two,
+         * makes WooCommerce 11.3.1 refuse a checkout request that overlaps it
+         * (TWO-27353). Null without a session to key it by.
+         */
+        private static function intent_verdict_store(): ?string
+        {
+            $session = function_exists('WC') ? (WC()->session ?? null) : null;
+            $customer_id = $session && method_exists($session, 'get_customer_id') ? (string) $session->get_customer_id() : '';
+            if ($customer_id === '') {
+                return null;
+            }
+            $cart = WC()->cart ?? null;
+            $cart_hash = $cart && method_exists($cart, 'get_cart_hash') ? (string) $cart->get_cart_hash() : '';
+            return WC_Twoinc_Brand::prefixed_name('intent_' . md5($customer_id . '|' . $cart_hash));
+        }
+
         /** Banked so order creation can refuse a declined company (TWO-25657). */
         public static function record_order_intent_verdict(string $company_id, bool $approved): void
         {
             $key = self::intent_verdict_key($company_id);
-            $session = function_exists('WC') ? (WC()->session ?? null) : null;
-            if ($key === '' || !$session) {
+            $store = self::intent_verdict_store();
+            if ($key === '' || $store === null) {
                 return;
             }
-            $verdicts = $session->get(self::INTENT_VERDICT_SESSION_KEY);
+            $verdicts = get_transient($store);
             $verdicts = is_array($verdicts) ? $verdicts : [];
             $verdicts[$key] = $approved;
-            $session->set(self::INTENT_VERDICT_SESSION_KEY, $verdicts);
+            set_transient($store, $verdicts, self::INTENT_VERDICT_TTL);
         }
 
         /** @return bool|null Null = no answer, never a decline. */
         public static function get_order_intent_verdict(string $company_id): ?bool
         {
             $key = self::intent_verdict_key($company_id);
-            $session = function_exists('WC') ? (WC()->session ?? null) : null;
-            if ($key === '' || !$session) {
+            $store = self::intent_verdict_store();
+            if ($key === '' || $store === null) {
                 return null;
             }
-            $verdicts = $session->get(self::INTENT_VERDICT_SESSION_KEY);
+            $verdicts = get_transient($store);
             if (!is_array($verdicts) || !array_key_exists($key, $verdicts)) {
                 return null;
             }

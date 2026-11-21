@@ -86,8 +86,20 @@ if (!class_exists('WC_Twoinc_Blocks_Support') && class_exists(AbstractPaymentMet
                 // itself once on mount when that key still names it.
                 'preselect' => class_exists('WC_Twoinc_Product_Button')
                     && WC_Twoinc_Product_Button::should_preselect_blocks(),
+                // Whether the session already names this gateway, so the tile
+                // announces its choice only on a real change: every announcement
+                // saves the session, which WooCommerce 11.3.1 refuses to let
+                // overlap a checkout request (TWO-27353).
+                'chosen' => $this->is_chosen_in_session(),
                 'supports' => $this->get_supported_features(),
             ];
+        }
+
+        private function is_chosen_in_session(): bool
+        {
+            $session = function_exists('WC') ? (WC()->session ?? null) : null;
+
+            return $session !== null && $session->get('chosen_payment_method') === WC_Twoinc_Brand::get('gateway_id');
         }
 
         private function get_gateway(): ?WC_Twoinc

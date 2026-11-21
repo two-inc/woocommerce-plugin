@@ -3383,6 +3383,8 @@ final class BrandConfigSpec
             $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
             $GLOBALS['__twoinc_test_notices'] = [];
             $GLOBALS['__twoinc_test_logs'] = [];
+            // Verdicts outlive the session object (TWO-27353): each case starts clean.
+            $GLOBALS['__twoinc_test_transients'] = [];
             WC()->session = new StubSession();
             if ($mode === 'declined') {
                 WC_Twoinc::record_order_intent_verdict('923456789', false);
@@ -3601,6 +3603,8 @@ final class BrandConfigSpec
             };
             $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
             $GLOBALS['__twoinc_test_notices'] = [];
+            // Verdicts outlive the session object (TWO-27353): each case starts clean.
+            $GLOBALS['__twoinc_test_transients'] = [];
             WC()->session = new StubSession();
             foreach ($verdicts as $company_id => $approved) {
                 WC_Twoinc::record_order_intent_verdict((string) $company_id, $approved);
@@ -3653,6 +3657,9 @@ final class BrandConfigSpec
                 'buyer' => ['company' => ['country_prefix' => 'NO', 'organization_number' => '923456789']],
             ])];
 
+            $session = WC()->session;
+            add_action('shutdown', [$session, 'save_data'], 20);
+
             self::runProxyHandler($gateway, 'ajax_order_intent');
 
             TinyAssert::same(
@@ -3660,6 +3667,15 @@ final class BrandConfigSpec
                 WC_Twoinc::get_order_intent_verdict('923456789'),
                 $description . ': was not banked as expected'
             );
+            // TWO-27353: the intent never saves the session, so it cannot overlap a checkout request's.
+            TinyAssert::same(
+                [],
+                array_filter($GLOBALS['__twoinc_test_filters']['shutdown'] ?? [], static function ($entry) use ($session) {
+                    return $entry['cb'] === [$session, 'save_data'];
+                }),
+                $description . ': the session would still be saved'
+            );
+            TinyAssert::same(null, $session->get('twoinc_order_intent_verdicts'), $description . ': banked in the session');
         }
 
         WC()->session = null;

@@ -71,6 +71,11 @@ function add_action($tag, $callback, $priority = 10, $accepted_args = 1)
     return add_filter($tag, $callback, $priority, $accepted_args);
 }
 
+function remove_action($tag, $callback, $priority = 10)
+{
+    return remove_filter($tag, $callback, $priority);
+}
+
 function apply_filters($tag, $value, ...$extra)
 {
     // By priority, then in the order added, as WordPress runs them.
