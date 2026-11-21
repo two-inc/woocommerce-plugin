@@ -98,6 +98,7 @@ final class BrandConfigSpec
             'testOrderIntentRefusesAnUnsupportedBuyerCountry',
             'testOrderCreationRefusesADeclinedOrderIntent',
             'testOrderIntentRecordsItsVerdictForOrderCreation',
+            'testOrderIntentVerdictFollowsTheBuyer',
             'testAvailabilityGateSkipsMinimumsOnEmptyCart',
             'testGatewayIsWithheldOnThePayForOrderPage',
             'testMerchantMinimumRaisesTheBar',
@@ -3590,38 +3591,16 @@ final class BrandConfigSpec
         foreach ($cases as $case) {
             list($verdicts, $posted_company_id, $refused, $description) = $case;
 
-            $order = new class extends StubOrder {
-                public function get_payment_method()
-                {
-                    return WC_Twoinc_Brand::get('gateway_id');
-                }
-
-                public function update_meta_data($key, $value)
-                {
-                    throw new DomainException('order building started');
-                }
-            };
-            $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
-            $GLOBALS['__twoinc_test_notices'] = [];
             // Verdicts outlive the session object (TWO-27353): each case starts clean.
             $GLOBALS['__twoinc_test_transients'] = [];
             WC()->session = new StubSession();
             foreach ($verdicts as $company_id => $approved) {
                 WC_Twoinc::record_order_intent_verdict((string) $company_id, $approved);
             }
-            $_POST = [WC_Twoinc::TERMS_CONSENT_FIELD => '1', 'company_id' => $posted_company_id, 'billing_country' => 'NO'];
 
-            $gateway = self::buyerCountryGateway(null);
-            $proceeded = false;
-            try {
-                $gateway->process_payment(42);
-            } catch (DomainException $e) {
-                $proceeded = true;
-            }
-
-            $notices = array_column($GLOBALS['__twoinc_test_notices'], 'message');
+            list($proceeded, $notices, $calls) = self::submitOrderFor($posted_company_id);
             if ($refused) {
-                TinyAssert::same([], $gateway->calls, $description . ': reached the API');
+                TinyAssert::same([], $calls, $description . ': reached the API');
                 TinyAssert::true(!$proceeded, $description . ': order building started anyway');
                 TinyAssert::same(
                     ['Invoice purchase with Two is not available for this order.'],
@@ -3635,6 +3614,119 @@ final class BrandConfigSpec
         }
 
         WC()->session = null;
+        $_POST = [];
+    }
+
+    /** Submits an order for the company: [order building started, the buyer's notices, the API calls made]. */
+    private static function submitOrderFor(string $company_id): array
+    {
+        $order = new class extends StubOrder {
+            public function get_payment_method()
+            {
+                return WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function update_meta_data($key, $value)
+            {
+                throw new DomainException('order building started');
+            }
+        };
+        $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+        $GLOBALS['__twoinc_test_notices'] = [];
+        $_POST = [WC_Twoinc::TERMS_CONSENT_FIELD => '1', 'company_id' => $company_id, 'billing_country' => 'NO'];
+
+        $gateway = self::buyerCountryGateway(null);
+        $proceeded = false;
+        try {
+            $gateway->process_payment(42);
+        } catch (DomainException $e) {
+            $proceeded = true;
+        }
+        return [$proceeded, array_column($GLOBALS['__twoinc_test_notices'], 'message'), $gateway->calls];
+    }
+
+    /**
+     * TWO-27353: a verdict follows the buyer, as it did in the session: through a change to the cart's totals,
+     * and onto the account a guest creates at checkout, which WooCommerce switches the session to before payment.
+     */
+    private static function testOrderIntentVerdictFollowsTheBuyer(): void
+    {
+        $source = (string) file_get_contents(dirname(__DIR__, 2) . '/tillit-payment-gateway.php');
+        $registrations = [
+            'woocommerce_guest_session_to_user_id' => [['WC_Twoinc', 'carry_intent_verdicts'], 2, "add_action('woocommerce_guest_session_to_user_id', ['WC_Twoinc', 'carry_intent_verdicts'], 10, 2);"],
+            'woocommerce_created_customer' => [['WC_Twoinc', 'carry_intent_verdicts_to_new_customer'], 1, "add_action('woocommerce_created_customer', ['WC_Twoinc', 'carry_intent_verdicts_to_new_customer']);"],
+        ];
+        foreach ($registrations as $hook => [$callback, $accepted_args, $line]) {
+            add_action($hook, $callback, 10, $accepted_args);
+        }
+
+        $cart = new class {
+            public $hash = 'before';
+
+            public function get_cart_hash()
+            {
+                return $this->hash;
+            }
+        };
+        $declined = '923456789';
+        $other = '999888777';
+        $as = static function (string $customer_id): void {
+            $GLOBALS['__twoinc_test_session_customer'] = $customer_id;
+        };
+        // WooCommerce 7.6 to 8.7 fires only the first; 8.8 and later fire it, then the second once the session holds the user id.
+        $create_account = static function (): void {
+            do_action('woocommerce_created_customer', 7, [], false);
+        };
+        $switch_session = static function () use ($as): void {
+            $as('7');
+            do_action('woocommerce_guest_session_to_user_id', 't_guest', '7');
+        };
+        // [the account's verdicts before checkout, what happens after the intent, verdicts at order creation, why]
+        $cases = [
+            [[], static function () use ($cart): void {
+                $cart->hash = 'after';
+            }, [$declined => false], 'a shipping, coupon or fee change after the intent'],
+            [[], static function () use ($as, $create_account): void {
+                $create_account();
+                $as('7');
+            }, [$declined => false], 'an account created at checkout on WooCommerce before 8.8'],
+            [[], $switch_session, [$declined => false], 'a guest session switched to the user id'],
+            [[$other => true], static function () use ($create_account, $switch_session): void {
+                $create_account();
+                $switch_session();
+            }, [$declined => false, $other => true], 'an account holding a verdict for another company, on WooCommerce 8.8 and later'],
+        ];
+
+        foreach ($cases as [$account_verdicts, $after_intent, $expected, $description]) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            WC()->session = new StubSession();
+            WC()->cart = $cart;
+            $cart->hash = 'before';
+            $as('7');
+            foreach ($account_verdicts as $company_id => $approved) {
+                WC_Twoinc::record_order_intent_verdict((string) $company_id, $approved);
+            }
+            $as('t_guest');
+            WC_Twoinc::record_order_intent_verdict($declined, false);
+
+            $after_intent();
+
+            foreach ($expected as $company_id => $approved) {
+                TinyAssert::same($approved, WC_Twoinc::get_order_intent_verdict((string) $company_id), "$description: the verdict for $company_id");
+            }
+            list($proceeded, $notices) = self::submitOrderFor($declined);
+            TinyAssert::true(!$proceeded, "$description: the declined company's order went ahead");
+            TinyAssert::same(['Invoice purchase with Two is not available for this order.'], $notices, "$description: the buyer was not told");
+        }
+
+        foreach ($registrations as $hook => [$callback, $accepted_args, $line]) {
+            unset($GLOBALS['__twoinc_test_filters'][$hook]);
+            TinyAssert::true(strpos($source, $line) !== false, "the plugin does not carry verdicts on $hook");
+        }
+        unset($GLOBALS['__twoinc_test_session_customer']);
+        WC()->session = null;
+        WC()->cart = null;
+        $GLOBALS['__twoinc_test_transients'] = [];
         $_POST = [];
     }
 

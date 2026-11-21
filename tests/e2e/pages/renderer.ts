@@ -61,8 +61,10 @@ const blocksDriver: CheckoutDriver = {
   goto: async (page) => {
     // TWO-27353: the TWO-27177 reload below must not overlap our mount write, as WooCommerce 11.3.1's session check refuses it.
     const mountWrite = page
+      // The bound starts before page.goto, so it covers a slow page load on CI as well as the write.
+      // Only a visit with no write waits it out in full.
       .waitForResponse((r) => (r.request().postData() ?? "").includes('"twoinc-payment-gateway"'), {
-        timeout: 5_000
+        timeout: 20_000
       })
       // Finished, not just answered: the session is saved as the request ends.
       .then((r) => r.finished())

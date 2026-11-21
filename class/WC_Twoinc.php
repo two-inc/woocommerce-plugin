@@ -6457,22 +6457,23 @@ if (!class_exists('WC_Twoinc')) {
             return strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $company_id));
         }
 
-        /**
-         * Transient holding one buyer's verdicts for one cart. Not the WooCommerce
-         * session: saving that from the order intent request, which waits on Two,
-         * makes WooCommerce 11.3.1 refuse a checkout request that overlaps it
-         * (TWO-27353). Null without a session to key it by.
-         */
-        private static function intent_verdict_store(): ?string
+        /** The current WooCommerce session's customer id, or '' without a session. */
+        private static function session_customer_id(): string
         {
             $session = function_exists('WC') ? (WC()->session ?? null) : null;
-            $customer_id = $session && method_exists($session, 'get_customer_id') ? (string) $session->get_customer_id() : '';
-            if ($customer_id === '') {
-                return null;
-            }
-            $cart = WC()->cart ?? null;
-            $cart_hash = $cart && method_exists($cart, 'get_cart_hash') ? (string) $cart->get_cart_hash() : '';
-            return WC_Twoinc_Brand::prefixed_name('intent_' . md5($customer_id . '|' . $cart_hash));
+            return $session && method_exists($session, 'get_customer_id') ? (string) $session->get_customer_id() : '';
+        }
+
+        /**
+         * Transient holding one buyer's verdicts, keyed by the session's customer id
+         * as the session itself is. Not the WooCommerce session: saving that from the
+         * order intent request, which waits on Two, makes WooCommerce 11.3.1 refuse a
+         * checkout request that overlaps it (TWO-27353). Null without an id to key it by.
+         */
+        private static function intent_verdict_store(?string $customer_id = null): ?string
+        {
+            $customer_id = $customer_id ?? self::session_customer_id();
+            return $customer_id === '' ? null : WC_Twoinc_Brand::prefixed_name('intent_' . md5($customer_id));
         }
 
         /** Banked so order creation can refuse a declined company (TWO-25657). */
@@ -6487,6 +6488,33 @@ if (!class_exists('WC_Twoinc')) {
             $verdicts = is_array($verdicts) ? $verdicts : [];
             $verdicts[$key] = $approved;
             set_transient($store, $verdicts, self::INTENT_VERDICT_TTL);
+        }
+
+        /**
+         * Carries a guest's verdicts to the user id WooCommerce switches the session to
+         * when the guest logs in or creates an account at checkout, before payment is
+         * processed. Hooked to woocommerce_guest_session_to_user_id (WooCommerce 8.8+).
+         * Verdicts the account already holds are kept unless the guest's replace them.
+         */
+        public static function carry_intent_verdicts($guest_id, $user_id): void
+        {
+            $from = self::intent_verdict_store((string) $guest_id);
+            $to = self::intent_verdict_store((string) $user_id);
+            $verdicts = $from === null ? false : get_transient($from);
+            if ($to === null || $from === $to || !is_array($verdicts) || $verdicts === []) {
+                return;
+            }
+            $held = get_transient($to);
+            set_transient($to, $verdicts + (is_array($held) ? $held : []), self::INTENT_VERDICT_TTL);
+        }
+
+        /**
+         * The same for an account created at checkout on WooCommerce before 8.8: fired
+         * while the session still holds the guest id.
+         */
+        public static function carry_intent_verdicts_to_new_customer($customer_id): void
+        {
+            self::carry_intent_verdicts(self::session_customer_id(), $customer_id);
         }
 
         /** @return bool|null Null = no answer, never a decline. */

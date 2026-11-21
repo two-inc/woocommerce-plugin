@@ -186,6 +186,9 @@ function load_twoinc_classes()
     add_action('wc_ajax_two_company_search', ['WC_Twoinc_Api_Proxy', 'ajax_company_search']);
     add_action('wc_ajax_two_company_by_id', ['WC_Twoinc_Api_Proxy', 'ajax_company_by_id']);
     add_action('wc_ajax_two_order_intent', ['WC_Twoinc_Api_Proxy', 'ajax_order_intent']);
+    // The intent's verdicts follow a guest onto the account they create at checkout (TWO-27353).
+    add_action('woocommerce_guest_session_to_user_id', ['WC_Twoinc', 'carry_intent_verdicts'], 10, 2);
+    add_action('woocommerce_created_customer', ['WC_Twoinc', 'carry_intent_verdicts_to_new_customer']);
     add_action('wc_ajax_two_payment_terms', ['WC_Twoinc_Api_Proxy', 'ajax_payment_terms']);
     add_action('wc_ajax_two_supported_countries', ['WC_Twoinc_Api_Proxy', 'ajax_supported_countries']);
 
