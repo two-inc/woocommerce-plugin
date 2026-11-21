@@ -103,8 +103,8 @@
   /** The cap on how often one write is dispatched, its first send included. */
   var SENDS = 3;
   var pushing = false;
-  /** The billing phone `push()` last mirrored from a pick, until billing holds another. */
-  var mirroredPhone = null;
+  /** Billing's own phone before a pick's first mirror, and the phone last written over it. */
+  var phoneHold = null;
   var saveScheduled = false;
   var restored = false;
   /** Seeded from the session, so a mount that changes nothing sends nothing (TWO-27353). */
@@ -399,14 +399,13 @@
 
         if (!patch) return;
         var cart = wp.data.dispatch("wc/store/cart");
-        cart[entry.setter](patch);
         // Blocks copies delivery into billing on its own form's change, on the tick and once on
         // mount, never on a store write: without this a re-pick leaves the last company's billing (TWO-27358).
-        if (entry.store === "shippingAddress" && shippingIsBilling()) {
-          // Ahead of the dispatch, whose notification runs `followShippingPhone()`.
-          if ("phone" in patch) mirroredPhone = patch.phone;
-          cart.setBillingAddress(patch);
-        }
+        var mirror = entry.store === "shippingAddress" && shippingIsBilling();
+        // Ahead of every dispatch, whose notifications run `settleBillingPhone()`.
+        if (mirror) holdBillingPhone(patch);
+        cart[entry.setter](patch);
+        if (mirror) mirrorToBilling(cart, patch);
       });
     } finally {
       pushing = false;
@@ -420,25 +419,44 @@
   }
 
   /**
-   * The billing phone `push()` mirrored, kept on the delivery phone while the box
-   * is ticked. On older WooCommerce (7.6 among them) the phone sits outside Blocks'
-   * address form and a buyer's typing reaches the delivery address alone, so the
-   * registered phone a pick gave billing would otherwise reach Two over the
-   * buyer's own. Only that phone: a billing phone anyone else wrote is theirs, and
-   * an empty one would leave Two no phone at all.
+   * Only a pick or a stale answer's revert sends a phone, so billing's phone now
+   * is the hold's to correct, not someone else's. Its own phone is kept once per hold.
    */
-  function followShippingPhone() {
-    if (mirroredPhone === null || !shippingIsBilling()) return;
+  function holdBillingPhone(patch) {
+    var billing = storedAddress("billingAddress");
+    if (!("phone" in patch) || !billing) return;
+    var current = asText(billing.phone);
+    phoneHold = { before: phoneHold ? phoneHold.before : current, written: current };
+  }
+
+  /** Every key but the phone as written; the phone through `settleBillingPhone()`. */
+  function mirrorToBilling(cart, patch) {
+    var rest = Object.assign({}, patch);
+    delete rest.phone;
+    if (Object.keys(rest).length) cart.setBillingAddress(rest);
+    settleBillingPhone();
+  }
+
+  /**
+   * While a pick holds billing's phone: the delivery phone, or billing's own from
+   * before the pick when that is empty. On older WooCommerce (7.6 among them) a
+   * typed phone reaches the delivery address alone, and a pick with no registered
+   * phone clears the last one. Billing holding anything but what was written here
+   * is someone else's, and ends the hold.
+   */
+  function settleBillingPhone() {
+    if (!phoneHold || !shippingIsBilling()) return;
     var shipping = storedAddress("shippingAddress");
     var billing = storedAddress("billingAddress");
     if (!shipping || !billing) return;
-    if (asText(billing.phone) !== mirroredPhone) {
-      mirroredPhone = null;
+    if (asText(billing.phone) !== phoneHold.written) {
+      phoneHold = null;
       return;
     }
-    var phone = asText(shipping.phone);
-    if (!phone || phone === mirroredPhone) return;
-    mirroredPhone = phone;
+    var phone = asText(shipping.phone) || phoneHold.before;
+    if (phone === phoneHold.written) return;
+    // Ahead of the dispatch, whose notification lands back here.
+    phoneHold.written = phone;
     wp.data.dispatch("wc/store/cart").setBillingAddress({ phone: phone });
   }
 
@@ -811,7 +829,7 @@
     }
     // Before `pull()`, so a key this pass releases is repainted from the store in it.
     push();
-    followShippingPhone();
+    settleBillingPhone();
     var moved = pull();
     restore();
     if (moved) resync();
