@@ -89,6 +89,7 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_Helper.php';
     require_once __DIR__ . '/class/WC_Twoinc_FX.php';
     require_once __DIR__ . '/class/WC_Twoinc_Rate_Limiter.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Intent_Verdicts.php';
     require_once __DIR__ . '/class/WC_Twoinc_Surcharge_Method_Exception.php';
     require_once __DIR__ . '/class/WC_Twoinc_Order_Postprocessing_Exception.php';
     require_once __DIR__ . '/class/WC_Twoinc_Shop_Match_Exception.php';
@@ -191,7 +192,7 @@ function load_twoinc_classes()
     add_action('woocommerce_guest_session_to_user_id', ['WC_Twoinc', 'carry_intent_verdicts'], 10, 2);
     add_action('woocommerce_created_customer', ['WC_Twoinc', 'carry_session_intent_verdicts_to']);
     add_action('wp_login', ['WC_Twoinc', 'carry_session_intent_verdicts_to'], 10, 2);
-    add_action('woocommerce_cleanup_sessions', ['WC_Twoinc', 'delete_expired_intent_verdicts']);
+    add_action('woocommerce_cleanup_sessions', ['WC_Twoinc_Intent_Verdicts', 'delete_expired']);
     add_action('wc_ajax_two_payment_terms', ['WC_Twoinc_Api_Proxy', 'ajax_payment_terms']);
     add_action('wc_ajax_two_supported_countries', ['WC_Twoinc_Api_Proxy', 'ajax_supported_countries']);
 

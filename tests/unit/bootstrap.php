@@ -2007,6 +2007,9 @@ class StubWpdb
     public function get_var($query)
     {
         $this->queries[] = $query;
+        if ($this->option_rows_sql($query, $result)) {
+            return $result;
+        }
         foreach ($this->held as $name) {
             if (strpos($query, "GET_LOCK('$name'") !== false) {
                 return '0';
@@ -2018,7 +2021,7 @@ class StubWpdb
     public function query($query)
     {
         $this->queries[] = $query;
-        return 1;
+        return $this->option_rows_sql($query, $result) ? $result : 1;
     }
 
     public $options = 'wp_options';
@@ -2028,30 +2031,36 @@ class StubWpdb
         return addcslashes($text, '_%\\');
     }
 
-    /** Answers a "option_name LIKE '<prefix>%'" read of wp_options from the stubbed options, values serialised as stored. */
-    public function get_results($query)
+    /**
+     * The order intent verdict rows' SQL (WC_Twoinc_Intent_Verdicts) against the stubbed options: a row read,
+     * an upsert, and a delete by name prefix, optionally only of rows whose "<expiry>|" lead is due.
+     * Answers whether it handled the query.
+     */
+    private function option_rows_sql(string $query, &$result): bool
     {
-        $this->queries[] = $query;
-        if (!preg_match("/FROM wp_options WHERE option_name LIKE '(.*)%'$/", $query, $match)) {
-            return [];
-        }
-        $prefix = stripcslashes($match[1]);
-        $rows = [];
-        foreach ($GLOBALS['__twoinc_test_options'] ?? [] as $name => $value) {
-            if (strpos((string) $name, $prefix) === 0) {
-                $rows[] = (object) ['option_name' => (string) $name, 'option_value' => is_scalar($value) ? (string) $value : serialize($value)];
+        $options = &$GLOBALS['__twoinc_test_options'];
+        if (preg_match("/^SELECT option_value FROM wp_options WHERE option_name = '([^']*)' LIMIT 1$/", $query, $m)) {
+            $result = $options[$m[1]] ?? null;
+        } elseif (preg_match("/^INSERT INTO wp_options \(option_name, option_value, autoload\) VALUES \('([^']*)', '([^']*)', 'no'\) ON DUPLICATE KEY UPDATE option_value = VALUES\(option_value\)$/", $query, $m)) {
+            $options[$m[1]] = $m[2];
+            $result = 1;
+        } elseif (preg_match("/^DELETE FROM wp_options WHERE option_name LIKE '([^']*)%'(?: AND CAST\(SUBSTRING_INDEX\(option_value, '\|', 1\) AS UNSIGNED\) <= (\d+))?$/", $query, $m)) {
+            $result = 0;
+            foreach (array_keys($options ?? []) as $name) {
+                $due = !isset($m[2]) || (int) explode('|', (string) $options[$name], 2)[0] <= (int) $m[2];
+                if (strpos((string) $name, stripcslashes($m[1])) === 0 && $due) {
+                    unset($options[$name]);
+                    $result++;
+                }
             }
+        } else {
+            return false;
         }
-        return $rows;
+        return true;
     }
 }
 
 $GLOBALS['wpdb'] = new StubWpdb();
-
-function maybe_unserialize($value)
-{
-    return is_string($value) && preg_match('/^(a|O|s|i|b|d):/', $value) ? unserialize($value) : $value;
-}
 
 // A minimal but representative status list — enough for the fulfilment-
 // trigger multiselect options builder (TWO-25386) to run during
@@ -2237,6 +2246,7 @@ require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Brand.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Helper.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_FX.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Rate_Limiter.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Intent_Verdicts.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Surcharge_Method_Exception.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Order_Postprocessing_Exception.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Shop_Match_Exception.php';

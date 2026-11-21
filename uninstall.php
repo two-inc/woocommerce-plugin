@@ -17,6 +17,11 @@ if (!defined('WP_UNINSTALL_PLUGIN')) {
 
 require_once __DIR__ . '/class/WC_Twoinc_Brand.php';
 require_once __DIR__ . '/class/WC_Twoinc_FX.php';
+require_once __DIR__ . '/class/WC_Twoinc_Intent_Verdicts.php';
+
+// Buyers' order intent verdicts are not settings, and nothing would expire them once the
+// plugin is gone. Plain rows, so cleared even when WooCommerce has gone first.
+WC_Twoinc_Intent_Verdicts::delete_all();
 
 // WC_Twoinc extends WooCommerce core's WC_Payment_Gateway. WooCommerce may
 // have been deactivated ahead of (or instead of) this plugin, in which case
