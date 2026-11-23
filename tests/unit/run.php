@@ -64,6 +64,7 @@ final class BrandConfigSpec
             'testProcessUpdateRefusesTerminalStates',
             'testRefusedEditMarksTheOrderOnce',
             'testHtmlEncodedAddressTextIsTheSameOrder',
+            'testTheChangeHashIgnoresTheMerchantUrls',
             'testCompletionSendsAPendingInvoiceEditFirst',
             'testAdminOrderSaveReachesTheEditPath',
             'testDeclaresFeatureCompatibility',
@@ -2220,6 +2221,54 @@ final class BrandConfigSpec
      * TWO-27374: the Checkout block stores address text through wp_kses, which writes "&" as "&amp;", and the
      * order screen saves it back as "&". Both are the same order to Two: no hash moves, and Two is sent "&".
      */
+    /**
+     * TWO-27376: the cancel URL carries a nonce for whoever builds the body, so the checkout and an admin save
+     * build different URLs for the same order. Neither hash moves with them; a real edit still moves the change hash.
+     */
+    private static function testTheChangeHashIgnoresTheMerchantUrls(): void
+    {
+        $twoinc_meta = [
+            'order_reference' => 'test-order-reference', 'company_id' => '912345678', 'department' => '', 'project' => '',
+            'purchase_order_number' => '', 'invoice_emails' => [], 'payment_reference_message' => '', 'payment_reference_ocr' => '',
+            'payment_reference' => '', 'payment_reference_type' => '', 'vendor_name' => '',
+        ];
+        $order_at = function (string $cancel_url, string $edit_url) {
+            return new class ($cancel_url, $edit_url) extends StubOrder {
+                private $urls;
+
+                public function __construct(string $cancel_url, string $edit_url)
+                {
+                    $this->urls = [$cancel_url, $edit_url];
+                }
+
+                public function get_cancel_order_url()
+                {
+                    return $this->urls[0];
+                }
+
+                public function get_edit_order_url()
+                {
+                    return $this->urls[1];
+                }
+            };
+        };
+        $base = WC_Twoinc_Helper::hash_order_pair($order_at('https://shop.example/cancel?_wpnonce=aaa111', 'https://shop.example/edit'), $twoinc_meta);
+        $cases = [
+            // cancel URL, edit URL, description
+            ['https://shop.example/cancel?_wpnonce=bbb222', 'https://shop.example/edit', 'another nonce on the cancel URL'],
+            ['https://shop.example/cancel?_wpnonce=aaa111&amp;x=1', 'https://shop.example/edit', 'a cancel URL with other parameters'],
+            ['https://shop.example/cancel?_wpnonce=aaa111', 'https://shop.example/edit?post=2', 'another edit URL'],
+        ];
+        foreach ($cases as [$cancel_url, $edit_url, $description]) {
+            TinyAssert::same($base, WC_Twoinc_Helper::hash_order_pair($order_at($cancel_url, $edit_url), $twoinc_meta), $description);
+        }
+        $twoinc_meta['purchase_order_number'] = 'PO-2';
+        TinyAssert::true(
+            WC_Twoinc_Helper::hash_order_pair($order_at('https://shop.example/cancel?_wpnonce=aaa111', 'https://shop.example/edit'), $twoinc_meta)[0] !== $base[0],
+            'a real edit still moves the change hash'
+        );
+    }
+
     private static function testHtmlEncodedAddressTextIsTheSameOrder(): void
     {
         $twoinc_meta = [

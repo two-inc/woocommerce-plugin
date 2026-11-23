@@ -127,6 +127,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 * Fixed: on older WooCommerce versions such as 7.6, the plugin no longer writes a "get_cart was called incorrectly" notice to the PHP log on each page load. Which payment methods checkout offers is unchanged.
 * Fixed: on WordPress 6.9.1 and later, the plugin no longer writes a notice that the "twoinc-blocks-checkout" style "was enqueued with dependencies that are not registered" to the PHP log. The checkout looks the same.
 * Fixed: on WooCommerce 7.6 with the Checkout block, the checkout address form now shows the Company field when company search sits in the address, as it already does on newer WooCommerce. Before, the field stayed hidden, so company search never appeared and buyers could not choose their company to pay with Two.
+* Fixed: saving a Two order from the order screen without changing it could send Two an edit and add the note "The order edit request has been accepted by Two.", because the order's cancel link differs for each person who builds it. That link is no longer compared.
 
 = 2.25.1 =
 
