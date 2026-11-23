@@ -205,6 +205,11 @@ function load_twoinc_classes()
     // anything has built the gateway, so the handler looks it up lazily.
     add_filter('render_block_data', ['WC_Twoinc_Checkout', 'reveal_blocks_company_attribute']);
 
+    // The Checkout block posts back the HTML-escaped company the Store API
+    // sent it, so a Two order would save "A &amp; B" (TWO-27368). Runs after
+    // WooCommerce writes the addresses and before it saves the order.
+    add_action('woocommerce_store_api_checkout_update_order_from_request', ['WC_Twoinc_Checkout', 'decode_store_api_company']);
+
     // A Blocks checkout builds its payment list from its own registry and
     // never reads woocommerce_payment_gateways.
     add_action('woocommerce_blocks_payment_method_type_registration', static function ($registry) {
