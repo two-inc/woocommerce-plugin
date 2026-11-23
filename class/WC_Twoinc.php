@@ -4829,6 +4829,25 @@ if (!class_exists('WC_Twoinc')) {
 
 
 
+        /** The states Two holds an order in once it has accepted the fulfilment that issues the invoice. */
+        private const INVOICED_ORDER_STATES = ['FULFILLING', 'FULFILLED', 'DELIVERED', 'REFUNDED', 'PARTIALLY_REFUNDED'];
+
+        /**
+         * Whether Two has issued, or is issuing, the order's invoice: it has accepted the fulfilment (TWO-27373).
+         * The WooCommerce status alone is not enough, as an order can be completed while Two refused or never
+         * received the fulfilment. An order with no recorded state keeps the WooCommerce status rule.
+         *
+         * @param WC_Order $order
+         */
+        public static function has_invoice($order): bool
+        {
+            $state = (string) $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
+            if ('' === $state) {
+                return in_array($order->get_status(), ['completed', 'refunded'], true);
+            }
+            return in_array($state, self::INVOICED_ORDER_STATES, true);
+        }
+
         public function add_invoice_credit_note_urls($order)
         {
             if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
@@ -4845,7 +4864,7 @@ if (!class_exists('WC_Twoinc')) {
                 )) . '</p></div>');
             }
 
-            if ($order->get_status() !== 'completed' && $order->get_status() !== 'refunded') {
+            if (!self::has_invoice($order)) {
                 return;
             }
 

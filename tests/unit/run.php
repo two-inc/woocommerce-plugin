@@ -228,6 +228,7 @@ final class BrandConfigSpec
             'testInvoiceDownloadCreditNoteOmitsVOriginal',
             'testInvoiceDownloadCapabilityGate',
             'testInvoiceDownloadTokenScopedToOrderAndVariant',
+            'testTheInvoiceLinkWaitsForTwosFulfilment',
             'testInvoiceDownloadNoticeIsolatedPerOrder',
             'testInvoiceStreamFilenameSanitizesOrderId',
             'testNegativeDiscountGuardPassesLegitimateDiscount',
@@ -10759,6 +10760,36 @@ final class BrandConfigSpec
         unset($_GET['_wpnonce'], $_GET['order_id'], $_GET['variant']);
         unset($GLOBALS['__twoinc_test_caps'], $GLOBALS['__twoinc_test_object_caps'], $GLOBALS['__twoinc_test_wc_orders']);
         unset($GLOBALS['__twoinc_test_token_url_actions'], $GLOBALS['__twoinc_test_referer_actions']);
+    }
+
+    /** TWO-27373: the order screen offers the invoice once Two has accepted the fulfilment, not on the status alone. */
+    private static function testTheInvoiceLinkWaitsForTwosFulfilment(): void
+    {
+        $cases = [
+            // Two's state, WooCommerce status, link shown, description
+            ['VERIFIED', 'completed', false, 'a completed order Two has not fulfilled'],
+            ['CONFIRMED', 'completed', false, 'a completed order Two holds as confirmed'],
+            ['CANCELLED', 'completed', false, 'a cancelled order'],
+            ['FULFILLING', 'completed', true, 'a fulfilment Two accepted'],
+            ['FULFILLED', 'processing', true, 'a fulfilled order moved back to processing'],
+            ['DELIVERED', 'completed', true, 'a delivered order'],
+            ['PARTIALLY_REFUNDED', 'completed', true, 'a partly refunded order'],
+            ['REFUNDED', 'refunded', true, 'a refunded order'],
+            ['', 'completed', true, 'an order with no recorded state, completed'],
+            ['', 'processing', false, 'an order with no recorded state, processing'],
+        ];
+        foreach ($cases as [$state, $status, $shown, $description]) {
+            $order = self::registerTwoOrder();
+            $order->status = $status;
+            if ('' !== $state) {
+                $order->meta[WC_Twoinc_Brand::meta_key('order_state')] = $state;
+            }
+            ob_start();
+            self::invoiceGateway([])->add_invoice_credit_note_urls($order);
+            $html = ob_get_clean();
+            TinyAssert::same($shown, strpos($html, 'Download Two invoice') !== false, $description);
+        }
+        unset($GLOBALS['__twoinc_test_wc_orders']);
     }
 
     private static function testInvoiceDownloadNoticeIsolatedPerOrder(): void
