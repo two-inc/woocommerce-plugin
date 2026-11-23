@@ -4832,25 +4832,40 @@ if (!class_exists('WC_Twoinc')) {
         /** The states Two holds an order in once it has accepted the fulfilment that issues the invoice. */
         private const INVOICED_ORDER_STATES = ['FULFILLING', 'FULFILLED', 'DELIVERED', 'REFUNDED', 'PARTIALLY_REFUNDED'];
 
+        /** Seconds the order screen waits for Two's order state before falling back to the WooCommerce status. */
+        private const INVOICE_STATE_TIMEOUT = 5;
+
         /**
-         * Whether the order may have a Two invoice (TWO-27373). The WooCommerce status alone is not enough, as an
-         * order can be completed while Two refused or never received the fulfilment. Hidden only where the order
-         * records that it has none: a Two state from before fulfilment and no invoice number. Releases before
-         * 3.0 stored the invoice number from the fulfilment answer, so a legacy fulfilled order keeps its link;
-         * an order with no recorded state keeps the WooCommerce status rule.
+         * Whether Two holds an invoice for the order (TWO-27373). The WooCommerce status alone is not enough: an
+         * order can be completed while Two refused the fulfilment, and Two can fulfil an order (merchant portal,
+         * API) that WooCommerce still shows as processing. The recorded state answers without a call once it is
+         * a fulfilled one, and so does an invoice number, which releases before 3.0 stored from the fulfilment
+         * answer. Otherwise the recorded state may be stale, so Two's own state decides. Only when Two cannot
+         * be read does the WooCommerce status decide, as it did before; the download then reports an invoice
+         * that is not ready yet.
          *
          * @param WC_Order $order
          */
-        public static function has_invoice($order): bool
+        public function has_invoice($order): bool
         {
             if ('' !== (string) $order->get_meta('invoice_number', true)) {
                 return true;
             }
-            $state = (string) $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
-            if ('' === $state) {
-                return in_array($order->get_status(), ['completed', 'refunded'], true);
+            $recorded = (string) $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
+            if (in_array($recorded, self::INVOICED_ORDER_STATES, true)) {
+                return true;
             }
-            return in_array($state, self::INVOICED_ORDER_STATES, true);
+            $twoinc_order_id = $this->get_twoinc_order_id($order);
+            $response = $twoinc_order_id
+                ? $this->make_request("/v1/order/{$twoinc_order_id}", [], 'GET', [], null, self::INVOICE_STATE_TIMEOUT)
+                : null;
+            $body = $response && !is_wp_error($response) && 200 === (int) wp_remote_retrieve_response_code($response)
+                ? json_decode((string) wp_remote_retrieve_body($response), true)
+                : null;
+            if (is_array($body) && isset($body['state']) && is_string($body['state'])) {
+                return in_array($body['state'], self::INVOICED_ORDER_STATES, true);
+            }
+            return in_array($order->get_status(), ['completed', 'refunded'], true);
         }
 
         public function add_invoice_credit_note_urls($order)
@@ -4869,7 +4884,7 @@ if (!class_exists('WC_Twoinc')) {
                 )) . '</p></div>');
             }
 
-            if (!self::has_invoice($order)) {
+            if (!$this->has_invoice($order)) {
                 return;
             }
 

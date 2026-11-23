@@ -10762,37 +10762,52 @@ final class BrandConfigSpec
         unset($GLOBALS['__twoinc_test_token_url_actions'], $GLOBALS['__twoinc_test_referer_actions']);
     }
 
-    /** TWO-27373: the order screen offers the invoice once Two has accepted the fulfilment, not on the status alone. */
+    /**
+     * TWO-27373: the order screen offers the invoice whenever Two holds one, wherever the fulfilment came from, and
+     * not before. A recorded fulfilled state or an invoice number answers without a call; any other recorded state
+     * may be stale, so Two's state decides; only when Two cannot be read does the WooCommerce status decide.
+     */
     private static function testTheInvoiceLinkWaitsForTwosFulfilment(): void
     {
         $cases = [
-            // Two's state, WooCommerce status, legacy invoice number, link shown, description
-            ['UNVERIFIED', 'completed', '', false, 'a completed order Two has not verified'],
-            ['VERIFIED', 'completed', '', false, 'a completed order Two has not fulfilled'],
-            ['CONFIRMED', 'completed', '', false, 'a completed order Two holds as confirmed'],
-            ['CANCELLED', 'completed', '', false, 'a cancelled order'],
-            ['FULFILLING', 'completed', '', true, 'a fulfilment Two accepted'],
-            ['FULFILLED', 'processing', '', true, 'a fulfilled order moved back to processing'],
-            ['DELIVERED', 'completed', '', true, 'a delivered order'],
-            ['PARTIALLY_REFUNDED', 'completed', '', true, 'a partly refunded order'],
-            ['REFUNDED', 'refunded', '', true, 'a refunded order'],
-            ['VERIFIED', 'completed', 'INV-1001', true, 'a legacy order holding an invoice number'],
-            ['', 'completed', '', true, 'an order with no recorded state, completed'],
-            ['', 'processing', '', false, 'an order with no recorded state, processing'],
+            // recorded state, Two's state (null: read fails), WooCommerce status, invoice number, link shown, Two asked, description
+            ['FULFILLING', null, 'completed', '', true, false, 'the plugin\'s own fulfilment, recorded'],
+            ['FULFILLED', null, 'processing', '', true, false, 'a recorded fulfilled order moved back to processing'],
+            ['DELIVERED', null, 'completed', '', true, false, 'a recorded delivered order'],
+            ['PARTIALLY_REFUNDED', null, 'completed', '', true, false, 'a recorded partly refunded order'],
+            ['REFUNDED', null, 'refunded', '', true, false, 'a recorded refunded order'],
+            ['VERIFIED', null, 'completed', 'INV-1001', true, false, 'a legacy order holding an invoice number'],
+            ['CONFIRMED', 'FULFILLED', 'completed', '', true, true, 'fulfilled in the merchant portal or API, completed here'],
+            ['CONFIRMED', 'FULFILLED', 'processing', '', true, true, 'fulfilled in the merchant portal or API, still processing here'],
+            ['VERIFIED', 'FULFILLING', 'completed', '', true, true, 'the plugin\'s fulfil refused as Two had already fulfilled: stale state'],
+            ['', 'FULFILLED', 'processing', '', true, true, 'no recorded state, fulfilled at Two'],
+            ['UNVERIFIED', 'UNVERIFIED', 'completed', '', false, true, 'completed here, Two has not verified'],
+            ['VERIFIED', 'VERIFIED', 'completed', '', false, true, 'completed here, Two has not fulfilled'],
+            ['CONFIRMED', 'CONFIRMED', 'completed', '', false, true, 'completed here, Two refused the fulfilment'],
+            ['CONFIRMED', 'CONFIRMED', 'processing', '', false, true, 'before fulfilment'],
+            ['CANCELLED', 'CANCELLED', 'completed', '', false, true, 'a cancelled order'],
+            ['', 'CONFIRMED', 'completed', '', false, true, 'no recorded state, completed here, not fulfilled at Two'],
+            ['CONFIRMED', null, 'completed', '', true, true, 'Two unreadable: the completed status decides'],
+            ['CONFIRMED', null, 'processing', '', false, true, 'Two unreadable: the processing status decides'],
         ];
-        foreach ($cases as [$state, $status, $invoice_number, $shown, $description]) {
+        foreach ($cases as [$recorded, $live, $status, $invoice_number, $shown, $asked, $description]) {
             $order = self::registerTwoOrder();
             $order->status = $status;
-            if ('' !== $state) {
-                $order->meta[WC_Twoinc_Brand::meta_key('order_state')] = $state;
+            if ('' !== $recorded) {
+                $order->meta[WC_Twoinc_Brand::meta_key('order_state')] = $recorded;
             }
             if ('' !== $invoice_number) {
                 $order->meta['invoice_number'] = $invoice_number;
             }
+            $gateway = self::invoiceGateway(null === $live ? [] : ['/v1/order/' => [self::orderState($live)]]);
             ob_start();
-            self::invoiceGateway([])->add_invoice_credit_note_urls($order);
+            $gateway->add_invoice_credit_note_urls($order);
             $html = ob_get_clean();
-            TinyAssert::same($shown, strpos($html, 'Download Two invoice') !== false, $description);
+            TinyAssert::same(
+                ['shown' => $shown, 'asked' => $asked],
+                ['shown' => strpos($html, 'Download Two invoice') !== false, 'asked' => [] !== $gateway->requests],
+                $description
+            );
         }
         unset($GLOBALS['__twoinc_test_wc_orders']);
     }
