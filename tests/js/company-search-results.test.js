@@ -281,10 +281,25 @@ describe("company search results", () => {
     test.each([
       ["Example &amp; Co", "Example & Co (11111111)", "", "an encoded ampersand"],
       ["Example & Co", "Example & Co (11111111)", "", "a raw ampersand"],
-      ["<mark>Example &amp; Co</mark>", "Example & Co (11111111)", "mark", "an encoded ampersand inside the highlight"],
-      ["Example &#39;s &quot;Co&quot;", "Example 's \"Co\" (11111111)", "", "numeric and named quotes"],
+      [
+        "<mark>Example &amp; Co</mark>",
+        "Example & Co (11111111)",
+        "mark",
+        "an encoded ampersand inside the highlight"
+      ],
+      [
+        "Example &#39;s &quot;Co&quot;",
+        'Example \'s "Co" (11111111)',
+        "",
+        "numeric and named quotes"
+      ],
       ["&lt;b&gt;Example Co", "<b>Example Co (11111111)", "", "an encoded bold tag"],
-      ["&amp;lt;b&amp;gt;Example Co", "&lt;b&gt;Example Co (11111111)", "", "a double-encoded tag is decoded once"],
+      [
+        "&amp;lt;b&amp;gt;Example Co",
+        "&lt;b&gt;Example Co (11111111)",
+        "",
+        "a double-encoded tag is decoded once"
+      ],
       [
         "</textarea><img src=x onerror=alert(1)>&amp; Co",
         "</textarea><img src=x onerror=alert(1)>& Co (11111111)",
@@ -301,7 +316,10 @@ describe("company search results", () => {
       const elements = Array.prototype.map.call(row.querySelectorAll("*"), (node) =>
         node.tagName.toLowerCase()
       );
-      expect({ description, elements }).toEqual({ description, elements: element ? [element] : [] });
+      expect({ description, elements }).toEqual({
+        description,
+        elements: element ? [element] : []
+      });
     });
 
     test("the field takes the plain name, never the markup", async () => {
