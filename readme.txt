@@ -129,7 +129,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 * Fixed: on WooCommerce 7.6 with the Checkout block, the checkout address form now shows the Company field when company search sits in the address, as it already does on newer WooCommerce. Before, the field stayed hidden, so company search never appeared and buyers could not choose their company to pay with Two.
 * Fixed: saving a Two order from the order screen without changing it could send Two an edit and add the note "The order edit request has been accepted by Two.", because the order's cancel link differs for each person who builds it. That link is no longer compared.
 * Fixed: Dutch, Norwegian and Swedish messages and order notes that end with the payment method's name had a space before the full stop, question mark, exclamation mark or colon.
-* On the Checkout block, a company chosen in the delivery address while "Use same address for billing" is ticked is now remembered for the buyer's next checkout page, as a company chosen in the billing address already was, so its payment terms show without choosing it again.
+* Fixed: on the Checkout block, a company chosen in the delivery address while "Use same address for billing" is ticked is now remembered for the buyer's next checkout page, as a company chosen in the billing address already was, so its payment terms show without choosing it again.
 
 = 2.25.1 =
 
