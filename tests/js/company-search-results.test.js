@@ -300,6 +300,15 @@ describe("company search results", () => {
         "",
         "a double-encoded tag is decoded once"
       ],
+      // Without a highlight the service sends the raw name, which is decoded
+      // too: a legacy entity that needs no semicolon changes. Pinned as known
+      // and accepted, since a raw name like this is rare.
+      [
+        "Smith&notaries Ltd",
+        "Smith¬aries Ltd (11111111)",
+        "",
+        "a raw name holding a legacy entity prefix"
+      ],
       [
         "</textarea><img src=x onerror=alert(1)>&amp; Co",
         "</textarea><img src=x onerror=alert(1)>& Co (11111111)",

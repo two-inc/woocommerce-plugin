@@ -136,7 +136,7 @@
    * them is made in text too (TWO-27368).
    */
   function storedText(address, key) {
-    return decode(address[key] == null ? "" : String(address[key]));
+    return decode(asText(address[key]));
   }
 
   /** jQuery assigns `.value` and fires nothing, so an accessor is the only hook. */
