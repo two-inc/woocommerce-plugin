@@ -409,7 +409,7 @@ msgstr "Kon niet worden gelezen"
 #: class/WC_Twoinc.php:2457
 #, php-format
 msgid "What is %s?"
-msgstr "Wat is %s ?"
+msgstr "Wat is %s?"
 
 #: class/WC_Twoinc.php:2464
 #, php-format
@@ -832,7 +832,7 @@ msgstr[1] "%s heeft verzoeken bevestigd om %d bestellingen uit te voeren. Factur
 #: class/WC_Twoinc.php:5667
 #, php-format
 msgid "%s has failed to issue invoice for order %s."
-msgstr "%s kon geen factuur uitgeven voor bestelling %s ."
+msgstr "%s kon geen factuur uitgeven voor bestelling %s."
 
 #: class/WC_Twoinc.php:5673
 #, php-format
@@ -849,7 +849,7 @@ msgstr "%s kon bestelling %s niet annuleren."
 #: class/WC_Twoinc.php:5765
 #, php-format
 msgid "Could not update status to \"Fulfilled\" with %s."
-msgstr "Kan status niet bijwerken naar \"Vervuld\" met %s ."
+msgstr "Kan status niet bijwerken naar \"Vervuld\" met %s."
 
 #: class/WC_Twoinc.php:5766 class/WC_Twoinc.php:5858 class/WC_Twoinc.php:6900
 #: class/WC_Twoinc.php:8409
@@ -886,7 +886,7 @@ msgstr "De status kon niet worden bijgewerkt naar \"Geannuleerd\"."
 #: class/WC_Twoinc.php:5865
 #, php-format
 msgid "Order is already cancelled with %s."
-msgstr "Bestelling is al geannuleerd met %s ."
+msgstr "Bestelling is al geannuleerd met %s."
 
 #. translators: 1: the payment method's product name, 2: its order id
 #: class/WC_Twoinc.php:5873
@@ -1025,7 +1025,7 @@ msgstr "Selecteer uw bedrijf voordat u betaalt met %s."
 #: class/WC_Twoinc.php:6787 class/WC_Twoinc.php:6801
 #, php-format
 msgid "Failed to request order creation with %s."
-msgstr "Het is niet gelukt om een bestelling aan te maken met %s ."
+msgstr "Het is niet gelukt om een bestelling aan te maken met %s."
 
 #: class/WC_Twoinc.php:6793
 #, php-format
@@ -1056,7 +1056,7 @@ msgstr "Kon %s order-ID niet vinden"
 #: class/WC_Twoinc.php:6912
 #, php-format
 msgid "Order has already been fully refunded with %s."
-msgstr "De bestelling is al volledig terugbetaald met %s ."
+msgstr "De bestelling is al volledig terugbetaald met %s."
 
 #: class/WC_Twoinc.php:6937
 #, php-format
@@ -1072,17 +1072,17 @@ msgstr "Neem contact op met %s support met order-ID: %s"
 #: class/WC_Twoinc.php:6970 class/WC_Twoinc.php:6982
 #, php-format
 msgid "Could not initiate refund with %s."
-msgstr "Kon geen restitutie starten met %s ."
+msgstr "Kon geen restitutie starten met %s."
 
 #: class/WC_Twoinc.php:6989
 #, php-format
 msgid "Invoice has been refunded and credit note has been sent by %s."
-msgstr "Factuur is terugbetaald en creditnota is verzonden door %s ."
+msgstr "Factuur is terugbetaald en creditnota is verzonden door %s."
 
 #: class/WC_Twoinc.php:6992
 #, php-format
 msgid "Invoice has been partially refunded and credit note has been sent by %s."
-msgstr "Factuur is gedeeltelijk terugbetaald en creditnota is verzonden door %s ."
+msgstr "Factuur is gedeeltelijk terugbetaald en creditnota is verzonden door %s."
 
 #: class/WC_Twoinc.php:7109 class/WC_Twoinc.php:7116
 msgid "The security code is not valid."
@@ -1697,17 +1697,17 @@ msgstr "Kon de bestelling met %s niet bewerken."
 #: class/WC_Twoinc.php:8465
 #, php-format
 msgid "The order edit request has been accepted by %s."
-msgstr "Het verzoek tot het bewerken van de bestelling is geaccepteerd door %s ."
+msgstr "Het verzoek tot het bewerken van de bestelling is geaccepteerd door %s."
 
 #: class/WC_Twoinc.php:8467
 #, php-format
 msgid "Order value is now %s."
-msgstr "De orderwaarde is nu %s ."
+msgstr "De orderwaarde is nu %s."
 
 #: class/WC_Twoinc.php:8938
 #, php-format
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
-msgstr "Vergroot uw B2B-omzet met Koop nu, betaal later met %s !"
+msgstr "Vergroot uw B2B-omzet met Koop nu, betaal later met %s!"
 
 #: class/WC_Twoinc.php:8939
 #, php-format
@@ -1878,12 +1878,12 @@ msgstr "Negatief kortingsbedrag berekend voor %s."
 #: class/WC_Twoinc_Helper.php:367
 #, php-format
 msgid "Empty response from %s."
-msgstr "Lege respons van %s ."
+msgstr "Lege respons van %s."
 
 #: class/WC_Twoinc_Helper.php:371
 #, php-format
 msgid "Response code from %s: %d"
-msgstr "Antwoordcode van %s : %d"
+msgstr "Antwoordcode van %s: %d"
 
 #: class/WC_Twoinc_Helper.php:473
 msgid "Buyer and merchant may not be the same company"
@@ -1998,7 +1998,7 @@ msgstr "Kan de bestelling met %s niet bevestigen."
 #: class/WC_Twoinc_Pending_Recovery.php:310
 #, php-format
 msgid "Order ID %s has been placed with %s."
-msgstr "Order-ID %s is geplaatst bij %s ."
+msgstr "Order-ID %s is geplaatst bij %s."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc_Pending_Recovery.php:420

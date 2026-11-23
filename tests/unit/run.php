@@ -158,6 +158,7 @@ final class BrandConfigSpec
             'testDeprecatedCustomTermFoldsInOnlyAgainstAResolvedOfferedSet',
             'testDeprecatedCustomTermWriteGuardHoldsEverySettingsWrite',
             'testDeprecatedCustomTermCopyIsTranslatedInEveryLocale',
+            'testNoTranslationPutsASpaceBeforePunctuation',
             'testChipCopyIsTranslatedInEveryLocale',
             'testZeroCapOnAnUnrenderedRowDoesNotBlockEnabling',
             'testDisablingSurchargesIsNeverBlockedByAZeroCap',
@@ -8170,6 +8171,32 @@ final class BrandConfigSpec
                 );
             }
         }
+    }
+
+    /**
+     * ABN-644: none of these languages puts a space before punctuation, so a translation ending "%s ." reads as a
+     * stray space after the product name. Every msgstr in every catalogue is checked, one locale per case.
+     */
+    private static function testNoTranslationPutsASpaceBeforePunctuation(): void
+    {
+        $languages = dirname(__DIR__, 2) . '/languages/';
+        $cases = [
+            // catalogue, description
+            ['twoinc-payment-gateway-es_ES.po', 'Spanish'],
+            ['twoinc-payment-gateway-nb_NO.po', 'Norwegian'],
+            ['twoinc-payment-gateway-nl_NL.po', 'Dutch'],
+            ['twoinc-payment-gateway-sv_SE.po', 'Swedish'],
+        ];
+        foreach ($cases as [$catalogue, $description]) {
+            $spaced = [];
+            foreach (file($languages . $catalogue, FILE_IGNORE_NEW_LINES) as $number => $line) {
+                if (strpos($line, 'msgstr') === 0 && preg_match('/\S[ \t]+[.,:;!?](?=\s|"$)/', $line)) {
+                    $spaced[] = ($number + 1) . ': ' . $line;
+                }
+            }
+            TinyAssert::same([], $spaced, $description . ': no space before punctuation');
+        }
+        TinyAssert::same(4, count(glob($languages . '*.po')), 'every catalogue is a case');
     }
 
     /**
