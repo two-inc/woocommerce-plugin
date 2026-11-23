@@ -285,7 +285,8 @@ final class TaxCodeAdminSpec
         $html = self::render($gateway);
         $cases = [
             // needle, shown, description
-            ['<td colspan="2"', true, 'the section spans the form'],
+            ['<td colspan="2" style="padding-left:0;">', true, 'the section spans the form'],
+            ['class="forminp"', false, 'on a cell WooCommerce does not show as a block'],
             ['<th scope="col">VAT-registered buyer, other EU state</th>', true, 'the exempt column'],
             ['<th scope="col">Your 0% tax rates</th>', true, 'the rates column'],
             ['<th scope="col">Buyer&#039;s address does not match a tax rate (no tax charged, e.g. exports)</th>', true, 'the no-rate column'],

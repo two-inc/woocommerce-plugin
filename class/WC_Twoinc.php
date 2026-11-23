@@ -1303,7 +1303,8 @@ if (!class_exists('WC_Twoinc')) {
             ob_start();
             ?>
             <tr valign="top" class="twoinc-tax-code-map-field">
-                <td colspan="2" class="forminp" style="padding-left:0;">
+                <?php // Not "forminp": WooCommerce shows that cell as a block, which drops the colspan and squeezes the table into the label column (TWO-27373). ?>
+                <td colspan="2" style="padding-left:0;">
                     <h4 class="twoinc-tax-code-title" style="margin:0 0 8px;"><?php echo wp_kses_post($data['title']); ?></h4>
                     <?php foreach ($notices as [$level, $text]) : ?>
                         <div class="notice notice-<?php echo esc_attr($level); ?> inline twoinc-tax-code-notice"><p><?php echo esc_html($text); ?></p></div>
