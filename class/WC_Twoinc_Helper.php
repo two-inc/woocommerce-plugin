@@ -3305,7 +3305,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * left out, and the order's products are identified by the product and
          * variation ids their order lines hold instead (TWO-27374). Those ids
          * are not in the body: the payload line carries no id, and its SKU can
-         * be empty.
+         * be empty. That makes them the one input to the invoice hash that the
+         * change hash lacks; a product swap that left the body byte-identical
+         * would send no edit, but a swapped product's name or URL always moves
+         * the body.
          *
          * @return string[] [change hash, invoice hash]
          */
