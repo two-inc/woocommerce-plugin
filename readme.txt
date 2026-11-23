@@ -131,6 +131,9 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 * Fixed: Dutch, Norwegian and Swedish messages and order notes that end with the payment method's name had a space before the full stop, question mark, exclamation mark or colon.
 * Fixed: on the Checkout block, a company chosen in the delivery address while "Use same address for billing" is ticked is now remembered for the buyer's next checkout page, as a company chosen in the billing address already was, so its payment terms show without choosing it again.
 * Fixed: a company name containing "&" showed it as "&amp;" in the checkout company search results, and an apostrophe showed as a code. On the Checkout block, after the page reloaded, the "&amp;" also showed in the availability notice, and an order paid with Two could save it like that as the billing or shipping company. The search results and the notice now show "&", and an order paid with Two saves the company with "&".
+* Fixed: under WooCommerce > Settings > Payments > Two, the "Tax codes for 0% lines" table was squeezed into the narrow label column. It now uses the full width of the settings page.
+* The "Download Two invoice" button on the order screen now appears once Two has accepted the order's fulfilment, not as soon as the order is completed. A completed order whose fulfilment Two refused no longer offers an invoice that does not exist.
+* Fixed: on the Checkout block, after a buyer changed to a company taken from the delivery address, the "not available" message could name the company chosen before.
 
 = 2.25.1 =
 
