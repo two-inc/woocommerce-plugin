@@ -2218,10 +2218,6 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-27374: the Checkout block stores address text through wp_kses, which writes "&" as "&amp;", and the
-     * order screen saves it back as "&". Both are the same order to Two: no hash moves, and Two is sent "&".
-     */
-    /**
      * TWO-27376: the cancel URL carries a nonce for whoever builds the body, so the checkout and an admin save
      * build different URLs for the same order. Neither hash moves with them; a real edit still moves the change hash.
      */
@@ -2269,6 +2265,10 @@ final class BrandConfigSpec
         );
     }
 
+    /**
+     * TWO-27374: the Checkout block stores address text through wp_kses, which writes "&" as "&amp;", and the
+     * order screen saves it back as "&". Both are the same order to Two: no hash moves, and Two is sent "&".
+     */
     private static function testHtmlEncodedAddressTextIsTheSameOrder(): void
     {
         $twoinc_meta = [
