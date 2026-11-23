@@ -6385,8 +6385,15 @@ class Twoinc {
         // show — the cached one being, by construction, the answer to the
         // body the form holds right now.
         Twoinc.getInstance().supersedeInFlightOrderIntent();
+        // Named from the record the cached body was built from (TWO-27373).
+        // A live field read here named the billing field's company, which is
+        // not the order's when the delivery address supplies it.
+        const [cachedAction, cachedSelector] =
+          Twoinc.getInstance().orderIntentLog[hashedBody].split("|");
         twoincDomHelper.togglePaySubtitleDesc(
-          ...Twoinc.getInstance().orderIntentLog[hashedBody].split("|")
+          cachedAction,
+          cachedSelector,
+          twoincDomHelper.readCompanyLabelFromRecord()
         );
         return;
       }

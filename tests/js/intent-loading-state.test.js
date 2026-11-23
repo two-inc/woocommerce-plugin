@@ -652,6 +652,40 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       }
     });
 
+    // TWO-27373. The cached body was built from the order-intent record, so
+    // its sentence names the record's company, not whatever the billing field
+    // holds: with the company taken from the delivery address, billing can
+    // still hold an earlier company with no number.
+    test.each([
+      ["Old Example & Co", "", "billing holds an earlier company with no number"],
+      ["", "", "billing is empty"],
+      ["ACME Widgets Ltd", "12345678", "billing holds the record's own company"]
+    ])(
+      "a cached verdict names the record's company when %s / %s (%s)",
+      (name, number, description) => {
+        const ajax = harness.stubAjax($);
+        try {
+          completeADeclinedCheck(ajax);
+          $("#billing_company").val(name);
+          $("#company_id").val(number);
+
+          instance.getApproval();
+          jest.advanceTimersByTime(1000);
+
+          expect({
+            description,
+            text: $(".twoinc-pay-box.twoinc-err-payment-default").text()
+          }).toEqual({
+            description,
+            text: "ACME Widgets Ltd (12345678)"
+          });
+          expect(ajax.calls.length).toBe(1);
+        } finally {
+          ajax.restore();
+        }
+      }
+    );
+
     test("the cached verdict is not re-rendered on a loop", () => {
       // With the timer left armed the cached branch repainted every second
       // forever. Ten seconds of quiet is what "disarmed" looks like from
