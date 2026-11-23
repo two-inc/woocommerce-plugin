@@ -1053,6 +1053,12 @@
     observer.observe(root, watched);
   }
 
+  // Here the delivery address is the invoice one while "Use same address for
+  // billing" is ticked, so a pick on it is remembered for the next page (ABN-644).
+  if (typeof twoincAddressRoles !== "undefined") {
+    twoincAddressRoles.deliveryIsInvoice = shippingIsBilling;
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", bootstrap);
   } else {

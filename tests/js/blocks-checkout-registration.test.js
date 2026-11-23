@@ -2204,3 +2204,22 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
     expect(base.calls.patches.length).toBe(patches);
   });
 });
+
+/** ABN-644. The controller asks whether the delivery address is the invoice one; here that is Blocks' own tick. */
+describe("blocks-checkout.js answers whether delivery is the invoice address", () => {
+  test.each([
+    [true, true, "use same address for billing ticked"],
+    [false, false, "use same address for billing unticked"]
+  ])("%s gives %s (%s)", (ticked, answer, description) => {
+    const base = baseGlobals("address_area");
+    base.checkout.useShippingAsBilling = ticked;
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    expect({ description, answer: window.twoincAddressRoles.deliveryIsInvoice() }).toEqual({
+      description,
+      answer
+    });
+  });
+});

@@ -163,6 +163,15 @@ let twoincAddressRoles = {
   deliveryFormIsInPlay: function () {
     const $toggle = jQuery("#ship-to-different-address-checkbox");
     return $toggle.length === 0 || $toggle.is(":checked");
+  },
+
+  /**
+   * Whether the delivery address is also the invoice one: the Checkout
+   * block's "Use same address for billing", which blocks-checkout.js answers.
+   * The classic checkout has no such case, since it collects billing first.
+   */
+  deliveryIsInvoice: function () {
+    return false;
   }
 };
 
@@ -373,7 +382,10 @@ let twoincCompanyCapture = {
   write: function (companyName, companyId, options) {
     const opts = options || {};
     const role = opts.role || twoincAddressRoles.primary();
-    if (role === twoincAddressRoles.invoice()) {
+    // A delivery pick that is also the invoice address is the order's company
+    // too, so the next page (the classic checkout among them) replays it
+    // with its term chips (ABN-644).
+    if (role === twoincAddressRoles.invoice() || twoincAddressRoles.deliveryIsInvoice()) {
       twoincCompanyCapture.rememberOnServer(
         companyName,
         companyId,
