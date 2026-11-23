@@ -3302,7 +3302,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * the rest of the body, so that a plugin update to it does not read as
          * an edit. A product line's name is read from the catalogue, which a
          * rename or a translation layer changes and no order edit can, so it is
-         * left out too (TWO-27374).
+         * left out, and the order's products are identified by the product and
+         * variation ids their order lines hold instead (TWO-27374). Those ids
+         * are not in the body: the payload line carries no id, and its SKU can
+         * be empty.
          *
          * @return string[] [change hash, invoice hash]
          */
@@ -3333,6 +3336,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
             foreach ($body['line_items'] ?? [] as $line) {
                 $is_product = in_array($line['type'] ?? '', self::PRODUCT_LINE_TYPES, true);
                 $invoiced['line_items'][] = [$is_product ? null : ($line['name'] ?? null), $line['quantity'] ?? null, $line['gross_amount'] ?? null];
+            }
+            foreach ($order->get_items() as $item) {
+                if (is_object($item) && method_exists($item, 'get_product_id')) {
+                    $invoiced['products'][] = [(int) $item->get_product_id(), (int) $item->get_variation_id()];
+                }
             }
             return [WC_Twoinc_Helper::hash_obj($body), WC_Twoinc_Helper::hash_obj($invoiced)];
         }

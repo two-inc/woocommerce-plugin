@@ -2455,12 +2455,12 @@ final class BrandConfigSpec
         $process_update->setAccessible(true);
         // An order of one product line and one shipping line; the product's name is the catalogue's.
         $new_order = function (array $lines) {
-            [$total, $product_name, $shipping_name] = $lines;
-            return new class ($total, $product_name, $shipping_name) extends StubOrder {
+            [$total, $product_name, $shipping_name, $product_id] = $lines + [3 => 501];
+            return new class ($total, $product_name, $shipping_name, $product_id) extends StubOrder {
                 private $total;
                 private $lines;
 
-                public function __construct(float $total, string $product_name, string $shipping_name)
+                public function __construct(float $total, string $product_name, string $shipping_name, int $product_id)
                 {
                     $this->total = $total;
                     $product = new class ($product_name) {
@@ -2498,7 +2498,7 @@ final class BrandConfigSpec
                     };
                     $net = $total - 25.0;
                     $this->lines = [
-                        'line_item' => [new StubProductLineItem(['name' => 'Order line', 'line_subtotal' => $net, 'line_total' => $net, 'data' => $product])],
+                        'line_item' => [new StubProductLineItem(['name' => 'Order line', 'line_subtotal' => $net, 'line_total' => $net, 'data' => $product, 'product_id' => $product_id])],
                         'shipping' => [new class ($shipping_name) extends StubShippingItem {
                             private $label;
 
@@ -2555,6 +2555,7 @@ final class BrandConfigSpec
             [$placed, $repriced, false, false, false, true, [$put, $fulfil], false, 'status set in code after an edit: edit sent first'],
             [$placed, [125.0, 'Widget Pro', 'Courier'], false, false, false, true, [$fulfil], false, 'status set in code after a catalogue rename: no edit'],
             [$placed, [125.0, 'Widget', 'Courier Express'], false, false, false, true, [$put, $fulfil], false, 'status set in code after a shipping title change: edit sent first'],
+            [$placed, [125.0, 'Gadget', 'Courier', 502], false, false, true, true, [$put, $fulfil], false, 'product swapped at the same quantity and price in the same Update: edit sent first'],
             [$placed, $repriced, false, false, false, false, [$fulfil], false, 'no company number on the order: the Two order is not read and no edit is sent'],
         ];
         foreach ($cases as [$accepted, $now, $tracking, $refuse, $from_screen, $company_id, $requests, $marked, $desc]) {
@@ -2590,6 +2591,7 @@ final class BrandConfigSpec
         $saved_cases = [
             [[125.0, 'Widget Pro', 'Courier'], false, 'product renamed in the catalogue: no edit'],
             [[125.0, 'Widget', 'Courier Express'], true, 'shipping title changed: an edit not sent'],
+            [[125.0, 'Gadget', 'Courier', 502], true, 'product swapped at the same quantity and price: an edit not sent'],
         ];
         foreach ($saved_cases as [$now, $marked, $desc]) {
             $order = $new_order($now);

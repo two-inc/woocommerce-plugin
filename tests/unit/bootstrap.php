@@ -1035,6 +1035,16 @@ class StubProductLineItem implements ArrayAccess
     {
         return $this->data['meta'][$key] ?? '';
     }
+
+    public function get_product_id()
+    {
+        return $this->data['product_id'] ?? 0;
+    }
+
+    public function get_variation_id()
+    {
+        return $this->data['variation_id'] ?? 0;
+    }
 }
 
 /** WC_Order_Item_Tax stub: one order-level tax row, read both as an object and via ['label']. */
