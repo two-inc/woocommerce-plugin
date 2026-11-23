@@ -5786,29 +5786,34 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
-            // Push tracking (shipping_details) BEFORE fulfilling: the Two
-            // API only accepts order edits pre-fulfilment, so this is the
-            // last chance for the buyer's invoice to carry the tracking
-            // number. Gated on tracking actually being present so ordinary
-            // fulfilments don't grow an extra edit round-trip, and
-            // best-effort by design: an edit failure must never block
-            // fulfilment (process_update_twoinc_order only leaves an order
-            // note on failure). Tracking added AFTER completion cannot be
-            // forwarded — the edit endpoint rejects fulfilled orders
-            // (TWO-24762).
+            // Send what the invoice must carry BEFORE fulfilling: Two only
+            // accepts edits until then. That is tracking (TWO-24762), and an
+            // edit to what the invoice bills saved in the same order-screen
+            // Update that sets the fulfilment status, whose own sync runs
+            // only after this and would be refused (TWO-27374). Gated on one
+            // or the other so ordinary fulfilments don't grow an extra edit
+            // round-trip, and best-effort by design: an edit failure must
+            // never block fulfilment (process_update_twoinc_order only leaves
+            // an order note on failure).
             $shipping_details = WC_Twoinc_Helper::get_shipping_details($order);
-            if (isset($shipping_details['tracking_number']) && $shipping_details['tracking_number'] !== '') {
-                $twoinc_meta = $this->get_save_twoinc_meta($order);
-                $tracking_synced = $twoinc_meta && $this->process_update_twoinc_order($order, $twoinc_meta, false, 'tracking_number');
-                if (!$tracking_synced) {
-                    // The generic edit-failure note already added downstream
-                    // says "contact support"; this one says what was
-                    // actually lost so the merchant isn't left guessing.
-                    $order->add_order_note(sprintf(
-                        __('The tracking number could not be attached to the %s order. The invoice will be sent without it.', 'twoinc-payment-gateway'),
-                        WC_Twoinc_Brand::get('product_name')
-                    ));
-                }
+            $has_tracking = isset($shipping_details['tracking_number']) && $shipping_details['tracking_number'] !== '';
+            // Only an order holding its invoice hash and company number is checked for a pending edit: with the
+            // number on the order, get_save_twoinc_meta() reads no Two order and so adds no note of its own.
+            // Every order placed with this release holds both, as checkout refuses an order without a number.
+            $checkable = $order->get_meta(WC_Twoinc_Brand::meta_key('invoice_hash')) && $order->get_meta('company_id');
+            $twoinc_meta = $has_tracking || $checkable ? $this->get_save_twoinc_meta($order) : null;
+            $synced = false;
+            if ($twoinc_meta && ($has_tracking || $this->invoice_edit_pending($order, $twoinc_meta))) {
+                $synced = $this->process_update_twoinc_order($order, $twoinc_meta, false, $has_tracking ? 'tracking_number' : 'status_change');
+            }
+            if ($has_tracking && !$synced) {
+                // The generic edit-failure note already added downstream
+                // says "contact support"; this one says what was
+                // actually lost so the merchant isn't left guessing.
+                $order->add_order_note(sprintf(
+                    __('The tracking number could not be attached to the %s order. The invoice will be sent without it.', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name')
+                ));
             }
 
             try {
@@ -8380,6 +8385,25 @@ if (!class_exists('WC_Twoinc')) {
                         ['source' => 'twoinc-payment-gateway']
                     );
                 }
+            }
+        }
+
+        /**
+         * Whether what the order's invoice bills differs from what Two last
+         * accepted (TWO-27374). An order with no invoice hash, or one that
+         * cannot be hashed, has none pending: the change hash still syncs it
+         * on its next save, as before.
+         */
+        private function invoice_edit_pending($order, $twoinc_meta): bool
+        {
+            $sent_invoice_hash = $order->get_meta(WC_Twoinc_Brand::meta_key('invoice_hash'));
+            if (!$sent_invoice_hash) {
+                return false;
+            }
+            try {
+                return WC_Twoinc_Helper::hash_order_pair($order, $twoinc_meta)[1] !== $sent_invoice_hash;
+            } catch (Exception $e) {
+                return false;
             }
         }
 

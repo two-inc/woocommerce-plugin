@@ -63,6 +63,8 @@ final class BrandConfigSpec
             'testShippingDetailsFromShipmentTrackingMeta',
             'testProcessUpdateRefusesTerminalStates',
             'testRefusedEditMarksTheOrderOnce',
+            'testHtmlEncodedAddressTextIsTheSameOrder',
+            'testCompletionSendsAPendingInvoiceEditFirst',
             'testAdminOrderSaveReachesTheEditPath',
             'testDeclaresFeatureCompatibility',
             'testBlocksStylesheetFollowsTheStylesheetItDependsOn',
@@ -2212,6 +2214,391 @@ final class BrandConfigSpec
         $gateway->add_invoice_credit_note_urls($order);
         $html = ob_get_clean();
         TinyAssert::true(strpos($html, 'since 2026-10-01 09:00 UTC were not sent to') !== false, 'marker shown: ' . $html);
+    }
+
+    /**
+     * TWO-27374: the Checkout block stores address text through wp_kses, which writes "&" as "&amp;", and the
+     * order screen saves it back as "&". Both are the same order to Two: no hash moves, and Two is sent "&".
+     */
+    private static function testHtmlEncodedAddressTextIsTheSameOrder(): void
+    {
+        $twoinc_meta = [
+            'order_reference' => 'test-order-reference', 'company_id' => '912345678', 'department' => '', 'project' => '',
+            'purchase_order_number' => '', 'invoice_emails' => [], 'payment_reference_message' => '', 'payment_reference_ocr' => '',
+            'payment_reference' => '', 'payment_reference_type' => '', 'vendor_name' => '',
+        ];
+        $order_with = function (string $field, string $value) {
+            return new class ($field, $value) extends StubOrder {
+                private $fields;
+
+                public function __construct(string $field, string $value)
+                {
+                    $this->fields = [$field => $value, 'shipping_city' => 'Oslo', 'shipping_country' => 'NO'];
+                }
+
+                private function field(string $name, string $default): string
+                {
+                    return $this->fields[$name] ?? $default;
+                }
+
+                public function get_billing_company()
+                {
+                    return $this->field('billing_company', parent::get_billing_company());
+                }
+
+                public function get_billing_address_1()
+                {
+                    return $this->field('billing_address_1', parent::get_billing_address_1());
+                }
+
+                public function get_billing_address_2()
+                {
+                    return $this->field('billing_address_2', parent::get_billing_address_2());
+                }
+
+                public function get_billing_city()
+                {
+                    return $this->field('billing_city', parent::get_billing_city());
+                }
+
+                public function get_billing_first_name()
+                {
+                    return $this->field('billing_first_name', parent::get_billing_first_name());
+                }
+
+                public function get_shipping_company()
+                {
+                    return $this->field('shipping_company', parent::get_shipping_company());
+                }
+
+                public function get_shipping_city()
+                {
+                    return $this->field('shipping_city', parent::get_shipping_city());
+                }
+
+                public function get_shipping_country()
+                {
+                    return $this->field('shipping_country', parent::get_shipping_country());
+                }
+            };
+        };
+
+        // [field, as the Checkout block stores it, as the order screen saves it, description]
+        $cases = [
+            ['billing_company', 'Smith &amp; Sons Ltd', 'Smith & Sons Ltd', 'billing company'],
+            ['billing_address_1', '1 High &amp; Low Street', '1 High & Low Street', 'street'],
+            ['billing_address_2', 'Unit 3 &amp; 4', 'Unit 3 & 4', 'second address line'],
+            ['billing_city', 'Hill &amp; Dale', 'Hill & Dale', 'city'],
+            ['billing_first_name', 'Jan &amp; Piet', 'Jan & Piet', 'buyer first name'],
+            ['shipping_company', 'Brown &amp; Co', 'Brown & Co', 'delivery company'],
+            ['billing_company', 'Quote &#039;n&#039; Co', "Quote 'n' Co", 'an encoded apostrophe'],
+        ];
+        foreach ($cases as [$field, $stored, $saved, $desc]) {
+            $placed = $order_with($field, $stored);
+            $resaved = $order_with($field, $saved);
+            [$change, $invoice] = WC_Twoinc_Helper::hash_order_pair($placed, $twoinc_meta);
+            TinyAssert::same([$change, $invoice], WC_Twoinc_Helper::hash_order_pair($resaved, $twoinc_meta), "$desc: both hashes unchanged by the screen's save");
+            $create = json_encode(WC_Twoinc_Helper::compose_twoinc_order($placed, 'test-order-reference', '912345678', '', '', '', []), JSON_UNESCAPED_UNICODE);
+            $edit = json_encode(WC_Twoinc_Helper::compose_twoinc_edit_order($placed, '', '', ''), JSON_UNESCAPED_UNICODE);
+            // The edit body carries no buyer name.
+            $bodies = ['create' => $create] + ($field === 'billing_first_name' ? [] : ['edit' => $edit]);
+            foreach ($bodies as $body => $json) {
+                TinyAssert::true(strpos($json, $saved) !== false && strpos($json, $stored) === false, "$desc: the $body body carries the plain text");
+            }
+        }
+
+        // Line names round-trip the same way: a shipping method title saved in the settings is stored encoded, and
+        // the order screen's items save writes each line's name back as the screen showed it.
+        $product = function (string $name) {
+            return [[new StubProductLineItem(['name' => $name, 'line_subtotal' => 10.0, 'line_total' => 10.0])], [], []];
+        };
+        // A line whose product still exists: its name is the catalogue's.
+        $live_product = function (string $name) {
+            $product = new class ($name) {
+                private $name;
+
+                public function __construct(string $name)
+                {
+                    $this->name = $name;
+                }
+
+                public function get_name()
+                {
+                    return $this->name;
+                }
+
+                public function get_description()
+                {
+                    return '';
+                }
+
+                public function get_id()
+                {
+                    return 0;
+                }
+
+                public function get_permalink()
+                {
+                    return '';
+                }
+
+                public function get_sku()
+                {
+                    return '';
+                }
+            };
+            return [[new StubProductLineItem(['name' => 'Order line', 'line_subtotal' => 10.0, 'line_total' => 10.0, 'data' => $product])], [], []];
+        };
+        $shipping = function (string $name) {
+            return [[], [new class ($name) extends StubShippingItem {
+                private $label;
+
+                public function __construct(string $label)
+                {
+                    parent::__construct(5.0, 0.0);
+                    $this->label = $label;
+                }
+
+                public function get_name()
+                {
+                    return $this->label;
+                }
+            }], []];
+        };
+        $fee = function (string $name) {
+            return [[], [], [new class ($name) {
+                private $label;
+
+                public function __construct(string $label)
+                {
+                    $this->label = $label;
+                }
+
+                public function get_name()
+                {
+                    return $this->label;
+                }
+
+                public function get_total()
+                {
+                    return 2.0;
+                }
+
+                public function get_total_tax()
+                {
+                    return 0.0;
+                }
+
+                public function get_taxes()
+                {
+                    return ['total' => []];
+                }
+            }]];
+        };
+        // [line builder, as stored, as the order screen saves it, the name Two is sent, description]
+        $line_cases = [
+            [$product, 'Nuts &amp; Bolts', 'Nuts & Bolts', 'Nuts & Bolts', 'line of a deleted product'],
+            [$live_product, 'Nuts &amp; Bolts', 'Nuts & Bolts', 'Nuts & Bolts', 'line of a live product'],
+            [$shipping, 'Click &amp; Collect', 'Click & Collect', 'Shipping - Click & Collect', 'shipping line'],
+            [$fee, 'Handling &amp; Packing', 'Handling & Packing', 'Handling & Packing', 'fee line'],
+        ];
+        foreach ($line_cases as [$lines, $stored, $saved, $sent, $desc]) {
+            $names = [];
+            foreach ([$stored, $saved] as $name) {
+                [$products, $shippings, $fees] = $lines($name);
+                $names[] = WC_Twoinc_Helper::get_line_items($products, $shippings, $fees, new StubOrder())[0]['name'];
+            }
+            TinyAssert::same([$sent, $sent], $names, "$desc: sent as plain text, stored or saved");
+        }
+    }
+
+    /**
+     * TWO-27374: one order-screen Update that edits what the invoice bills and sets the fulfilment status sends
+     * the edit before the fulfilment, so the save that follows has nothing to refuse. An unchanged order is
+     * fulfilled without an edit round-trip.
+     */
+    private static function testCompletionSendsAPendingInvoiceEditFirst(): void
+    {
+        $twoinc_meta = [
+            'order_reference' => 'test-order-reference', 'company_id' => '912345678', 'department' => '', 'project' => '',
+            'purchase_order_number' => '', 'invoice_emails' => [], 'payment_reference_message' => '', 'payment_reference_ocr' => '',
+            'payment_reference' => '', 'payment_reference_type' => '', 'vendor_name' => 'Vendor',
+        ];
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'api_key' ? 'key' : ($empty_value ?? '');
+            }
+
+            public function get_merchant_id()
+            {
+                return '42';
+            }
+
+            /** @var bool Two refuses the edit. */
+            public $refuse_edit = false;
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null, $timeout = 30, $idempotency_key = null)
+            {
+                if ($this->refuse_edit && $method === 'PUT') {
+                    $GLOBALS['__twoinc_test_http_calls'][] = ['url' => $endpoint, 'args' => ['method' => $method]];
+                    return ['response' => ['code' => 400], 'body' => json_encode(['error_message' => 'Refused']), 'headers' => []];
+                }
+                return parent::make_request($endpoint, $payload, $method, $params, $api_key_override, $timeout, $idempotency_key);
+            }
+        };
+        $process_update = new ReflectionMethod(WC_Twoinc::class, 'process_update_twoinc_order');
+        $process_update->setAccessible(true);
+        // An order of one product line and one shipping line; the product's name is the catalogue's.
+        $new_order = function (array $lines) {
+            [$total, $product_name, $shipping_name] = $lines;
+            return new class ($total, $product_name, $shipping_name) extends StubOrder {
+                private $total;
+                private $lines;
+
+                public function __construct(float $total, string $product_name, string $shipping_name)
+                {
+                    $this->total = $total;
+                    $product = new class ($product_name) {
+                        private $name;
+
+                        public function __construct(string $name)
+                        {
+                            $this->name = $name;
+                        }
+
+                        public function get_name()
+                        {
+                            return $this->name;
+                        }
+
+                        public function get_description()
+                        {
+                            return '';
+                        }
+
+                        public function get_id()
+                        {
+                            return 0;
+                        }
+
+                        public function get_permalink()
+                        {
+                            return '';
+                        }
+
+                        public function get_sku()
+                        {
+                            return '';
+                        }
+                    };
+                    $net = $total - 25.0;
+                    $this->lines = [
+                        'line_item' => [new StubProductLineItem(['name' => 'Order line', 'line_subtotal' => $net, 'line_total' => $net, 'data' => $product])],
+                        'shipping' => [new class ($shipping_name) extends StubShippingItem {
+                            private $label;
+
+                            public function __construct(string $label)
+                            {
+                                parent::__construct(25.0, 0.0);
+                                $this->label = $label;
+                            }
+
+                            public function get_name()
+                            {
+                                return $this->label;
+                            }
+                        }],
+                    ];
+                }
+
+                public function get_total()
+                {
+                    return $this->total;
+                }
+
+                public function get_items($type = 'line_item')
+                {
+                    return $this->lines[$type] ?? [];
+                }
+            };
+        };
+        $meta_for = function (array $accepted, string $state, bool $company_id) use ($new_order, $twoinc_meta) {
+            [$change, $invoice] = WC_Twoinc_Helper::hash_order_pair($new_order($accepted), $twoinc_meta);
+            return [
+                WC_Twoinc_Brand::prefixed_name('order_id') => 'two-order-1',
+                WC_Twoinc_Brand::meta_key('merchant_id') => '42',
+                WC_Twoinc_Brand::meta_key('order_state') => $state,
+                WC_Twoinc_Brand::meta_key('order_reference') => 'test-order-reference',
+                WC_Twoinc_Brand::meta_key('req_body_hash') => $change,
+                WC_Twoinc_Brand::meta_key('invoice_hash') => $invoice,
+                'vendor_name' => 'Vendor',
+            ] + ($company_id ? ['company_id' => '912345678'] : []);
+        };
+
+        $put = 'PUT /v1/order/two-order-1';
+        $fulfil = 'POST /v1/order/two-order-1/fulfillments';
+        $placed = [125.0, 'Widget', 'Courier'];
+        $repriced = [150.0, 'Widget', 'Courier'];
+        // [as Two accepted it, as it is now, tracking added, Two refuses the edit, from the order screen,
+        //  company number on the order, requests sent, refused-edit marker, description]
+        $cases = [
+            [$placed, $placed, false, false, true, true, [$fulfil], false, 'unchanged order: fulfilled with no edit'],
+            [$placed, $repriced, false, false, true, true, [$put, $fulfil], false, 'amount edited in the same Update: edit sent first'],
+            [$placed, $placed, true, false, true, true, [$put, $fulfil], false, 'tracking added: edit sent first'],
+            [$placed, $repriced, false, true, true, true, [$put, $fulfil], true, 'edit refused: still fulfilled, and the edit is marked not sent'],
+            [$placed, $placed, false, false, false, true, [$fulfil], false, 'status set in code, unchanged order: no edit'],
+            [$placed, $repriced, false, false, false, true, [$put, $fulfil], false, 'status set in code after an edit: edit sent first'],
+            [$placed, [125.0, 'Widget Pro', 'Courier'], false, false, false, true, [$fulfil], false, 'status set in code after a catalogue rename: no edit'],
+            [$placed, [125.0, 'Widget', 'Courier Express'], false, false, false, true, [$put, $fulfil], false, 'status set in code after a shipping title change: edit sent first'],
+            [$placed, $repriced, false, false, false, false, [$fulfil], false, 'no company number on the order: the Two order is not read and no edit is sent'],
+        ];
+        foreach ($cases as [$accepted, $now, $tracking, $refuse, $from_screen, $company_id, $requests, $marked, $desc]) {
+            $order = $new_order($now);
+            $order->payment_method = WC_Twoinc_Brand::get('gateway_id');
+            $order->meta = $meta_for($accepted, 'VERIFIED', $company_id);
+            if ($tracking) {
+                $order->meta['_wc_shipment_tracking_items'] = [['tracking_provider' => 'dhl', 'tracking_number' => 'TR-1']];
+            }
+            $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+            $GLOBALS['__twoinc_test_http_calls'] = [];
+            $gateway->refuse_edit = $refuse;
+            self::withGatewayInstance($gateway, function () {
+                // How WooCommerce reports every status change, from the order screen or from code.
+                WC_Twoinc::on_order_status_changed(42, 'processing', 'completed');
+            });
+            if ($from_screen) {
+                // The order screen's own sync, which runs after the status change.
+                $process_update->invoke($gateway, $order, $twoinc_meta);
+            }
+            $sent = array_map(function ($call) {
+                return ($call['args']['method'] ?? 'GET') . ' ' . parse_url($call['url'], PHP_URL_PATH);
+            }, $GLOBALS['__twoinc_test_http_calls']);
+            TinyAssert::same($requests, $sent, "$desc: requests");
+            TinyAssert::same('FULFILLING', $order->meta[WC_Twoinc_Brand::meta_key('order_state')], "$desc: fulfilled");
+            TinyAssert::same($marked, ($order->meta[WC_Twoinc_Brand::meta_key('not_sent_at')] ?? '') !== '', "$desc: refused-edit marker");
+            TinyAssert::true(strpos(implode("\n", $order->notes), 'Unable to retrieve') === false, "$desc: no failed-read note");
+        }
+        $gateway->refuse_edit = false;
+
+        // A fulfilled order saved on the order screen: only what the screen can edit counts as an edit.
+        // [as it is now, refused-edit marker, description]
+        $saved_cases = [
+            [[125.0, 'Widget Pro', 'Courier'], false, 'product renamed in the catalogue: no edit'],
+            [[125.0, 'Widget', 'Courier Express'], true, 'shipping title changed: an edit not sent'],
+        ];
+        foreach ($saved_cases as [$now, $marked, $desc]) {
+            $order = $new_order($now);
+            $order->meta = $meta_for($placed, 'FULFILLED', true);
+            $process_update->invoke($gateway, $order, $twoinc_meta);
+            TinyAssert::same($marked, ($order->meta[WC_Twoinc_Brand::meta_key('not_sent_at')] ?? '') !== '', "$desc: refused-edit marker");
+        }
+        $GLOBALS['__twoinc_test_wc_orders'] = [];
+        $GLOBALS['__twoinc_test_http_calls'] = [];
     }
 
     /** TWO-26205: WooCommerce is told the plugin supports HPOS and the checkout blocks. */

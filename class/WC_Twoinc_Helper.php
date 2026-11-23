@@ -25,6 +25,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /** The requests the API defines with no body (TWO-26340): sent empty whatever a subscriber returns. */
         private const BODYLESS_REQUEST_TYPES = ['order_confirm', 'cancel'];
 
+        /** The line types of a product line, whose name is the catalogue's (TWO-27374). */
+        private const PRODUCT_LINE_TYPES = ['PHYSICAL', 'DIGITAL'];
+
         /** Logged when a subscriber returns a body for a request with none. */
         public const BODY_NOT_ACCEPTED_CODE = 'TWO_ORDER_POSTPROCESSING_BODY_NOT_ACCEPTED';
 
@@ -645,14 +648,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 );
 
                 if (! is_object($product_simple)) {
-                    $name = method_exists($line_item, 'get_name') ? $line_item->get_name() : 'Item';
+                    $name = self::order_text(method_exists($line_item, 'get_name') ? $line_item->get_name() : 'Item');
                     $description = '';
                     $image_url = '';
                     $product_page_url = '';
                     $sku = '';
                     $categories = [];
                 } else {
-                    $name = $product_simple->get_name();
+                    $name = self::order_text($product_simple->get_name());
                     $description = substr($product_simple->get_description(), 0, 255);
                     $image_url = '';
                     if ($product_simple->get_id()) {
@@ -753,7 +756,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 }
                 $shipping_rates[$key] = $tax_rate;
                 $shipping_line = [
-                    'name' => 'Shipping - ' . $shipping->get_name(),
+                    'name' => 'Shipping - ' . self::order_text($shipping->get_name()),
                     'description' => '',
                     'gross_amount' => strval(WC_Twoinc_Helper::round_amt($shipping->get_total() + $shipping->get_total_tax())),
                     'net_amount' => strval(WC_Twoinc_Helper::round_amt($shipping->get_total())),
@@ -804,7 +807,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     // Already the resolved, translated, brand-correct label;
                     // no hardcoded prefix: 'type' below carries the semantic
                     // instead, BUYER_FEE for the plugin's own payment terms fee.
-                    'name' => $fee->get_name(),
+                    'name' => self::order_text($fee->get_name()),
                     'description' => '',
                     'gross_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total() + $fee->get_total_tax())),
                     'net_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total())),
@@ -1488,6 +1491,46 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * The order's billing and shipping address as Two receives them, shipping falling back to billing when it
+         * is empty. The Checkout block stores an address through wp_kses, which writes "&" as "&amp;", and the
+         * order screen saves it back as "&" (TWO-27374): decoded, the text is the same either way, the invoice
+         * prints what the buyer typed, and the change hash does not read the order screen's save as an edit.
+         *
+         * @param WC_Order $order
+         *
+         * @return array[] [billing address, shipping address]
+         */
+        private static function order_addresses($order): array
+        {
+            $addresses = [];
+            foreach (['billing', 'shipping'] as $role) {
+                $address_2 = $order->{"get_{$role}_address_2"}();
+                $addresses[] = [
+                    'organization_name' => self::order_text($order->{"get_{$role}_company"}()),
+                    'street_address' => self::order_text($order->{"get_{$role}_address_1"}() . ($address_2 ? (', ' . $address_2) : '')),
+                    'postal_code' => self::order_text($order->{"get_{$role}_postcode"}()),
+                    'city' => self::order_text($order->{"get_{$role}_city"}()),
+                    'region' => self::order_text($order->{"get_{$role}_state"}()),
+                    'country' => $order->{"get_{$role}_country"}()
+                ];
+            }
+            if (self::is_twoinc_address_empty($addresses[1])) {
+                $addresses[1] = $addresses[0];
+            }
+            return $addresses;
+        }
+
+        /**
+         * Text the shop may hold HTML-encoded (see order_addresses), as plain text.
+         *
+         * @param mixed $value
+         */
+        private static function order_text($value): string
+        {
+            return html_entity_decode((string) $value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        }
+
+        /**
          * Brand extension hooks fire in this order, each seeing the
          * previous one's result (the same hooks fire in
          * compose_twoinc_edit_order so create and edit stay symmetric):
@@ -1523,25 +1566,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $payment_terms = null
         ) {
 
-            $billing_address = [
-                'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_billing_address_1() . ($order->get_billing_address_2() ? (', ' . $order->get_billing_address_2()) : ''),
-                'postal_code' => $order->get_billing_postcode(),
-                'city' => $order->get_billing_city(),
-                'region' => $order->get_billing_state(),
-                'country' => $order->get_billing_country()
-            ];
-            $shipping_address = [
-                'organization_name' => $order->get_shipping_company(),
-                'street_address' => $order->get_shipping_address_1() . ($order->get_shipping_address_2() ? (', ' . $order->get_shipping_address_2()) : ''),
-                'postal_code' => $order->get_shipping_postcode(),
-                'city' => $order->get_shipping_city(),
-                'region' => $order->get_shipping_state(),
-                'country' => $order->get_shipping_country()
-            ];
-            if (WC_Twoinc_Helper::is_twoinc_address_empty($shipping_address)) {
-                $shipping_address = $billing_address;
-            }
+            [$billing_address, $shipping_address] = self::order_addresses($order);
 
             $invoice_details = [
                 'payment_reference_message' => $payment_reference_message,
@@ -1574,12 +1599,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
                         'organization_number' => $company_id,
                         'country_prefix' => $order->get_billing_country(),
                         // The captured company, not the address's — the two may differ.
-                        'company_name' => $order->get_meta('company_name') ?: $order->get_billing_company()
+                        'company_name' => self::order_text($order->get_meta('company_name') ?: $order->get_billing_company())
                     ],
                     'representative' => [
                         'email' => $order->get_billing_email(),
-                        'first_name' => $order->get_billing_first_name(),
-                        'last_name' => $order->get_billing_last_name(),
+                        'first_name' => self::order_text($order->get_billing_first_name()),
+                        'last_name' => self::order_text($order->get_billing_last_name()),
                         'phone_number' => self::buyer_phone($order)
                     ],
                 ],
@@ -1680,25 +1705,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $purchase_order_number
         ) {
 
-            $billing_address = [
-                'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_billing_address_1() . ($order->get_billing_address_2() ? (', ' . $order->get_billing_address_2()) : ''),
-                'postal_code' => $order->get_billing_postcode(),
-                'city' => $order->get_billing_city(),
-                'region' => $order->get_billing_state(),
-                'country' => $order->get_billing_country()
-            ];
-            $shipping_address = [
-                'organization_name' => $order->get_shipping_company(),
-                'street_address' => $order->get_shipping_address_1() . ($order->get_shipping_address_2() ? (', ' . $order->get_shipping_address_2()) : ''),
-                'postal_code' => $order->get_shipping_postcode(),
-                'city' => $order->get_shipping_city(),
-                'region' => $order->get_shipping_state(),
-                'country' => $order->get_shipping_country()
-            ];
-            if (WC_Twoinc_Helper::is_twoinc_address_empty($shipping_address)) {
-                $shipping_address = $billing_address;
-            }
+            [$billing_address, $shipping_address] = self::order_addresses($order);
 
             $line_items = self::expect_order_totals($order, 'order_update', true, WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order, false, null, $shipping_rates));
             $req_body = ['currency' => $order->get_currency()] + self::order_totals($order, self::placed_without_prepaid($order) ? [] : self::$whole_order_check['tenders']) + [
@@ -3287,12 +3294,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * The change hash, and a hash of only what the invoice bills: amounts,
-         * addresses, and each line's name, quantity and amount. The second
-         * judges whether an admin edit changed the order (TWO-26171). It
-         * leaves out shipping_details, which moves on its own (a tracking
-         * number added late, an expected delivery date taken from today) and
-         * is no edit to warn about (TWO-24762), and the rest of the body, so
-         * that a plugin update to it does not read as an edit.
+         * addresses, each line's quantity and amount, and the name of each
+         * line that is not a product. The second judges whether an admin edit
+         * changed the order (TWO-26171). It leaves out shipping_details, which
+         * moves on its own (a tracking number added late, an expected delivery
+         * date taken from today) and is no edit to warn about (TWO-24762), and
+         * the rest of the body, so that a plugin update to it does not read as
+         * an edit. A product line's name is read from the catalogue, which a
+         * rename or a translation layer changes and no order edit can, so it is
+         * left out too (TWO-27374).
          *
          * @return string[] [change hash, invoice hash]
          */
@@ -3321,7 +3331,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $invoiced[$key] = $body[$key] ?? null;
             }
             foreach ($body['line_items'] ?? [] as $line) {
-                $invoiced['line_items'][] = [$line['name'] ?? null, $line['quantity'] ?? null, $line['gross_amount'] ?? null];
+                $is_product = in_array($line['type'] ?? '', self::PRODUCT_LINE_TYPES, true);
+                $invoiced['line_items'][] = [$is_product ? null : ($line['name'] ?? null), $line['quantity'] ?? null, $line['gross_amount'] ?? null];
             }
             return [WC_Twoinc_Helper::hash_obj($body), WC_Twoinc_Helper::hash_obj($invoiced)];
         }
