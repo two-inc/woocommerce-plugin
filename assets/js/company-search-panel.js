@@ -418,9 +418,32 @@
     const HIGHLIGHT_TOKEN = /(<\/?(?:mark|b)>)/;
     const HIGHLIGHT_TAG = /^<(\/?)(mark|b)>$/;
 
+    /** A textarea in a document with no browsing context: parses, never runs or loads. */
+    let entityDecoder = null;
+
+    /**
+     * Decode the character references in one text token of the label, so
+     * the API's `&amp;` reads as `&`. The textarea parses its content as
+     * text only, so a decoded `<b>` stays text and never becomes an element.
+     *
+     * @param {string} text
+     * @returns {string}
+     */
+    function decodeEntities(text) {
+        if (text.indexOf('&') === -1) return text;
+        if (!entityDecoder) {
+            entityDecoder = document.implementation
+                .createHTMLDocument('')
+                .createElement('textarea');
+        }
+        entityDecoder.innerHTML = text;
+        return entityDecoder.value;
+    }
+
     /**
      * Rebuild a row's registry-sourced label as nodes, keeping only the
-     * `<mark>`/`<b>` pair the API marks the match with.
+     * `<mark>`/`<b>` pair the API marks the match with. The label is HTML,
+     * so its text is entity-decoded before it becomes a text node.
      *
      * @param {string} html
      * @returns {DocumentFragment}
@@ -433,7 +456,7 @@
             const host = open[open.length - 1];
             const tag = HIGHLIGHT_TAG.exec(token);
             if (!tag) {
-                if (token) host.appendChild(document.createTextNode(token));
+                if (token) host.appendChild(document.createTextNode(decodeEntities(token)));
                 return;
             }
             if (!tag[1]) {

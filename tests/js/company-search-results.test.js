@@ -264,7 +264,7 @@ describe("company search results", () => {
       ],
       [
         "&lt;mark&gt;Ex&lt;/mark&gt;ample Co",
-        "&amp;lt;mark&amp;gt;Ex&amp;lt;/mark&amp;gt;ample Co (11111111)",
+        "&lt;mark&gt;Ex&lt;/mark&gt;ample Co (11111111)",
         "an already entity-encoded mark"
       ]
     ])("a row renders %s as %s (%s)", async (highlight, rendered) => {
@@ -273,6 +273,35 @@ describe("company search results", () => {
       ]);
 
       expect(document.querySelector(".two-company-dropdown__row").innerHTML).toBe(rendered);
+    });
+
+    // TWO-27368. The label is HTML, so its text is entity-decoded once and
+    // shown as text: the buyer reads "&", never "&amp;", and a decoded tag
+    // never becomes an element.
+    test.each([
+      ["Example &amp; Co", "Example & Co (11111111)", "", "an encoded ampersand"],
+      ["Example & Co", "Example & Co (11111111)", "", "a raw ampersand"],
+      ["<mark>Example &amp; Co</mark>", "Example & Co (11111111)", "mark", "an encoded ampersand inside the highlight"],
+      ["Example &#39;s &quot;Co&quot;", "Example 's \"Co\" (11111111)", "", "numeric and named quotes"],
+      ["&lt;b&gt;Example Co", "<b>Example Co (11111111)", "", "an encoded bold tag"],
+      ["&amp;lt;b&amp;gt;Example Co", "&lt;b&gt;Example Co (11111111)", "", "a double-encoded tag is decoded once"],
+      [
+        "</textarea><img src=x onerror=alert(1)>&amp; Co",
+        "</textarea><img src=x onerror=alert(1)>& Co (11111111)",
+        "",
+        "a textarea breakout"
+      ]
+    ])("a row decodes %s to %s", async (highlight, text, element, description) => {
+      await searchYielding("example", [
+        { name: "Example Co", highlight: highlight, national_identifier: { id: "11111111" } }
+      ]);
+
+      const row = document.querySelector(".two-company-dropdown__row");
+      expect({ description, text: row.textContent }).toEqual({ description, text });
+      const elements = Array.prototype.map.call(row.querySelectorAll("*"), (node) =>
+        node.tagName.toLowerCase()
+      );
+      expect({ description, elements }).toEqual({ description, elements: element ? [element] : [] });
     });
 
     test("the field takes the plain name, never the markup", async () => {
