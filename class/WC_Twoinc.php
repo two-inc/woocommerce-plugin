@@ -4833,14 +4833,19 @@ if (!class_exists('WC_Twoinc')) {
         private const INVOICED_ORDER_STATES = ['FULFILLING', 'FULFILLED', 'DELIVERED', 'REFUNDED', 'PARTIALLY_REFUNDED'];
 
         /**
-         * Whether Two has issued, or is issuing, the order's invoice: it has accepted the fulfilment (TWO-27373).
-         * The WooCommerce status alone is not enough, as an order can be completed while Two refused or never
-         * received the fulfilment. An order with no recorded state keeps the WooCommerce status rule.
+         * Whether the order may have a Two invoice (TWO-27373). The WooCommerce status alone is not enough, as an
+         * order can be completed while Two refused or never received the fulfilment. Hidden only where the order
+         * records that it has none: a Two state from before fulfilment and no invoice number. Releases before
+         * 3.0 stored the invoice number from the fulfilment answer, so a legacy fulfilled order keeps its link;
+         * an order with no recorded state keeps the WooCommerce status rule.
          *
          * @param WC_Order $order
          */
         public static function has_invoice($order): bool
         {
+            if ('' !== (string) $order->get_meta('invoice_number', true)) {
+                return true;
+            }
             $state = (string) $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
             if ('' === $state) {
                 return in_array($order->get_status(), ['completed', 'refunded'], true);

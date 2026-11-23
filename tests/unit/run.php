@@ -10766,23 +10766,28 @@ final class BrandConfigSpec
     private static function testTheInvoiceLinkWaitsForTwosFulfilment(): void
     {
         $cases = [
-            // Two's state, WooCommerce status, link shown, description
-            ['VERIFIED', 'completed', false, 'a completed order Two has not fulfilled'],
-            ['CONFIRMED', 'completed', false, 'a completed order Two holds as confirmed'],
-            ['CANCELLED', 'completed', false, 'a cancelled order'],
-            ['FULFILLING', 'completed', true, 'a fulfilment Two accepted'],
-            ['FULFILLED', 'processing', true, 'a fulfilled order moved back to processing'],
-            ['DELIVERED', 'completed', true, 'a delivered order'],
-            ['PARTIALLY_REFUNDED', 'completed', true, 'a partly refunded order'],
-            ['REFUNDED', 'refunded', true, 'a refunded order'],
-            ['', 'completed', true, 'an order with no recorded state, completed'],
-            ['', 'processing', false, 'an order with no recorded state, processing'],
+            // Two's state, WooCommerce status, legacy invoice number, link shown, description
+            ['UNVERIFIED', 'completed', '', false, 'a completed order Two has not verified'],
+            ['VERIFIED', 'completed', '', false, 'a completed order Two has not fulfilled'],
+            ['CONFIRMED', 'completed', '', false, 'a completed order Two holds as confirmed'],
+            ['CANCELLED', 'completed', '', false, 'a cancelled order'],
+            ['FULFILLING', 'completed', '', true, 'a fulfilment Two accepted'],
+            ['FULFILLED', 'processing', '', true, 'a fulfilled order moved back to processing'],
+            ['DELIVERED', 'completed', '', true, 'a delivered order'],
+            ['PARTIALLY_REFUNDED', 'completed', '', true, 'a partly refunded order'],
+            ['REFUNDED', 'refunded', '', true, 'a refunded order'],
+            ['VERIFIED', 'completed', 'INV-1001', true, 'a legacy order holding an invoice number'],
+            ['', 'completed', '', true, 'an order with no recorded state, completed'],
+            ['', 'processing', '', false, 'an order with no recorded state, processing'],
         ];
-        foreach ($cases as [$state, $status, $shown, $description]) {
+        foreach ($cases as [$state, $status, $invoice_number, $shown, $description]) {
             $order = self::registerTwoOrder();
             $order->status = $status;
             if ('' !== $state) {
                 $order->meta[WC_Twoinc_Brand::meta_key('order_state')] = $state;
+            }
+            if ('' !== $invoice_number) {
+                $order->meta['invoice_number'] = $invoice_number;
             }
             ob_start();
             self::invoiceGateway([])->add_invoice_credit_note_urls($order);
