@@ -1323,8 +1323,31 @@ describe("billing country switch", () => {
           await flushPromises();
           clickFirstResultRow();
         }
+      },
+      {
+        description: "a shipping country switch",
+        change: async () => {
+          ctx.capture.write("Example Co", "123456789", { role: ctx.roles.delivery() });
+          ctx.$("#shipping_country").val("ES").trigger("change");
+        }
+      },
+      {
+        description: "a company typed in delivery",
+        change: async () => {
+          ctx.capture.write("Example Co", "123456789", { role: ctx.roles.delivery() });
+          ctx.$("#shipping_company").val("Other Example Co").trigger("input").trigger("change");
+        }
       }
     ])("$description", async ({ description, change }) => {
+      ctx
+        .$("form[name='checkout']")
+        .append(
+          '<select id="shipping_country" name="shipping_country">' +
+            '<option value="GB" selected>United Kingdom</option><option value="ES">Spain</option></select>' +
+            '<input type="text" id="shipping_company" name="shipping_company" value="" />' +
+            '<input type="text" id="shipping_company_display" name="shipping_company_display" value="" />' +
+            '<input type="text" id="shipping_company_id" name="shipping_company_id" value="" />'
+        );
       initializeCheckout();
       ctx
         .$("form[name='checkout']")
