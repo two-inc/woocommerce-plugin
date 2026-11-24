@@ -3189,7 +3189,12 @@ let twoincDomHelper = {
             document.querySelector("#" + inp.id).value = inp.val;
           }
         } else if (inp.type === "radio") {
-          if (document.querySelector("#" + inp.id) && inp.id != "payment_method_kco") {
+          // The payment method is the WooCommerce session's choice, rendered
+          // as the checked radio: replaying the stored one would re-select Two
+          // for a buyer it declined, who came back to pay another way
+          // (TWO-27397), and would open Klarna Checkout over the page.
+          if (inp.name === "payment_method") continue;
+          if (document.querySelector("#" + inp.id)) {
             document.querySelector("#" + inp.id).click();
           }
         } else if (inp.type === "checkbox") {
@@ -7659,7 +7664,10 @@ jQuery(function () {
         });
       });
 
-      // If last selected payment method is Twoinc, run Twoinc code anyway
+      // A buyer whose snapshot was taken with Twoinc selected gets the
+      // Twoinc code and the snapshot's saved fields restored at load. The
+      // restore does not re-select Twoinc (TWO-27397): the payment method
+      // stays the one WooCommerce rendered from the session.
       let lastSelectedPayment = twoincDomHelper.getCheckoutInput(
         "INPUT",
         "radio",
