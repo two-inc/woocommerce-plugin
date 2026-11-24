@@ -145,6 +145,30 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
+         * The Store API sends address fields HTML-escaped ("A & B" arrives as "A &#038; B"), the
+         * Checkout block keeps that text in its cart store and posts it back at checkout, and
+         * WooCommerce saves it as it arrives. So a Two order's company is decoded once here, the
+         * point where the Store API has written the addresses and not yet saved the order, and
+         * then sanitised as WooCommerce sanitises typed text (TWO-27368). Orders paid another
+         * way are left as WooCommerce writes them.
+         *
+         * @param WC_Order $order
+         */
+        public static function decode_store_api_company($order): void
+        {
+            if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
+                return;
+            }
+            foreach (['billing', 'shipping'] as $role) {
+                $company = (string) $order->{'get_' . $role . '_company'}();
+                $decoded = sanitize_text_field(html_entity_decode($company, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                if ($decoded !== $company) {
+                    $order->{'set_' . $role . '_company'}($decoded);
+                }
+            }
+        }
+
+        /**
          * A Blocks checkout render, or the Store API call that serves it.
          *
          * @return bool

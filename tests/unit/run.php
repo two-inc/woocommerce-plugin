@@ -14,6 +14,7 @@ require __DIR__ . '/AllowedFieldsSpec.php';
 require __DIR__ . '/OrderTermWireSpec.php';
 require __DIR__ . '/PendingRecoverySpec.php';
 require __DIR__ . '/BuyerPhoneSpec.php';
+require __DIR__ . '/StoreApiCompanySpec.php';
 
 final class TinyAssert
 {
@@ -20110,4 +20111,5 @@ AllowedFieldsSpec::runAll();
 OrderTermWireSpec::runAll();
 PendingRecoverySpec::runAll();
 BuyerPhoneSpec::runAll();
+StoreApiCompanySpec::runAll();
 print("All tests passed.\n");

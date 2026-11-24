@@ -129,6 +129,16 @@
     return (customer && customer[key]) || null;
   }
 
+  /**
+   * One address value as the buyer typed it. The Store API sends address
+   * fields HTML-escaped, so a company "A & B" comes back as "A &amp; B";
+   * the fields the controller reads hold text, and every comparison with
+   * them is made in text too (TWO-27368).
+   */
+  function storedText(address, key) {
+    return decode(asText(address[key]));
+  }
+
   /** jQuery assigns `.value` and fires nothing, so an accessor is the only hook. */
   function announceWrites(input, announce) {
     var native = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
@@ -189,7 +199,7 @@
         add(entry.role + "_" + key, function () {
           var address = storedAddress(entry.store);
           // Null until an address answers, since by the push this write is the store's own value.
-          var was = address ? String(address[key] == null ? "" : address[key]) : null;
+          var was = address ? storedText(address, key) : null;
           (dirty[entry.role] = dirty[entry.role] || {})[key] = {
             was: was,
             sends: SENDS,
@@ -252,7 +262,7 @@
         // Skipped only until the store holds this write; the record outlives that.
         if (held && !held.taken) return;
         var input = document.getElementById(entry.role + "_" + key);
-        var value = address[key] == null ? "" : String(address[key]);
+        var value = storedText(address, key);
         if (input && input.value !== value) {
           input.value = value;
           moved = true;
@@ -376,7 +386,7 @@
         Object.keys(written).forEach(function (key) {
           var held = written[key];
           var input = document.getElementById(entry.role + "_" + key);
-          var stored = address[key] == null ? "" : String(address[key]);
+          var stored = storedText(address, key);
           // No address at the write: the first to answer is what it replaced. Ahead
           // of the agreement below, which would leave `was` unset for the next value.
           if (held.was === null) held.was = stored;

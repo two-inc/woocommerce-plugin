@@ -2223,3 +2223,55 @@ describe("blocks-checkout.js answers whether delivery is the invoice address", (
     });
   });
 });
+
+/**
+ * TWO-27368. The Store API answers with address fields HTML-escaped, so a
+ * company "Example & Co" comes back as "Example &amp; Co". The fields the
+ * controller reads, and the order it submits, take the text.
+ */
+describe("blocks-checkout.js reads the store's addresses as text", () => {
+  /** What `wp.htmlEntities.decodeEntities` does: decode in a detached textarea. */
+  function decodeEntities(value) {
+    const textarea = document.createElement("textarea");
+    textarea.innerHTML = value;
+    return textarea.value;
+  }
+
+  function evaluateWith(billing, shipping) {
+    const base = baseGlobals("address_area", billing, shipping);
+    const { env } = globals({});
+    env.wp.data = base.data;
+    env.wp.htmlEntities = { decodeEntities };
+    evaluate(env);
+    return base;
+  }
+
+  test.each([
+    ["Example &amp; Co", "Example & Co", "an escaped ampersand"],
+    ["Example & Co", "Example & Co", "a raw ampersand"],
+    ["Example &#039;s Co", "Example 's Co", "an escaped apostrophe"],
+    ["&lt;b&gt;Example Co", "<b>Example Co", "an escaped tag stays text"]
+  ])("the store's %s reaches both company fields as %s (%s)", (stored, text, description) => {
+    evaluateWith({ company: stored }, { company: stored });
+
+    expect({
+      description,
+      billing: shadowInput("billing_company").value,
+      shipping: shadowInput("shipping_company").value
+    }).toEqual({ description, billing: text, shipping: text });
+  });
+
+  test("a write the store answers escaped counts as taken, not refused", async () => {
+    const base = evaluateWith({ company: "" });
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_company").value = "Example & Co";
+    await Promise.resolve();
+    base.receiveCart({ company: "Example &amp; Co" });
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ company: "Example & Co" }]);
+    expect(shadowInput("billing_company").value).toBe("Example & Co");
+  });
+});
