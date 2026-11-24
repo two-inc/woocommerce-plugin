@@ -574,6 +574,26 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * @return bool
          */
+        /**
+         * Where Two's checkout sends a buyer it did not approve, or who left it (TWO-27388): the plugin's own
+         * route, handled by WC_Twoinc::process_decline_return(). It names the order, carries the order key so it
+         * works from any browser, and names the checkout attempt by the order reference that attempt minted,
+         * since the Two order id is not known until Two answers. Detected by its parameters; the path is cosmetic,
+         * as for the confirmation URL.
+         */
+        public static function decline_return_url($order, string $order_reference): string
+        {
+            return add_query_arg(
+                [
+                    'order_id' => $order->get_id(),
+                    WC_Twoinc_Brand::prefixed_name('order_key') => $order->get_order_key(),
+                    WC_Twoinc_Brand::prefixed_name('order_reference') => $order_reference,
+                    WC_Twoinc_Brand::prefixed_name('decline_return') => '1',
+                ],
+                get_home_url() . '/twoinc-payment-gateway/decline'
+            );
+        }
+
         public static function is_twoinc_order($order)
         {
             return $order && $order->get_payment_method() && $order->get_payment_method() === WC_Twoinc_Brand::get('gateway_id');
@@ -1617,9 +1637,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'merchant_order_id' => strval($order->get_id()),
                 'merchant_reference' => '',
                 'merchant_urls' => [
-                    'merchant_cancel_order_url' => wp_specialchars_decode($order->get_cancel_order_url()),
+                    // Both send a buyer Two did not approve back to choose another payment method (TWO-27388).
+                    'merchant_cancel_order_url' => self::decline_return_url($order, (string) $order_reference),
                     'merchant_edit_order_url' => wp_specialchars_decode($order->get_edit_order_url()),
-                    'merchant_order_verification_failed_url' => wp_specialchars_decode($order->get_cancel_order_url()),
+                    'merchant_order_verification_failed_url' => self::decline_return_url($order, (string) $order_reference),
                     'merchant_invoice_url' => '',
                     'merchant_shipping_document_url' => ''
                 ],

@@ -263,6 +263,8 @@ function load_twoinc_classes()
 
     // Confirm order after returning from Two's hosted checkout page, DO NOT CHANGE HOOKS
     add_action('template_redirect', 'WC_Twoinc::process_confirmation_header_redirect');
+    // A buyer Two did not approve comes back here to choose another payment method (TWO-27388).
+    add_action('template_redirect', 'WC_Twoinc::process_decline_return_redirect');
     // add_action('template_redirect', 'WC_Twoinc::before_process_confirmation');
     // add_action('get_header', 'WC_Twoinc::process_confirmation_header_redirect');
     // add_action('init', 'WC_Twoinc::process_confirmation_js_redirect'); // some theme does not call get_header()

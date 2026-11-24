@@ -75,9 +75,9 @@
             "merchant_order_id": "42",
             "merchant_reference": "",
             "merchant_urls": {
-                "merchant_cancel_order_url": "https://shop.example/cancel",
+                "merchant_cancel_order_url": "https://shop.example/twoinc-payment-gateway/decline?order_id=42&twoinc_order_key=wc_order_stubkey&twoinc_order_reference=ref&twoinc_decline_return=1",
                 "merchant_edit_order_url": "https://shop.example/edit",
-                "merchant_order_verification_failed_url": "https://shop.example/cancel",
+                "merchant_order_verification_failed_url": "https://shop.example/twoinc-payment-gateway/decline?order_id=42&twoinc_order_key=wc_order_stubkey&twoinc_order_reference=ref&twoinc_decline_return=1",
                 "merchant_invoice_url": "",
                 "merchant_shipping_document_url": "",
                 "merchant_confirmation_url": "https://shop.example/twoinc-payment-gateway/confirm?order_id=42&twoinc_order_reference=ref&twoinc_csrf_token=testtoken:twoinc_confirm_42"
@@ -324,9 +324,9 @@
             "merchant_order_id": "42",
             "merchant_reference": "",
             "merchant_urls": {
-                "merchant_cancel_order_url": "https://shop.example/cancel",
+                "merchant_cancel_order_url": "https://shop.example/twoinc-payment-gateway/decline?order_id=42&twoinc_order_key=wc_order_stubkey&twoinc_order_reference=ref&twoinc_decline_return=1",
                 "merchant_edit_order_url": "https://shop.example/edit",
-                "merchant_order_verification_failed_url": "https://shop.example/cancel",
+                "merchant_order_verification_failed_url": "https://shop.example/twoinc-payment-gateway/decline?order_id=42&twoinc_order_key=wc_order_stubkey&twoinc_order_reference=ref&twoinc_decline_return=1",
                 "merchant_invoice_url": "",
                 "merchant_shipping_document_url": "",
                 "merchant_confirmation_url": "https://shop.example/twoinc-payment-gateway/confirm?order_id=42&twoinc_order_reference=ref&twoinc_csrf_token=testtoken:twoinc_confirm_42"
@@ -604,9 +604,9 @@
             "merchant_order_id": "42",
             "merchant_reference": "",
             "merchant_urls": {
-                "merchant_cancel_order_url": "https://shop.example/cancel",
+                "merchant_cancel_order_url": "https://shop.example/twoinc-payment-gateway/decline?order_id=42&twoinc_order_key=wc_order_stubkey&twoinc_order_reference=ref&twoinc_decline_return=1",
                 "merchant_edit_order_url": "https://shop.example/edit",
-                "merchant_order_verification_failed_url": "https://shop.example/cancel",
+                "merchant_order_verification_failed_url": "https://shop.example/twoinc-payment-gateway/decline?order_id=42&twoinc_order_key=wc_order_stubkey&twoinc_order_reference=ref&twoinc_decline_return=1",
                 "merchant_invoice_url": "",
                 "merchant_shipping_document_url": "",
                 "merchant_confirmation_url": "https://shop.example/twoinc-payment-gateway/confirm?order_id=42&twoinc_order_reference=ref&twoinc_csrf_token=testtoken:twoinc_confirm_42"
@@ -859,9 +859,9 @@
             "merchant_order_id": "42",
             "merchant_reference": "",
             "merchant_urls": {
-                "merchant_cancel_order_url": "https://shop.example/cancel",
+                "merchant_cancel_order_url": "https://shop.example/twoinc-payment-gateway/decline?order_id=42&twoinc_order_key=wc_order_stubkey&twoinc_order_reference=ref&twoinc_decline_return=1",
                 "merchant_edit_order_url": "https://shop.example/edit",
-                "merchant_order_verification_failed_url": "https://shop.example/cancel",
+                "merchant_order_verification_failed_url": "https://shop.example/twoinc-payment-gateway/decline?order_id=42&twoinc_order_key=wc_order_stubkey&twoinc_order_reference=ref&twoinc_decline_return=1",
                 "merchant_invoice_url": "",
                 "merchant_shipping_document_url": "",
                 "merchant_confirmation_url": "https://shop.example/twoinc-payment-gateway/confirm?order_id=42&twoinc_order_reference=ref&twoinc_csrf_token=testtoken:twoinc_confirm_42"
@@ -1053,9 +1053,9 @@
             "merchant_order_id": "42",
             "merchant_reference": "",
             "merchant_urls": {
-                "merchant_cancel_order_url": "https://shop.example/cancel",
+                "merchant_cancel_order_url": "https://shop.example/twoinc-payment-gateway/decline?order_id=42&twoinc_order_key=wc_order_stubkey&twoinc_order_reference=ref&twoinc_decline_return=1",
                 "merchant_edit_order_url": "https://shop.example/edit",
-                "merchant_order_verification_failed_url": "https://shop.example/cancel",
+                "merchant_order_verification_failed_url": "https://shop.example/twoinc-payment-gateway/decline?order_id=42&twoinc_order_key=wc_order_stubkey&twoinc_order_reference=ref&twoinc_decline_return=1",
                 "merchant_invoice_url": "",
                 "merchant_shipping_document_url": "",
                 "merchant_confirmation_url": "https://shop.example/twoinc-payment-gateway/confirm?order_id=42&twoinc_order_reference=ref&twoinc_csrf_token=testtoken:twoinc_confirm_42"
@@ -1247,9 +1247,9 @@
             "merchant_order_id": "42",
             "merchant_reference": "",
             "merchant_urls": {
-                "merchant_cancel_order_url": "https://shop.example/cancel",
+                "merchant_cancel_order_url": "https://shop.example/twoinc-payment-gateway/decline?order_id=42&twoinc_order_key=wc_order_stubkey&twoinc_order_reference=ref&twoinc_decline_return=1",
                 "merchant_edit_order_url": "https://shop.example/edit",
-                "merchant_order_verification_failed_url": "https://shop.example/cancel",
+                "merchant_order_verification_failed_url": "https://shop.example/twoinc-payment-gateway/decline?order_id=42&twoinc_order_key=wc_order_stubkey&twoinc_order_reference=ref&twoinc_decline_return=1",
                 "merchant_invoice_url": "",
                 "merchant_shipping_document_url": "",
                 "merchant_confirmation_url": "https://shop.example/twoinc-payment-gateway/confirm?order_id=42&twoinc_order_reference=ref&twoinc_csrf_token=testtoken:twoinc_confirm_42"

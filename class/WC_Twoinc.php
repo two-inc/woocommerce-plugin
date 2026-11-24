@@ -7218,7 +7218,120 @@ if (!class_exists('WC_Twoinc')) {
                 case WC_Twoinc_Pending_Recovery::OUTCOME_NOT_WAITING:
                     return $this->settled_return_url((int) $order->get_id());
             }
-            return wp_specialchars_decode($order->get_cancel_order_url());
+            // Not placed: on to the decline return, which closes the order if Two will not take payment for it and
+            // sends the buyer to choose another payment method (TWO-27388).
+            return WC_Twoinc_Helper::decline_return_url($order, $order_reference);
+        }
+
+        /**
+         * `template_redirect`: the buyer's return from a checkout Two did not approve, or that they left
+         * (TWO-27388).
+         *
+         * @return void
+         */
+        public static function process_decline_return_redirect()
+        {
+            $redirect_url = WC_Twoinc::get_instance()->process_decline_return();
+            if (isset($redirect_url)) {
+                wp_redirect($redirect_url);
+                exit;
+            }
+        }
+
+        /**
+         * Handles the URL WC_Twoinc_Helper::decline_return_url() builds. The click is never trusted: the order is
+         * read from Two through the pending-order resolver, under its lock. A verified order is placed as on the
+         * confirmation route. One Two cancelled, rejected or declined is closed as failed, and one the buyer left
+         * unverified is cancelled with Two first. A link from an earlier checkout attempt changes nothing. The
+         * buyer is then sent to choose another payment method.
+         *
+         * @return string|null where to send the buyer, or null when this is not the decline return
+         */
+        private function process_decline_return()
+        {
+            if (!isset($_GET[WC_Twoinc_Brand::prefixed_name('decline_return')], $_GET['order_id'])) {
+                return null;
+            }
+            status_header(200);
+
+            $order_id = absint($_GET['order_id']);
+            $order = wc_get_order($order_id);
+            $order_key = sanitize_text_field(wp_unslash($_GET[WC_Twoinc_Brand::prefixed_name('order_key')] ?? ''));
+            if (!$order || $order_key === '' || !hash_equals((string) $order->get_order_key(), $order_key)) {
+                wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
+            }
+            $order_reference = sanitize_text_field(wp_unslash($_GET[WC_Twoinc_Brand::prefixed_name('order_reference')] ?? ''));
+
+            $result = WC_Twoinc_Pending_Recovery::resolve(
+                $this,
+                $order_id,
+                WC_Twoinc_Pending_Recovery::TRIGGER_DECLINE_RETURN,
+                WC_Twoinc_Pending_Recovery::INTERACTIVE_LOCK_WAIT,
+                $order_reference
+            );
+            switch ($result['outcome']) {
+                case WC_Twoinc_Pending_Recovery::OUTCOME_CONFIRMED:
+                case WC_Twoinc_Pending_Recovery::OUTCOME_PROCESSED:
+                    return wp_specialchars_decode($order->get_checkout_order_received_url());
+                case WC_Twoinc_Pending_Recovery::OUTCOME_STALE:
+                    return wc_get_cart_url();
+                case WC_Twoinc_Pending_Recovery::OUTCOME_BUSY:
+                    return $this->settled_return_url($order_id);
+                case WC_Twoinc_Pending_Recovery::OUTCOME_NOT_WAITING:
+                    // Already closed (a second click) or cancelled: told again. Paid or otherwise settled: placed.
+                    $order = WC_Twoinc_Pending_Recovery::fresh_order($order_id);
+                    if ($order && !$order->has_status(['pending', 'failed', 'cancelled'])) {
+                        return wp_specialchars_decode($order->get_checkout_order_received_url());
+                    }
+            }
+            return $this->decline_landing_url($order_id);
+        }
+
+        /**
+         * Where a buyer Two did not approve lands, told so. In the browser that holds their basket for this order
+         * (TWO-27388) they go back to checkout, with Two still offered but no longer preselected; WooCommerce
+         * resumes the failed order while the basket is unchanged. Anywhere else there is no basket to restore:
+         * they land on the cart, and a session is started so the message survives the redirect.
+         */
+        private function decline_landing_url(int $order_id): string
+        {
+            $message = sprintf(
+                /* translators: %s is the brand product name (e.g. "Two") */
+                __('%s could not approve this purchase. Please choose another payment method.', 'twoinc-payment-gateway'),
+                WC_Twoinc_Brand::get('product_name')
+            );
+            $session = WC()->session ?? null;
+            $cart = WC()->cart ?? null;
+            // The classic checkout records the order it is paying as order_awaiting_payment, the block checkout as
+            // store_api_draft_order.
+            $same_session = $session && $cart && !$cart->is_empty()
+                && in_array($order_id, [absint($session->get('order_awaiting_payment')), absint($session->get('store_api_draft_order'))], true);
+            if ($same_session) {
+                self::withdraw_preselection($session);
+                wc_add_notice($message, 'error');
+                return wc_get_checkout_url();
+            }
+            if ($session && method_exists($session, 'has_session') && !$session->has_session() && method_exists($session, 'set_customer_session_cookie')) {
+                $session->set_customer_session_cookie(true);
+            }
+            wc_add_notice($message, 'error');
+            return wc_get_cart_url();
+        }
+
+        /**
+         * Two stays offered to a buyer who came back to pay another way, but is not chosen for them: the first other
+         * payment method the checkout offers is, as WooCommerce would choose with Two not there. A choice of
+         * another method is kept.
+         */
+        private static function withdraw_preselection($session): void
+        {
+            $id = WC_Twoinc_Brand::get('gateway_id');
+            $chosen = (string) $session->get('chosen_payment_method');
+            if ($chosen !== '' && $chosen !== $id) {
+                return;
+            }
+            $others = array_values(array_diff(array_keys((array) WC()->payment_gateways()->get_available_payment_gateways()), [$id]));
+            $session->set('chosen_payment_method', $others[0] ?? '');
         }
 
         /**

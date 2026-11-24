@@ -657,7 +657,7 @@ add_filter('twoinc_order_postprocessing', function (array $payload, array $conte
   | Key                          | Type                      | Meaning                                                                                                                                                                                                                                                                                                |
   | ---------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
   | `request_type`               | string                    | `order_intent`, `order_create`, `order_update`, `order_confirm`, `capture`, `refund` or `cancel`                                                                                                                                                                                                       |
-  | `trigger`                    | string                    | What caused it, for diagnosis: `checkout`, `change_hash`, `admin_edit`, `tracking_number`, `confirmation_redirect`, `scheduled_check`, `admin_check`, `unpaid_order_cancel`, `status_change`, `order_refund`                                                                                           |
+  | `trigger`                    | string                    | What caused it, for diagnosis: `checkout`, `change_hash`, `admin_edit`, `tracking_number`, `confirmation_redirect`, `decline_return`, `scheduled_check`, `admin_check`, `unpaid_order_cancel`, `status_change`, `order_refund`                                                                         |
   | `endpoint`                   | string                    | The API path, e.g. `/v1/order/<id>/refund`                                                                                                                                                                                                                                                             |
   | `order`                      | `WC_Order`                | The order; for `order_intent` an unsaved order built from the cart                                                                                                                                                                                                                                     |
   | `refund`                     | `WC_Order_Refund` or null | The refund being sent, for `refund`                                                                                                                                                                                                                                                                    |
@@ -994,16 +994,19 @@ return from Two's checkout used to be the only thing that confirmed it, so a
 buyer who verified and then closed the tab left an order Two would honour
 sitting unpaid in the shop. The plugin now checks waiting orders with Two
 itself, through one resolver (`WC_Twoinc_Pending_Recovery::resolve()`) that
-four triggers share. An order is waiting while it is Pending payment. The
-buyer's return and the admin action also take a Failed order as waiting:
-WooCommerce's classic checkout resumes a failed order without setting it back
-to pending, so a buyer can pay a failed order with Two. The scheduled check and
+five triggers share. An order is waiting while it is Pending payment. The
+buyer's returns and the admin action also take a Failed order as waiting:
+WooCommerce's classic and block checkouts resume a failed order without setting
+it back to pending, so a buyer can pay a failed order with Two. A Failed order
+whose stored Two state is CANCELLED was closed by the resolver and no longer
+waits for any trigger, until it is sent to Two again. The scheduled check and
 the unpaid-order time limit leave a Failed order alone, since a merchant may
 have set that status by hand.
 
 | Trigger                 | When                                                                                                                   |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `confirmation_redirect` | The buyer returns from Two's checkout                                                                                  |
+| `decline_return`        | The buyer comes back from a Two checkout that did not approve them, or that they left; see below                       |
 | `scheduled_check`       | The Action Scheduler action `twoinc_check_pending_orders`, every 15 minutes (WooCommerce > Status > Scheduled Actions) |
 | `admin_check`           | The order screen's Order actions box: **Check status with Two**, offered for a Pending payment or Failed Two order     |
 | `unpaid_order_cancel`   | WooCommerce's unpaid-order time limit (Hold stock) would cancel the order; see below                                   |
@@ -1011,14 +1014,55 @@ have set that status by hand.
 The resolver reads the order from Two (`GET /v1/order/<id>`) and acts on its
 state:
 
-| Two reports                                                                                           | The shop                                                                                                                                      |
-| ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| UNVERIFIED                                                                                            | Nothing changes, except at the unpaid-order time limit (below). The buyer's return goes to the cancel page, as before                         |
-| VERIFIED                                                                                              | Confirms with Two, then marks the order paid exactly as the return does (`payment_complete()`)                                                |
-| CONFIRMED, FULFILLING, FULFILLED, DELIVERED, FULFILMENT_NEEDS_MANUAL_RESOLUTION                       | Marks the order paid without confirming again                                                                                                 |
-| CANCELLED (including Two's own cancellation of an unverified order), or a REJECTED or DECLINED status | Cancels the order here without sending a cancel to Two: the order state is stored as CANCELLED first, so the cancel handler treats it as done |
-| Any other state                                                                                       | Nothing changes; logged, and noted on the order once per state                                                                                |
-| A failed read                                                                                         | Nothing changes, except at the unpaid-order time limit (below); logged, and the next run retries                                              |
+| Two reports                                                                                           | The shop                                                                                                                                          |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| UNVERIFIED                                                                                            | Nothing changes, except at the unpaid-order time limit (below) and on the decline return, which cancels it with Two, then closes it               |
+| VERIFIED                                                                                              | Confirms with Two, then marks the order paid exactly as the return does (`payment_complete()`)                                                    |
+| CONFIRMED, FULFILLING, FULFILLED, DELIVERED, FULFILMENT_NEEDS_MANUAL_RESOLUTION                       | Marks the order paid without confirming again                                                                                                     |
+| CANCELLED (including Two's own cancellation of an unverified order), or a REJECTED or DECLINED status | Closes the order as Failed without sending a cancel to Two: the order state is stored as CANCELLED first, so the cancel handler treats it as done |
+| Any other state                                                                                       | Nothing changes; logged, and noted on the order once per state                                                                                    |
+| A failed read                                                                                         | Nothing changes, except at the unpaid-order time limit (below); logged, and the next run retries                                                  |
+
+A Failed order, not a Cancelled one, is what lets the buyer pay for the same
+basket another way: WooCommerce's checkout resumes it while the basket is
+unchanged. Closing it releases the stock WooCommerce held for it, which
+WooCommerce does on a cancel but not on a failure, and the move to Failed sends
+WooCommerce's Failed order email to the shop's admin, if that email is enabled.
+
+### A buyer Two did not approve
+
+Two's checkout sends a buyer it did not approve, or who chose to leave it, to
+the order's `merchant_cancel_order_url`; `merchant_order_verification_failed_url`
+is the same. Both are the plugin's own route,
+`/twoinc-payment-gateway/decline?order_id=…&twoinc_order_key=…&twoinc_order_reference=…&twoinc_decline_return=1`
+(the `twoinc_` prefix follows the brand), detected by its parameters like the
+confirmation URL. It carries the order key, so it works from any browser, and
+names the checkout attempt by the order reference that attempt minted. The click
+is never trusted: the route runs the resolver as `decline_return`, under the
+order's lock.
+
+- Two reports VERIFIED or later: the order is placed exactly as on the buyer's
+  return, and the buyer lands on the order-received page.
+- CANCELLED, or a REJECTED or DECLINED status: the order is closed as Failed,
+  with no cancel sent to Two. UNVERIFIED (the buyer left): the order is cancelled
+  with Two first, then closed; if Two refuses the cancel it is left waiting.
+- The link names an earlier attempt than the order's current one: nothing
+  changes, and the buyer lands on the cart.
+- A second click finds the order closed and changes nothing.
+
+The buyer is then told "Two could not approve this purchase. Please choose
+another payment method." (with the brand's product name). In the browser that
+holds their basket for this order (the classic checkout's
+`order_awaiting_payment` or the block checkout's `store_api_draft_order` in the
+WooCommerce session, with a basket that is not empty), they go back to checkout
+with the basket as it was; Two stays offered but is no longer the chosen payment
+method. In any other browser there is nothing to restore, so they land on the
+cart with the same message. When Two cannot be read, nothing is closed and the
+buyer is still sent to choose another payment method.
+
+The message is a WooCommerce notice. The classic checkout and the cart show it;
+the Checkout block shows it only where the page template has the Store Notices
+block, as WooCommerce's own block theme templates do.
 
 At the unpaid-order time limit the resolver takes WooCommerce's place, under the
 order's lock and on the order as stored at that moment. It cancels the order,
@@ -1064,7 +1108,7 @@ covers Two's own cancellation of unverified orders (2 days by default, set per
 merchant). Action Scheduler runs off site traffic, so a low-traffic shop should
 run WP-Cron from a system cron.
 
-All four triggers take one MySQL named lock per order (`GET_LOCK`) and re-read
+All five triggers take one MySQL named lock per order (`GET_LOCK`) and re-read
 the order once they hold it, so whichever arrives second finds it no longer
 waiting. A buyer returning after the scheduled check confirmed their order lands
 on the order-received page and nothing is sent. One returning to an order that

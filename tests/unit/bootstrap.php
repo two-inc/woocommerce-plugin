@@ -481,6 +481,19 @@ class StubSession
 {
     private $data = [];
 
+    /** False for a browser that has not started a WooCommerce session yet. */
+    public $has_session = true;
+
+    public function has_session()
+    {
+        return $this->has_session;
+    }
+
+    public function set_customer_session_cookie($set)
+    {
+        $this->has_session = (bool) $set;
+    }
+
     public function get_customer_id()
     {
         return $GLOBALS['__twoinc_test_session_customer'] ?? 't_stubshopper';
@@ -1996,6 +2009,12 @@ function clean_post_cache($post)
 function wc_get_cart_url()
 {
     return 'https://shop.example/cart';
+}
+
+/** Records the orders whose held stock is released, in $GLOBALS['__twoinc_test_stock_released']. */
+function wc_release_stock_for_order($order)
+{
+    $GLOBALS['__twoinc_test_stock_released'][] = $order->get_id();
 }
 
 /**
