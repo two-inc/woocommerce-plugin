@@ -196,7 +196,7 @@ test("admin order action: Check status with Two confirms a verified order straig
   expect(orderNotes(wcOrderId).some((note) => note.includes("Checked by"))).toBe(true);
 });
 
-test("scheduled check: an order Two cancelled is cancelled here without a cancel sent back", async ({
+test("scheduled check: an order Two cancelled is marked failed here without a cancel sent back", async ({
   page
 }) => {
   const lastName = `E2ERecoverCancel${Date.now().toString(36)}`;
@@ -206,11 +206,12 @@ test("scheduled check: an order Two cancelled is cancelled here without a cancel
   backdate(wcOrderId);
   runScheduledCheck();
 
-  expect(orderStatus(wcOrderId)).toBe("cancelled");
+  // Failed, not cancelled, inside the hold-stock limit: the buyer can still pay for the basket another way (TWO-27388).
+  expect(orderStatus(wcOrderId)).toBe("failed");
   const notes = orderNotes(wcOrderId);
   expect(notes.some((note) => note.includes("reports this order as cancelled"))).toBe(true);
-  // The note the cancel handler leaves when it sends nothing to Two, and none of the notes a sent cancel leaves.
-  expect(notes.some((note) => note.includes("already cancelled with Two"))).toBe(true);
+  // None of the notes a cancel sent to Two leaves.
   expect(notes.some((note) => note.includes("Could not update status"))).toBe(false);
+  expect(notes.some((note) => / order \S+ cancelled\.$/.test(note))).toBe(false);
   expect(await getOrderState(twoOrderId)).toBe("CANCELLED");
 });

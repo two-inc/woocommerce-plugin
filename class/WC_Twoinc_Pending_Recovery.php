@@ -4,16 +4,18 @@
  * Recovers Two orders the buyer verified but never returned from (TWO-26300).
  *
  * The buyer's return to the shop used to be the only route by which a placed order became a paid one. One
- * resolver now serves four triggers: the buyer's return, a scheduled check every 15 minutes, the admin "Check
- * status with Two" order action, and WooCommerce's unpaid-order time limit. It reads the order from Two and
- * acts on its state, under a per-order lock all four share, re-reading the local order once it holds the lock
- * so whichever arrives second finds the work done.
+ * resolver now serves five triggers: the buyer's return, the buyer's return from a checkout Two did not approve
+ * (TWO-27388), a scheduled check every 15 minutes, the admin "Check status with Two" order action, and
+ * WooCommerce's unpaid-order time limit. It reads the order from Two and acts on its state, under a per-order
+ * lock all of them share, re-reading the local order once it holds the lock so whichever arrives second finds
+ * the work done.
  */
 
 if (!class_exists('WC_Twoinc_Pending_Recovery')) {
     class WC_Twoinc_Pending_Recovery
     {
         public const TRIGGER_BUYER_RETURN = 'confirmation_redirect';
+        public const TRIGGER_DECLINE_RETURN = 'decline_return';
         public const TRIGGER_SCHEDULED = 'scheduled_check';
         public const TRIGGER_ADMIN = 'admin_check';
         public const TRIGGER_UNPAID_CANCEL = 'unpaid_order_cancel';
@@ -32,10 +34,11 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
         /** Last, so the `$cancel` it receives is every other filter's verdict, a merchant's included. */
         public const UNPAID_FILTER_PRIORITY = PHP_INT_MAX;
         /**
-         * The statuses the buyer's return and the admin action find an order waiting in. WooCommerce's classic
-         * checkout resumes a failed order without setting it back to pending, so a buyer can pay a failed order
-         * with Two. The scheduled check and the unpaid-order limit act on pending orders only, leaving a failed
-         * status a merchant set by hand alone unless the merchant asks.
+         * The statuses the buyer's returns and the admin action find an order waiting in. WooCommerce's classic
+         * checkout resumes a failed order without setting it back to pending (the block checkout does set it
+         * back), so an order paid with Two from a failed one may still be failed until process_payment() sets
+         * it pending. The scheduled check and the unpaid-order limit act on pending orders only, leaving a
+         * failed status a merchant set by hand alone unless the merchant asks.
          */
         public const RETURN_WAITING_STATUSES = ['pending', 'failed'];
 
@@ -51,6 +54,10 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
         public const OUTCOME_PROCESSED = 'processed';
         public const OUTCOME_CANCELLED = 'cancelled';
         public const OUTCOME_DECLINED = 'declined';
+        /** The buyer left Two's checkout unverified and came back: cancelled with Two, then closed here. */
+        public const OUTCOME_ABANDONED = 'abandoned';
+        /** The link names an earlier checkout attempt than the order's current one. */
+        public const OUTCOME_STALE = 'stale';
         public const OUTCOME_UNKNOWN = 'unknown';
         public const OUTCOME_REFUSED = 'refused';
         public const OUTCOME_READ_FAILED = 'read_failed';
@@ -195,28 +202,37 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
         /**
          * Reads the order from Two and acts on its state. A cancel reaches Two only from WooCommerce's
          * unpaid-order time limit, for an order Two still reports UNVERIFIED or one past the 7-day window that
-         * Two cannot be read for, as it did before.
+         * Two cannot be read for, as it did before, and from the buyer's return from a checkout they left
+         * unverified. An order Two reports cancelled, rejected or declined is closed as failed, whichever
+         * trigger finds it, so the buyer's basket can still be paid another way.
+         *
+         * @param string|null $order_reference the checkout attempt the caller acts for, when it names one: an
+         *                                     order since sent to Two again is a later attempt and is left alone
          *
          * @return array{outcome: string, state: string, message: string}
          */
-        public static function resolve(WC_Twoinc $gateway, int $order_id, string $trigger, int $lock_wait = self::INTERACTIVE_LOCK_WAIT): array
+        public static function resolve(WC_Twoinc $gateway, int $order_id, string $trigger, int $lock_wait = self::INTERACTIVE_LOCK_WAIT, ?string $order_reference = null): array
         {
             if (!self::lock($order_id, $lock_wait)) {
                 self::log('info', sprintf('Pending check skipped for order %d (%s): another check holds its lock.', $order_id, $trigger));
                 return self::result(self::OUTCOME_BUSY);
             }
             try {
-                return self::resolve_locked($gateway, $order_id, $trigger);
+                return self::resolve_locked($gateway, $order_id, $trigger, $order_reference);
             } finally {
                 self::unlock($order_id);
             }
         }
 
-        private static function resolve_locked(WC_Twoinc $gateway, int $order_id, string $trigger): array
+        private static function resolve_locked(WC_Twoinc $gateway, int $order_id, string $trigger, ?string $order_reference): array
         {
             $order = self::fresh_order($order_id);
-            if (!$order || !WC_Twoinc_Helper::is_twoinc_order($order) || !in_array($order->get_status(), self::waiting_statuses($trigger), true)) {
+            if (!$order || !self::is_waiting($order, $trigger)) {
                 return self::result(self::OUTCOME_NOT_WAITING);
+            }
+            if ($order_reference !== null && !hash_equals((string) $order->get_meta(WC_Twoinc_Brand::meta_key('order_reference'), true), $order_reference)) {
+                self::log('info', sprintf('Pending check for order %d (%s): the link names an earlier checkout attempt; not changed.', $order_id, $trigger));
+                return self::result(self::OUTCOME_STALE);
             }
             $two_order_id = (string) $gateway->get_twoinc_order_id($order);
             if ($two_order_id === '') {
@@ -253,6 +269,9 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
                         // cancel goes to Two too, as it always has for an order the buyer never verified.
                         $order->add_order_note(self::note($outcome, $state, self::TRIGGER_UNPAID_CANCEL));
                         $order->update_status('cancelled');
+                    } elseif ($trigger === self::TRIGGER_DECLINE_RETURN) {
+                        // The buyer left Two's checkout without verifying and came back to pay another way.
+                        return self::cancel_and_close($gateway, $order, $state, $trigger, $two_order_id);
                     } elseif ($trigger === self::TRIGGER_ADMIN) {
                         $order->add_order_note(self::note($outcome, $state, $trigger));
                     } elseif ($trigger === self::TRIGGER_BUYER_RETURN) {
@@ -280,16 +299,15 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
                 case self::ACTION_CANCEL:
                 case self::ACTION_DECLINE:
                     $outcome = $action === self::ACTION_CANCEL ? self::OUTCOME_CANCELLED : self::OUTCOME_DECLINED;
-                    // Stored first, so on_order_cancelled() reads the order as already cancelled at Two and sends nothing.
-                    $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_state'), 'CANCELLED');
-                    $order->add_order_note(self::note($outcome, $state, $trigger));
-                    if ($trigger === self::TRIGGER_BUYER_RETURN) {
-                        // The buyer is sent to the cancel URL, where WooCommerce cancels it and tells them so.
-                        $order->save();
-                    } else {
+                    if ($at_time_limit) {
+                        // WooCommerce cancels an unpaid order here anyway, and nothing would ever clear a failed
+                        // one, so it is cancelled as before. Stored first, so on_order_cancelled() sends nothing.
+                        $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_state'), 'CANCELLED');
+                        $order->add_order_note(trim(self::cancelled_here_message($outcome) . ' ' . self::trigger_message($trigger)));
                         $order->update_status('cancelled');
+                        return self::result($outcome, $state);
                     }
-                    return self::result($outcome, $state);
+                    return self::close($order, $outcome, $state, $trigger);
             }
 
             self::log('warning', sprintf('Pending check for order %d (%s): %s reports state %s; not changed.', $order_id, $trigger, self::product(), $state));
@@ -306,7 +324,7 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
         /** Marks the order paid exactly as the buyer's return always has. */
         private static function complete($order, string $outcome, string $state, string $trigger, string $two_order_id): array
         {
-            $note = $trigger === self::TRIGGER_BUYER_RETURN
+            $note = in_array($trigger, [self::TRIGGER_BUYER_RETURN, self::TRIGGER_DECLINE_RETURN], true)
                 ? sprintf(__('Order ID %s has been placed with %s.', 'twoinc-payment-gateway'), $two_order_id, self::product())
                 : self::note($outcome, $state, $trigger);
             $order->add_order_note($note);
@@ -314,6 +332,82 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
             $order->save();
             $order->payment_complete();
             return self::result($outcome, $state);
+        }
+
+        /**
+         * Closes an order Two will not take payment for as failed (TWO-27388), not cancelled: WooCommerce's
+         * checkout resumes a failed order while the basket is unchanged, so the buyer can pay it another way.
+         * The Two state is stored first, so a later cancel by the merchant sends nothing to Two, and the stock
+         * held for the order is released, which WooCommerce does on a cancel but not on a failure.
+         */
+        private static function close($order, string $outcome, string $state, string $trigger): array
+        {
+            if (in_array($trigger, [self::TRIGGER_DECLINE_RETURN, self::TRIGGER_BUYER_RETURN], true)) {
+                // The buyer is told on screen as they land (the return from Two's checkout goes on to the decline
+                // return), so WooCommerce's customer "Failed order" email is not sent for this close. Kept for the
+                // request, as WooCommerce may defer its emails to shutdown.
+                self::$quiet_customer_failed_email[(int) $order->get_id()] = true;
+                add_filter('woocommerce_email_enabled_customer_failed_order', [self::class, 'filter_customer_failed_email'], 10, 2);
+            }
+            $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_state'), 'CANCELLED');
+            $order->add_order_note(self::note($outcome, $state, $trigger));
+            $order->update_status('failed');
+            if (function_exists('wc_release_stock_for_order')) {
+                wc_release_stock_for_order($order);
+            }
+            return self::result($outcome, $state);
+        }
+
+        /** @var array<int,bool> orders closed on the buyer's return in this request */
+        private static $quiet_customer_failed_email = [];
+
+        /** `woocommerce_email_enabled_customer_failed_order`: off for an order the buyer's return closed. */
+        public static function filter_customer_failed_email($enabled, $order = null)
+        {
+            if (is_object($order) && method_exists($order, 'get_id') && isset(self::$quiet_customer_failed_email[(int) $order->get_id()])) {
+                return false;
+            }
+            return $enabled;
+        }
+
+        /** The note for a cancelled or declined order cancelled at WooCommerce's unpaid-order time limit. */
+        private static function cancelled_here_message(string $outcome): string
+        {
+            $product = self::product();
+            return $outcome === self::OUTCOME_DECLINED
+                /* translators: %s is the brand product name (e.g. "Two") */
+                ? sprintf(__('%s declined this order. Cancelled here to match.', 'twoinc-payment-gateway'), $product)
+                /* translators: %s is the brand product name (e.g. "Two") */
+                : sprintf(__('%s reports this order as cancelled. Cancelled here to match.', 'twoinc-payment-gateway'), $product);
+        }
+
+        /** Cancels with Two an order the buyer left unverified, then closes it. One Two refuses stays waiting. */
+        private static function cancel_and_close(WC_Twoinc $gateway, $order, string $state, string $trigger, string $two_order_id): array
+        {
+            // Sent with no body whatever the postprocessing hook does, so it never refuses (TWO-26340).
+            $cancel = $gateway->make_order_request('cancel', $trigger, "/v1/order/{$two_order_id}/cancel", [], 'POST', $order);
+            $error = is_wp_error($cancel) ? $cancel->get_error_message() : WC_Twoinc_Helper::get_twoinc_error_msg($cancel);
+            if ($error) {
+                /* translators: %s is the brand product name (e.g. "Two") */
+                $order->add_order_note(sprintf(__('Unable to cancel the order with %s. The order is left waiting for payment.', 'twoinc-payment-gateway'), self::product()));
+                $order->save();
+                self::log('error', sprintf('Pending check for order %d (%s): cancel refused: %s', $order->get_id(), $trigger, $error));
+                return self::result(self::OUTCOME_REFUSED, $state, (string) $error);
+            }
+            return self::close($order, self::OUTCOME_ABANDONED, $state, $trigger);
+        }
+
+        /**
+         * Whether the order waits for this trigger: a Two order in one of its waiting statuses, and not one
+         * already closed as failed because Two will not take payment for it (its Two state stored as CANCELLED).
+         * A closed order sent to Two again stores the new order's state, so it waits again.
+         */
+        public static function is_waiting($order, string $trigger): bool
+        {
+            if (!WC_Twoinc_Helper::is_twoinc_order($order) || !in_array($order->get_status(), self::waiting_statuses($trigger), true)) {
+                return false;
+            }
+            return !($order->get_status() === 'failed' && $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true) === 'CANCELLED');
         }
 
         /**
@@ -332,7 +426,7 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
                 $order->delete_meta_data(self::not_found_key());
             }
 
-            $interactive = in_array($trigger, [self::TRIGGER_BUYER_RETURN, self::TRIGGER_ADMIN], true);
+            $interactive = in_array($trigger, [self::TRIGGER_BUYER_RETURN, self::TRIGGER_DECLINE_RETURN, self::TRIGGER_ADMIN], true);
             $logged_key = WC_Twoinc_Brand::meta_key('pending_error_logged_at');
             $message = sprintf('Pending check for order %d, %s order %s (%s): could not read the order: %s', $order->get_id(), self::product(), $two_order_id, $trigger, $reason);
             if ($interactive || time() - (int) $order->get_meta($logged_key, true) >= self::ERROR_LOG_INTERVAL) {
@@ -373,7 +467,7 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
         /** The statuses an order waits for payment in, for this trigger. */
         public static function waiting_statuses(string $trigger): array
         {
-            return in_array($trigger, [self::TRIGGER_BUYER_RETURN, self::TRIGGER_ADMIN], true) ? self::RETURN_WAITING_STATUSES : ['pending'];
+            return in_array($trigger, [self::TRIGGER_BUYER_RETURN, self::TRIGGER_DECLINE_RETURN, self::TRIGGER_ADMIN], true) ? self::RETURN_WAITING_STATUSES : ['pending'];
         }
 
         private static function is_past_window($order): bool
@@ -426,10 +520,13 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
                     return sprintf(__('The buyer verified this order with %1$s but did not return to the shop. %1$s had already confirmed it.', 'twoinc-payment-gateway'), $product);
                 case self::OUTCOME_CANCELLED:
                     /* translators: %s is the brand product name (e.g. "Two") */
-                    return sprintf(__('%s reports this order as cancelled. Cancelled here to match.', 'twoinc-payment-gateway'), $product);
+                    return sprintf(__('%s reports this order as cancelled. Marked as failed here, so the buyer can still pay for it another way.', 'twoinc-payment-gateway'), $product);
                 case self::OUTCOME_DECLINED:
                     /* translators: %s is the brand product name (e.g. "Two") */
-                    return sprintf(__('%s declined this order. Cancelled here to match.', 'twoinc-payment-gateway'), $product);
+                    return sprintf(__('%s declined this order. Marked as failed here, so the buyer can still pay for it another way.', 'twoinc-payment-gateway'), $product);
+                case self::OUTCOME_ABANDONED:
+                    /* translators: %1$s is the brand product name (e.g. "Two") */
+                    return sprintf(__('The buyer left the %1$s checkout without finishing verification. Cancelled with %1$s and marked as failed here, so the buyer can still pay for it another way.', 'twoinc-payment-gateway'), $product);
                 case self::OUTCOME_NOT_FOUND:
                     /* translators: %s is the brand product name (e.g. "Two") */
                     return sprintf(__('%s has no record of this order. Cancelled here without a cancel sent to it.', 'twoinc-payment-gateway'), $product);
@@ -455,6 +552,8 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
                     return __('Found by the scheduled check.', 'twoinc-payment-gateway');
                 case self::TRIGGER_UNPAID_CANCEL:
                     return __('Found when the unpaid order time limit was reached.', 'twoinc-payment-gateway');
+                case self::TRIGGER_DECLINE_RETURN:
+                    return __('Found when the buyer came back to choose another payment method.', 'twoinc-payment-gateway');
                 case self::TRIGGER_ADMIN:
                     $user = wp_get_current_user();
                     $name = $user && isset($user->display_name) ? (string) $user->display_name : '';
@@ -474,7 +573,7 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
                 global $theorder;
                 $order = $theorder;
             }
-            if (!is_array($actions) || !$order || !WC_Twoinc_Helper::is_twoinc_order($order) || !in_array($order->get_status(), self::waiting_statuses(self::TRIGGER_ADMIN), true)) {
+            if (!is_array($actions) || !$order || !self::is_waiting($order, self::TRIGGER_ADMIN)) {
                 return $actions;
             }
             $gateway = WC_Twoinc::get_instance();

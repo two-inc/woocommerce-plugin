@@ -481,6 +481,19 @@ class StubSession
 {
     private $data = [];
 
+    /** False for a browser that has not started a WooCommerce session yet. */
+    public $has_session = true;
+
+    public function has_session()
+    {
+        return $this->has_session;
+    }
+
+    public function set_customer_session_cookie($set)
+    {
+        $this->has_session = (bool) $set;
+    }
+
     public function get_customer_id()
     {
         return $GLOBALS['__twoinc_test_session_customer'] ?? 't_stubshopper';
@@ -1285,6 +1298,11 @@ class StubOrder
         $this->meta[$key] = $value;
     }
 
+    public function delete_meta_data($key)
+    {
+        unset($this->meta[$key]);
+    }
+
     public $saves = 0;
 
     public function save()
@@ -1442,6 +1460,42 @@ class StubOrder
     public function get_status()
     {
         return $this->status;
+    }
+
+    /** @var string[] every status update_status() set, in order */
+    public $status_updates = [];
+
+    public function update_status($status, $note = '')
+    {
+        $this->status = $status;
+        $this->status_updates[] = $status;
+        $this->saves++;
+    }
+
+    public function get_checkout_payment_url($on_checkout = false)
+    {
+        return 'https://shop.example/pay/42';
+    }
+
+    public function has_status($status)
+    {
+        return in_array($this->status, (array) $status, true);
+    }
+
+    public function is_paid()
+    {
+        return $this->has_status(['processing', 'completed']);
+    }
+
+    /** As WooCommerce's: pending or failed, with something to pay. */
+    public function needs_payment()
+    {
+        return $this->has_status(['pending', 'failed']) && $this->get_total() > 0;
+    }
+
+    public function get_checkout_order_received_url()
+    {
+        return 'https://shop.example/thanks';
     }
 
     public function get_refunds()
@@ -1996,6 +2050,27 @@ function clean_post_cache($post)
 function wc_get_cart_url()
 {
     return 'https://shop.example/cart';
+}
+
+function is_cart()
+{
+    return $GLOBALS['__twoinc_test_is_cart'] ?? false;
+}
+
+/** Prints, or returns with $return, the notice as `<notice type>: <message>`. */
+function wc_print_notice($message, $notice_type = 'success', $data = [], $return = false)
+{
+    $html = $notice_type . ': ' . $message;
+    if ($return) {
+        return $html;
+    }
+    echo $html;
+}
+
+/** Records the orders whose held stock is released, in $GLOBALS['__twoinc_test_stock_released']. */
+function wc_release_stock_for_order($order)
+{
+    $GLOBALS['__twoinc_test_stock_released'][] = $order->get_id();
 }
 
 /**
