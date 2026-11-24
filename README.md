@@ -996,8 +996,10 @@ sitting unpaid in the shop. The plugin now checks waiting orders with Two
 itself, through one resolver (`WC_Twoinc_Pending_Recovery::resolve()`) that
 five triggers share. An order is waiting while it is Pending payment. The
 buyer's returns and the admin action also take a Failed order as waiting:
-WooCommerce's classic and block checkouts resume a failed order without setting
-it back to pending, so a buyer can pay a failed order with Two. A Failed order
+WooCommerce's classic checkout resumes a failed order without setting it back to
+pending (the block checkout does), so a buyer can pay a failed order with Two;
+the plugin then sets it back to pending before sending it to Two, so the
+scheduled check and the unpaid-order time limit still find it. A Failed order
 whose stored Two state is CANCELLED was closed by the resolver and no longer
 waits for any trigger, until it is sent to Two again. The scheduled check and
 the unpaid-order time limit leave a Failed order alone, since a merchant may
@@ -1014,20 +1016,25 @@ have set that status by hand.
 The resolver reads the order from Two (`GET /v1/order/<id>`) and acts on its
 state:
 
-| Two reports                                                                                           | The shop                                                                                                                                          |
-| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| UNVERIFIED                                                                                            | Nothing changes, except at the unpaid-order time limit (below) and on the decline return, which cancels it with Two, then closes it               |
-| VERIFIED                                                                                              | Confirms with Two, then marks the order paid exactly as the return does (`payment_complete()`)                                                    |
-| CONFIRMED, FULFILLING, FULFILLED, DELIVERED, FULFILMENT_NEEDS_MANUAL_RESOLUTION                       | Marks the order paid without confirming again                                                                                                     |
-| CANCELLED (including Two's own cancellation of an unverified order), or a REJECTED or DECLINED status | Closes the order as Failed without sending a cancel to Two: the order state is stored as CANCELLED first, so the cancel handler treats it as done |
-| Any other state                                                                                       | Nothing changes; logged, and noted on the order once per state                                                                                    |
-| A failed read                                                                                         | Nothing changes, except at the unpaid-order time limit (below); logged, and the next run retries                                                  |
+| Two reports                                                                                           | The shop                                                                                                                                                                                                 |
+| ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| UNVERIFIED                                                                                            | Nothing changes, except at the unpaid-order time limit (below) and on the decline return, which cancels it with Two, then closes it                                                                      |
+| VERIFIED                                                                                              | Confirms with Two, then marks the order paid exactly as the return does (`payment_complete()`)                                                                                                           |
+| CONFIRMED, FULFILLING, FULFILLED, DELIVERED, FULFILMENT_NEEDS_MANUAL_RESOLUTION                       | Marks the order paid without confirming again                                                                                                                                                            |
+| CANCELLED (including Two's own cancellation of an unverified order), or a REJECTED or DECLINED status | Closes the order as Failed (at the unpaid-order time limit, cancels it as before) without sending a cancel to Two: the order state is stored as CANCELLED first, so the cancel handler treats it as done |
+| Any other state                                                                                       | Nothing changes; logged, and noted on the order once per state                                                                                                                                           |
+| A failed read                                                                                         | Nothing changes, except at the unpaid-order time limit (below); logged, and the next run retries                                                                                                         |
 
 A Failed order, not a Cancelled one, is what lets the buyer pay for the same
 basket another way: WooCommerce's checkout resumes it while the basket is
 unchanged. Closing it releases the stock WooCommerce held for it, which
-WooCommerce does on a cancel but not on a failure, and the move to Failed sends
-WooCommerce's Failed order email to the shop's admin, if that email is enabled.
+WooCommerce does on a cancel but not on a failure. The move to Failed sends
+WooCommerce's Failed order email to the shop's admin, and its customer Failed
+order email to the buyer, each if enabled under WooCommerce > Settings > Emails,
+except that the customer email is not sent when the decline return closed the
+order: the buyer is told on screen as they land. At the unpaid-order time limit
+nothing could clear a Failed order, so there a cancelled or declined order is
+cancelled, as WooCommerce would.
 
 ### A buyer Two did not approve
 
@@ -1055,14 +1062,21 @@ another payment method." (with the brand's product name). In the browser that
 holds their basket for this order (the classic checkout's
 `order_awaiting_payment` or the block checkout's `store_api_draft_order` in the
 WooCommerce session, with a basket that is not empty), they go back to checkout
-with the basket as it was; Two stays offered but is no longer the chosen payment
-method. In any other browser there is nothing to restore, so they land on the
-cart with the same message. When Two cannot be read, nothing is closed and the
-buyer is still sent to choose another payment method.
+with the basket as it was. One who paid from the pay-for-order page, which the
+plugin records in the session as `twoinc_order_pay_order` when the order is sent
+to Two, goes back to that page. Either way Two stays offered but is no longer
+the chosen payment method. In any other browser there is nothing to restore, so
+they land on the cart with the same message. When Two cannot be read, nothing is
+closed and the buyer is still sent to choose another payment method. A
+confirmation return whose confirm Two refused is not sent here: the order may
+still be paid, so the buyer is told it is still being confirmed.
 
-The message is a WooCommerce notice. The classic checkout and the cart show it;
-the Checkout block shows it only where the page template has the Store Notices
-block, as WooCommerce's own block theme templates do.
+The message is shown on the page the buyer lands on and nowhere else. It is
+kept in the session (`twoinc_decline_notice`) only until the next page load,
+which takes it out whatever the page is, and printed once at the top of the
+classic cart, empty cart, checkout or pay-for-order page, or above the Cart or
+Checkout block. It is never added as a WooCommerce notice, so it cannot appear
+later on another page.
 
 At the unpaid-order time limit the resolver takes WooCommerce's place, under the
 order's lock and on the order as stored at that moment. It cancels the order,

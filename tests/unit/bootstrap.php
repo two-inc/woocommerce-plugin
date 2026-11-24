@@ -1457,6 +1457,42 @@ class StubOrder
         return $this->status;
     }
 
+    /** @var string[] every status update_status() set, in order */
+    public $status_updates = [];
+
+    public function update_status($status, $note = '')
+    {
+        $this->status = $status;
+        $this->status_updates[] = $status;
+        $this->saves++;
+    }
+
+    public function get_checkout_payment_url($on_checkout = false)
+    {
+        return 'https://shop.example/pay/42';
+    }
+
+    public function has_status($status)
+    {
+        return in_array($this->status, (array) $status, true);
+    }
+
+    public function is_paid()
+    {
+        return $this->has_status(['processing', 'completed']);
+    }
+
+    /** As WooCommerce's: pending or failed, with something to pay. */
+    public function needs_payment()
+    {
+        return $this->has_status(['pending', 'failed']) && $this->get_total() > 0;
+    }
+
+    public function get_checkout_order_received_url()
+    {
+        return 'https://shop.example/thanks';
+    }
+
     public function get_refunds()
     {
         return [];
@@ -2009,6 +2045,21 @@ function clean_post_cache($post)
 function wc_get_cart_url()
 {
     return 'https://shop.example/cart';
+}
+
+function is_cart()
+{
+    return $GLOBALS['__twoinc_test_is_cart'] ?? false;
+}
+
+/** Prints, or returns with $return, the notice as `<notice type>: <message>`. */
+function wc_print_notice($message, $notice_type = 'success', $data = [], $return = false)
+{
+    $html = $notice_type . ': ' . $message;
+    if ($return) {
+        return $html;
+    }
+    echo $html;
 }
 
 /** Records the orders whose held stock is released, in $GLOBALS['__twoinc_test_stock_released']. */

@@ -59,6 +59,7 @@ final class OrderPostprocessingSpec
             'testIntentAppliesThePostedTermBeforeTotals',
             'testIntentRunsTheSameLineFilterAsCreate',
             'testTheTwoOrderIdIsKeptWhenTheChangeHashFails',
+            'testAFailedOrderIsSetPendingBeforeItIsSentToTwo',
             'testNoSubscriberBuildersMatchTheShippingTaxRelease',
             'testNoRequestBodyCarriesAnInvoiceType',
             'testTheEditBodyOmitsTheOrderLevelVendorNameAndCreateKeepsIt',
@@ -1785,6 +1786,35 @@ final class OrderPostprocessingSpec
         $intent = WC_Twoinc_Helper::compose_twoinc_intent($order, []);
 
         TinyAssert::same(json_encode($create['line_items']), json_encode($intent['line_items']), 'intent lines differ from create lines');
+    }
+
+    /**
+     * The classic checkout resumes a failed order without setting it back to pending: paid with Two, it is set
+     * pending before it is sent, so the scheduled check and the unpaid-order limit still find it (TWO-27388). One
+     * paid from the pay-for-order page is recorded in the session for the decline return.
+     */
+    private static function testAFailedOrderIsSetPendingBeforeItIsSentToTwo(): void
+    {
+        // [status before, posted from the pay-for-order page, status updates, order recorded in the session, description]
+        $cases = [
+            ['failed', false, ['pending'], null, 'a resumed failed order: pending again'],
+            ['pending', false, [], null, 'a pending order: unchanged'],
+            ['failed', true, ['pending'], 42, 'paid from the pay-for-order page: recorded for the decline return'],
+        ];
+        foreach ($cases as [$status, $pay, $updates, $recorded, $description]) {
+            self::reset();
+            WC()->session = new StubSession();
+            WC()->cart = new StubCart(150.0, 21.0, false);
+            $_POST = ['company_id' => '912345678', 'company_name' => 'Buyer AS', WC_Twoinc::TERMS_CONSENT_FIELD => '1'] + ($pay ? ['woocommerce_pay' => '1'] : []);
+            $order = self::exampleOrder();
+            $order->status = $status;
+            unset($order->meta[WC_Twoinc_Brand::prefixed_name('order_id')]);
+            $result = self::recordingGateway()->process_payment(42);
+            TinyAssert::same('success', $result['result'] ?? json_encode($result), "$description: placed");
+            TinyAssert::same($updates, $order->status_updates, "$description: status updates");
+            TinyAssert::same($recorded, WC()->session->get('twoinc_order_pay_order'), "$description: session");
+        }
+        $_POST = [];
     }
 
     private static function testTheTwoOrderIdIsKeptWhenTheChangeHashFails(): void

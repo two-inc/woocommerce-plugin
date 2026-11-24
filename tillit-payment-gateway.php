@@ -265,6 +265,13 @@ function load_twoinc_classes()
     add_action('template_redirect', 'WC_Twoinc::process_confirmation_header_redirect');
     // A buyer Two did not approve comes back here to choose another payment method (TWO-27388).
     add_action('template_redirect', 'WC_Twoinc::process_decline_return_redirect');
+    // Its message is shown on the page the buyer lands on and nowhere else, on classic and block pages alike.
+    add_action('template_redirect', 'WC_Twoinc::arm_decline_notice', 30);
+    foreach (['woocommerce_before_checkout_form', 'before_woocommerce_pay', 'woocommerce_before_cart', 'woocommerce_cart_is_empty'] as $decline_notice_hook) {
+        add_action($decline_notice_hook, 'WC_Twoinc::print_decline_notice', 1, 0);
+    }
+    add_filter('render_block_woocommerce/cart', 'WC_Twoinc::prepend_decline_notice');
+    add_filter('render_block_woocommerce/checkout', 'WC_Twoinc::prepend_decline_notice');
     // add_action('template_redirect', 'WC_Twoinc::before_process_confirmation');
     // add_action('get_header', 'WC_Twoinc::process_confirmation_header_redirect');
     // add_action('init', 'WC_Twoinc::process_confirmation_js_redirect'); // some theme does not call get_header()

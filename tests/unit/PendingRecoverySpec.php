@@ -17,6 +17,8 @@ final class PendingRecoverySpec
             'testTheDeclineReturn',
             'testTwoIsNotPreselectedAfterADecline',
             'testTheOrderNamesTheDeclineReturn',
+            'testTheCustomerFailedEmailIsQuietOnlyForTheDeclineReturn',
+            'testTheDeclineMessageIsShownOnlyOnTheLandingPage',
             'testACancelledOrderIsNotCancelledAtTwoAgain',
             'testTheUnpaidOrderTimeLimit',
             'testANotFoundOrderIsCancelledOnlyOnceConfirmed',
@@ -231,7 +233,8 @@ final class PendingRecoverySpec
             [$scheduled, 'CANCELLED', 'APPROVED', 200, 'cancelled', 'failed', [], 'reports this order as cancelled', 'CANCELLED', 'scheduled, cancelled: closed as failed'],
             [$admin, 'UNVERIFIED', 'REJECTED', 200, 'declined', 'failed', [], 'declined this order', 'CANCELLED', 'admin, rejected: closed as failed'],
             [$return, 'CANCELLED', 'APPROVED', 200, 'cancelled', 'failed', [], 'reports this order as cancelled', 'CANCELLED', 'return, cancelled: closed as failed'],
-            [$unpaid, 'CANCELLED', 'APPROVED', 200, 'cancelled', 'failed', [], 'unpaid order time limit', 'CANCELLED', 'unpaid limit, cancelled: closed as failed'],
+            [$unpaid, 'CANCELLED', 'APPROVED', 200, 'cancelled', 'cancelled', [], 'Cancelled here to match. Found when the unpaid order time limit', 'CANCELLED', 'unpaid limit, cancelled: cancelled, as WooCommerce would'],
+            [$unpaid, 'UNVERIFIED', 'DECLINED', 200, 'declined', 'cancelled', [], 'declined this order. Cancelled here to match.', 'CANCELLED', 'unpaid limit, declined: cancelled, as WooCommerce would'],
             [$decline, 'UNVERIFIED', 'APPROVED', 200, 'abandoned', 'failed', ['POST /v1/order/two-1/cancel'], 'without finishing verification', 'CANCELLED', 'decline return, unverified: cancelled with Two, then closed'],
             [$decline, 'VERIFIED', 'APPROVED', 200, 'confirmed', 'processing', ['POST /v1/order/two-1/confirm'], 'has been placed with', 'CONFIRMED', 'decline return, verified: placed as a return would'],
             [$decline, 'CONFIRMED', 'APPROVED', 200, 'processed', 'processing', [], 'has been placed with', 'CONFIRMED', 'decline return, confirmed: placed'],
@@ -431,6 +434,16 @@ final class PendingRecoverySpec
             TinyAssert::true($order->paid <= 1, "$description: paid at most once");
             TinyAssert::same($notice === null ? [] : [$notice], array_column($GLOBALS['__twoinc_test_notices'], 'message'), "$description: notices");
         }
+
+        // A confirm Two refuses, on an order it verified, may still be paid: the buyer is never told it was not
+        // approved, and nothing is cancelled.
+        self::reset();
+        $order = self::order();
+        $gateway = self::gateway(['id' => 'two-1', 'state' => 'VERIFIED'], 200, 400);
+        $_REQUEST = ['order_id' => '42', 'twoinc_order_reference' => 'ref', 'twoinc_csrf_token' => wp_create_nonce('twoinc_confirm_42')];
+        TinyAssert::same($thanks, $method->invoke($gateway), 'confirm refused: order-received, as before the decline return');
+        TinyAssert::same(['pending', ['We are still confirming your order with Two.']], [$order->status, array_column($GLOBALS['__twoinc_test_notices'], 'message')], 'confirm refused: still waiting, told so');
+        TinyAssert::same(['GET /v1/order/two-1', 'POST /v1/order/two-1/confirm'], $gateway->calls(), 'confirm refused: no cancel sent');
     }
 
     /**
@@ -467,6 +480,7 @@ final class PendingRecoverySpec
             ['pending', 'UNVERIFIED', 'UNVERIFIED', 'APPROVED', 200, 400, 'ref', 'classic', $checkout, 'pending', true, $cancel, true, 'the cancel is refused: left waiting'],
             ['failed', 'CANCELLED', 'CANCELLED', 'APPROVED', 200, 200, 'ref', 'classic', $checkout, 'failed', false, [], true, 'a second click: nothing read or changed, told again'],
             ['processing', 'CONFIRMED', 'CONFIRMED', 'APPROVED', 200, 200, 'ref', 'classic', $thanks, 'processing', false, [], false, 'already paid: placed, nothing sent'],
+            ['pending', 'UNVERIFIED', 'UNVERIFIED', 'REJECTED', 200, 200, 'ref', 'pay', 'https://shop.example/pay/42', 'failed', true, [], true, 'paid from the pay-for-order page: back there'],
         ];
         foreach ($cases as [$status, $stored, $state, $two_status, $read, $write, $reference, $session_kind, $expected, $local, $reads, $writes, $notice, $description]) {
             self::reset();
@@ -485,7 +499,8 @@ final class PendingRecoverySpec
             TinyAssert::same($local, $order->status, "$description: local status");
             TinyAssert::same($reads, $gateway->calls() !== [], "$description: reads Two");
             TinyAssert::same($writes, array_slice($gateway->calls(), 1), "$description: writes sent");
-            TinyAssert::same($notice ? [['message' => $message, 'type' => 'error']] : [], $GLOBALS['__twoinc_test_notices'], "$description: notice");
+            TinyAssert::same($notice ? $message : null, $session->get('twoinc_decline_notice'), "$description: the message is armed for the landing page");
+            TinyAssert::same([], $GLOBALS['__twoinc_test_notices'], "$description: never left as a session notice");
             TinyAssert::true($session->has_session(), "$description: a session holds the notice");
             if ($status !== $local) {
                 TinyAssert::same(1, count($order->notes), "$description: one note " . json_encode($order->notes));
@@ -579,14 +594,85 @@ final class PendingRecoverySpec
     }
 
     /**
+     * WooCommerce's customer "Failed order" email is off for an order the decline return closed, as the buyer is
+     * told on screen, and only for that order; the scheduled check's close leaves it to the shop's setting.
+     */
+    private static function testTheCustomerFailedEmailIsQuietOnlyForTheDeclineReturn(): void
+    {
+        $filter = 'woocommerce_email_enabled_customer_failed_order';
+        $scheduled = self::order('pending', 43);
+        $scheduled->meta[WC_Twoinc_Brand::meta_key('order_reference')] = 'ref';
+        WC_Twoinc_Pending_Recovery::resolve(self::gateway(['id' => 'two-1', 'state' => 'CANCELLED']), 43, WC_Twoinc_Pending_Recovery::TRIGGER_SCHEDULED, 0);
+        TinyAssert::same('failed', $scheduled->status, 'scheduled: closed');
+        TinyAssert::same(true, apply_filters($filter, true, $scheduled), 'scheduled close: the shop\'s setting applies');
+
+        $declined = self::order('pending', 44);
+        WC_Twoinc_Pending_Recovery::resolve(self::gateway(['id' => 'two-1', 'state' => 'CANCELLED']), 44, WC_Twoinc_Pending_Recovery::TRIGGER_DECLINE_RETURN, 0, 'ref');
+        TinyAssert::same('failed', $declined->status, 'decline return: closed');
+        TinyAssert::same(false, apply_filters($filter, true, $declined), 'decline return close: no customer email');
+        TinyAssert::same(true, apply_filters($filter, true, $scheduled), 'another order: the shop\'s setting applies');
+        TinyAssert::same(false, apply_filters($filter, false, $scheduled), 'another order, email off: stays off');
+        remove_all_filters($filter);
+    }
+
+    /**
+     * The decline message is shown on the page the buyer lands on, on classic and block pages alike, and taken
+     * out of the session on the first page loaded whatever it is, so it never reaches a later one.
+     */
+    private static function testTheDeclineMessageIsShownOnlyOnTheLandingPage(): void
+    {
+        $message = 'Two could not approve this purchase. Please choose another payment method.';
+        $notice = 'error: ' . $message;
+        // [is cart, is checkout, how it is rendered, shown, description]
+        $cases = [
+            [false, true, 'classic', true, 'classic checkout or pay-for-order page'],
+            [true, false, 'classic', true, 'classic cart, empty or not'],
+            [false, true, 'block', true, 'Checkout block'],
+            [true, false, 'block', true, 'Cart block'],
+            [false, false, 'classic', false, 'another page first: not shown, and gone'],
+        ];
+        foreach ($cases as [$is_cart, $is_checkout, $render, $shown, $description]) {
+            self::reset();
+            $session = self::buyerSession('classic');
+            $session->set('twoinc_decline_notice', $message);
+            $GLOBALS['__twoinc_test_is_cart'] = $is_cart;
+            $GLOBALS['__twoinc_test_is_checkout'] = $is_checkout;
+            WC_Twoinc::arm_decline_notice();
+            TinyAssert::same(null, $session->get('twoinc_decline_notice'), "$description: out of the session");
+            // Rendered twice, as a page with both a hook and a block would: shown once.
+            if ($render === 'block') {
+                $output = WC_Twoinc::prepend_decline_notice('<div>block</div>') . WC_Twoinc::prepend_decline_notice('<div>block</div>');
+                $expected = ($shown ? '<div class="woocommerce">' . $notice . '</div>' : '') . '<div>block</div><div>block</div>';
+            } else {
+                ob_start();
+                WC_Twoinc::print_decline_notice();
+                WC_Twoinc::print_decline_notice();
+                $output = (string) ob_get_clean();
+                $expected = $shown ? $notice : '';
+            }
+            TinyAssert::same($expected, $output, "$description: shown once");
+            // The next page load finds nothing.
+            WC_Twoinc::arm_decline_notice();
+            ob_start();
+            WC_Twoinc::print_decline_notice();
+            TinyAssert::same('', (string) ob_get_clean(), "$description: not on the next page");
+        }
+        unset($GLOBALS['__twoinc_test_is_cart'], $GLOBALS['__twoinc_test_is_checkout']);
+        WC()->session = null;
+        WC()->cart = null;
+    }
+
+    /**
      * The buyer's WooCommerce session and basket. `classic` and `blocks` hold this order the way each checkout
-     * records it; `other` is paying another order; `empty` holds this order with the basket emptied; `none` is a
-     * browser with no session yet.
+     * records it; `pay` paid it from the pay-for-order page; `other` is paying another order; `empty` holds this
+     * order with the basket emptied; `none` is a browser with no session yet.
      */
     private static function buyerSession(string $kind): StubSession
     {
         $session = new StubSession();
-        if ($kind === 'classic' || $kind === 'empty') {
+        if ($kind === 'pay') {
+            $session->set('twoinc_order_pay_order', 42);
+        } elseif ($kind === 'classic' || $kind === 'empty') {
             $session->set('order_awaiting_payment', 42);
         } elseif ($kind === 'blocks') {
             $session->set('store_api_draft_order', 42);
@@ -596,7 +682,7 @@ final class PendingRecoverySpec
             $session->has_session = false;
         }
         WC()->session = $session;
-        WC()->cart = new StubCart(100.0, 0.0, $kind === 'none' || $kind === 'empty');
+        WC()->cart = new StubCart(100.0, 0.0, in_array($kind, ['none', 'empty', 'pay'], true));
         return $session;
     }
 
@@ -632,7 +718,7 @@ final class PendingRecoverySpec
             [true, true, 'two-1', 'UNVERIFIED', 200, $days, false, 'cancelled', '', true, 'unverified: cancelled here, and at Two'],
             [true, true, 'two-1', 'VERIFIED', 200, $days, false, 'processing', 'CONFIRMED', true, 'verified: confirmed instead'],
             [true, true, 'two-1', 'CONFIRMED', 200, $days, false, 'processing', 'CONFIRMED', true, 'confirmed at Two: processed instead'],
-            [true, true, 'two-1', 'CANCELLED', 200, $days, false, 'failed', 'CANCELLED', true, 'cancelled at Two: closed as failed, without echoing'],
+            [true, true, 'two-1', 'CANCELLED', 200, $days, false, 'cancelled', 'CANCELLED', true, 'cancelled at Two: cancelled here, without echoing'],
             [true, true, 'two-1', 'VERIFIED', 404, $days, false, 'pending', '', true, 'a 404 that is not Two\'s not-found answer: held'],
             [true, true, 'two-1', 'VERIFIED', 0, $days, false, 'pending', '', true, 'no response, inside 7 days: held for the next run'],
             [true, true, 'two-1', 'VERIFIED', 500, $days, false, 'pending', '', true, 'Two refused the read, inside 7 days: held'],
