@@ -1077,8 +1077,9 @@ restore of the buyer's saved form inputs (`checkoutInputs` in the browser's
 load, so it cannot put Two back; it still restores every other field. In any
 other browser there is nothing to restore, so they land on the cart with the
 same message. When Two cannot be read, nothing is closed and the buyer is still
-sent to choose another payment method. A confirmation return whose confirm Two refused is not sent here: the order may
-still be paid, so the buyer is told it is still being confirmed.
+sent to choose another payment method. A confirmation return whose confirm Two
+refused is not sent here: the order may still be paid, so the buyer is told it
+is still being confirmed.
 
 The message is shown on the page the buyer lands on and nowhere else. It is
 kept in the session (`twoinc_decline_notice`) only until the next page load,

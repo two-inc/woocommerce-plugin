@@ -7664,7 +7664,10 @@ jQuery(function () {
         });
       });
 
-      // If last selected payment method is Twoinc, run Twoinc code anyway
+      // A buyer whose snapshot was taken with Twoinc selected gets the
+      // Twoinc code and the snapshot's saved fields restored at load. The
+      // restore does not re-select Twoinc (TWO-27397): the payment method
+      // stays the one WooCommerce rendered from the session.
       let lastSelectedPayment = twoincDomHelper.getCheckoutInput(
         "INPUT",
         "radio",
