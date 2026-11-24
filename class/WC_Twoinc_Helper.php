@@ -3310,6 +3310,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * would send no edit, but a swapped product's name or URL always moves
          * the body.
          *
+         * The change hash leaves out merchant_urls (TWO-27376): the cancel URL
+         * carries a nonce minted for whoever builds the body, so a body built
+         * at checkout and the same order built on an admin save differ there
+         * alone. An edit never changes those URLs.
+         *
          * @return string[] [change hash, invoice hash]
          */
         public static function hash_order_pair($order, $twoinc_meta)
@@ -3345,7 +3350,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $invoiced['products'][] = [(int) $item->get_product_id(), (int) $item->get_variation_id()];
                 }
             }
-            return [WC_Twoinc_Helper::hash_obj($body), WC_Twoinc_Helper::hash_obj($invoiced)];
+            $changed = $body;
+            unset($changed['merchant_urls']);
+            return [WC_Twoinc_Helper::hash_obj($changed), WC_Twoinc_Helper::hash_obj($invoiced)];
         }
 
         /**
