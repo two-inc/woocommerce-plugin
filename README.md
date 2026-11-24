@@ -1069,10 +1069,15 @@ WooCommerce session, with a basket that is not empty), they go back to checkout
 with the basket as it was. One who paid from the pay-for-order page, which the
 plugin records in the session as `twoinc_order_pay_order` when the order is sent
 to Two, goes back to that page. Either way Two stays offered but is no longer
-the chosen payment method. In any other browser there is nothing to restore, so
-they land on the cart with the same message. When Two cannot be read, nothing is
-closed and the buyer is still sent to choose another payment method. A
-confirmation return whose confirm Two refused is not sent here: the order may
+the chosen payment method: the route moves the session's `chosen_payment_method`
+to the first other method the checkout offers, unless the buyer had already
+chosen another, and WooCommerce renders that choice. The checkout script's
+restore of the buyer's saved form inputs (`checkoutInputs` in the browser's
+`sessionStorage`) never selects a payment method, on this page or any other
+load, so it cannot put Two back; it still restores every other field. In any
+other browser there is nothing to restore, so they land on the cart with the
+same message. When Two cannot be read, nothing is closed and the buyer is still
+sent to choose another payment method. A confirmation return whose confirm Two refused is not sent here: the order may
 still be paid, so the buyer is told it is still being confirmed.
 
 The message is shown on the page the buyer lands on and nowhere else. It is

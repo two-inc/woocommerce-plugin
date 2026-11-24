@@ -3189,7 +3189,12 @@ let twoincDomHelper = {
             document.querySelector("#" + inp.id).value = inp.val;
           }
         } else if (inp.type === "radio") {
-          if (document.querySelector("#" + inp.id) && inp.id != "payment_method_kco") {
+          // The payment method is the WooCommerce session's choice, rendered
+          // as the checked radio: replaying the stored one would re-select Two
+          // for a buyer it declined, who came back to pay another way
+          // (TWO-27397), and would open Klarna Checkout over the page.
+          if (inp.name === "payment_method") continue;
+          if (document.querySelector("#" + inp.id)) {
             document.querySelector("#" + inp.id).click();
           }
         } else if (inp.type === "checkbox") {
