@@ -410,7 +410,7 @@ msgstr "Kunde inte läsas"
 #: class/WC_Twoinc.php:2457
 #, php-format
 msgid "What is %s?"
-msgstr "Vad är %s ?"
+msgstr "Vad är %s?"
 
 #: class/WC_Twoinc.php:2464
 #, php-format
@@ -833,7 +833,7 @@ msgstr[1] "%s har bekräftat begäran om att utföra %d beställningar. Fakturor
 #: class/WC_Twoinc.php:5667
 #, php-format
 msgid "%s has failed to issue invoice for order %s."
-msgstr "%s har misslyckats med att utfärda faktura för order %s ."
+msgstr "%s har misslyckats med att utfärda faktura för order %s."
 
 #: class/WC_Twoinc.php:5673
 #, php-format
@@ -845,12 +845,12 @@ msgstr[1] "%s har avbrutit %d beställningar."
 #: class/WC_Twoinc.php:5677
 #, php-format
 msgid "%s has failed to cancel order %s."
-msgstr "%s har misslyckats med att avbryta beställning %s ."
+msgstr "%s har misslyckats med att avbryta beställning %s."
 
 #: class/WC_Twoinc.php:5765
 #, php-format
 msgid "Could not update status to \"Fulfilled\" with %s."
-msgstr "Kunde inte uppdatera status till \"Uppfylld\" med %s ."
+msgstr "Kunde inte uppdatera status till \"Uppfylld\" med %s."
 
 #: class/WC_Twoinc.php:5766 class/WC_Twoinc.php:5858 class/WC_Twoinc.php:6900
 #: class/WC_Twoinc.php:8409
@@ -887,7 +887,7 @@ msgstr "Kunde inte uppdatera status till \"Avbruten\"."
 #: class/WC_Twoinc.php:5865
 #, php-format
 msgid "Order is already cancelled with %s."
-msgstr "Beställningen är redan annullerad med %s ."
+msgstr "Beställningen är redan annullerad med %s."
 
 #. translators: 1: the payment method's product name, 2: its order id
 #: class/WC_Twoinc.php:5873
@@ -1026,7 +1026,7 @@ msgstr "Välj ditt företag innan du betalar med %s."
 #: class/WC_Twoinc.php:6787 class/WC_Twoinc.php:6801
 #, php-format
 msgid "Failed to request order creation with %s."
-msgstr "Det gick inte att begära att beställningen skapades med %s ."
+msgstr "Det gick inte att begära att beställningen skapades med %s."
 
 #: class/WC_Twoinc.php:6793
 #, php-format
@@ -1047,7 +1047,7 @@ msgstr "Minsta ordervärde är %1$s%2$s %3$s moms."
 #: class/WC_Twoinc.php:6977
 #, php-format
 msgid "Failed to request order refund with %s."
-msgstr "Det gick inte att begära återbetalning av beställningen med %s ."
+msgstr "Det gick inte att begära återbetalning av beställningen med %s."
 
 #: class/WC_Twoinc.php:6904
 #, php-format
@@ -1057,7 +1057,7 @@ msgstr "Kunde inte hitta %s order-ID"
 #: class/WC_Twoinc.php:6912
 #, php-format
 msgid "Order has already been fully refunded with %s."
-msgstr "Beställningen har redan återbetalats i sin helhet med %s ."
+msgstr "Beställningen har redan återbetalats i sin helhet med %s."
 
 #: class/WC_Twoinc.php:6937
 #, php-format
@@ -1073,17 +1073,17 @@ msgstr "Vänligen kontakta %s support med order-ID: %s"
 #: class/WC_Twoinc.php:6970 class/WC_Twoinc.php:6982
 #, php-format
 msgid "Could not initiate refund with %s."
-msgstr "Kunde inte initiera återbetalning med %s ."
+msgstr "Kunde inte initiera återbetalning med %s."
 
 #: class/WC_Twoinc.php:6989
 #, php-format
 msgid "Invoice has been refunded and credit note has been sent by %s."
-msgstr "Faktura har återbetalats och kreditnota har skickats av %s ."
+msgstr "Faktura har återbetalats och kreditnota har skickats av %s."
 
 #: class/WC_Twoinc.php:6992
 #, php-format
 msgid "Invoice has been partially refunded and credit note has been sent by %s."
-msgstr "Fakturan har delvis återbetalats och kreditnota har skickats av %s ."
+msgstr "Fakturan har delvis återbetalats och kreditnota har skickats av %s."
 
 #: class/WC_Twoinc.php:7109 class/WC_Twoinc.php:7116
 msgid "The security code is not valid."
@@ -1534,7 +1534,7 @@ msgstr "Handlar-ID:"
 #: class/WC_Twoinc.php:7755
 #, php-format
 msgid "Don't have an API key? Get one by signing up <a href='%s'>here</a>."
-msgstr "Har du ingen API-nyckel? Skaffa en genom att registrera dig <a href='%s'>här</a> ."
+msgstr "Har du ingen API-nyckel? Skaffa en genom att registrera dig <a href='%s'>här</a>."
 
 #: class/WC_Twoinc.php:7803
 msgid "Header name"
@@ -1693,22 +1693,22 @@ msgstr "Denna ändring sparades i WooCommerce men skickades inte till %1$s, som 
 #: class/WC_Twoinc.php:8408 class/WC_Twoinc.php:8439 class/WC_Twoinc.php:8446
 #, php-format
 msgid "Could not edit the order with %s."
-msgstr "Kunde inte redigera beställningen med %s ."
+msgstr "Kunde inte redigera beställningen med %s."
 
 #: class/WC_Twoinc.php:8465
 #, php-format
 msgid "The order edit request has been accepted by %s."
-msgstr "Beställningsredigeringsbegäran har accepterats av %s ."
+msgstr "Beställningsredigeringsbegäran har accepterats av %s."
 
 #: class/WC_Twoinc.php:8467
 #, php-format
 msgid "Order value is now %s."
-msgstr "Ordervärdet är nu %s ."
+msgstr "Ordervärdet är nu %s."
 
 #: class/WC_Twoinc.php:8938
 #, php-format
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
-msgstr "Öka din B2B-försäljning med Köp nu, betala senare med %s !"
+msgstr "Öka din B2B-försäljning med Köp nu, betala senare med %s!"
 
 #: class/WC_Twoinc.php:8939
 #, php-format
@@ -1879,12 +1879,12 @@ msgstr "Negativt rabattbelopp beräknat för %s."
 #: class/WC_Twoinc_Helper.php:367
 #, php-format
 msgid "Empty response from %s."
-msgstr "Tomt svar från %s ."
+msgstr "Tomt svar från %s."
 
 #: class/WC_Twoinc_Helper.php:371
 #, php-format
 msgid "Response code from %s: %d"
-msgstr "Svarskod från %s : %d"
+msgstr "Svarskod från %s: %d"
 
 #: class/WC_Twoinc_Helper.php:473
 msgid "Buyer and merchant may not be the same company"
@@ -1994,12 +1994,12 @@ msgstr "Avgift för betalningsvillkor - %s dagar"
 #: class/WC_Twoinc_Pending_Recovery.php:440
 #, php-format
 msgid "Unable to confirm the order with %s."
-msgstr "Det gick inte att bekräfta beställningen med %s ."
+msgstr "Det gick inte att bekräfta beställningen med %s."
 
 #: class/WC_Twoinc_Pending_Recovery.php:310
 #, php-format
 msgid "Order ID %s has been placed with %s."
-msgstr "Order-ID %s har placerats med %s ."
+msgstr "Order-ID %s har placerats med %s."
 
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc_Pending_Recovery.php:420

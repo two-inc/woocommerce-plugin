@@ -116,6 +116,36 @@ describe("the captured company lives in the WC session", () => {
     }
   });
 
+  // ABN-644. A pick on the delivery address reaches the session only while
+  // that address is also the invoice one (the Checkout block's "Use same
+  // address for billing"), so the classic checkout can replay it.
+  test.each([
+    [true, true, "ticked: the delivery pick is remembered"],
+    [false, false, "unticked: the delivery pick is not"]
+  ])("use same address for billing %s", (sameAddress, remembered, description) => {
+    load();
+    ctx
+      .$("form.checkout")
+      .append(
+        '<select id="shipping_country"><option value="GB" selected>United Kingdom</option></select>' +
+          '<input type="text" id="shipping_company" /><input type="text" id="shipping_company_id" />'
+      );
+    ctx.roles.deliveryIsInvoice = () => sameAddress;
+    const ajax = harness.stubAjax(ctx.$);
+
+    try {
+      ctx.capture.write(NAME, NUMBER, { role: ctx.roles.delivery(), country: "GB" });
+      jest.runAllTimers();
+
+      const sent = ajax.calls
+        .filter((call) => call.url === harness.REMEMBER_COMPANY_URL)
+        .map((call) => harness.requestParams(call).get("company_id"));
+      expect({ description, sent }).toEqual({ description, sent: remembered ? [NUMBER] : [] });
+    } finally {
+      ajax.restore();
+    }
+  });
+
   /** Enter manually keeps the name and gives up the number, so a reload can only replay the name (TWO-26775). */
   test("Enter manually hands the session the name with no number", () => {
     load();
