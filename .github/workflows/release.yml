@@ -20,6 +20,12 @@ concurrency:
 jobs:
   release:
     runs-on: ${{ vars.RUNNER_STANDARD }}
+    # ISEC-853: id-token lets app-token read the App key from Secret Manager
+    # (gha-app-key-reader, bound to workflow_run on staging) instead of the
+    # org secret, which stays as the fallback for now.
+    permissions:
+      contents: write
+      id-token: write
     # It must also be a push to this repo's own `main`, which requires a pull
     # request. The event check alone passes a push to any branch, and a push
     # in a fork carries the fork as head_repository. This job mints the org
@@ -32,10 +38,10 @@ jobs:
     steps:
       - name: Mint GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v3
+        uses: two-inc/actions-public/app-token@main
         with:
           client-id: ${{ vars.TWO_INC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.TWO_INC_APP_PRIVATE_KEY }}
+          app-private-key: ${{ secrets.TWO_INC_APP_PRIVATE_KEY }}
       - uses: actions/checkout@v7
         with:
           ref: main
