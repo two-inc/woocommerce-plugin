@@ -17,7 +17,7 @@ final class PendingRecoverySpec
             'testTheDeclineReturn',
             'testTwoIsNotPreselectedAfterADecline',
             'testTheOrderNamesTheDeclineReturn',
-            'testTheCustomerFailedEmailIsQuietOnlyForTheDeclineReturn',
+            'testTheCustomerFailedEmailIsQuietOnlyForTheBuyersReturns',
             'testTheDeclineMessageIsShownOnlyOnTheLandingPage',
             'testACancelledOrderIsNotCancelledAtTwoAgain',
             'testTheUnpaidOrderTimeLimit',
@@ -594,10 +594,11 @@ final class PendingRecoverySpec
     }
 
     /**
-     * WooCommerce's customer "Failed order" email is off for an order the decline return closed, as the buyer is
-     * told on screen, and only for that order; the scheduled check's close leaves it to the shop's setting.
+     * WooCommerce's customer "Failed order" email is off for an order the buyer's return (the decline return, or the
+     * return from Two's checkout) closed, as the buyer is told on screen, and only for that order; the scheduled
+     * check's close leaves it to the shop's setting.
      */
-    private static function testTheCustomerFailedEmailIsQuietOnlyForTheDeclineReturn(): void
+    private static function testTheCustomerFailedEmailIsQuietOnlyForTheBuyersReturns(): void
     {
         $filter = 'woocommerce_email_enabled_customer_failed_order';
         $scheduled = self::order('pending', 43);
@@ -610,6 +611,12 @@ final class PendingRecoverySpec
         WC_Twoinc_Pending_Recovery::resolve(self::gateway(['id' => 'two-1', 'state' => 'CANCELLED']), 44, WC_Twoinc_Pending_Recovery::TRIGGER_DECLINE_RETURN, 0, 'ref');
         TinyAssert::same('failed', $declined->status, 'decline return: closed');
         TinyAssert::same(false, apply_filters($filter, true, $declined), 'decline return close: no customer email');
+
+        // The return from Two's checkout closes it, then sends the buyer on to the decline message.
+        $returned = self::order('pending', 45);
+        WC_Twoinc_Pending_Recovery::resolve(self::gateway(['id' => 'two-1', 'state' => 'CANCELLED']), 45, WC_Twoinc_Pending_Recovery::TRIGGER_BUYER_RETURN, 0);
+        TinyAssert::same('failed', $returned->status, 'return from Two: closed');
+        TinyAssert::same(false, apply_filters($filter, true, $returned), 'return from Two close: no customer email');
         TinyAssert::same(true, apply_filters($filter, true, $scheduled), 'another order: the shop\'s setting applies');
         TinyAssert::same(false, apply_filters($filter, false, $scheduled), 'another order, email off: stays off');
         remove_all_filters($filter);

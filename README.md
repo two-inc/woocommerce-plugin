@@ -998,10 +998,13 @@ five triggers share. An order is waiting while it is Pending payment. The
 buyer's returns and the admin action also take a Failed order as waiting:
 WooCommerce's classic checkout resumes a failed order without setting it back to
 pending (the block checkout does), so a buyer can pay a failed order with Two;
-the plugin then sets it back to pending before sending it to Two, so the
+the plugin sets it back to pending once Two has created the order, so the
 scheduled check and the unpaid-order time limit still find it. A Failed order
 whose stored Two state is CANCELLED was closed by the resolver and no longer
-waits for any trigger, until it is sent to Two again. The scheduled check and
+waits for any trigger, until it is sent to Two again. Sending it again forgets
+the closed Two order's id first, so a create Two refuses or that errors leaves
+the order Failed (or Pending payment, where the block checkout set it so) with
+no Two order to wait on, never closed a second time. The scheduled check and
 the unpaid-order time limit leave a Failed order alone, since a merchant may
 have set that status by hand.
 
@@ -1031,8 +1034,9 @@ unchanged. Closing it releases the stock WooCommerce held for it, which
 WooCommerce does on a cancel but not on a failure. The move to Failed sends
 WooCommerce's Failed order email to the shop's admin, and its customer Failed
 order email to the buyer, each if enabled under WooCommerce > Settings > Emails,
-except that the customer email is not sent when the decline return closed the
-order: the buyer is told on screen as they land. At the unpaid-order time limit
+except that the customer email is not sent when the buyer's return (the
+decline return, or the return from Two's checkout) closed the order: the buyer
+is told on screen as they land. At the unpaid-order time limit
 nothing could clear a Failed order, so there a cancelled or declined order is
 cancelled, as WooCommerce would.
 

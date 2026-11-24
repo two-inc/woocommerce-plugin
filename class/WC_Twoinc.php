@@ -6776,18 +6776,20 @@ if (!class_exists('WC_Twoinc')) {
                 return self::payment_failure($verdict_error);
             }
 
-            // The classic checkout resumes a failed order without setting it back to pending, as the block checkout
-            // does. Left failed, an order the buyer verifies and never returns from would never reach the scheduled
-            // check or the unpaid-order limit, which take pending orders only (TWO-27388).
-            if ($order->get_status() === 'failed') {
-                $order->update_status('pending');
-            }
             // The pay-for-order page records no order in the session; the decline return needs to know this
             // browser was paying it (TWO-27388).
             if (isset($_POST['woocommerce_pay']) && WC()->session) {
                 WC()->session->set(WC_Twoinc_Brand::prefixed_name('order_pay_order'), $order->get_id());
             }
 
+            // A new attempt on an order closed as failed because Two would not take payment for it: that Two order is
+            // over and no longer describes this one. The block checkout has already set the order pending, so were the
+            // id kept, a create Two refuses or that errors would leave the order waiting on it, and the scheduled check
+            // would close it as failed a second time (TWO-27388).
+            if ($order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true) === 'CANCELLED') {
+                $order->delete_meta_data(WC_Twoinc_Brand::prefixed_name('order_id'));
+                $order->delete_meta_data('tillit_order_id');
+            }
             $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_reference'), $order_reference);
             $order->update_meta_data(WC_Twoinc_Brand::meta_key('merchant_id'), $merchant_id);
             $order->update_meta_data('company_id', $company_id);
@@ -6950,6 +6952,15 @@ if (!class_exists('WC_Twoinc')) {
 
             if (isset($body['state'])) {
                 $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_state'), $body['state']);
+            }
+
+            // The classic checkout resumes a failed order without setting it back to pending, as the block checkout
+            // does. Left failed, an order the buyer verifies and never returns from would never reach the scheduled
+            // check or the unpaid-order limit, which take pending orders only. Set pending only now the new Two order
+            // id is stored: a create Two refuses or that errors leaves the order failed, never waiting on the earlier
+            // Two order, which the scheduled check would close as failed a second time (TWO-27388).
+            if ($order->get_status() === 'failed') {
+                $order->update_status('pending');
             }
 
             $order->save();

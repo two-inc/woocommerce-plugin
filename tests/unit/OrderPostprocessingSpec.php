@@ -59,7 +59,7 @@ final class OrderPostprocessingSpec
             'testIntentAppliesThePostedTermBeforeTotals',
             'testIntentRunsTheSameLineFilterAsCreate',
             'testTheTwoOrderIdIsKeptWhenTheChangeHashFails',
-            'testAFailedOrderIsSetPendingBeforeItIsSentToTwo',
+            'testAFailedOrderIsSetPendingOnlyOnceTwoCreatesIt',
             'testNoSubscriberBuildersMatchTheShippingTaxRelease',
             'testNoRequestBodyCarriesAnInvoiceType',
             'testTheEditBodyOmitsTheOrderLevelVendorNameAndCreateKeepsIt',
@@ -1790,28 +1790,44 @@ final class OrderPostprocessingSpec
 
     /**
      * The classic checkout resumes a failed order without setting it back to pending: paid with Two, it is set
-     * pending before it is sent, so the scheduled check and the unpaid-order limit still find it (TWO-27388). One
-     * paid from the pay-for-order page is recorded in the session for the decline return.
+     * pending once Two has created the order, so the scheduled check and the unpaid-order limit still find it. A
+     * create Two refuses or that errors never leaves the order waiting on the earlier, closed Two order: a failed
+     * order stays failed, and the block checkout's pending one no longer carries the earlier Two order id
+     * (TWO-27388). One paid from the pay-for-order page is recorded in the session for the decline return.
      */
-    private static function testAFailedOrderIsSetPendingBeforeItIsSentToTwo(): void
+    private static function testAFailedOrderIsSetPendingOnlyOnceTwoCreatesIt(): void
     {
-        // [status before, posted from the pay-for-order page, status updates, order recorded in the session, description]
+        $id_key = WC_Twoinc_Brand::prefixed_name('order_id');
+        $state_key = WC_Twoinc_Brand::meta_key('order_state');
+        $refused = '{"id":"two-2","status":"REJECTED","state":"UNVERIFIED"}';
+        // [status before, earlier Two order, posted from the pay-for-order page, create HTTP status (0: no response), create body,
+        //  result, status updates, Two order id after, order recorded in the session, description]
         $cases = [
-            ['failed', false, ['pending'], null, 'a resumed failed order: pending again'],
-            ['pending', false, [], null, 'a pending order: unchanged'],
-            ['failed', true, ['pending'], 42, 'paid from the pay-for-order page: recorded for the decline return'],
+            ['failed', null, false, 200, null, 'success', ['pending'], 'two-1', null, 'a resumed failed order: pending again'],
+            ['pending', null, false, 200, null, 'success', [], 'two-1', null, 'a pending order: unchanged'],
+            ['failed', null, true, 200, null, 'success', ['pending'], 'two-1', 42, 'paid from the pay-for-order page: recorded for the decline return'],
+            ['failed', 'two-old', false, 200, null, 'success', ['pending'], 'two-1', null, 'a closed order retried: pending on the new Two order'],
+            ['failed', 'two-old', false, 200, $refused, 'failure', [], '', null, 'a closed order retried, refused: still failed, the closed Two order forgotten'],
+            ['failed', 'two-old', false, 0, null, 'failure', [], '', null, 'a closed order retried, no response: still failed, the closed Two order forgotten'],
+            ['pending', 'two-old', false, 200, $refused, 'failure', [], '', null, 'the block checkout set it pending, refused: the closed Two order forgotten'],
         ];
-        foreach ($cases as [$status, $pay, $updates, $recorded, $description]) {
+        foreach ($cases as [$status, $earlier, $pay, $http, $body, $outcome, $updates, $two_id, $recorded, $description]) {
             self::reset();
             WC()->session = new StubSession();
             WC()->cart = new StubCart(150.0, 21.0, false);
             $_POST = ['company_id' => '912345678', 'company_name' => 'Buyer AS', WC_Twoinc::TERMS_CONSENT_FIELD => '1'] + ($pay ? ['woocommerce_pay' => '1'] : []);
             $order = self::exampleOrder();
             $order->status = $status;
-            unset($order->meta[WC_Twoinc_Brand::prefixed_name('order_id')]);
-            $result = self::recordingGateway()->process_payment(42);
-            TinyAssert::same('success', $result['result'] ?? json_encode($result), "$description: placed");
+            unset($order->meta[$id_key], $order->meta[$state_key]);
+            if ($earlier !== null) {
+                // Closed as failed on the decline return: the Two state is stored as CANCELLED.
+                $order->meta[$id_key] = $earlier;
+                $order->meta[$state_key] = 'CANCELLED';
+            }
+            $result = self::recordingGateway($http, $body)->process_payment(42);
+            TinyAssert::same($outcome, $result['result'] ?? json_encode($result), "$description: result");
             TinyAssert::same($updates, $order->status_updates, "$description: status updates");
+            TinyAssert::same($two_id, $order->get_meta($id_key), "$description: Two order id");
             TinyAssert::same($recorded, WC()->session->get('twoinc_order_pay_order'), "$description: session");
         }
         $_POST = [];

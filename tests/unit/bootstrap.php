@@ -1298,6 +1298,11 @@ class StubOrder
         $this->meta[$key] = $value;
     }
 
+    public function delete_meta_data($key)
+    {
+        unset($this->meta[$key]);
+    }
+
     public $saves = 0;
 
     public function save()

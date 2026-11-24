@@ -342,9 +342,10 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
          */
         private static function close($order, string $outcome, string $state, string $trigger): array
         {
-            if ($trigger === self::TRIGGER_DECLINE_RETURN) {
-                // The buyer is told on screen as they land, so WooCommerce's customer "Failed order" email is not
-                // sent for this close. Kept for the request, as WooCommerce may defer its emails to shutdown.
+            if (in_array($trigger, [self::TRIGGER_DECLINE_RETURN, self::TRIGGER_BUYER_RETURN], true)) {
+                // The buyer is told on screen as they land (the return from Two's checkout goes on to the decline
+                // return), so WooCommerce's customer "Failed order" email is not sent for this close. Kept for the
+                // request, as WooCommerce may defer its emails to shutdown.
                 self::$quiet_customer_failed_email[(int) $order->get_id()] = true;
                 add_filter('woocommerce_email_enabled_customer_failed_order', [self::class, 'filter_customer_failed_email'], 10, 2);
             }
@@ -357,10 +358,10 @@ if (!class_exists('WC_Twoinc_Pending_Recovery')) {
             return self::result($outcome, $state);
         }
 
-        /** @var array<int,bool> orders closed on the decline return in this request */
+        /** @var array<int,bool> orders closed on the buyer's return in this request */
         private static $quiet_customer_failed_email = [];
 
-        /** `woocommerce_email_enabled_customer_failed_order`: off for an order the decline return closed. */
+        /** `woocommerce_email_enabled_customer_failed_order`: off for an order the buyer's return closed. */
         public static function filter_customer_failed_email($enabled, $order = null)
         {
             if (is_object($order) && method_exists($order, 'get_id') && isset(self::$quiet_customer_failed_email[(int) $order->get_id()])) {
