@@ -1286,4 +1286,81 @@ describe("billing country switch", () => {
       expect(ctx.$("#billing_company_display_field").hasClass("hidden")).toBe(false);
     });
   });
+
+  // TWO-27373. A decline is about the company it was asked for, so every
+  // change of company takes it off screen at once and asks again.
+  describe("a company change retires a decline on screen", () => {
+    test.each([
+      {
+        description: "a billing country switch",
+        change: async () => {
+          captureCompany("Example Co", "123456789");
+          ctx.$("#billing_country").val("ES");
+          fireCountryChange();
+        }
+      },
+      {
+        description: "a company typed in billing",
+        change: async () => {
+          captureCompany("Example Co", "123456789");
+          ctx.$("#billing_company").val("Other Example Co").trigger("input").trigger("change");
+        }
+      },
+      {
+        description: "a company picked in billing",
+        change: async () => {
+          harness.openCompanyPanel(ctx.$, ctx.helper);
+          typeCompanyQuery("example");
+          ajax.last().succeed({
+            items: [
+              {
+                name: "Example Co",
+                highlight: "Example Co",
+                national_identifier: { id: "123456789" }
+              }
+            ]
+          });
+          await flushPromises();
+          clickFirstResultRow();
+        }
+      },
+      {
+        description: "a shipping country switch",
+        change: async () => {
+          ctx.capture.write("Example Co", "123456789", { role: ctx.roles.delivery() });
+          ctx.$("#shipping_country").val("ES").trigger("change");
+        }
+      },
+      {
+        description: "a company typed in delivery",
+        change: async () => {
+          ctx.capture.write("Example Co", "123456789", { role: ctx.roles.delivery() });
+          ctx.$("#shipping_company").val("Other Example Co").trigger("input").trigger("change");
+        }
+      }
+    ])("$description", async ({ description, change }) => {
+      ctx
+        .$("form[name='checkout']")
+        .append(
+          '<select id="shipping_country" name="shipping_country">' +
+            '<option value="GB" selected>United Kingdom</option><option value="ES">Spain</option></select>' +
+            '<input type="text" id="shipping_company" name="shipping_company" value="" />' +
+            '<input type="text" id="shipping_company_display" name="shipping_company_display" value="" />' +
+            '<input type="text" id="shipping_company_id" name="shipping_company_id" value="" />'
+        );
+      initializeCheckout();
+      ctx
+        .$("form[name='checkout']")
+        .append('<div class="twoinc-pay-box twoinc-err-payment-default">Declined</div>');
+      const getApproval = jest.spyOn(ctx.Twoinc.getInstance(), "getApproval");
+
+      await change();
+
+      expect({
+        description,
+        declineShown: !ctx.$(".twoinc-err-payment-default").hasClass("hidden"),
+        askedAgain: getApproval.mock.calls.length > 0
+      }).toEqual({ description, declineShown: false, askedAgain: true });
+    });
+  });
 });

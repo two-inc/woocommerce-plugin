@@ -1303,7 +1303,8 @@ if (!class_exists('WC_Twoinc')) {
             ob_start();
             ?>
             <tr valign="top" class="twoinc-tax-code-map-field">
-                <td colspan="2" class="forminp" style="padding-left:0;">
+                <?php // Not "forminp": WooCommerce shows that cell as a block, which drops the colspan and squeezes the table into the label column (TWO-27373). ?>
+                <td colspan="2" style="padding-left:0;">
                     <h4 class="twoinc-tax-code-title" style="margin:0 0 8px;"><?php echo wp_kses_post($data['title']); ?></h4>
                     <?php foreach ($notices as [$level, $text]) : ?>
                         <div class="notice notice-<?php echo esc_attr($level); ?> inline twoinc-tax-code-notice"><p><?php echo esc_html($text); ?></p></div>
@@ -4828,6 +4829,49 @@ if (!class_exists('WC_Twoinc')) {
 
 
 
+        /** The states Two holds an order in once it has accepted the fulfilment that issues the invoice. */
+        private const INVOICED_ORDER_STATES = ['FULFILLING', 'FULFILLED', 'DELIVERED', 'REFUNDED', 'PARTIALLY_REFUNDED'];
+
+        /** Seconds the order screen waits for Two's order state before falling back to the WooCommerce status. */
+        private const INVOICE_STATE_TIMEOUT = 5;
+
+        /**
+         * Whether Two holds an invoice for the order (TWO-27373). The WooCommerce status alone is not enough: an
+         * order can be completed while Two refused the fulfilment, and Two can fulfil an order (merchant portal,
+         * API) that WooCommerce still shows as processing. The recorded state answers without a call once it is
+         * a fulfilled one or the terminal cancelled one, and so does an invoice number, which releases before 3.0 stored from the fulfilment
+         * answer. Otherwise the recorded state may be stale, so Two's own state decides. Only when Two cannot
+         * be read does the WooCommerce status decide, as it did before; the download then reports an invoice
+         * that is not ready yet.
+         *
+         * @param WC_Order $order
+         */
+        public function has_invoice($order): bool
+        {
+            if ('' !== (string) $order->get_meta('invoice_number', true)) {
+                return true;
+            }
+            $recorded = (string) $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
+            if (in_array($recorded, self::INVOICED_ORDER_STATES, true)) {
+                return true;
+            }
+            if ('CANCELLED' === $recorded) {
+                // Terminal: a cancelled order never gains an invoice, so the panel need not wait on Two.
+                return false;
+            }
+            $twoinc_order_id = $this->get_twoinc_order_id($order);
+            $response = $twoinc_order_id
+                ? $this->make_request("/v1/order/{$twoinc_order_id}", [], 'GET', [], null, self::INVOICE_STATE_TIMEOUT)
+                : null;
+            $body = $response && !is_wp_error($response) && 200 === (int) wp_remote_retrieve_response_code($response)
+                ? json_decode((string) wp_remote_retrieve_body($response), true)
+                : null;
+            if (is_array($body) && isset($body['state']) && is_string($body['state'])) {
+                return in_array($body['state'], self::INVOICED_ORDER_STATES, true);
+            }
+            return in_array($order->get_status(), ['completed', 'refunded'], true);
+        }
+
         public function add_invoice_credit_note_urls($order)
         {
             if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
@@ -4844,7 +4888,7 @@ if (!class_exists('WC_Twoinc')) {
                 )) . '</p></div>');
             }
 
-            if ($order->get_status() !== 'completed' && $order->get_status() !== 'refunded') {
+            if (!$this->has_invoice($order)) {
                 return;
             }
 
