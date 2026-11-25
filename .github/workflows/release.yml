@@ -41,7 +41,6 @@ jobs:
         uses: two-inc/actions-public/app-token@main
         with:
           client-id: ${{ vars.TWO_INC_APP_CLIENT_ID }}
-          app-private-key: ${{ secrets.TWO_INC_APP_PRIVATE_KEY }}
       - uses: actions/checkout@v7
         with:
           ref: main
