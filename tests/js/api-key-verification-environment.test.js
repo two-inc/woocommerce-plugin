@@ -99,4 +99,46 @@ describe("the live API key check uses the environment chosen on the form", () =>
       expect({ description, posted }).toEqual({ description, posted: expected });
     }
   );
+
+  test("a slow reply for the environment left behind is dropped, and never recorded for the new one", async () => {
+    const pending = [];
+    const { $ } = await loadAdmin({
+      apiKey: KEY,
+      environment: "sandbox",
+      checked: [30],
+      stubAjax: function (jq) {
+        jq.ajax = jest.fn(function (settings) {
+          pending.push(settings);
+          return { done: function () {}, fail: function () {} };
+        });
+      }
+    });
+    const shown = () => ({
+      valid: $("#api-key-valid").css("display") !== "none",
+      invalid: $("#api-key-invalid").css("display") !== "none"
+    });
+    const rejected = {
+      success: false,
+      data: { status: "invalid_key", code: 401, definitive: true }
+    };
+
+    $("#" + FIELD_PREFIX + "checkout_env")
+      .val("production")
+      .trigger("change");
+    const [sandboxCheck, productionCheck] = pending;
+    productionCheck.success(rejected);
+    sandboxCheck.success({ success: true, data: { merchant_id: "m-1" } });
+    const afterStaleReply = shown();
+
+    $("#" + FIELD_PREFIX + "api_key").trigger("blur");
+    pending[2].success({
+      success: false,
+      data: { status: "service_error", code: 503, definitive: false }
+    });
+
+    expect({ afterStaleReply, afterOutage: shown() }).toEqual({
+      afterStaleReply: { valid: false, invalid: true },
+      afterOutage: { valid: false, invalid: true }
+    });
+  });
 });

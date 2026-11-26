@@ -145,6 +145,9 @@ jQuery(function ($) {
   // inventing a red cross, but only while the form still holds that pair.
   let lastDefinitiveStatus = null;
   let lastDefinitivePair = null;
+  // Each check's number; a reply for any but the latest is dropped, so a slow
+  // answer for an earlier key or environment never paints over a later one.
+  let verificationSequence = 0;
 
   function chosenEnvironment() {
     return $environmentField.length ? String($environmentField.val() || "") : "";
@@ -154,8 +157,8 @@ jQuery(function ($) {
     return apiKey + "|" + chosenEnvironment();
   }
 
-  function indicatorForUnjudgedKey(apiKey) {
-    return keyAndEnvironment(apiKey) === lastDefinitivePair ? lastDefinitiveStatus : null;
+  function indicatorForUnjudgedKey(pair) {
+    return pair === lastDefinitivePair ? lastDefinitiveStatus : null;
   }
 
   function showVerificationStatus(status) {
@@ -264,12 +267,16 @@ jQuery(function ($) {
   // useStored checks the saved key, which the page never holds.
   function verifyApiKey(apiKey, useStored) {
     if (!useStored && (!apiKey || apiKey.length < 10)) {
+      verificationSequence++;
       $verificationIcon.hide();
       return;
     }
 
     showVerificationStatus("loading");
 
+    // The pair this check judges, as the form held it when the check was sent.
+    const pair = keyAndEnvironment(apiKey);
+    const sequence = ++verificationSequence;
     const data = {
       action: "twoinc_verify_api_key",
       api_key: useStored ? "" : apiKey,
@@ -284,9 +291,12 @@ jQuery(function ($) {
       type: "POST",
       data: data,
       success: function (response) {
+        if (sequence !== verificationSequence) {
+          return;
+        }
         if (response.success) {
           lastDefinitiveStatus = "valid";
-          lastDefinitivePair = keyAndEnvironment(apiKey);
+          lastDefinitivePair = pair;
           showVerificationStatus("valid");
           updateMerchantInfo(response.data);
           return;
@@ -296,17 +306,20 @@ jQuery(function ($) {
         // and must leave the Merchant ID and key status alone.
         const data = response.data || {};
         if (!data.definitive) {
-          showVerificationStatus(indicatorForUnjudgedKey(apiKey));
+          showVerificationStatus(indicatorForUnjudgedKey(pair));
           showMerchantInfoUnconfirmed(data.status, data.code);
           return;
         }
         lastDefinitiveStatus = "invalid";
-        lastDefinitivePair = keyAndEnvironment(apiKey);
+        lastDefinitivePair = pair;
         showVerificationStatus("invalid");
         showMerchantInfoRejected(data.status, data.code);
       },
       error: function () {
-        showVerificationStatus(indicatorForUnjudgedKey(apiKey));
+        if (sequence !== verificationSequence) {
+          return;
+        }
+        showVerificationStatus(indicatorForUnjudgedKey(pair));
         showMerchantInfoUnconfirmed("request_failed", null);
       }
     });
