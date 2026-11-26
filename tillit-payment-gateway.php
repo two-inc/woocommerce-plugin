@@ -480,20 +480,18 @@ function twoinc_ajax_verify_api_key()
         return;
     }
 
-    // Get the Two instance and verify the API key. cache_verification_result()
-    // both categorizes the outcome AND warms the checkout-side cache
-    // (get_api_key_verification_status()) — this is the freshest live check
-    // this key has had, so a merchant who just fixed it here shouldn't have to
-    // wait out the checkout cache's TTL to see it take effect (TWO-25326
-    // follow-up).
-    $result = $twoinc_instance->verify_api_key($api_key);
-    $category = $twoinc_instance->cache_verification_result($api_key, $result);
+    // Verify the key against the environment chosen on the form (TWO-27300).
+    // The verdict also warms the checkout-side cache when that environment is
+    // the saved one — this is the freshest live check this key has had, so a
+    // merchant who just fixed it here shouldn't have to wait out the checkout
+    // cache's TTL to see it take effect (TWO-25326 follow-up).
+    $category = $twoinc_instance->verify_key_for_live_check($api_key, $_POST['mode'] ?? null);
 
     if ($category['status'] === 'ok') {
         // Echo the merchant identity back so the settings page can refresh the
         // displayed Merchant ID + short name as soon as validation completes,
         // without a reload (the key being typed is not persisted here).
-        $body = isset($result['body']) && is_array($result['body']) ? $result['body'] : [];
+        $body = isset($category['body']) && is_array($category['body']) ? $category['body'] : [];
         wp_send_json_success([
             'message' => 'API key is valid',
             'merchant_id' => isset($body['id']) ? (string) $body['id'] : '',

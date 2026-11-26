@@ -133,19 +133,29 @@ jQuery(function ($) {
 
   let verificationTimeout;
   const $apiKeyField = $("#woocommerce_" + twoinc_admin.gateway_id + "_api_key");
+  // The key is checked against the environment chosen here, saved or not (TWO-27300).
+  const $environmentField = $("#woocommerce_" + twoinc_admin.gateway_id + "_checkout_env");
   const $verificationIcon = $("#api-key-verification-icon");
   const $validIcon = $("#api-key-valid");
   const $invalidIcon = $("#api-key-invalid");
   const $loadingIcon = $("#api-key-loading");
 
-  // The last verdict that judged the key, and the key it judged — an
-  // inconclusive verdict restores that indicator rather than inventing a red
-  // cross, but only while the field still holds the key it applied to.
+  // The last verdict that judged the key, and the key and environment it
+  // judged — an inconclusive verdict restores that indicator rather than
+  // inventing a red cross, but only while the form still holds that pair.
   let lastDefinitiveStatus = null;
-  let lastDefinitiveKey = null;
+  let lastDefinitivePair = null;
+
+  function chosenEnvironment() {
+    return $environmentField.length ? String($environmentField.val() || "") : "";
+  }
+
+  function keyAndEnvironment(apiKey) {
+    return apiKey + "|" + chosenEnvironment();
+  }
 
   function indicatorForUnjudgedKey(apiKey) {
-    return apiKey === lastDefinitiveKey ? lastDefinitiveStatus : null;
+    return keyAndEnvironment(apiKey) === lastDefinitivePair ? lastDefinitiveStatus : null;
   }
 
   function showVerificationStatus(status) {
@@ -260,19 +270,23 @@ jQuery(function ($) {
 
     showVerificationStatus("loading");
 
+    const data = {
+      action: "twoinc_verify_api_key",
+      api_key: useStored ? "" : apiKey,
+      stored: useStored ? 1 : 0,
+      csrf_token: twoinc_admin.csrf_token
+    };
+    if ($environmentField.length) {
+      data.mode = chosenEnvironment();
+    }
     $.ajax({
       url: twoinc_admin.ajax_url,
       type: "POST",
-      data: {
-        action: "twoinc_verify_api_key",
-        api_key: useStored ? "" : apiKey,
-        stored: useStored ? 1 : 0,
-        csrf_token: twoinc_admin.csrf_token
-      },
+      data: data,
       success: function (response) {
         if (response.success) {
           lastDefinitiveStatus = "valid";
-          lastDefinitiveKey = apiKey;
+          lastDefinitivePair = keyAndEnvironment(apiKey);
           showVerificationStatus("valid");
           updateMerchantInfo(response.data);
           return;
@@ -287,7 +301,7 @@ jQuery(function ($) {
           return;
         }
         lastDefinitiveStatus = "invalid";
-        lastDefinitiveKey = apiKey;
+        lastDefinitivePair = keyAndEnvironment(apiKey);
         showVerificationStatus("invalid");
         showMerchantInfoRejected(data.status, data.code);
       },
@@ -315,11 +329,23 @@ jQuery(function ($) {
     verifyApiKey($(this).val());
   });
 
-  if ($apiKeyField.val()) {
-    verifyApiKey($apiKeyField.val());
-  } else if (twoinc_admin.has_saved_key) {
-    verifyApiKey("", true);
+  // The typed key, or else the saved one, as the save would judge it.
+  function verifyKeyInForm() {
+    if ($apiKeyField.val()) {
+      verifyApiKey($apiKeyField.val());
+    } else if (twoinc_admin.has_saved_key) {
+      verifyApiKey("", true);
+    }
   }
+
+  // A verdict is for one key in one environment, so switching the
+  // environment checks the key again.
+  $environmentField.on("change", function () {
+    clearTimeout(verificationTimeout);
+    verifyKeyInForm();
+  });
+
+  verifyKeyInForm();
 
   // ── Payment terms config ────────────────────────────────────────────────
   //

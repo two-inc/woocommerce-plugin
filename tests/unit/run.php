@@ -334,6 +334,7 @@ final class BrandConfigSpec
             'testVerifyApiKeyDistinguishesUnreachableFromNotConfigured',
             'testOnlyARejectedApiKeyRevertsOnSave',
             'testTheKeyAndEnvironmentSaveAsOnePair',
+            'testTheLiveKeyCheckUsesTheEnvironmentChosenOnTheForm',
             'testTheSavedKeyNeverReachesTheSettingsPage',
             'testTheVendorNameIsPrintableAsciiOfAtMost255',
             'testApiKeyVerificationStatusCachedAcrossCallsWithinTtl',
@@ -14431,6 +14432,51 @@ final class BrandConfigSpec
         ];
         $gateway->process_admin_options();
         TinyAssert::same('old-key', get_option($option_key, [])['api_key'] ?? null, 'twelve checks of other keys later, an outage save still keeps the pair Two accepted');
+        unset($GLOBALS['__twoinc_test_http_response']);
+    }
+
+    /**
+     * The settings page's live check verifies a typed key against the
+     * environment chosen on the form, saved or not, as the save does
+     * (TWO-27300). Only a check against the saved environment speaks for
+     * checkout's cache.
+     */
+    private static function testTheLiveKeyCheckUsesTheEnvironmentChosenOnTheForm(): void
+    {
+        $ok = ['response' => ['code' => 200], 'body' => '{"id":"merchant-1","short_name":"shop"}'];
+        $sandbox = 'https://api.sandbox.two.inc';
+        $production = 'https://api.two.inc';
+        // [saved env, posted mode, host checked against, checkout cache warmed, why]
+        $cases = [
+            ['sandbox', 'production', $production, false, 'env switched, unsaved: the chosen environment is checked'],
+            ['production', 'sandbox', $sandbox, false, 'env switched back, unsaved: the chosen environment is checked'],
+            ['sandbox', 'sandbox', $sandbox, true, 'env unchanged: the saved environment is checked'],
+            ['sandbox', null, $sandbox, true, 'mode missing: the saved environment is checked'],
+            ['sandbox', 'development', $sandbox, true, 'unknown mode: the saved environment is checked'],
+            ['sandbox', 'Production', $sandbox, true, 'only the stored spelling is a known mode'],
+            ['sandbox', ['production'], $sandbox, true, 'a non-string mode: the saved environment is checked'],
+        ];
+        foreach ($cases as [$saved_env, $posted, $host, $cached, $description]) {
+            $GLOBALS['__twoinc_test_options'] = [];
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $GLOBALS['__twoinc_test_http_calls'] = [];
+            $GLOBALS['__twoinc_test_http_response'] = $ok;
+            $gateway = self::save_gateway(true);
+            $gateway->init_form_fields();
+            $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()] = ['api_key' => 'old-key', 'checkout_env' => $saved_env];
+            $gateway->init_settings();
+
+            $verdict = $gateway->verify_key_for_live_check('typed-key', $posted);
+
+            $verifies = array_values(array_filter(array_column($GLOBALS['__twoinc_test_http_calls'], 'url'), static function ($url) {
+                return strpos($url, '/v1/merchant/verify_api_key') !== false;
+            }));
+            TinyAssert::same(1, count($verifies), $description . ': one check');
+            TinyAssert::same($host, (string) preg_replace('#^(https://[^/]+).*$#', '$1', (string) $verifies[0]), $description . ': host');
+            TinyAssert::same(['ok', 'merchant-1'], [$verdict['status'], $verdict['body']['id'] ?? null], $description . ': verdict and merchant');
+            TinyAssert::same($cached, get_transient(WC_Twoinc::verification_cache_key('typed-key')) !== false, $description . ': checkout cache');
+            TinyAssert::same($saved_env, $gateway->get_option('checkout_env'), $description . ': the saved environment is unchanged');
+        }
         unset($GLOBALS['__twoinc_test_http_response']);
     }
 
