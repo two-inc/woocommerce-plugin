@@ -14446,8 +14446,13 @@ final class BrandConfigSpec
         $ok = ['response' => ['code' => 200], 'body' => '{"id":"merchant-1","short_name":"shop"}'];
         $sandbox = 'https://api.sandbox.two.inc';
         $production = 'https://api.two.inc';
+        $staging = 'https://api.staging.two.inc';
+        // Staging is offered only on Two's infrastructure, or where it is stored.
+        putenv('TWO_INTERNAL_ENVIRONMENTS');
         // [saved env, posted mode, host checked against, checkout cache warmed, why]
         $cases = [
+            ['sandbox', 'staging', $sandbox, true, 'staging, not offered: the saved environment is checked'],
+            ['staging', 'staging', $staging, true, 'staging, offered because it is stored: staging is checked'],
             ['sandbox', 'production', $production, false, 'env switched, unsaved: the chosen environment is checked'],
             ['production', 'sandbox', $sandbox, false, 'env switched back, unsaved: the chosen environment is checked'],
             ['sandbox', 'sandbox', $sandbox, true, 'env unchanged: the saved environment is checked'],

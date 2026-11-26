@@ -9585,7 +9585,8 @@ if (!class_exists('WC_Twoinc')) {
          * The settings page's live check of a key (TWO-27300), against the
          * environment chosen on the form, saved or not: switching environment
          * and typing that environment's key is one admin action, as the save
-         * treats it. Anything but a known mode checks the saved environment.
+         * treats it. Only a mode the save would accept (the dropdown's options)
+         * is used; anything else checks the saved environment.
          *
          * @param mixed $posted_mode the Environment dropdown's value, if posted
          *
@@ -9593,7 +9594,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function verify_key_for_live_check(string $api_key, $posted_mode): array
         {
-            if (is_string($posted_mode) && in_array($posted_mode, WC_Twoinc_Helper::ENVIRONMENT_MODES, true)) {
+            if (WC_Twoinc_Helper::is_environment_mode_save_allowed($posted_mode, $this->get_stored_checkout_env())) {
                 return $this->verify_key_for_environment($api_key, $posted_mode);
             }
             return $this->cache_verification_result($api_key, $this->verify_api_key($api_key));
