@@ -4,7 +4,7 @@ Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
 WC requires at least: 7.6
-Stable tag: 3.0.0
+Stable tag: 4.2.0
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 Two - BNPL for businesses is a WooCommerce plugin that simplifies B2B shopping, allowing merchants to safely offer invoices as a payment method.
@@ -66,8 +66,9 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 
 == Changelog ==
 
-= 3.0.0 =
+= 4.2.0 =
 
+* The version jumps from 2.25.1 to 4.2.0 to align with the other Two plugins.
 * Block checkout on WooCommerce 11.3.1 and later: WooCommerce now refuses a checkout request when another request saved the buyer's session while it ran. Two's availability check, which waits on Two, no longer saves the session, so it neither trips that refusal nor puts back an address the buyer has since changed. Its verdict is kept for the buyer for up to two days, as before, including when they log in or create an account at checkout. The checkout records Two as the chosen payment method only when the choice changes, not on every page load.
 * Every fulfil and cancel outcome is written to the order notes: a cancel Two accepted, an order that was already fulfilled or cancelled, Two's own reason when it refused, and a separate note when Two could not be reached. Cancelling an order Two holds as fulfilled is not sent to Two: the note says a fulfilled order is refunded, not cancelled.
 * The payment method title is no longer stored at install. An empty title shows "Business invoice" in the shop's language (Spanish, Norwegian, Dutch and Swedish are included). On update, a title that is exactly one of the English titles earlier versions stored at install ("Pay with Tillit", "Pay in 15 days with invoice", "Business invoice 30 days", "Business invoice %s days", "Business invoice - %s days" or "Business invoice") is cleared once, so the shop shows the default in its own language. A title you edited is kept, and the subtitle is never changed. A title you typed yourself that is exactly one of those English titles is cleared too, as the update cannot tell it from the install default, and a title of exactly "Business invoice" is now shown translated in a shop in another language. To keep an English title there, word it differently.
@@ -239,7 +240,7 @@ Older releases are listed at https://github.com/two-inc/woocommerce-plugin/relea
 
 == Upgrade Notice ==
 
-= 3.0.0 =
+= 4.2.0 =
 Removes the "Default shipping tax class" setting, with no migration. See the changelog for the WP-CLI option that takes the shipping tax rate from WooCommerce's shipping tax class. Spanish merchants: set "Tax codes for 0% lines" under WooCommerce > Settings > Payments > Two, or Two refuses your 0% order lines.
 
 = 2.25.1 =
