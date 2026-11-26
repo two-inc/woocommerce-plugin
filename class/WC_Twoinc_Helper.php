@@ -1768,7 +1768,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * @param mixed $order the parent order; a currency string (the pre-3.0.0 form) is still accepted.
+         * @param mixed $order the parent order; a currency string (the pre-4.2.0 form) is still accepted.
          *
          * @return array
          */

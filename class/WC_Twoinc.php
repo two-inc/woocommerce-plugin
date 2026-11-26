@@ -4839,7 +4839,7 @@ if (!class_exists('WC_Twoinc')) {
          * Whether Two holds an invoice for the order (TWO-27373). The WooCommerce status alone is not enough: an
          * order can be completed while Two refused the fulfilment, and Two can fulfil an order (merchant portal,
          * API) that WooCommerce still shows as processing. The recorded state answers without a call once it is
-         * a fulfilled one or the terminal cancelled one, and so does an invoice number, which releases before 3.0 stored from the fulfilment
+         * a fulfilled one or the terminal cancelled one, and so does an invoice number, which releases before 4.2.0 stored from the fulfilment
          * answer. Otherwise the recorded state may be stale, so Two's own state decides. Only when Two cannot
          * be read does the WooCommerce status decide, as it did before; the download then reports an invoice
          * that is not ready yet.

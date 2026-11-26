@@ -3086,7 +3086,7 @@ final class BrandConfigSpec
         TinyAssert::same([], array_values(array_filter($failures)), "Failing cases:\n  " . implode("\n  ", array_filter($failures)));
     }
 
-    /** TWO-26072: callers written against 2.x keep working after the 3.0.0 signature changes. */
+    /** TWO-26072: callers written against 2.x keep working after the 4.2.0 signature changes. */
     private static function testTaxHelpersKeepTheirPre300CallForms(): void
     {
         $order = new StubTaxOrder(self::stubTaxRows([[1, 25.0, false]]), [], [], 1, [5 => new StubShippingItem(10.0, 2.5, [1 => 2.5])]);
@@ -3096,7 +3096,7 @@ final class BrandConfigSpec
             $subtotals = WC_Twoinc_Helper::get_tax_subtotals([], [new StubShippingItem(10.0, 2.5, [1 => 2.5])], [], $order);
             $body = WC_Twoinc_Helper::compose_twoinc_refund($refund, -12.5, 'SEK');
         } catch (Throwable $e) {
-            TinyAssert::same('no error', get_class($e) . ': ' . $e->getMessage(), 'pre-3.0.0 call forms');
+            TinyAssert::same('no error', get_class($e) . ': ' . $e->getMessage(), 'pre-4.2.0 call forms');
             return;
         } finally {
             unset($GLOBALS['__twoinc_test_wc_orders'][7]);
