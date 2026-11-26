@@ -200,6 +200,28 @@ function buildSettingsPage(options) {
         '<div id="twoinc-merchant-invalid-notice" class="twoinc-merchant-notice" style="display:none"></div>' +
         "</td></tr>";
 
+  // The Environment dropdown, opt-in: options.environment is its selected value.
+  const environmentBlock =
+    opts.environment === undefined
+      ? ""
+      : '    <tr><td><select id="' +
+        FIELD_PREFIX +
+        'checkout_env">' +
+        ["production", "sandbox", "staging"]
+          .map(function (mode) {
+            return (
+              '<option value="' +
+              mode +
+              '"' +
+              (mode === opts.environment ? " selected" : "") +
+              ">" +
+              mode +
+              "</option>"
+            );
+          })
+          .join("") +
+        "</select></td></tr>";
+
   // Mirrors generate_two_refresh_merchant_record_html(); opt-in, so the default page has no button.
   const refreshBlock = opts.refreshMerchantRecord
     ? "    <tr><td>" +
@@ -211,6 +233,7 @@ function buildSettingsPage(options) {
   document.body.innerHTML = [
     '<form method="post">',
     '  <table class="form-table"><tbody>',
+    environmentBlock,
     apiKeyBlock,
     refreshBlock,
     '    <tr><td><fieldset class="twoinc-term-checkboxes"' +
