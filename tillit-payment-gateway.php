@@ -4,7 +4,7 @@
  * Plugin Name: Two - BNPL for businesses
  * Plugin URI: https://two.inc
  * Description: Integration between WooCommerce and Two
- * Version: 3.0.0
+ * Version: 4.2.0
  * Author: Two
  * Author URI: https://two.inc
  * Text Domain: twoinc-payment-gateway
