@@ -100,6 +100,36 @@ describe("the live API key check uses the environment chosen on the form", () =>
     }
   );
 
+  test("clearing the key and switching the environment drops the old key's reply and hides the icon", async () => {
+    const pending = [];
+    const { $ } = await loadAdmin({
+      apiKey: KEY,
+      hasSavedKey: false,
+      environment: "sandbox",
+      checked: [30],
+      stubAjax: function (jq) {
+        jq.ajax = jest.fn(function (settings) {
+          pending.push(settings);
+          return { done: function () {}, fail: function () {} };
+        });
+      }
+    });
+
+    $("#" + FIELD_PREFIX + "api_key")
+      .val("")
+      .trigger("input");
+    $("#" + FIELD_PREFIX + "checkout_env")
+      .val("production")
+      .trigger("change");
+    pending[0].success({ success: true, data: { merchant_id: "m-1" } });
+
+    expect({
+      requests: pending.length,
+      iconShown: $("#api-key-verification-icon").css("display") !== "none",
+      validShown: $("#api-key-valid").css("display") !== "none"
+    }).toEqual({ requests: 1, iconShown: false, validShown: false });
+  });
+
   test("a slow reply for the environment left behind is dropped, and never recorded for the new one", async () => {
     const pending = [];
     const { $ } = await loadAdmin({

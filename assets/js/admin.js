@@ -342,12 +342,14 @@ jQuery(function ($) {
     verifyApiKey($(this).val());
   });
 
-  // The typed key, or else the saved one, as the save would judge it.
+  // The typed key, or else the saved one, as the save would judge it. With
+  // no key at all, the empty check still drops any reply in flight and hides
+  // the icon, so an old key's verdict can't outlive the key.
   function verifyKeyInForm() {
     if ($apiKeyField.val()) {
       verifyApiKey($apiKeyField.val());
-    } else if (twoinc_admin.has_saved_key) {
-      verifyApiKey("", true);
+    } else {
+      verifyApiKey("", twoinc_admin.has_saved_key);
     }
   }
 
