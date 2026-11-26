@@ -1,4 +1,4 @@
-/** ABN-554. The browser replays only the company the server rendered the page with, and keeps no copy of its own. */
+/** The browser replays only the company the server rendered the page with, and keeps no copy of its own. */
 
 "use strict";
 
@@ -7,7 +7,7 @@ const harness = require("./wc-harness");
 const NAME = "ACME Widgets Ltd";
 const NUMBER = "12345678";
 
-describe("ABN-554 — the captured company lives in the WC session", () => {
+describe("the captured company lives in the WC session", () => {
   let ctx;
 
   beforeEach(() => {
@@ -45,7 +45,7 @@ describe("ABN-554 — the captured company lives in the WC session", () => {
   }
 
   test("the company the page was rendered with is restored", () => {
-    load({ billing_company: NAME, company_id: NUMBER });
+    load({ billing_company: NAME, company_id: NUMBER, company_country: "GB" });
 
     ctx.dom.loadUserMetaInputs();
 
@@ -102,6 +102,8 @@ describe("ABN-554 — the captured company lives in the WC session", () => {
       expect(ajax.calls[ajax.calls.length - 1].url).toBe(harness.REMEMBER_COMPANY_URL);
       expect(sent.get("company_id")).toBe(NUMBER);
       expect(sent.get("company_name")).toBe(NAME);
+      // With the country it was captured under, so a replay keeps the pair (TWO-26286).
+      expect(sent.get("country")).toBe("GB");
 
       ctx.capture.write("", "");
       jest.runAllTimers();
@@ -110,6 +112,91 @@ describe("ABN-554 — the captured company lives in the WC session", () => {
       expect(cleared.get("company_id")).toBe("");
       expect(cleared.get("company_name")).toBe("");
     } finally {
+      ajax.restore();
+    }
+  });
+
+  // ABN-644. A pick on the delivery address reaches the session only while
+  // that address is also the invoice one (the Checkout block's "Use same
+  // address for billing"), so the classic checkout can replay it.
+  test.each([
+    [true, true, "ticked: the delivery pick is remembered"],
+    [false, false, "unticked: the delivery pick is not"]
+  ])("use same address for billing %s", (sameAddress, remembered, description) => {
+    load();
+    ctx
+      .$("form.checkout")
+      .append(
+        '<select id="shipping_country"><option value="GB" selected>United Kingdom</option></select>' +
+          '<input type="text" id="shipping_company" /><input type="text" id="shipping_company_id" />'
+      );
+    ctx.roles.deliveryIsInvoice = () => sameAddress;
+    const ajax = harness.stubAjax(ctx.$);
+
+    try {
+      ctx.capture.write(NAME, NUMBER, { role: ctx.roles.delivery(), country: "GB" });
+      jest.runAllTimers();
+
+      const sent = ajax.calls
+        .filter((call) => call.url === harness.REMEMBER_COMPANY_URL)
+        .map((call) => harness.requestParams(call).get("company_id"));
+      expect({ description, sent }).toEqual({ description, sent: remembered ? [NUMBER] : [] });
+    } finally {
+      ajax.restore();
+    }
+  });
+
+  /** Enter manually keeps the name and gives up the number, so a reload can only replay the name (TWO-26775). */
+  test("Enter manually hands the session the name with no number", () => {
+    load();
+    const ajax = harness.stubAjax(ctx.$);
+
+    try {
+      ctx.capture.write(NAME, NUMBER);
+      jest.runAllTimers();
+
+      ctx.helper.enterManualCompanyEntry();
+      jest.runAllTimers();
+
+      const sent = harness.requestParams(ajax.calls[ajax.calls.length - 1]);
+      expect(ajax.calls[ajax.calls.length - 1].url).toBe(harness.REMEMBER_COMPANY_URL);
+      expect(sent.get("company_id")).toBe("");
+      expect(sent.get("company_name")).toBe(NAME);
+    } finally {
+      ajax.restore();
+    }
+  });
+
+  /** A reload inside the debounce would otherwise replay the number the buyer had just let go (TWO-26775). */
+  test.each([
+    { beacon: true, description: "by beacon" },
+    { beacon: false, description: "by request where the browser has no beacon" }
+  ])("a write still held by the debounce is sent as the page goes, $description", ({ beacon }) => {
+    load();
+    const ajax = harness.stubAjax(ctx.$);
+    const sendBeacon = jest.fn(() => true);
+    const original = navigator.sendBeacon;
+    navigator.sendBeacon = beacon ? sendBeacon : undefined;
+
+    try {
+      ctx.capture.write(NAME, NUMBER);
+      jest.runAllTimers();
+      const before = ajax.calls.length;
+      ctx.capture.write(NAME, "");
+
+      window.dispatchEvent(new window.Event("pagehide"));
+      jest.runAllTimers();
+
+      // The last one: a module an earlier test loaded holds its own listener on this window.
+      const sent = beacon
+        ? sendBeacon.mock.calls[sendBeacon.mock.calls.length - 1][1]
+        : harness.requestParams(ajax.calls[ajax.calls.length - 1]);
+      expect(sent.get("company_id")).toBe("");
+      expect(sent.get("company_name")).toBe(NAME);
+      // Sent once: the debounce does not fire it a second time.
+      expect(ajax.calls.length - before).toBe(beacon ? 0 : 1);
+    } finally {
+      navigator.sendBeacon = original;
       ajax.restore();
     }
   });
@@ -129,7 +216,7 @@ describe("ABN-554 — the captured company lives in the WC session", () => {
   });
 
   test("restoring what the page already carried posts nothing back", () => {
-    load({ billing_company: NAME, company_id: NUMBER });
+    load({ billing_company: NAME, company_id: NUMBER, company_country: "GB" });
     const ajax = harness.stubAjax(ctx.$);
 
     try {

@@ -92,3 +92,24 @@ export async function triggerFulfilBatch(): Promise<void> {
   });
   if (!res.ok) throw new Error(`trigger fulfil batch failed: ${res.status}`);
 }
+
+/** POST an order as built, for tests that assert on Two's refusal: the status and body come back either way. */
+export async function createOrder(
+  body: Record<string, unknown>
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const res = await fetch(`${API_BASE_URL}/v1/order`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body)
+  });
+  return { status: res.status, body: await res.json().catch(() => ({})) };
+}
+
+/** Cancel an order a test left behind, without letting a failed cancel replace the test's own failure. */
+export async function cancelOrderQuietly(orderId: string): Promise<void> {
+  try {
+    await cancelOrder(orderId);
+  } catch (error) {
+    console.warn(`Could not cancel order ${orderId}: ${error}`);
+  }
+}

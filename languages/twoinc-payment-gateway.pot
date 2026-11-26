@@ -2,14 +2,14 @@
 # This file is distributed under the GPLv2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Two - BNPL for businesses 2.25.0\n"
+"Project-Id-Version: Two - BNPL for businesses 4.2.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/app\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-18T15:21:32+00:00\n"
+"POT-Creation-Date: 2026-11-24T17:35:02+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: twoinc-payment-gateway\n"
@@ -35,1779 +35,2144 @@ msgstr ""
 msgid "Two"
 msgstr ""
 
-#: class/WC_Twoinc.php:88
+#: class/WC_Twoinc.php:127
 msgid "Place order"
 msgstr ""
 
-#: class/WC_Twoinc.php:90
+#: class/WC_Twoinc.php:129
 msgid "Making it easy for businesses to buy online."
 msgstr ""
 
-#: class/WC_Twoinc.php:230
+#: class/WC_Twoinc.php:258
+#: class/WC_Twoinc.php:8343
 msgid "Production"
 msgstr ""
 
-#: class/WC_Twoinc.php:231
+#: class/WC_Twoinc.php:259
+#: class/WC_Twoinc.php:8344
 msgid "Sandbox"
 msgstr ""
 
+#: class/WC_Twoinc.php:260
+#: class/WC_Twoinc.php:8345
+msgid "Staging"
+msgstr ""
+
+#: class/WC_Twoinc.php:305
+msgid "Select a valid environment."
+msgstr ""
+
+#: class/WC_Twoinc.php:1178
+#: class/WC_Twoinc.php:7750
+msgid "Standard"
+msgstr ""
+
+#: class/WC_Twoinc.php:1219
+msgid "VAT-registered buyer, other EU state"
+msgstr ""
+
+#: class/WC_Twoinc.php:1221
+msgid "Your 0% tax rates"
+msgstr ""
+
+#: class/WC_Twoinc.php:1223
+msgid "Buyer's address does not match a tax rate (no tax charged, e.g. exports)"
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:1250
+#, php-format
+msgid "%1$s rejected the stored API key; check \"%1$s API key\"."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$s an HTTP status or "-"
+#: class/WC_Twoinc.php:1252
+#, php-format
+msgid "Could not read your merchant details from %1$s (HTTP %2$s); try again in a few minutes."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$s a country name, %3$s an HTTP status or "-"
+#: class/WC_Twoinc.php:1257
+#, php-format
+msgid "Could not check whether %1$s requires tax codes for your country (%2$s, HTTP %3$s); try again in a few minutes."
+msgstr ""
+
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:921
+#: class/WC_Twoinc.php:1292
+#, php-format
+msgid "Saved tax codes can't be read, so %s is hidden at checkout; clear them to restore it."
+msgstr ""
+
+#: class/WC_Twoinc.php:1293
+msgid "Checkout has not picked up your merchant details; press \"Refresh merchant profile\" under Diagnostics."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$s a country name
+#: class/WC_Twoinc.php:1295
+#, php-format
+msgid "Saved tax codes still apply at checkout, though %1$s does not require them for your country (%2$s)."
+msgstr ""
+
+#. translators: %1$s is a country name, %2$s the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:1297
+#, php-format
+msgid "Some saved tax codes are not valid on 0%% lines for your country (%1$s), so %2$s refuses orders that use them."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$s a country name
+#: class/WC_Twoinc.php:1315
+#, php-format
+msgid "%1$s requires a tax code on every 0%% line for your country (%2$s): choose one for each case below. A case left on (none) sends no code, and %1$s refuses the line. Shipping with no tax class of its own takes the code the order's other 0%% lines share. Northern Ireland counts as EU for goods only: in a services class's EU column, don't choose an intra-community services code."
+msgstr ""
+
+#: class/WC_Twoinc.php:1322
+msgid "Clear saved tax codes"
+msgstr ""
+
+#: class/WC_Twoinc.php:1360
+msgid "(none)"
+msgstr ""
+
+#: class/WC_Twoinc.php:1363
+msgid "not valid on 0% lines"
+msgstr ""
+
+#: class/WC_Twoinc.php:1363
+msgid "no longer listed"
+msgstr ""
+
+#: class/WC_Twoinc.php:1382
+msgid "Tax class"
+msgstr ""
+
+#: class/WC_Twoinc.php:1399
+msgid "No 0% tax rate in this class"
+msgstr ""
+
+#. translators: %s is why the tax code section could not be read
+#: class/WC_Twoinc.php:1441
+#, php-format
+msgid "The tax codes for 0%% lines were not saved, and your saved codes are unchanged: %s"
+msgstr ""
+
+#: class/WC_Twoinc.php:1448
+msgid "The tax codes for 0% lines arrived incomplete, so they were not saved and your saved codes are unchanged. Reload the page and try again."
+msgstr ""
+
+#. translators: %s is a tax code
+#: class/WC_Twoinc.php:1466
+#, php-format
+msgid "The tax code %s is not offered for 0%% lines, so the tax codes were not saved and your saved codes are unchanged."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:1895
 #, php-format
 msgid "The %s payment method stays available; buyers are offered no payment term to choose from until one can be read."
 msgstr ""
 
 #. translators: %s is a date and time in the site's own format
-#: class/WC_Twoinc.php:927
+#: class/WC_Twoinc.php:1901
 #, php-format
 msgid "Payment terms were last read successfully on %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:930
+#: class/WC_Twoinc.php:1904
 msgid "Payment terms have never been read successfully on this site."
 msgstr ""
 
 #. translators: %s is a date and time in the site's own format
-#: class/WC_Twoinc.php:937
+#: class/WC_Twoinc.php:1911
 #, php-format
 msgid "The last attempt was on %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:943
+#: class/WC_Twoinc.php:1917
 msgid "No attempt has been made yet."
 msgstr ""
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:950
+#: class/WC_Twoinc.php:1924
 #, php-format
 msgid "Check the \"%s API key\" and \"Environment\" settings."
 msgstr ""
 
-#: class/WC_Twoinc.php:956
+#: class/WC_Twoinc.php:1930
 msgid "The plugin retries by itself; \"Refresh merchant profile\" under Diagnostics retries now."
 msgstr ""
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:968
+#: class/WC_Twoinc.php:1942
 #, php-format
 msgid "No API key is saved, so your payment terms cannot be read from %s."
 msgstr ""
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:971
+#: class/WC_Twoinc.php:1945
 #, php-format
 msgid "Your %s account currently offers no payment terms."
 msgstr ""
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:974
+#: class/WC_Twoinc.php:1948
 #, php-format
 msgid "Your %s account returned no list of payment terms."
 msgstr ""
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:977
+#: class/WC_Twoinc.php:1951
 #, php-format
 msgid "Your payment terms have not been read from %s yet."
 msgstr ""
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:983
+#: class/WC_Twoinc.php:1957
 #, php-format
 msgid "Your payment terms could not be read: %s could not be reached (network failure or timeout)."
 msgstr ""
 
 #. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
-#: class/WC_Twoinc.php:986
+#: class/WC_Twoinc.php:1960
 #, php-format
 msgid "Your payment terms could not be read: %1$s rejected the saved API key (HTTP %2$d)."
 msgstr ""
 
 #. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
-#: class/WC_Twoinc.php:989
+#: class/WC_Twoinc.php:1963
 #, php-format
 msgid "Your payment terms could not be read: %1$s refused the request as too frequent (HTTP %2$d)."
 msgstr ""
 
 #. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
-#: class/WC_Twoinc.php:992
+#: class/WC_Twoinc.php:1966
 #, php-format
 msgid "Your payment terms could not be read: %1$s reported a server error (HTTP %2$d)."
 msgstr ""
 
 #. translators: %1$s is the brand product name (e.g. "Two"), %2$d an HTTP status code
-#: class/WC_Twoinc.php:995
+#: class/WC_Twoinc.php:1969
 #, php-format
 msgid "Your payment terms could not be read: %1$s answered HTTP %2$d."
 msgstr ""
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:999
+#: class/WC_Twoinc.php:1973
 #, php-format
 msgid "Your payment terms could not be read: the answer from %s could not be understood."
 msgstr ""
 
-#: class/WC_Twoinc.php:1013
+#: class/WC_Twoinc.php:1987
 msgid "Never"
 msgstr ""
 
 #. translators: %s is a date and time in the site's own format
-#: class/WC_Twoinc.php:1022
+#: class/WC_Twoinc.php:1996
 #, php-format
 msgid "%s — the last attempt to refresh these figures failed; use \"Refresh merchant profile\" under Diagnostics to retry"
 msgstr ""
 
 #. translators: %s is a date and time in the site's own format
-#: class/WC_Twoinc.php:1029
+#: class/WC_Twoinc.php:2003
 #, php-format
 msgid "%s — these figures are out of date; use \"Refresh merchant profile\" under Diagnostics"
 msgstr ""
 
-#: class/WC_Twoinc.php:1051
+#: class/WC_Twoinc.php:2025
 msgid "Payment method at checkout"
 msgstr ""
 
 #. translators: prefix of a reason the payment method is absent from checkout
-#: class/WC_Twoinc.php:1053
+#: class/WC_Twoinc.php:2027
 msgid "Not shown at checkout"
 msgstr ""
 
-#: class/WC_Twoinc.php:1057
+#: class/WC_Twoinc.php:2031
 msgid "the payment method is disabled. Check \"Turn on/off\"."
 msgstr ""
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:1061
+#: class/WC_Twoinc.php:2035
 #, php-format
 msgid "no API key is saved. Check \"%s API key\"."
 msgstr ""
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:1070
+#: class/WC_Twoinc.php:2044
 #, php-format
 msgid "the API key was rejected. Check \"%s API key\" and \"Environment\"."
 msgstr ""
 
-#: class/WC_Twoinc.php:1079
+#: class/WC_Twoinc.php:2050
+msgid "the saved tax code mapping is unreadable. Use \"Clear saved tax codes\" under Tax."
+msgstr ""
+
+#: class/WC_Twoinc.php:2056
 msgid "the saved surcharge method is not recognised. Check \"Surcharge method\"."
 msgstr ""
 
 #. translators: %s is the brand provider's full name
-#: class/WC_Twoinc.php:1088
+#: class/WC_Twoinc.php:2065
 #, php-format
 msgid "the buyer countries on your account could not be read. Contact %s."
 msgstr ""
 
 #. translators: %s is the brand provider's full name
-#: class/WC_Twoinc.php:1093
+#: class/WC_Twoinc.php:2070
 #, php-format
 msgid "no buyer countries are currently enabled for your account. Contact %s to have them enabled."
 msgstr ""
 
-#: class/WC_Twoinc.php:1111
+#: class/WC_Twoinc.php:2088
 msgid "Shown at checkout"
 msgstr ""
 
 #. translators: %s is a comma-separated list of ISO country codes
-#: class/WC_Twoinc.php:1121
+#: class/WC_Twoinc.php:2098
 #, php-format
 msgid "offered only to buyers in %s"
 msgstr ""
 
-#: class/WC_Twoinc.php:1127
+#: class/WC_Twoinc.php:2104
 msgid "minimum order value not known until your profile refreshes"
 msgstr ""
 
 #. translators: %s is an amount with its currency, e.g. "250.00 EUR (excluding tax)"
-#: class/WC_Twoinc.php:1137
+#: class/WC_Twoinc.php:2114
 #, php-format
 msgid "hidden for baskets below %s"
 msgstr ""
 
 #. translators: %1$s and %2$s are amounts with their currencies
-#: class/WC_Twoinc.php:1142
+#: class/WC_Twoinc.php:2119
 #, php-format
 msgid "hidden for baskets below %1$s or %2$s"
 msgstr ""
 
-#: class/WC_Twoinc.php:1149
+#: class/WC_Twoinc.php:2126
 msgid "hidden for baskets in a currency the buyer surcharge cannot be priced in"
 msgstr ""
 
 #. translators: %s is a comma-separated list of ISO country codes
-#: class/WC_Twoinc.php:1174
+#: class/WC_Twoinc.php:2151
 #, php-format
 msgid "offered only to buyers billed in %s"
 msgstr ""
 
-#: class/WC_Twoinc.php:1208
+#: class/WC_Twoinc.php:2185
 msgid "excluding tax"
 msgstr ""
 
-#: class/WC_Twoinc.php:1209
+#: class/WC_Twoinc.php:2186
 msgid "including tax"
 msgstr ""
 
 #. translators: %d is a count of payment terms
-#: class/WC_Twoinc.php:1220
+#: class/WC_Twoinc.php:2197
 #, php-format
 msgid "Resolved (%d available)"
 msgstr ""
 
 #. translators: %d is a count of payment terms
-#: class/WC_Twoinc.php:1225
+#: class/WC_Twoinc.php:2202
 #, php-format
 msgid "Resolved (%d available), last refresh failed"
 msgstr ""
 
 #. translators: %d is a count of payment terms
-#: class/WC_Twoinc.php:1227
+#: class/WC_Twoinc.php:2204
 #, php-format
 msgid "Resolved (%d available), out of date"
 msgstr ""
 
-#: class/WC_Twoinc.php:1229
+#: class/WC_Twoinc.php:2206
 msgid "No API key saved"
 msgstr ""
 
-#: class/WC_Twoinc.php:1231
+#: class/WC_Twoinc.php:2208
 msgid "None offered by the account"
 msgstr ""
 
-#: class/WC_Twoinc.php:1233
+#: class/WC_Twoinc.php:2210
 msgid "Not returned by the account"
 msgstr ""
 
-#: class/WC_Twoinc.php:1235
+#: class/WC_Twoinc.php:2212
 msgid "Not read yet"
 msgstr ""
 
 #. translators: %d is an HTTP status code
-#: class/WC_Twoinc.php:1241
+#: class/WC_Twoinc.php:2218
 #, php-format
 msgid "Could not be read (HTTP %d)"
 msgstr ""
 
-#: class/WC_Twoinc.php:1242
+#: class/WC_Twoinc.php:2219
 msgid "Could not be read"
 msgstr ""
 
-#: class/WC_Twoinc.php:1466
+#: class/WC_Twoinc.php:2458
 #, php-format
 msgid "What is %s?"
 msgstr ""
 
-#: class/WC_Twoinc.php:1473
+#: class/WC_Twoinc.php:2465
 #, php-format
 msgid "%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple."
 msgstr ""
 
-#: class/WC_Twoinc.php:1474
+#: class/WC_Twoinc.php:2466
 #: class/WC_Twoinc_Product_Promo.php:127
 msgid "Buy now, receive your goods, pay your invoice later."
 msgstr ""
 
-#: class/WC_Twoinc.php:1476
+#: class/WC_Twoinc.php:2468
 msgid "Click to find out more"
 msgstr ""
 
 #. translators: shown beside the spinner while the order-intent availability check runs.
-#: class/WC_Twoinc.php:1540
+#: class/WC_Twoinc.php:2532
 msgid "Checking availability"
 msgstr ""
 
 #. translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side — reorderable, do not assume %1$s precedes %2$s in every locale
-#: class/WC_Twoinc.php:1655
+#: class/WC_Twoinc.php:2647
 #, php-format
 msgid "This order by %2$s is likely to be accepted by %1$s"
 msgstr ""
 
-#: class/WC_Twoinc.php:1664
+#: class/WC_Twoinc.php:2656
 #, php-format
 msgid "Your invoice with %1$s is likely to be accepted, subject to additional checks."
 msgstr ""
 
-#: class/WC_Twoinc.php:1700
-#: class/WC_Twoinc.php:5473
-#: class/WC_Twoinc.php:5483
-#: class/WC_Twoinc.php:5591
-#: class/WC_Twoinc_Helper.php:248
+#: class/WC_Twoinc.php:2692
+#: class/WC_Twoinc.php:6762
+#: class/WC_Twoinc.php:6772
+#: class/WC_Twoinc.php:6874
+#: class/WC_Twoinc.php:6904
+#: class/WC_Twoinc_Blocks_Support.php:80
+#: class/WC_Twoinc_Helper.php:453
 #, php-format
 msgid "Invoice purchase with %s is not available for this order."
 msgstr ""
 
 #. translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side
-#: class/WC_Twoinc.php:1716
+#: class/WC_Twoinc.php:2708
 #, php-format
 msgid "%1$s is not available for this order by %2$s"
 msgstr ""
 
-#: class/WC_Twoinc.php:1804
+#: class/WC_Twoinc.php:2796
 msgid "Phone number is invalid."
 msgstr ""
 
-#: class/WC_Twoinc.php:1805
+#: class/WC_Twoinc.php:2797
 msgid "We could not complete that just now. Please wait a moment and try again."
 msgstr ""
 
-#: class/WC_Twoinc.php:1809
+#: class/WC_Twoinc.php:2801
 #, php-format
 msgid "To pay with %s, search for your company name and select it from the results."
 msgstr ""
 
-#: class/WC_Twoinc.php:1827
-#: class/WC_Twoinc.php:1847
-#: class/WC_Twoinc.php:2886
-#: class/WC_Twoinc.php:4181
-#: class/WC_Twoinc_Checkout.php:673
+#: class/WC_Twoinc.php:2819
+#: class/WC_Twoinc.php:2839
+#: class/WC_Twoinc.php:3869
+#: class/WC_Twoinc.php:5306
+#: class/WC_Twoinc_Checkout.php:819
 #, php-format
 msgid "%s days"
 msgstr ""
 
-#: class/WC_Twoinc.php:1844
-#: class/WC_Twoinc.php:4183
+#: class/WC_Twoinc.php:2836
+#: class/WC_Twoinc.php:5308
 msgid "Automatic"
 msgstr ""
 
-#: class/WC_Twoinc.php:1892
+#: class/WC_Twoinc.php:2884
 msgid "Rounding step must be one of the offered values."
 msgstr ""
 
-#: class/WC_Twoinc.php:1910
+#: class/WC_Twoinc.php:2902
 msgid "— select a tax class —"
 msgstr ""
 
-#: class/WC_Twoinc.php:1995
+#: class/WC_Twoinc.php:2987
 msgid "-- Select surcharge tax treatment --"
 msgstr ""
 
-#: class/WC_Twoinc.php:1996
+#: class/WC_Twoinc.php:2988
 msgid "Standard (store default tax rules)"
 msgstr ""
 
-#: class/WC_Twoinc.php:1997
+#: class/WC_Twoinc.php:2989
 msgid "Specific tax class"
 msgstr ""
 
-#: class/WC_Twoinc.php:1998
+#: class/WC_Twoinc.php:2990
 msgid "Never taxed"
 msgstr ""
 
-#: class/WC_Twoinc.php:2041
+#: class/WC_Twoinc.php:3033
 msgid "⚠ This store is set to leave the surcharge UNTAXED for every destination. That treatment is no longer available and these settings cannot be saved while it is stored — select a tax treatment above. To keep the fee untaxed, create a tax class with a 0% rate under WooCommerce → Settings → Tax and select it as the surcharge tax class."
 msgstr ""
 
-#: class/WC_Twoinc.php:2064
+#: class/WC_Twoinc.php:3056
 #, php-format
 msgid "⚠ The previously selected tax class (\"%s\") no longer exists. The surcharge is currently taxed under the Standard treatment — select an existing tax class or change the tax treatment above."
 msgstr ""
 
 #. translators: %s: submitted value
-#: class/WC_Twoinc.php:2193
+#: class/WC_Twoinc.php:3185
 #, php-format
 msgid "Unrecognised value for the product page message switch: %s."
 msgstr ""
 
 #. translators: %s: the type of the submitted value
-#: class/WC_Twoinc.php:2218
+#: class/WC_Twoinc.php:3210
 #, php-format
 msgid "Product page message accepts text only; a %s was submitted."
 msgstr ""
 
 #. translators: %s: submitted value
-#: class/WC_Twoinc.php:2252
+#: class/WC_Twoinc.php:3244
 #, php-format
 msgid "Unrecognised value for the product page button switch: %s."
 msgstr ""
 
 #. translators: 1: submitted value, 2: comma-separated list of valid methods
-#: class/WC_Twoinc.php:2270
+#: class/WC_Twoinc.php:3262
 #, php-format
 msgid "Unrecognised surcharge method: %1$s. Choose one of: %2$s."
 msgstr ""
 
-#: class/WC_Twoinc.php:2297
+#: class/WC_Twoinc.php:3289
 msgid "Select a surcharge tax treatment before enabling surcharges."
 msgstr ""
 
 #. translators: %s: comma-separated term days, e.g. "14, 30"
-#: class/WC_Twoinc.php:2309
+#: class/WC_Twoinc.php:3301
 #, php-format
 msgid "Clear or correct the surcharge limit of 0 on these terms before enabling a percentage surcharge: %s. A limit of 0 charges nothing at all; to charge nothing on a term, set its percentage and fixed fee to 0 and leave the limit empty."
 msgstr ""
 
-#: class/WC_Twoinc.php:2331
+#: class/WC_Twoinc.php:3323
 msgid "Select a surcharge tax treatment — surcharges cannot be used without one."
 msgstr ""
 
-#: class/WC_Twoinc.php:2342
+#: class/WC_Twoinc.php:3334
 msgid "That surcharge tax treatment leaves the surcharge untaxed for every destination and is no longer available. Create a tax class with a 0% rate and select it as the surcharge tax class instead."
 msgstr ""
 
-#: class/WC_Twoinc.php:2349
+#: class/WC_Twoinc.php:3341
 msgid "Surcharge tax treatment must be one of the offered modes."
 msgstr ""
 
-#: class/WC_Twoinc.php:2368
+#: class/WC_Twoinc.php:3360
 msgid "Surcharge tax class must be one of the store's existing tax classes."
 msgstr ""
 
-#: class/WC_Twoinc.php:2381
-msgid "Default shipping tax class must be one of the store's existing tax classes."
-msgstr ""
-
 #. translators: %s: store currency symbol, e.g. "€"
-#: class/WC_Twoinc.php:2417
+#: class/WC_Twoinc.php:3396
 #, php-format
 msgid "Enter a limit amount (in %s) if you do not want to charge your customer more than a specific amount. Leave the limit field empty if you don't want to impose a limit amount."
 msgstr ""
 
-#: class/WC_Twoinc.php:2423
+#: class/WC_Twoinc.php:3402
 msgid "A limit of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead."
 msgstr ""
 
-#: class/WC_Twoinc.php:2427
+#: class/WC_Twoinc.php:3406
 msgid "The limit applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
 msgstr ""
 
-#: class/WC_Twoinc.php:2431
+#: class/WC_Twoinc.php:3410
 msgid "Enter the percentage of the fee's cost to you that you want the surcharge to recover. 100% means the fee no longer reduces your revenue at all."
 msgstr ""
 
-#: class/WC_Twoinc.php:2433
+#: class/WC_Twoinc.php:3412
 msgid "Enter the amount you want to charge your customer."
 msgstr ""
 
 #. translators: %s: maximum fixed amount with currency, e.g. "EUR 25"
-#: class/WC_Twoinc.php:2437
+#: class/WC_Twoinc.php:3416
 #, php-format
 msgid "Max %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:2442
+#: class/WC_Twoinc.php:3421
 msgid "Enter the amount and percentage of the fee charged to you that you want to offset with a surcharge. Max 100%."
 msgstr ""
 
-#: class/WC_Twoinc.php:2465
+#: class/WC_Twoinc.php:3444
 msgid "No payment terms are offered yet — configure the offered terms above first."
 msgstr ""
 
-#: class/WC_Twoinc.php:2468
+#: class/WC_Twoinc.php:3447
 msgid "Term (days)"
 msgstr ""
 
-#: class/WC_Twoinc.php:2469
+#: class/WC_Twoinc.php:3448
 msgid "Fixed"
 msgstr ""
 
-#: class/WC_Twoinc.php:2470
+#: class/WC_Twoinc.php:3449
 msgid "Percent of fee"
 msgstr ""
 
-#: class/WC_Twoinc.php:2471
+#: class/WC_Twoinc.php:3450
 msgid "Limit"
 msgstr ""
 
 #. translators: %s: store currency code, e.g. "EUR"
-#: class/WC_Twoinc.php:2490
+#: class/WC_Twoinc.php:3469
 #, php-format
 msgid "Amounts are shown in %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:2510
+#: class/WC_Twoinc.php:3489
 msgid "fixed fee"
 msgstr ""
 
-#: class/WC_Twoinc.php:2511
+#: class/WC_Twoinc.php:3490
 msgid "percentage"
 msgstr ""
 
-#: class/WC_Twoinc.php:2512
+#: class/WC_Twoinc.php:3491
 msgid "limit"
 msgstr ""
 
 #. translators: 1: grid column name, already translated; 2: term days
-#: class/WC_Twoinc.php:2591
+#: class/WC_Twoinc.php:3570
 #, php-format
 msgid "Surcharge %1$s for the %2$s-day term must be a non-negative number."
 msgstr ""
 
 #. translators: %s: term days
-#: class/WC_Twoinc.php:2599
+#: class/WC_Twoinc.php:3578
 #, php-format
 msgid "Surcharge percentage for the %s-day term must be between 0 and 100."
 msgstr ""
 
 #. translators: %s: term days
-#: class/WC_Twoinc.php:2625
+#: class/WC_Twoinc.php:3604
 #, php-format
 msgid "Surcharge limit for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the limit empty."
 msgstr ""
 
 #. translators: 1: term days, 2: maximum amount with currency
-#: class/WC_Twoinc.php:2632
+#: class/WC_Twoinc.php:3611
 #, php-format
 msgid "Surcharge fixed amount for the %1$s-day term exceeds the maximum of %2$s."
 msgstr ""
 
-#: class/WC_Twoinc.php:2821
+#: class/WC_Twoinc.php:3804
 msgid "Select at least one payment term or enter a custom term."
 msgstr ""
 
 #. translators: %s is the stored number of days.
-#: class/WC_Twoinc.php:2849
+#: class/WC_Twoinc.php:3832
 #, php-format
 msgid "Legacy setting. This offers a custom term of %s days after the end of the month. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
 msgstr ""
 
 #. translators: %s is the stored number of days.
-#: class/WC_Twoinc.php:2856
+#: class/WC_Twoinc.php:3839
 #, php-format
 msgid "Legacy setting. This offers a custom term of %s days from fulfilment. It is no longer supported and cannot be edited. Choose Remove to withdraw it, or use the payment terms above to change what you offer."
 msgstr ""
 
-#: class/WC_Twoinc.php:2901
-#: class/WC_Twoinc.php:4198
-#: class/WC_Twoinc.php:6495
+#: class/WC_Twoinc.php:3884
+#: class/WC_Twoinc.php:5323
+#: class/WC_Twoinc.php:8100
 msgid "Remove"
 msgstr ""
 
-#: class/WC_Twoinc.php:2971
+#: class/WC_Twoinc.php:3954
 msgid "Custom payment terms (days) can only be removed, not changed."
 msgstr ""
 
 #. translators: %s is the unusable stored value.
-#: class/WC_Twoinc.php:2976
+#: class/WC_Twoinc.php:3959
 #, php-format
 msgid "Custom payment terms (days) holds \"%s\", which is not a usable number of days. Choose Remove on that field to clear it."
 msgstr ""
 
 #. translators: %s is the stored number of days.
-#: class/WC_Twoinc.php:3007
+#: class/WC_Twoinc.php:3990
 #, php-format
 msgid "Custom payment terms (days) of %s is now one of the standard terms you offer, so it has been selected under Payment terms and the custom field cleared."
 msgstr ""
 
 #. translators: %s: the link text naming Two's terms, e.g. "payment terms".
-#: class/WC_Twoinc.php:3145
+#: class/WC_Twoinc.php:4128
 #, php-format
 msgid "You must accept %s to place order."
 msgstr ""
 
-#: class/WC_Twoinc.php:3146
-#: class/WC_Twoinc.php:3173
+#: class/WC_Twoinc.php:4129
+#: class/WC_Twoinc.php:4156
 msgid "payment terms"
 msgstr ""
 
 #. translators: %1$s: a link to the brand's terms page; %2$s: the provider's full name.
-#: class/WC_Twoinc.php:3183
+#: class/WC_Twoinc.php:4166
 #, php-format
 msgid "I accept the %1$s and authorize %2$s to process my data automatically."
 msgstr ""
 
 #. translators: %1$s opens and %2$s closes a link to the brand's FAQ page.
-#: class/WC_Twoinc.php:3285
+#: class/WC_Twoinc.php:4267
 #, php-format
 msgid "For all companies, %1$sread more%2$s."
 msgstr ""
 
-#: class/WC_Twoinc.php:3814
+#: class/WC_Twoinc.php:4398
+msgid "Business invoice"
+msgstr ""
+
+#: class/WC_Twoinc.php:4885
+#, php-format
+msgid "Changes made to this order since %1$s UTC were not sent to %2$s. The %2$s invoice does not include them."
+msgstr ""
+
+#: class/WC_Twoinc.php:4925
 #, php-format
 msgid "Download %s invoice"
 msgstr ""
 
-#: class/WC_Twoinc.php:3821
+#: class/WC_Twoinc.php:4932
 #, php-format
 msgid "Download %s credit note"
 msgstr ""
 
-#: class/WC_Twoinc.php:3872
+#: class/WC_Twoinc.php:4983
 #, php-format
 msgid "No %s order reference is set for this order."
 msgstr ""
 
-#: class/WC_Twoinc.php:3919
+#: class/WC_Twoinc.php:5030
 msgid "The invoice for this order is still being prepared. Please try again later."
 msgstr ""
 
-#: class/WC_Twoinc.php:3939
+#: class/WC_Twoinc.php:5050
 #, php-format
 msgid "No %1$s invoice is available because the order is in state: %2$s."
 msgstr ""
 
-#: class/WC_Twoinc.php:3980
+#: class/WC_Twoinc.php:5091
 #, php-format
 msgid "Could not reach %s to retrieve the invoice. Please try again."
 msgstr ""
 
-#: class/WC_Twoinc.php:3988
+#: class/WC_Twoinc.php:5099
 #, php-format
 msgid "Could not retrieve the %s invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:4026
+#: class/WC_Twoinc.php:5137
 msgid "Invalid invoice variant."
 msgstr ""
 
-#: class/WC_Twoinc.php:4031
+#: class/WC_Twoinc.php:5142
 msgid "Order not found."
 msgstr ""
 
-#: class/WC_Twoinc.php:4041
+#: class/WC_Twoinc.php:5152
 msgid "You are not allowed to download this invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:4105
+#: class/WC_Twoinc.php:5215
 msgid "Could not refresh the merchant profile; the values read previously are still in use."
 msgstr ""
 
-#: class/WC_Twoinc.php:4114
+#: class/WC_Twoinc.php:5224
+#: class/WC_Twoinc.php:8312
 msgid "Merchant profile refreshed."
 msgstr ""
 
-#: class/WC_Twoinc.php:4199
+#: class/WC_Twoinc.php:5324
 msgid "Refreshing…"
 msgstr ""
 
-#: class/WC_Twoinc.php:4200
+#: class/WC_Twoinc.php:5325
 msgid "Could not refresh the merchant profile."
 msgstr ""
 
-#: class/WC_Twoinc.php:4203
+#: class/WC_Twoinc.php:5328
 msgid "no figure"
 msgstr ""
 
-#: class/WC_Twoinc.php:4404
+#: class/WC_Twoinc.php:5529
 msgid "This API key is invalid or has expired."
 msgstr ""
 
 #. translators: 1: product name (e.g. Two). 2: HTTP status code returned by the API (e.g. 502), substituted by admin.js.
-#: class/WC_Twoinc.php:4406
+#: class/WC_Twoinc.php:5531
 #, php-format
 msgid "%1$s's API returned a service error (HTTP %2$s). This is likely temporary on %1$s's side — try again shortly."
 msgstr ""
 
 #. translators: %s: product name (e.g. Two).
-#: class/WC_Twoinc.php:4408
+#: class/WC_Twoinc.php:5533
 #, php-format
 msgid "Could not reach %s's API (network or connectivity error). Try again shortly."
 msgstr ""
 
 #. translators: %s: product name (e.g. Two).
-#: class/WC_Twoinc.php:4410
+#: class/WC_Twoinc.php:5535
 #, php-format
 msgid "Enter an API key above to enable %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:4411
+#: class/WC_Twoinc.php:5536
 msgid "Could not complete verification — try again shortly."
 msgstr ""
 
 #. translators: 1: product name (e.g. Two). 2: HTTP status code returned by the API (e.g. 418), substituted by admin.js.
-#: class/WC_Twoinc.php:4413
+#: class/WC_Twoinc.php:5538
 #, php-format
 msgid "%1$s's API returned an unexpected response (HTTP %2$s)."
 msgstr ""
 
-#: class/WC_Twoinc.php:4414
+#: class/WC_Twoinc.php:5539
 msgid "This API key could not be verified."
 msgstr ""
 
-#: class/WC_Twoinc.php:4559
+#: class/WC_Twoinc.php:5702
 #, php-format
 msgid "%s has acknowledged request to fulfill %d order. An invoice will be sent to the buyer when the fulfilment is complete."
 msgid_plural "%s has acknowledged request to fulfill %d orders. Invoices will be sent to the buyers when the fulfilments are complete."
 msgstr[0] ""
 msgstr[1] ""
 
-#: class/WC_Twoinc.php:4568
+#: class/WC_Twoinc.php:5711
 #, php-format
 msgid "%s has failed to issue invoice for order %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:4574
+#: class/WC_Twoinc.php:5717
 #, php-format
 msgid "%s has cancelled %d order."
 msgid_plural "%s has cancelled %d orders."
 msgstr[0] ""
 msgstr[1] ""
 
-#: class/WC_Twoinc.php:4578
+#: class/WC_Twoinc.php:5721
 #, php-format
 msgid "%s has failed to cancel order %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:4666
+#: class/WC_Twoinc.php:5809
 #, php-format
 msgid "Could not update status to \"Fulfilled\" with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:4667
-#: class/WC_Twoinc.php:4762
-#: class/WC_Twoinc.php:5667
-#: class/WC_Twoinc.php:6948
+#: class/WC_Twoinc.php:5810
+#: class/WC_Twoinc.php:5907
+#: class/WC_Twoinc.php:6993
+#: class/WC_Twoinc.php:8695
 #, php-format
 msgid "Reason: Could not find %s order ID."
 msgstr ""
 
-#: class/WC_Twoinc.php:4697
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5820
+#, php-format
+msgid "%1$s order %2$s is cancelled, so it was not fulfilled."
+msgstr ""
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5826
+#, php-format
+msgid "%1$s order %2$s was already sent for fulfilment, so it was not sent again."
+msgstr ""
+
+#: class/WC_Twoinc.php:5858
 #, php-format
 msgid "The tracking number could not be attached to the %s order. The invoice will be sent without it."
 msgstr ""
 
-#: class/WC_Twoinc.php:4707
-#: class/WC_Twoinc.php:4719
-#, php-format
-msgid "Could not update order status to \"Fulfilled\" with %s."
-msgstr ""
-
-#: class/WC_Twoinc.php:4711
-#: class/WC_Twoinc.php:4723
-#: class/WC_Twoinc.php:4778
-#: class/WC_Twoinc.php:4786
-#: class/WC_Twoinc.php:5727
-#: class/WC_Twoinc.php:5740
-#: class/WC_Twoinc.php:6842
-#: class/WC_Twoinc.php:6984
-#, php-format
-msgid "Please contact %s support with order ID: %s"
-msgstr ""
-
-#: class/WC_Twoinc.php:4724
-#: class/WC_Twoinc.php:4787
-#: class/WC_Twoinc.php:5728
-#: class/WC_Twoinc.php:6985
-#, php-format
-msgid "Response: %s"
-msgstr ""
-
-#: class/WC_Twoinc.php:4729
+#: class/WC_Twoinc.php:5874
 #, php-format
 msgid "%s has acknowledged the request to fulfil the order. An invoice will be sent to the buyer when the fulfilment is complete."
 msgstr ""
 
-#: class/WC_Twoinc.php:4761
-#: class/WC_Twoinc.php:4777
-#: class/WC_Twoinc.php:4785
+#: class/WC_Twoinc.php:5906
 msgid "Could not update status to \"Cancelled\"."
 msgstr ""
 
-#: class/WC_Twoinc.php:4769
+#: class/WC_Twoinc.php:5914
 #, php-format
 msgid "Order is already cancelled with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:4823
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5922
+#, php-format
+msgid "%1$s order %2$s has been fulfilled, so it was not cancelled. A fulfilled order is refunded, not cancelled."
+msgstr ""
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5938
+#, php-format
+msgid "%1$s order %2$s cancelled."
+msgstr ""
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5968
+#, php-format
+msgid "%1$s could not be reached, so %1$s order %2$s was not fulfilled. Set the order to Completed again to retry."
+msgstr ""
+
+#. translators: 1: the payment method's product name, 2: its order id
+#: class/WC_Twoinc.php:5970
+#, php-format
+msgid "%1$s could not be reached, so %1$s order %2$s was not cancelled. Set the order to Cancelled again to retry."
+msgstr ""
+
+#. translators: 1: the payment method's product name, 2: its order id, 3: the reason it gave
+#: class/WC_Twoinc.php:5983
+#, php-format
+msgid "%1$s refused to fulfil order %2$s: %3$s"
+msgstr ""
+
+#. translators: 1: the payment method's product name, 2: its order id, 3: the reason it gave
+#: class/WC_Twoinc.php:5985
+#, php-format
+msgid "%1$s refused to cancel order %2$s: %3$s"
+msgstr ""
+
+#: class/WC_Twoinc.php:6018
 #, php-format
 msgid "%s pre-filled fields"
 msgstr ""
 
-#: class/WC_Twoinc.php:4827
+#: class/WC_Twoinc.php:6022
 msgid "Billing company name"
 msgstr ""
 
-#: class/WC_Twoinc.php:4833
+#: class/WC_Twoinc.php:6028
 msgid "Billing company ID"
 msgstr ""
 
-#: class/WC_Twoinc.php:4839
-#: class/WC_Twoinc_Checkout.php:331
+#: class/WC_Twoinc.php:6034
+#: class/WC_Twoinc_Checkout.php:414
 msgid "Project"
 msgstr ""
 
-#: class/WC_Twoinc.php:4843
+#: class/WC_Twoinc.php:6038
 msgid "The project displayed on the invoices"
 msgstr ""
 
-#: class/WC_Twoinc.php:4847
-#: class/WC_Twoinc_Checkout.php:340
+#: class/WC_Twoinc.php:6042
+#: class/WC_Twoinc_Checkout.php:423
 msgid "Department"
 msgstr ""
 
-#: class/WC_Twoinc.php:4851
+#: class/WC_Twoinc.php:6046
 msgid "The department displayed on the invoices"
 msgstr ""
 
-#: class/WC_Twoinc.php:5080
-#: class/WC_Twoinc.php:5204
-#: class/WC_Twoinc.php:5610
+#: class/WC_Twoinc.php:6279
+#: class/WC_Twoinc.php:6438
+#: class/WC_Twoinc.php:6923
 msgid "including"
 msgstr ""
 
-#: class/WC_Twoinc.php:5081
-#: class/WC_Twoinc.php:5204
-#: class/WC_Twoinc.php:5610
+#: class/WC_Twoinc.php:6280
+#: class/WC_Twoinc.php:6438
+#: class/WC_Twoinc.php:6923
 msgid "excluding"
 msgstr ""
 
-#: class/WC_Twoinc.php:5084
+#: class/WC_Twoinc.php:6283
 #, php-format
 msgid "Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below and must exceed it."
 msgstr ""
 
 #. translators: 1: platform minimum in its native currency, e.g. "EUR 250.00", 2: the same minimum converted into the store currency at the current FX rate, e.g. "NOK 2,941.18", 3: tax basis label, "including" or "excluding"
-#: class/WC_Twoinc.php:5098
+#: class/WC_Twoinc.php:6297
 #, php-format
 msgid "Platform minimum %1$s (approximately %2$s at the current exchange rate), %3$s tax. A value here is interpreted in the store currency on the tax basis selected below — both minimums are enforced independently."
 msgstr ""
 
-#: class/WC_Twoinc.php:5105
+#: class/WC_Twoinc.php:6304
 #, php-format
 msgid "Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below; it cannot be checked against the platform minimum (different currency) — both minimums are enforced independently."
 msgstr ""
 
-#: class/WC_Twoinc.php:5110
+#: class/WC_Twoinc.php:6309
 msgid "Hide the payment method below this order value (store currency, on the tax basis selected below). Leave empty for no minimum."
 msgstr ""
 
-#. translators: 1: the subtitle as typed, 2: what the checkout tile would render
-#: class/WC_Twoinc.php:5160
+#. translators: 1: the subtitle as typed, 2: what the checkout tile would show
+#: class/WC_Twoinc.php:6365
 #, php-format
-msgid "Subtitle accepts plain text and a single link only; \"%1$s\" would be shown as \"%2$s\"."
+msgid "Subtitle accepts plain text only, with no links or other markup; \"%1$s\" would be shown as \"%2$s\"."
 msgstr ""
 
-#: class/WC_Twoinc.php:5193
+#: class/WC_Twoinc.php:6400
+msgid "Enter a vendor name of at most 255 characters, using unaccented letters, digits, spaces and punctuation only, with no line breaks. The previously saved vendor name was kept."
+msgstr ""
+
+#: class/WC_Twoinc.php:6427
 msgid "Minimum order value must be a non-negative number."
 msgstr ""
 
-#: class/WC_Twoinc.php:5202
+#: class/WC_Twoinc.php:6436
 #, php-format
 msgid "Minimum order value must exceed the platform minimum of %1$s, %2$s tax."
 msgstr ""
 
 #. translators: %s is a comma-separated list of the rejected entries
-#: class/WC_Twoinc.php:5234
+#: class/WC_Twoinc.php:6468
 #, php-format
 msgid "Trusted proxy addresses: %s is not a valid IP address or CIDR block, and is ignored. Requests from it are not treated as coming from a trusted proxy."
 msgstr ""
 
-#: class/WC_Twoinc.php:5361
+#: class/WC_Twoinc.php:6627
 #, php-format
 msgid "This order cannot be paid with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:5396
-msgid "The selected payment term is no longer available. Please review the payment options and place the order again."
+#. translators: 1: the payment method's product name, 2: the order's currency code
+#: class/WC_Twoinc.php:6638
+#, php-format
+msgid "%1$s is not available for orders in %2$s. Please choose another currency or payment method."
 msgstr ""
 
-#: class/WC_Twoinc.php:5458
+#: class/WC_Twoinc.php:6747
 #, php-format
 msgid "Please select your company before paying with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:5571
+#: class/WC_Twoinc.php:6880
+#: class/WC_Twoinc.php:6894
 #, php-format
 msgid "Failed to request order creation with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:5577
+#: class/WC_Twoinc.php:6886
 #, php-format
 msgid "Failed to process payment with %s"
 msgstr ""
 
-#: class/WC_Twoinc.php:5607
+#: class/WC_Twoinc.php:6895
+#: class/WC_Twoinc.php:7059
+#: class/WC_Twoinc.php:8734
+#, php-format
+msgid "Response: %s"
+msgstr ""
+
+#: class/WC_Twoinc.php:6920
 #, php-format
 msgid "Minimum order value is %1$s%2$s %3$s tax."
 msgstr ""
 
-#: class/WC_Twoinc.php:5666
-#: class/WC_Twoinc.php:5719
-#: class/WC_Twoinc.php:5726
-#: class/WC_Twoinc.php:5739
+#: class/WC_Twoinc.php:6992
+#: class/WC_Twoinc.php:7050
+#: class/WC_Twoinc.php:7057
+#: class/WC_Twoinc.php:7070
 #, php-format
 msgid "Failed to request order refund with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:5671
+#: class/WC_Twoinc.php:6997
 #, php-format
 msgid "Could not find %s order ID"
 msgstr ""
 
-#: class/WC_Twoinc.php:5679
+#: class/WC_Twoinc.php:7005
 #, php-format
 msgid "Order has already been fully refunded with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:5704
+#: class/WC_Twoinc.php:7030
 #, php-format
 msgid "Could not initiate refund with %s"
 msgstr ""
 
-#: class/WC_Twoinc.php:5732
-#: class/WC_Twoinc.php:5744
+#: class/WC_Twoinc.php:7058
+#: class/WC_Twoinc.php:7071
+#: class/WC_Twoinc.php:8473
+#: class/WC_Twoinc.php:8733
+#, php-format
+msgid "Please contact %s support with order ID: %s"
+msgstr ""
+
+#: class/WC_Twoinc.php:7063
+#: class/WC_Twoinc.php:7075
 #, php-format
 msgid "Could not initiate refund with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:5751
+#: class/WC_Twoinc.php:7082
 #, php-format
 msgid "Invoice has been refunded and credit note has been sent by %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:5754
+#: class/WC_Twoinc.php:7085
 #, php-format
 msgid "Invoice has been partially refunded and credit note has been sent by %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:5871
-#: class/WC_Twoinc.php:5878
+#: class/WC_Twoinc.php:7202
+#: class/WC_Twoinc.php:7209
+#: class/WC_Twoinc.php:7276
 msgid "The security code is not valid."
 msgstr ""
 
-#: class/WC_Twoinc.php:5884
-#: class/WC_Twoinc.php:5893
+#: class/WC_Twoinc.php:7215
+#: class/WC_Twoinc.php:7227
+#: class/WC_Twoinc_Pending_Recovery.php:441
 #, php-format
 msgid "Unable to retrieve %s order information."
 msgstr ""
 
-#: class/WC_Twoinc.php:5900
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:7324
 #, php-format
-msgid "Unable to confirm the order with %s."
+msgid "%s could not approve this purchase. Please choose another payment method."
 msgstr ""
 
-#: class/WC_Twoinc.php:5907
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:7429
 #, php-format
-msgid "Order ID %s has been placed with %s."
+msgid "We are still confirming your order with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:5928
+#: class/WC_Twoinc.php:7445
 msgid "General"
 msgstr ""
 
-#: class/WC_Twoinc.php:5931
+#: class/WC_Twoinc.php:7448
 msgid "Turn on/off"
 msgstr ""
 
-#: class/WC_Twoinc.php:5933
+#: class/WC_Twoinc.php:7450
 #, php-format
 msgid "Enable %s payments"
 msgstr ""
 
-#: class/WC_Twoinc.php:5938
-#: class/WC_Twoinc.php:6738
+#: class/WC_Twoinc.php:7455
+#: class/WC_Twoinc.php:8369
 msgid "Environment"
 msgstr ""
 
-#: class/WC_Twoinc.php:5943
+#: class/WC_Twoinc.php:7456
+msgid "Sandbox is for testing and moves no real money. Use the API key issued for the environment you select."
+msgstr ""
+
+#: class/WC_Twoinc.php:7461
 #, php-format
 msgid "%s API key"
 msgstr ""
 
 #. translators: %s is the contact email address for obtaining production API keys
-#: class/WC_Twoinc.php:5947
+#: class/WC_Twoinc.php:7465
 #, php-format
 msgid "API key for the sandbox environment is available on your merchant portal (however please reach out to %s for access to production keys)."
 msgstr ""
 
-#: class/WC_Twoinc.php:5952
+#: class/WC_Twoinc.php:7470
 msgid "Vendor name (optional)"
 msgstr ""
 
 #. translators: %1$s and %2$s are both the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:5956
+#: class/WC_Twoinc.php:7474
 #, php-format
 msgid "If this store represents one of several vendor sites sharing the same %1$s merchant account, enter a name here to identify this specific site/vendor on each order sent to %2$s. Leave blank if you only run a single site."
 msgstr ""
 
-#: class/WC_Twoinc.php:5964
+#: class/WC_Twoinc.php:7482
 msgid "Checkout fields"
 msgstr ""
 
-#: class/WC_Twoinc.php:5967
+#: class/WC_Twoinc.php:7485
 msgid "Title"
 msgstr ""
 
-#: class/WC_Twoinc.php:5974
+#: class/WC_Twoinc.php:7493
 msgid "Subtitle"
 msgstr ""
 
-#: class/WC_Twoinc.php:5976
+#: class/WC_Twoinc.php:7495
 msgid "Optional subtitle shown beneath the title at checkout."
 msgstr ""
 
-#: class/WC_Twoinc.php:5984
+#: class/WC_Twoinc.php:7503
 msgid "Show message on product pages"
 msgstr ""
 
-#: class/WC_Twoinc.php:5985
+#: class/WC_Twoinc.php:7504
 msgid "Shows a short promotional line on product pages, beneath the add to cart button. Off by default. Where it lands depends on your theme."
 msgstr ""
 
-#: class/WC_Twoinc.php:5992
+#: class/WC_Twoinc.php:7511
 msgid "Product page message"
 msgstr ""
 
-#: class/WC_Twoinc.php:5994
+#: class/WC_Twoinc.php:7513
 msgid "Optional. Empty uses the default wording. Avoid naming a number of days unless you are certain of the terms you offer: terms run from fulfilment, and the terms actually available come from your merchant record."
 msgstr ""
 
-#: class/WC_Twoinc.php:6001
+#: class/WC_Twoinc.php:7520
 msgid "Show buy button on product pages"
 msgstr ""
 
-#: class/WC_Twoinc.php:6002
+#: class/WC_Twoinc.php:7521
 msgid "Adds a button beside Add to cart that adds the item and opens checkout with this payment method already selected. It does not place the order. Off by default. Where it lands depends on your theme."
 msgstr ""
 
-#: class/WC_Twoinc.php:6012
+#: class/WC_Twoinc.php:7531
 #, php-format
 msgid "Minimum order value, %s"
 msgstr ""
 
-#: class/WC_Twoinc.php:6020
+#: class/WC_Twoinc.php:7539
 msgid "Minimum order value tax basis"
 msgstr ""
 
-#: class/WC_Twoinc.php:6024
+#: class/WC_Twoinc.php:7543
 msgid "Including tax (gross)"
 msgstr ""
 
-#: class/WC_Twoinc.php:6025
+#: class/WC_Twoinc.php:7544
 msgid "Excluding tax (net)"
 msgstr ""
 
-#: class/WC_Twoinc.php:6027
+#: class/WC_Twoinc.php:7546
 msgid "Whether the basket is compared against the minimum including or excluding tax."
 msgstr ""
 
-#: class/WC_Twoinc.php:6030
+#: class/WC_Twoinc.php:7549
 msgid "Pre-approve buyer during checkout"
 msgstr ""
 
-#: class/WC_Twoinc.php:6031
+#: class/WC_Twoinc.php:7550
 msgid "Approve buyer when phone and company name is filled out."
 msgstr ""
 
-#: class/WC_Twoinc.php:6038
+#: class/WC_Twoinc.php:7557
 #, php-format
 msgid "Show \"What is %s\" link in checkout"
 msgstr ""
 
-#: class/WC_Twoinc.php:6044
+#: class/WC_Twoinc.php:7563
 msgid "Display input tooltips"
 msgstr ""
 
-#: class/WC_Twoinc.php:6058
+#: class/WC_Twoinc.php:7577
 msgid "Show invoice email field"
 msgstr ""
 
-#: class/WC_Twoinc.php:6059
+#: class/WC_Twoinc.php:7578
 msgid "Adds an input field where buyers can input optional additional email address to receive invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:6066
+#: class/WC_Twoinc.php:7585
 msgid "Show PO number field"
 msgstr ""
 
-#: class/WC_Twoinc.php:6067
+#: class/WC_Twoinc.php:7586
 msgid "Adds an input field where buyers can input their purchase order number to display on the invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:6074
+#: class/WC_Twoinc.php:7593
 msgid "Show project field"
 msgstr ""
 
-#: class/WC_Twoinc.php:6075
+#: class/WC_Twoinc.php:7594
 msgid "Adds an input field where buyers can input their project in the company to display on the invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:6082
+#: class/WC_Twoinc.php:7601
 msgid "Show department field"
 msgstr ""
 
-#: class/WC_Twoinc.php:6083
+#: class/WC_Twoinc.php:7602
 msgid "Adds an input field where buyers can input their department to display on the invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:6093
+#: class/WC_Twoinc.php:7612
 msgid "Enable company search in address entry"
 msgstr ""
 
-#: class/WC_Twoinc.php:6094
+#: class/WC_Twoinc.php:7613
 msgid "When enabled, the buyer may search for their company within the address entry section of the checkout. Otherwise, company search will be visible within the payment method."
 msgstr ""
 
-#: class/WC_Twoinc.php:6101
+#: class/WC_Twoinc.php:7620
 msgid "Autofill company address"
 msgstr ""
 
-#: class/WC_Twoinc.php:6102
+#: class/WC_Twoinc.php:7621
 msgid "Enables automatically filling in the registered address from the national registry."
 msgstr ""
 
-#: class/WC_Twoinc.php:6114
-#: class/WC_Twoinc.php:6128
-#: class/WC_Twoinc.php:6753
+#: class/WC_Twoinc.php:7633
+#: class/WC_Twoinc.php:7647
+#: class/WC_Twoinc.php:8384
 msgid "Payment terms"
 msgstr ""
 
-#: class/WC_Twoinc.php:6117
+#: class/WC_Twoinc.php:7636
 msgid "Payment terms type"
 msgstr ""
 
-#: class/WC_Twoinc.php:6118
+#: class/WC_Twoinc.php:7637
 msgid "Standard counts the term days from the invoice date. End of month counts them from the end of the invoice month."
 msgstr ""
 
-#: class/WC_Twoinc.php:6122
+#: class/WC_Twoinc.php:7641
 msgid "Standard (from invoice date)"
 msgstr ""
 
-#: class/WC_Twoinc.php:6123
+#: class/WC_Twoinc.php:7642
 msgid "End of month"
 msgstr ""
 
-#: class/WC_Twoinc.php:6129
+#: class/WC_Twoinc.php:7648
 msgid "Select the payment term(s) you want to offer."
 msgstr ""
 
-#: class/WC_Twoinc.php:6134
+#: class/WC_Twoinc.php:7653
 msgid "Custom payment terms (days)"
 msgstr ""
 
-#: class/WC_Twoinc.php:6140
+#: class/WC_Twoinc.php:7659
 msgid "Default payment terms"
 msgstr ""
 
-#: class/WC_Twoinc.php:6141
+#: class/WC_Twoinc.php:7660
 msgid "Select the payment term that will be automatically selected for your customer. Automatic leaves the choice to the checkout, which uses your own default term when you offer it."
 msgstr ""
 
-#: class/WC_Twoinc.php:6148
+#: class/WC_Twoinc.php:7667
 msgid "Surcharge method"
 msgstr ""
 
-#: class/WC_Twoinc.php:6149
+#: class/WC_Twoinc.php:7668
 msgid "Select a method to surcharge your customer."
 msgstr ""
 
-#: class/WC_Twoinc.php:6153
+#: class/WC_Twoinc.php:7672
 msgid "No surcharge applied"
 msgstr ""
 
-#: class/WC_Twoinc.php:6154
+#: class/WC_Twoinc.php:7673
 msgid "Percentage"
 msgstr ""
 
-#: class/WC_Twoinc.php:6155
+#: class/WC_Twoinc.php:7674
 msgid "Fixed fee"
 msgstr ""
 
-#: class/WC_Twoinc.php:6156
+#: class/WC_Twoinc.php:7675
 msgid "Fixed fee and percentage"
 msgstr ""
 
-#: class/WC_Twoinc.php:6161
+#: class/WC_Twoinc.php:7680
 msgid "Surcharge calculation basis"
 msgstr ""
 
-#: class/WC_Twoinc.php:6162
+#: class/WC_Twoinc.php:7681
 msgid "Total fee charges the configured surcharge for the chosen term. Fee difference charges only the difference versus the default term (which then shows no surcharge)."
 msgstr ""
 
-#: class/WC_Twoinc.php:6166
+#: class/WC_Twoinc.php:7685
 msgid "Total fee for selected term"
 msgstr ""
 
-#: class/WC_Twoinc.php:6167
+#: class/WC_Twoinc.php:7686
 msgid "Fee difference vs default payment term"
 msgstr ""
 
-#: class/WC_Twoinc.php:6172
+#: class/WC_Twoinc.php:7691
 msgid "Surcharge line description"
 msgstr ""
 
-#: class/WC_Twoinc.php:6173
+#: class/WC_Twoinc.php:7692
 #, php-format
 msgid "Buyer-facing label for the surcharge line. Use %s for the term length in days. Leave blank to use the brand default."
 msgstr ""
 
-#: class/WC_Twoinc.php:6179
+#: class/WC_Twoinc.php:7698
 msgid "Surcharge tax treatment"
 msgstr ""
 
-#: class/WC_Twoinc.php:6180
+#: class/WC_Twoinc.php:7699
 msgid "How the surcharge line is taxed. Standard applies your store's default tax rules to the fee. Specific tax class taxes the fee under a WooCommerce tax class you select below — to leave the fee untaxed, create a tax class with a 0% rate and select it here."
 msgstr ""
 
-#: class/WC_Twoinc.php:6202
+#: class/WC_Twoinc.php:7721
 msgid "Surcharge tax class"
 msgstr ""
 
-#: class/WC_Twoinc.php:6203
+#: class/WC_Twoinc.php:7722
 msgid "The WooCommerce tax class applied to the surcharge when the tax treatment is \"Specific tax class\". Manage tax classes under WooCommerce → Settings → Tax."
 msgstr ""
 
-#: class/WC_Twoinc.php:6213
+#: class/WC_Twoinc.php:7732
 msgid "Payment surcharge configuration"
 msgstr ""
 
-#: class/WC_Twoinc.php:6223
+#: class/WC_Twoinc.php:7742
 msgid "Surcharge rounding"
 msgstr ""
 
-#: class/WC_Twoinc.php:6224
+#: class/WC_Twoinc.php:7743
 msgid "Snap the buyer surcharge line to a clean increment. Select None for standard two-decimal amounts."
 msgstr ""
 
-#: class/WC_Twoinc.php:6228
+#: class/WC_Twoinc.php:7747
 msgid "None"
 msgstr ""
 
-#: class/WC_Twoinc.php:6229
+#: class/WC_Twoinc.php:7748
 msgid "Up"
 msgstr ""
 
-#: class/WC_Twoinc.php:6230
+#: class/WC_Twoinc.php:7749
 msgid "Down"
 msgstr ""
 
-#: class/WC_Twoinc.php:6231
-msgid "Standard"
-msgstr ""
-
-#: class/WC_Twoinc.php:6236
+#: class/WC_Twoinc.php:7755
 msgid "Rounding step"
 msgstr ""
 
-#: class/WC_Twoinc.php:6237
+#: class/WC_Twoinc.php:7756
 msgid "Increment the surcharge is rounded to (e.g. 1 = whole units, 0.50 = nearest half). Applies only when a rounding direction is selected."
 msgstr ""
 
-#: class/WC_Twoinc.php:6246
+#: class/WC_Twoinc.php:7765
 msgid "Order management"
 msgstr ""
 
-#: class/WC_Twoinc.php:6249
+#: class/WC_Twoinc.php:7768
 msgid "Fulfilment trigger statuses"
 msgstr ""
 
 #. translators: %1$s and %2$s are both the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:6257
+#: class/WC_Twoinc.php:7776
 #, php-format
 msgid "Which order status(es) tell %1$s an order is fulfilled. Defaults to \"Completed\" — add another status here (e.g. a custom status from another plugin) if your workflow never sets an order to Completed, otherwise %2$s is never notified and the order is left un-fulfilled indefinitely."
 msgstr ""
 
-#: class/WC_Twoinc.php:6264
+#: class/WC_Twoinc.php:7784
+msgid "Tax"
+msgstr ""
+
+#: class/WC_Twoinc.php:7787
 msgid "Validate tax subtotals"
 msgstr ""
 
-#. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:6269
-#, php-format
-msgid "When enabled, a breakdown of tax subtotals is included in the order payload sent to %s."
+#: class/WC_Twoinc.php:7790
+msgid "When checked, a per-tax-rate tax_subtotals breakdown is sent with orders, order updates and refunds, for validation against the order lines. When unchecked, tax_subtotals is omitted from all of them."
 msgstr ""
 
-#: class/WC_Twoinc.php:6276
-msgid "Default shipping tax class"
+#: class/WC_Twoinc.php:7795
+msgid "Tax codes for 0% lines"
 msgstr ""
 
-#: class/WC_Twoinc.php:6280
-msgid "Used only when a shipping method's tax rate cannot be resolved from the order itself (e.g. a third-party carrier or click-and-collect module that registers no tax class) but the shipping line was charged tax. Leave unselected to keep reporting an unresolvable rate as untaxed, matching today's behaviour."
-msgstr ""
-
-#: class/WC_Twoinc.php:6286
+#: class/WC_Twoinc.php:7802
 msgid "Diagnostics"
 msgstr ""
 
-#: class/WC_Twoinc.php:6289
+#: class/WC_Twoinc.php:7805
 msgid "Disable checkout rate limiting"
 msgstr ""
 
-#: class/WC_Twoinc.php:6290
+#: class/WC_Twoinc.php:7806
 msgid "Serve the checkout AJAX endpoints unmetered"
 msgstr ""
 
-#: class/WC_Twoinc.php:6292
+#: class/WC_Twoinc.php:7808
 msgid "The checkout AJAX endpoints spend your API key, so each client address is allowed a fixed number of requests per minute. Turn this on only if legitimate buyers are being refused — that happens when the store sits behind a reverse proxy or CDN and every buyer reaches PHP as the same address, which collapses the per-buyer allowance into a store-wide one. The lasting fix is to list the proxy below."
 msgstr ""
 
-#: class/WC_Twoinc.php:6296
+#: class/WC_Twoinc.php:7812
 msgid "Trusted proxy addresses"
 msgstr ""
 
-#: class/WC_Twoinc.php:6298
+#: class/WC_Twoinc.php:7814
 msgid "Addresses of your own reverse proxies, load balancers or CDN egress, as IPs or CIDR ranges, separated by commas or new lines. These IP addresses will be exempt from rate limiting."
 msgstr ""
 
-#: class/WC_Twoinc.php:6303
+#: class/WC_Twoinc.php:7819
 msgid "Custom request headers"
 msgstr ""
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:6307
+#: class/WC_Twoinc.php:7823
 #, php-format
 msgid "If your IT administrator asks you to add headers to the calls your store makes to the %s API (for example a firewall token), add them here. Every header listed is sent on all calls your store makes from your server."
 msgstr ""
 
-#: class/WC_Twoinc.php:6312
+#: class/WC_Twoinc.php:7828
 msgid "Disable SSL verification"
 msgstr ""
 
-#: class/WC_Twoinc.php:6313
+#: class/WC_Twoinc.php:7829
 msgid "Skip SSL certificate verification on outbound API requests"
 msgstr ""
 
-#: class/WC_Twoinc.php:6315
+#: class/WC_Twoinc.php:7831
 msgid "WARNING: this is unsafe for production and only intended for local/dev debugging behind a corporate proxy with custom SSL certificates. Applies in every environment, including Production, while enabled."
 msgstr ""
 
-#: class/WC_Twoinc.php:6319
+#: class/WC_Twoinc.php:7835
 msgid "Enable debug logging"
 msgstr ""
 
-#: class/WC_Twoinc.php:6320
+#: class/WC_Twoinc.php:7836
 msgid "Log API requests/responses and other diagnostic detail"
 msgstr ""
 
-#: class/WC_Twoinc.php:6323
+#: class/WC_Twoinc.php:7839
 #, php-format
 msgid "If enabled, API interactions and other diagnostic detail (e.g. surcharge/FX rounding) are logged. This can be useful for debugging. You can view the logs <a href=\"%s\">here</a>."
 msgstr ""
 
-#: class/WC_Twoinc.php:6329
+#: class/WC_Twoinc.php:7845
 msgid "Error log"
 msgstr ""
 
-#: class/WC_Twoinc.php:6333
+#: class/WC_Twoinc.php:7849
 msgid "Skip user validation at order confirmation"
 msgstr ""
 
-#: class/WC_Twoinc.php:6334
+#: class/WC_Twoinc.php:7850
 msgid "Accept the confirmation callback without a valid WordPress security token"
 msgstr ""
 
-#: class/WC_Twoinc.php:6336
+#: class/WC_Twoinc.php:7852
 msgid "The confirmation callback always checks the order's unique 64-character order reference; this option skips only the additional WordPress security token, which typically expires 12 to 24 hours after the order was placed — and, for a signed-in customer, when their session changes — so a buyer who comes back to a legitimately authorised order can be rejected. The order reference must still match, so the callback is not left open, but the security token's protection against a cross-site request is gone; leave this off unless you are seeing those false rejections."
 msgstr ""
 
-#: class/WC_Twoinc.php:6340
+#: class/WC_Twoinc.php:7856
 msgid "Clear settings on uninstall of plug-in"
 msgstr ""
 
-#: class/WC_Twoinc.php:6346
+#: class/WC_Twoinc.php:7862
 msgid "Plugin version"
 msgstr ""
 
-#: class/WC_Twoinc.php:6350
+#: class/WC_Twoinc.php:7866
 msgid "Install health checklist"
 msgstr ""
 
-#: class/WC_Twoinc.php:6354
+#: class/WC_Twoinc.php:7870
 msgid "Merchant profile"
 msgstr ""
 
-#: class/WC_Twoinc.php:6413
+#: class/WC_Twoinc.php:8010
+msgid "A key is saved. Leave this blank to keep it."
+msgstr ""
+
+#: class/WC_Twoinc.php:8018
 msgid "Merchant ID:"
 msgstr ""
 
-#: class/WC_Twoinc.php:6417
+#: class/WC_Twoinc.php:8022
 #, php-format
 msgid "Don't have an API key? Get one by signing up <a href='%s'>here</a>."
 msgstr ""
 
-#: class/WC_Twoinc.php:6465
+#: class/WC_Twoinc.php:8070
 msgid "Header name"
 msgstr ""
 
-#: class/WC_Twoinc.php:6466
+#: class/WC_Twoinc.php:8071
 msgid "Value"
 msgstr ""
 
-#: class/WC_Twoinc.php:6467
+#: class/WC_Twoinc.php:8072
 msgid "Also send from browser"
 msgstr ""
 
-#: class/WC_Twoinc.php:6482
-#: class/WC_Twoinc.php:6488
+#: class/WC_Twoinc.php:8087
+#: class/WC_Twoinc.php:8093
 msgid "This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again."
 msgstr ""
 
-#: class/WC_Twoinc.php:6491
+#: class/WC_Twoinc.php:8096
 msgid "This row is not being sent, and the settings cannot be saved until it is corrected or removed."
 msgstr ""
 
-#: class/WC_Twoinc.php:6500
+#: class/WC_Twoinc.php:8105
 msgid "Add header"
 msgstr ""
 
-#: class/WC_Twoinc.php:6502
+#: class/WC_Twoinc.php:8107
 msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
 msgstr ""
 
-#: class/WC_Twoinc.php:6532
+#: class/WC_Twoinc.php:8137
 msgid "Every custom request header needs a name."
 msgstr ""
 
 #. translators: %s: the rejected header name
-#: class/WC_Twoinc.php:6537
+#: class/WC_Twoinc.php:8142
 #, php-format
 msgid "\"%s\" is not a valid HTTP header name. Use letters, digits and hyphens."
 msgstr ""
 
 #. translators: %s: the rejected header name
-#: class/WC_Twoinc.php:6545
+#: class/WC_Twoinc.php:8150
 #, php-format
 msgid "The header \"%s\" is reserved and cannot be set from this table."
 msgstr ""
 
 #. translators: %s: the header name whose value was rejected
-#: class/WC_Twoinc.php:6552
+#: class/WC_Twoinc.php:8157
 #, php-format
 msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
 msgstr ""
 
 #. translators: %s: the duplicated header name
-#: class/WC_Twoinc.php:6559
+#: class/WC_Twoinc.php:8164
 #, php-format
 msgid "The header \"%s\" is listed more than once."
 msgstr ""
 
-#: class/WC_Twoinc.php:6637
+#: class/WC_Twoinc.php:8242
 msgid "Select image"
 msgstr ""
 
-#: class/WC_Twoinc.php:6660
+#: class/WC_Twoinc.php:8265
 msgid "View error log"
 msgstr ""
 
-#: class/WC_Twoinc.php:6663
+#: class/WC_Twoinc.php:8268
 msgid "Opens the WooCommerce log viewer filtered to this plugin's log entries."
 msgstr ""
 
-#: class/WC_Twoinc.php:6698
+#: class/WC_Twoinc.php:8303
 msgid "Refresh merchant profile"
 msgstr ""
 
 #. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:6704
+#: class/WC_Twoinc.php:8318
 #, php-format
 msgid "Your offerable payment terms, buyer-surcharge cap, minimum order value and default term are read from %s and cached. They are refreshed every night and whenever the API key or environment is saved; use this to pull a change through now. The nightly refresh runs on WP-Cron. With WP-Cron disabled, the next request more than 24 hours after the last refresh re-reads it, and while a re-read keeps failing one request a minute retries it."
 msgstr ""
 
-#: class/WC_Twoinc.php:6733
+#: class/WC_Twoinc.php:8348
+msgid "Not recognised: Sandbox is in use. Select an environment and save."
+msgstr ""
+
+#. translators: %s: brand name
+#: class/WC_Twoinc.php:8352
+#, php-format
+msgid "Staging (%s internal test environment). Select Sandbox or Production."
+msgstr ""
+
+#: class/WC_Twoinc.php:8364
 msgid "API key"
 msgstr ""
 
-#: class/WC_Twoinc.php:6734
+#: class/WC_Twoinc.php:8365
 msgid "Configured"
 msgstr ""
 
-#: class/WC_Twoinc.php:6734
+#: class/WC_Twoinc.php:8365
 msgid "Not configured"
 msgstr ""
 
-#: class/WC_Twoinc.php:6743
+#: class/WC_Twoinc.php:8374
 msgid "SSL verification"
 msgstr ""
 
-#: class/WC_Twoinc.php:6744
+#: class/WC_Twoinc.php:8375
 msgid "Disabled"
 msgstr ""
 
-#: class/WC_Twoinc.php:6744
+#: class/WC_Twoinc.php:8375
 msgid "Enabled"
 msgstr ""
 
-#: class/WC_Twoinc.php:6748
+#: class/WC_Twoinc.php:8379
 msgid "PHP curl extension"
 msgstr ""
 
-#: class/WC_Twoinc.php:6749
+#: class/WC_Twoinc.php:8380
 msgid "Present"
 msgstr ""
 
-#: class/WC_Twoinc.php:6749
+#: class/WC_Twoinc.php:8380
 msgid "Missing"
 msgstr ""
 
-#: class/WC_Twoinc.php:6758
+#: class/WC_Twoinc.php:8389
 msgid "Merchant profile last read"
 msgstr ""
 
-#: class/WC_Twoinc.php:6782
+#: class/WC_Twoinc.php:8413
 msgid "SSL verification is disabled while the environment is not production-hardened; re-check the \"Disable SSL verification\" setting."
 msgstr ""
 
-#: class/WC_Twoinc.php:6799
-#: class/WC_Twoinc.php:6829
+#: class/WC_Twoinc.php:8430
+#: class/WC_Twoinc.php:8460
 msgid "Unable to retrieve the order information."
 msgstr ""
 
-#: class/WC_Twoinc.php:6835
+#: class/WC_Twoinc.php:8466
 msgid "Unable to retrieve the order payment information"
 msgstr ""
 
-#: class/WC_Twoinc.php:6841
+#: class/WC_Twoinc.php:8472
 msgid "Missing company ID."
 msgstr ""
 
-#: class/WC_Twoinc.php:6919
+#: class/WC_Twoinc.php:8566
 #, php-format
 msgid "Could not update the order with %s. Reason: %s"
 msgstr ""
 
-#: class/WC_Twoinc.php:6947
-#: class/WC_Twoinc.php:6976
-#: class/WC_Twoinc.php:6983
+#: class/WC_Twoinc.php:8673
+#, php-format
+msgid "This change was saved in WooCommerce but was not sent to %1$s, which no longer accepts edits to this order. The %1$s invoice does not include it."
+msgstr ""
+
+#: class/WC_Twoinc.php:8694
+#: class/WC_Twoinc.php:8725
+#: class/WC_Twoinc.php:8732
 #, php-format
 msgid "Could not edit the order with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:6998
+#: class/WC_Twoinc.php:8751
 #, php-format
 msgid "The order edit request has been accepted by %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:7000
+#: class/WC_Twoinc.php:8753
 #, php-format
 msgid "Order value is now %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:7312
+#: class/WC_Twoinc.php:9224
 #, php-format
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
 msgstr ""
 
-#: class/WC_Twoinc.php:7313
+#: class/WC_Twoinc.php:9225
 #, php-format
 msgid "%s credit approves 90%% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It is quick, easy and gives you immediate access to the %s Merchant Portal."
 msgstr ""
 
-#: class/WC_Twoinc.php:7314
+#: class/WC_Twoinc.php:9226
 msgid "Set up my account"
 msgstr ""
 
 #. translators: 1: base plugin provenance, e.g. "2.23.9 (eb7bf92cec07, deployed 2026-07-08 11:35 UTC)"
-#: class/WC_Twoinc.php:7399
+#: class/WC_Twoinc.php:9314
 #, php-format
 msgid "Plugin: %s"
 msgstr ""
 
 #. translators: 1: overlay plugin slug, 2: overlay provenance
-#: class/WC_Twoinc.php:7407
+#: class/WC_Twoinc.php:9322
 #, php-format
 msgid "Brand overlay: %1$s %2$s"
 msgstr ""
 
 #. translators: 1: plugin (and overlay) provenance fragments, 2: WooCommerce version, 3: WordPress version
-#: class/WC_Twoinc.php:7414
+#: class/WC_Twoinc.php:9329
 #, php-format
 msgid "%1$s | WooCommerce: %2$s | WordPress: %3$s"
 msgstr ""
 
 #. translators: %s: UTC timestamp the code was deployed
-#: class/WC_Twoinc.php:7446
+#: class/WC_Twoinc.php:9361
 #, php-format
 msgid "deployed %s UTC"
 msgstr ""
 
-#: class/WC_Twoinc.php:7581
+#: class/WC_Twoinc.php:9541
 #, php-format
 msgid "%s API key verified."
 msgstr ""
 
 #. translators: %s: the payment method's product name
-#: class/WC_Twoinc.php:7592
+#: class/WC_Twoinc.php:9546
 #, php-format
 msgid "%s rejected that API key for the selected environment, so the previously saved API key and environment were kept."
 msgstr ""
 
-#: class/WC_Twoinc.php:7587
+#. translators: %s: the payment method's product name
+#: class/WC_Twoinc.php:9553
+#, php-format
+msgid "%s could not check the new API key and environment, so the previously saved ones, which it last accepted, were kept. Save again once it can be reached."
+msgstr ""
+
+#: class/WC_Twoinc.php:9558
 #, php-format
 msgid "API key saved, but %s could not be reached to verify it."
 msgstr ""
 
-#: class/WC_Twoinc.php:7589
+#: class/WC_Twoinc.php:9560
 msgid "API key saved, but it could not be verified because no environment is configured."
 msgstr ""
 
-#: class/WC_Twoinc.php:7591
+#: class/WC_Twoinc.php:9562
 #, php-format
 msgid "API key saved, but %s returned an error while verifying it."
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:220
-#: class/WC_Twoinc_Checkout.php:234
-#: class/WC_Twoinc_Checkout.php:248
-#: class/WC_Twoinc_Checkout.php:271
-#: class/WC_Twoinc_Checkout.php:280
-#: class/WC_Twoinc_Helper.php:303
+#: class/WC_Twoinc_Checkout.php:303
+#: class/WC_Twoinc_Checkout.php:317
+#: class/WC_Twoinc_Checkout.php:331
+#: class/WC_Twoinc_Checkout.php:354
+#: class/WC_Twoinc_Checkout.php:363
+#: class/WC_Twoinc_Helper.php:508
 msgid "Company name"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:255
-#: class/WC_Twoinc_Checkout.php:294
+#: class/WC_Twoinc_Checkout.php:338
+#: class/WC_Twoinc_Checkout.php:377
 msgid "Company ID"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:311
-#: class/WC_Twoinc_Helper.php:327
+#: class/WC_Twoinc_Checkout.php:394
+#: class/WC_Twoinc_Helper.php:532
 msgid "Invoice email address"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:322
+#: class/WC_Twoinc_Checkout.php:405
 msgid "PO Number"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:596
+#: class/WC_Twoinc_Checkout.php:739
 msgid "We require your phone number so we can verify your purchase."
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:597
+#: class/WC_Twoinc_Checkout.php:740
 msgid "We use your company name to automatically populate your address and register the company that made the purchase."
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:601
+#: class/WC_Twoinc_Checkout.php:744
 msgid "Company search is temporarily unavailable. Please try again."
 msgstr ""
 
+#: class/WC_Twoinc_Checkout.php:747
+msgid "Select your country above to search for your company."
+msgstr ""
+
 #. translators: %d: minimum number of characters the buyer must type before the company search runs. Left unresolved here and interpolated in JS from the threshold the widget enforces, so the two cannot disagree.
-#: class/WC_Twoinc_Checkout.php:609
+#: class/WC_Twoinc_Checkout.php:755
 #, php-format
 msgid "Enter %d or more characters"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:616
+#: class/WC_Twoinc_Checkout.php:762
 msgid "Enter manually"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:617
+#: class/WC_Twoinc_Checkout.php:763
 msgid "Search for company"
 msgstr ""
 
 #. translators: %d: number of companies the search returned, interpolated in JS.
-#: class/WC_Twoinc_Checkout.php:620
+#: class/WC_Twoinc_Checkout.php:766
 #, php-format
 msgid "%d results are available, use up and down arrow keys to navigate."
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:621
+#: class/WC_Twoinc_Checkout.php:767
 msgid "1 result is available, use up and down arrow keys to navigate."
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:677
+#: class/WC_Twoinc_Checkout.php:823
 msgid "Selected payment terms"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:683
+#: class/WC_Twoinc_Checkout.php:829
 #, php-format
 msgid "EOM+%s"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:684
+#: class/WC_Twoinc_Checkout.php:830
 #, php-format
 msgid "EOM+%s: pay %s days after the end of the month"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:692
+#: class/WC_Twoinc_Checkout.php:838
 #, php-format
 msgid "EOM+%1$s: pay %1$s days after the end of the month, plus a %2$s surcharge"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:722
+#: class/WC_Twoinc_Checkout.php:868
 msgid "Registered company"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:723
+#: class/WC_Twoinc_Checkout.php:869
 msgid "Sole trader"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:724
-msgid "Click here to login or sign up as a sole trader."
+#: class/WC_Twoinc_Checkout.php:871
+msgid "Sign up or log in as a sole trader"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:730
+#: class/WC_Twoinc_Checkout.php:877
 msgid "Select a different sole trader"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:731
+#: class/WC_Twoinc_Checkout.php:878
 msgid "Something went wrong setting up sole trader checkout. Please try again."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:205
+#: class/WC_Twoinc_Helper.php:351
 #, php-format
 msgid "Negative discount amount calculated for %s."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:224
+#: class/WC_Twoinc_Helper.php:370
 #, php-format
 msgid "Empty response from %s."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:228
+#: class/WC_Twoinc_Helper.php:374
 #, php-format
 msgid "Response code from %s: %d"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:271
+#: class/WC_Twoinc_Helper.php:476
 msgid "Buyer and merchant may not be the same company"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:290
+#: class/WC_Twoinc_Helper.php:495
 #, php-format
 msgid "Please enter a valid %s to pay on invoice"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:294
-#: class/WC_Twoinc_Helper.php:297
+#: class/WC_Twoinc_Helper.php:499
+#: class/WC_Twoinc_Helper.php:502
 msgid "Phone number"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:300
+#: class/WC_Twoinc_Helper.php:505
 msgid "Organization number"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:306
+#: class/WC_Twoinc_Helper.php:511
 msgid "First name"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:309
+#: class/WC_Twoinc_Helper.php:514
 msgid "Last name"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:312
+#: class/WC_Twoinc_Helper.php:517
 msgid "Email"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:315
+#: class/WC_Twoinc_Helper.php:520
 msgid "Address"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:318
+#: class/WC_Twoinc_Helper.php:523
 msgid "City"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:321
+#: class/WC_Twoinc_Helper.php:526
 msgid "Country"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:324
+#: class/WC_Twoinc_Helper.php:529
 msgid "Postal code"
 msgstr ""
 
-#: class/WC_Twoinc_Payment_Terms.php:1104
+#: class/WC_Twoinc_Helper.php:2540
+msgid "The order lines do not add up to the order total."
+msgstr ""
+
+#. translators: 1: request type (e.g. order_update). 2: product name (e.g. Two). 3: what went wrong.
+#: class/WC_Twoinc_Helper.php:2726
+#, php-format
+msgid "The %1$s request was not sent to %2$s: the twoinc_order_postprocessing filter failed (%3$s)."
+msgstr ""
+
+#. translators: %s: shipping method name
+#: class/WC_Twoinc_Helper.php:3483
+#, php-format
+msgid "Shipping \"%s\" cannot be refunded: the order line it refunds was not found."
+msgstr ""
+
+#. translators: 1: order line name. 2: product name (e.g. Two).
+#: class/WC_Twoinc_Helper.php:3536
+#, php-format
+msgid "\"%1$s\" cannot be refunded as tax alone: %2$s refunds a line's tax only together with its net amount. To correct the tax charged, refund the whole order and rebook it with the correct tax rates."
+msgstr ""
+
+#. translators: 1: order line name. 2: product name (e.g. Two).
+#: class/WC_Twoinc_Helper.php:3555
+#, php-format
+msgid "\"%1$s\" has no tax entered: %2$s refunds a line's net amount only together with its tax. Enter the tax refunded for this line as well."
+msgstr ""
+
+#. translators: %s: shipping method name
+#: class/WC_Twoinc_Helper.php:3740
+#, php-format
+msgid "The tax charged on \"%s\" does not match the shop's tax rates."
+msgstr ""
+
+#: class/WC_Twoinc_Payment_Terms.php:213
+msgid "The selected payment term is no longer available. Please review the payment options and place the order again."
+msgstr ""
+
+#. translators: %s: the payment method's product name
+#: class/WC_Twoinc_Payment_Terms.php:223
+#, php-format
+msgid "%s has no payment term available for this order. Please choose another payment method."
+msgstr ""
+
+#: class/WC_Twoinc_Payment_Terms.php:1208
 msgid "Payment terms fee"
 msgstr ""
 
-#: class/WC_Twoinc_Payment_Terms.php:1107
+#: class/WC_Twoinc_Payment_Terms.php:1211
 #, php-format
 msgid "Payment terms fee - %s days from end of month"
 msgstr ""
 
-#: class/WC_Twoinc_Payment_Terms.php:1108
+#: class/WC_Twoinc_Payment_Terms.php:1212
 #, php-format
 msgid "Payment terms fee - %s days"
 msgstr ""
 
+#: class/WC_Twoinc_Pending_Recovery.php:279
+#: class/WC_Twoinc_Pending_Recovery.php:289
+#: class/WC_Twoinc_Pending_Recovery.php:536
+#, php-format
+msgid "Unable to confirm the order with %s."
+msgstr ""
+
+#: class/WC_Twoinc_Pending_Recovery.php:328
+#, php-format
+msgid "Order ID %s has been placed with %s."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:378
+#, php-format
+msgid "%s declined this order. Cancelled here to match."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:380
+#, php-format
+msgid "%s reports this order as cancelled. Cancelled here to match."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:391
+#, php-format
+msgid "Unable to cancel the order with %s. The order is left waiting for payment."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:513
+#, php-format
+msgid "Checked with %s: the buyer has not finished verification."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:516
+#, php-format
+msgid "The buyer verified this order with %1$s but did not return to the shop. Confirmed with %1$s."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:519
+#, php-format
+msgid "The buyer verified this order with %1$s but did not return to the shop. %1$s had already confirmed it."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:522
+#, php-format
+msgid "%s reports this order as cancelled. Marked as failed here, so the buyer can still pay for it another way."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:525
+#, php-format
+msgid "%s declined this order. Marked as failed here, so the buyer can still pay for it another way."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:528
+#, php-format
+msgid "The buyer left the %1$s checkout without finishing verification. Cancelled with %1$s and marked as failed here, so the buyer can still pay for it another way."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:531
+#, php-format
+msgid "%s has no record of this order. Cancelled here without a cancel sent to it."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$s the order state it reports
+#: class/WC_Twoinc_Pending_Recovery.php:534
+#, php-format
+msgid "%1$s reports state %2$s; not changed. Check the order in the %1$s portal."
+msgstr ""
+
+#. translators: %1$s is the brand product name (e.g. "Two"), %2$s the reason the read failed
+#: class/WC_Twoinc_Pending_Recovery.php:539
+#, php-format
+msgid "Could not read the order from %1$s: %2$s"
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:542
+#, php-format
+msgid "This order is being checked with %s already. Reload the page in a moment."
+msgstr ""
+
+#: class/WC_Twoinc_Pending_Recovery.php:544
+msgid "This order is no longer waiting for payment, so it was not checked."
+msgstr ""
+
+#: class/WC_Twoinc_Pending_Recovery.php:551
+msgid "Found by the scheduled check."
+msgstr ""
+
+#: class/WC_Twoinc_Pending_Recovery.php:553
+msgid "Found when the unpaid order time limit was reached."
+msgstr ""
+
+#: class/WC_Twoinc_Pending_Recovery.php:555
+msgid "Found when the buyer came back to choose another payment method."
+msgstr ""
+
+#: class/WC_Twoinc_Pending_Recovery.php:560
+msgid "an administrator"
+msgstr ""
+
+#. translators: %s is the name of the admin user who ran the check
+#: class/WC_Twoinc_Pending_Recovery.php:563
+#, php-format
+msgid "Checked by %s."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc_Pending_Recovery.php:583
+#, php-format
+msgid "Check status with %s"
+msgstr ""
+
 #. translators: %s: the payment brand's name, for example Two
-#: class/WC_Twoinc_Product_Button.php:96
+#: class/WC_Twoinc_Product_Button.php:102
 #, php-format
 msgid "Buy with %s"
 msgstr ""
 
 #. translators: a fragment, followed by the payment brand's logo which names the brand. Keep it short.
-#: class/WC_Twoinc_Product_Button.php:107
+#: class/WC_Twoinc_Product_Button.php:113
 msgid "Buy with"
 msgstr ""
 
@@ -1867,6 +2232,6 @@ msgstr[1] ""
 msgid "Days you'll have to pay your invoice"
 msgstr ""
 
-#: tillit-payment-gateway.php:263
+#: tillit-payment-gateway.php:358
 msgid "Settings"
 msgstr ""

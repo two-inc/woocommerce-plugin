@@ -182,7 +182,7 @@ describe("the two address forms are independent", () => {
   });
 
   /**
-   * ABN-551. Replacing a captured company must not leave any component of the
+   * Replacing a captured company must not leave any component of the
    * outgoing one behind. Line 2 was the live case: a sole trader adopted by
    * autofill writes it, and the registry record for the company chosen next
    * carries no premises, so setAddress had nothing to say about line 2 and the
@@ -240,7 +240,7 @@ describe("the two address forms are independent", () => {
   });
 
   /**
-   * ABN-551 again, for the component `clearAddress` used to skip: `setRegion`
+   * The same bug again, for the component `clearAddress` used to skip: `setRegion`
    * writes a registry region onto the state control, so a record that carries
    * none left the outgoing company's county on the form.
    */
@@ -485,11 +485,199 @@ describe("TWO-40 — field routing for an externally supplied address", () => {
       expect($("#billing_city").val()).toBe("Ashford, Kent");
     });
 
+    // TWO-26174: the registry gives some countries' regions as ISO 3166-2 codes.
+    const ES =
+      '<select id="billing_state"><option value=""></option><option value="B">Barcelona</option><option value="CA">Cádiz</option></select>';
+    const BG =
+      '<select id="billing_state"><option value=""></option><option value="BG-01">Blagoevgrad</option></select>';
+    const TEXT = '<input type="text" id="billing_state" value="" />';
+    const NONE = '<input type="hidden" id="billing_state" />';
+    // Block checkout's own country data, as WooCommerce publishes it.
+    const COUNTRY_DATA = {
+      ES: { states: { B: "Barcelona", CA: "Cádiz" } },
+      BG: { states: { "BG-01": "Blagoevgrad" } },
+      FR: { states: {} }
+    };
+    test.each`
+      country | markup  | blocks   | region                | state                 | city                               | description
+      ${"ES"} | ${ES}   | ${false} | ${"ES-B"}             | ${"B"}                | ${"Sant Antoni"}                   | ${"an ISO code matches the province id"}
+      ${"ES"} | ${ES}   | ${false} | ${"es-ca"}            | ${"CA"}               | ${"Sant Antoni"}                   | ${"case does not matter"}
+      ${"BG"} | ${BG}   | ${false} | ${"BG-01"}            | ${"BG-01"}            | ${"Sant Antoni"}                   | ${"a whole-code province id still matches"}
+      ${"ES"} | ${ES}   | ${false} | ${"Barcelona"}        | ${"B"}                | ${"Sant Antoni"}                   | ${"a name still matches by text"}
+      ${"ES"} | ${ES}   | ${false} | ${"ES-Z"}             | ${""}                 | ${"Sant Antoni"}                   | ${"an unmatched ISO code is not put on the city"}
+      ${"FR"} | ${ES}   | ${false} | ${"ES-B"}             | ${""}                 | ${"Sant Antoni, ES-B"}             | ${"another country's code is not read as a code"}
+      ${"ES"} | ${TEXT} | ${false} | ${"ES-B"}             | ${"ES-B"}             | ${"Sant Antoni"}                   | ${"a free-text county with no state list is written as given"}
+      ${"ES"} | ${TEXT} | ${true}  | ${"ES-B"}             | ${"B"}                | ${"Sant Antoni"}                   | ${"block checkout matches its own country data"}
+      ${"BG"} | ${TEXT} | ${true}  | ${"BG-01"}            | ${"BG-01"}            | ${"Sant Antoni"}                   | ${"block checkout keeps a whole-code id"}
+      ${"ES"} | ${TEXT} | ${true}  | ${"ES-Z"}             | ${""}                 | ${"Sant Antoni"}                   | ${"block checkout leaves an unmatched code out"}
+      ${"FR"} | ${TEXT} | ${true}  | ${"Pays de la Loire"} | ${"Pays de la Loire"} | ${"Sant Antoni"}                   | ${"block checkout writes a region for a country with no state list"}
+      ${"FR"} | ${NONE} | ${false} | ${"FR-PDL"}           | ${""}                 | ${"Sant Antoni"}                   | ${"a code is not put on the city of a country without states"}
+      ${"FR"} | ${NONE} | ${false} | ${"Pays de la Loire"} | ${""}                 | ${"Sant Antoni, Pays de la Loire"} | ${"a name still goes on the city of a country without states"}
+    `("$description", ({ country, markup, blocks, region, state, city }) => {
+      buildAddressForm({ billingCountry: country, billingStateMarkup: markup });
+      const savedWc = window.wc;
+      if (blocks) {
+        window.wc = {
+          wcSettings: {
+            getSetting: (key, fallback) => (key === "countryData" ? COUNTRY_DATA : fallback)
+          }
+        };
+      }
+      try {
+        ctx.Twoinc.getInstance().setAddress({ street: "x", city: "Sant Antoni", region });
+      } finally {
+        window.wc = savedWc;
+      }
+
+      expect($("#billing_state").val() || "").toBe(state);
+      expect($("#billing_city").val()).toBe(city);
+    });
+
     test("an empty region writes nothing", () => {
       $("#billing_city").val("Ashford");
       ctx.Twoinc.getInstance().setAddress({ street: "x", city: "Ashford", region: "" });
       expect($("#billing_city").val()).toBe("Ashford");
       expect($("#billing_state").val()).toBe("");
     });
+  });
+});
+
+describe("TWO-27159: a company pick writes the registry phone", () => {
+  let ctx;
+  let $;
+  let ajax;
+
+  beforeEach(() => {
+    // A 429 arms a notice timer that must not outlive the test.
+    jest.useFakeTimers();
+    ctx = loadTwoinc({ enable_address_lookup: "yes" });
+    $ = ctx.$;
+    ajax = harness.stubAjax($);
+    buildAddressForm();
+    $("form[name='checkout']").append(
+      '<input type="tel" id="billing_phone" name="billing_phone" value="" />' +
+        '<input type="tel" id="shipping_phone" name="shipping_phone" value="" />'
+    );
+  });
+
+  afterEach(() => {
+    ajax.restore();
+    document.body.innerHTML = "";
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  });
+
+  const WITH_PHONE = (phone) => ({
+    addresses: [{ street_address: "Registry Street 1", phone_number: phone }]
+  });
+  const NO_PHONE = { addresses: [{ street_address: "Registry Street 1" }] };
+  const succeed = (data) => (call) => call.succeed(data);
+  const fail = (status) => (call) => call.fail("error", "failed", status);
+
+  /** Pick a company on a role and settle its address lookup with `settle`. */
+  function pick(role, settle) {
+    ctx.Twoinc.getInstance().addressLookup({ lookup_id: "lookup" }, role);
+    settle(ajax.last());
+  }
+
+  test.each([
+    {
+      typed: "",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      expected: "+31 20 123 4567",
+      description: "a registry phone fills an empty field"
+    },
+    {
+      typed: "+44 7700 900123",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      expected: "+31 20 123 4567",
+      description: "a registry phone replaces the field's value"
+    },
+    {
+      typed: "+44 7700 900123",
+      first: succeed(WITH_PHONE("  ")),
+      expected: "+44 7700 900123",
+      description: "a blank registry phone is no phone"
+    },
+    {
+      typed: "+44 7700 900123",
+      first: succeed(NO_PHONE),
+      expected: "+44 7700 900123",
+      description: "a pick with no phone keeps a typed phone"
+    },
+    {
+      typed: "+44 7700 900123",
+      first: fail(500),
+      expected: "+44 7700 900123",
+      description: "a failed lookup keeps a typed phone"
+    },
+    {
+      typed: "",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      second: succeed(WITH_PHONE("+31 10 765 4321")),
+      expected: "+31 10 765 4321",
+      description: "a re-pick's registry phone replaces the last one"
+    },
+    {
+      typed: "",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      second: succeed(NO_PHONE),
+      expected: "",
+      description: "a re-pick with no phone clears the registry phone"
+    },
+    {
+      typed: "",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      second: succeed({ addresses: [] }),
+      expected: "",
+      description: "a re-pick with no address clears the registry phone"
+    },
+    {
+      typed: "",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      second: fail(500),
+      expected: "",
+      description: "a re-pick whose lookup fails clears the registry phone"
+    },
+    {
+      typed: "",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      second: fail(429),
+      expected: "",
+      description: "a re-pick refused by the rate limit clears the registry phone"
+    },
+    {
+      typed: "",
+      first: succeed(WITH_PHONE("+31 20 123 4567")),
+      edited: "+31 20 123 9999",
+      second: succeed(NO_PHONE),
+      expected: "+31 20 123 9999",
+      description: "a phone the buyer edited is never cleared"
+    }
+  ])("$description", ({ typed, first, edited, second, expected, description }) => {
+    $("#billing_phone").val(typed);
+    pick("billing", first);
+    if (edited !== undefined) $("#billing_phone").val(edited);
+    if (second) pick("billing", second);
+
+    expect({ description, phone: $("#billing_phone").val() }).toEqual({
+      description,
+      phone: expected
+    });
+  });
+
+  test("a shipping pick writes the shipping phone and leaves billing's alone", () => {
+    $("#billing_phone").val("+44 7700 900123");
+    pick("shipping", succeed(WITH_PHONE("+31 20 123 4567")));
+
+    expect($("#shipping_phone").val()).toBe("+31 20 123 4567");
+    expect($("#billing_phone").val()).toBe("+44 7700 900123");
+  });
+
+  test("a sole trader with no phone clears a registry phone still standing, as a verified phone does", () => {
+    pick("billing", succeed(WITH_PHONE("+31 20 123 4567")));
+    ctx.Twoinc.getInstance().writeSoleTraderAddress({ phone_number: "" }, "billing");
+
+    expect($("#billing_phone").val()).toBe("");
   });
 });

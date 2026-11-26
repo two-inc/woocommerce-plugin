@@ -39,6 +39,21 @@ jQuery(function ($) {
     $(this).closest("tr.twoinc-custom-header-row").remove();
   });
 
+  // ── Tax codes for 0% lines (TWO-26153) ──────────────────────────────
+  // The dropdowns post nothing: the whole mapping goes as one JSON field, so
+  // a large rate table cannot run past PHP's max_input_vars and silently lose
+  // rows. "rows" lets the server refuse a field that arrived cut short.
+  $("body").on("change", ".twoinc-tax-code-map select[data-twoinc-tax-code-row]", function () {
+    const $field = $(this).closest(".twoinc-tax-code-map-field");
+    const map = {};
+    let rows = 0;
+    $field.find("select[data-twoinc-tax-code-row]").each(function () {
+      map[$(this).attr("data-twoinc-tax-code-row")] = $(this).val() || "";
+      rows++;
+    });
+    $field.find(".twoinc-tax-code-map-value").val(JSON.stringify({ rows: rows, map: map }));
+  });
+
   $("body").on("click", ".woocommerce-twoinc-logo", function (e) {
     e.preventDefault();
 
@@ -68,8 +83,8 @@ jQuery(function ($) {
   });
 
   // Autofill off and withdrawn while company search is off; unticked so the next
-  // save stores it off (ABN-554). The ON is edge-triggered only — driving it from
-  // the level showed a stored off as on and saved that back (ABN-562).
+  // save stores it off. The ON is edge-triggered only: driving it from
+  // the level showed a stored off as on and saved that back.
   const $companySearchToggle = $(
     "#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search"
   );
@@ -87,10 +102,14 @@ jQuery(function ($) {
     $addressLookupToggle.closest("tr").toggle(searchOn);
   }
 
-  $companySearchToggle.on("change", function () {
-    syncAddressLookupToggle(true);
-  });
-  syncAddressLookupToggle(false);
+  // A brand that withholds company search (allowed_fields) leaves no toggle to
+  // read; its stored value still stands, so address lookup is left as saved.
+  if ($companySearchToggle.length) {
+    $companySearchToggle.on("change", function () {
+      syncAddressLookupToggle(true);
+    });
+    syncAddressLookupToggle(false);
+  }
 
   jQuery("[id*='" + twoinc_admin.gateway_id + "'].wc-settings-sub-title").append(
     '<a href="#" class="collapsed setting-dropdown"><span class="dashicons dashicons-arrow-down-alt2"></span></a>'
@@ -114,19 +133,32 @@ jQuery(function ($) {
 
   let verificationTimeout;
   const $apiKeyField = $("#woocommerce_" + twoinc_admin.gateway_id + "_api_key");
+  // The key is checked against the environment chosen here, saved or not (TWO-27300).
+  const $environmentField = $("#woocommerce_" + twoinc_admin.gateway_id + "_checkout_env");
   const $verificationIcon = $("#api-key-verification-icon");
   const $validIcon = $("#api-key-valid");
   const $invalidIcon = $("#api-key-invalid");
   const $loadingIcon = $("#api-key-loading");
 
-  // The last verdict that judged the key, and the key it judged — an
-  // inconclusive verdict restores that indicator rather than inventing a red
-  // cross, but only while the field still holds the key it applied to.
+  // The last verdict that judged the key, and the key and environment it
+  // judged — an inconclusive verdict restores that indicator rather than
+  // inventing a red cross, but only while the form still holds that pair.
   let lastDefinitiveStatus = null;
-  let lastDefinitiveKey = null;
+  let lastDefinitivePair = null;
+  // Each check's number; a reply for any but the latest is dropped, so a slow
+  // answer for an earlier key or environment never paints over a later one.
+  let verificationSequence = 0;
 
-  function indicatorForUnjudgedKey(apiKey) {
-    return apiKey === lastDefinitiveKey ? lastDefinitiveStatus : null;
+  function chosenEnvironment() {
+    return $environmentField.length ? String($environmentField.val() || "") : "";
+  }
+
+  function keyAndEnvironment(apiKey) {
+    return apiKey + "|" + chosenEnvironment();
+  }
+
+  function indicatorForUnjudgedKey(pair) {
+    return pair === lastDefinitivePair ? lastDefinitiveStatus : null;
   }
 
   function showVerificationStatus(status) {
@@ -232,46 +264,62 @@ jQuery(function ($) {
       .show();
   }
 
-  function verifyApiKey(apiKey) {
-    if (!apiKey || apiKey.length < 10) {
+  // useStored checks the saved key, which the page never holds.
+  function verifyApiKey(apiKey, useStored) {
+    if (!useStored && (!apiKey || apiKey.length < 10)) {
+      verificationSequence++;
       $verificationIcon.hide();
       return;
     }
 
     showVerificationStatus("loading");
 
+    // The pair this check judges, as the form held it when the check was sent.
+    const pair = keyAndEnvironment(apiKey);
+    const sequence = ++verificationSequence;
+    const data = {
+      action: "twoinc_verify_api_key",
+      api_key: useStored ? "" : apiKey,
+      stored: useStored ? 1 : 0,
+      csrf_token: twoinc_admin.csrf_token
+    };
+    if ($environmentField.length) {
+      data.mode = chosenEnvironment();
+    }
     $.ajax({
       url: twoinc_admin.ajax_url,
       type: "POST",
-      data: {
-        action: "twoinc_verify_api_key",
-        api_key: apiKey,
-        csrf_token: twoinc_admin.csrf_token
-      },
+      data: data,
       success: function (response) {
+        if (sequence !== verificationSequence) {
+          return;
+        }
         if (response.success) {
           lastDefinitiveStatus = "valid";
-          lastDefinitiveKey = apiKey;
+          lastDefinitivePair = pair;
           showVerificationStatus("valid");
           updateMerchantInfo(response.data);
           return;
         }
         // Whether the verdict judged the KEY is decided server-side, where the
         // categories are defined once; anything else judged nothing about it
-        // and must leave the Merchant ID and key status alone (ABN-536).
+        // and must leave the Merchant ID and key status alone.
         const data = response.data || {};
         if (!data.definitive) {
-          showVerificationStatus(indicatorForUnjudgedKey(apiKey));
+          showVerificationStatus(indicatorForUnjudgedKey(pair));
           showMerchantInfoUnconfirmed(data.status, data.code);
           return;
         }
         lastDefinitiveStatus = "invalid";
-        lastDefinitiveKey = apiKey;
+        lastDefinitivePair = pair;
         showVerificationStatus("invalid");
         showMerchantInfoRejected(data.status, data.code);
       },
       error: function () {
-        showVerificationStatus(indicatorForUnjudgedKey(apiKey));
+        if (sequence !== verificationSequence) {
+          return;
+        }
+        showVerificationStatus(indicatorForUnjudgedKey(pair));
         showMerchantInfoUnconfirmed("request_failed", null);
       }
     });
@@ -294,9 +342,25 @@ jQuery(function ($) {
     verifyApiKey($(this).val());
   });
 
-  if ($apiKeyField.val()) {
-    verifyApiKey($apiKeyField.val());
+  // The typed key, or else the saved one, as the save would judge it. With
+  // no key at all, the empty check still drops any reply in flight and hides
+  // the icon, so an old key's verdict can't outlive the key.
+  function verifyKeyInForm() {
+    if ($apiKeyField.val()) {
+      verifyApiKey($apiKeyField.val());
+    } else {
+      verifyApiKey("", twoinc_admin.has_saved_key);
+    }
   }
+
+  // A verdict is for one key in one environment, so switching the
+  // environment checks the key again.
+  $environmentField.on("change", function () {
+    clearTimeout(verificationTimeout);
+    verifyKeyInForm();
+  });
+
+  verifyKeyInForm();
 
   // ── Payment terms config ────────────────────────────────────────────────
   //
@@ -331,7 +395,7 @@ jQuery(function ($) {
         });
     }
 
-    // An unresolved offered set is unknown, so it narrows nothing (ABN-521).
+    // An unresolved offered set is unknown, so it narrows nothing.
     function merchantOffers(n) {
       const merchant = (twoinc_admin.merchant_available_terms || []).map(Number);
       return merchant.length === 0 || merchant.indexOf(n) !== -1;
@@ -356,7 +420,7 @@ jQuery(function ($) {
       const current = parseInt($defaultTerm.val(), 10) || 0;
       $defaultTerm.empty();
       // First, so a selection that is no longer offered lands here rather than
-      // on a day count nobody chose (ABN-548).
+      // on a day count nobody chose.
       $defaultTerm.append($("<option></option>").attr("value", "").text(automaticLabel));
       $.each(terms, function (_, days) {
         $defaultTerm.append(
@@ -378,7 +442,7 @@ jQuery(function ($) {
     }
 
     // An empty span reads as "no fee for this term", so a term the answer did
-    // not price says so instead (ABN-540).
+    // not price says so instead.
     function noFigureLabel() {
       return " (" + (twoinc_admin.i18n_no_fee_figure || "no figure") + ")";
     }
@@ -637,6 +701,15 @@ jQuery(function ($) {
 
   // ── Diagnostics: on-demand merchant-profile refresh ─────────────────────
   (function initRefreshMerchantRecord() {
+    // The reload after a refresh carries a stamp the server confirms once;
+    // drop it, so the settings form does not post back to it and a later
+    // save does not confirm the refresh again.
+    const landed = new URL(window.location.href);
+    if (landed.searchParams.has("twoinc_refreshed")) {
+      landed.searchParams.delete("twoinc_refreshed");
+      window.history.replaceState(window.history.state, "", landed.toString());
+    }
+
     const $button = $("#twoinc-refresh-merchant-record");
     const $status = $("#twoinc-refresh-merchant-record-status");
     if (!$button.length) {
@@ -645,6 +718,12 @@ jQuery(function ($) {
 
     function render(colour, text) {
       $status.css("color", colour).text(text);
+    }
+
+    // window.twoincAdminNavigate, when set, stands in (the JS tests set it:
+    // jsdom cannot navigate).
+    function navigateTo(href) {
+      window.location.assign(href);
     }
 
     $button.on("click", function () {
@@ -662,6 +741,13 @@ jQuery(function ($) {
           const data = response.data || {};
           if (response.success) {
             render("#2a7f2a", [data.message, data.merchant].filter(Boolean).join(" "));
+            // Reload onto Diagnostics so the tax code section is rendered
+            // afresh; the server confirms the refresh there. The stamp makes
+            // every reload a new URL, so it is never only a hash change.
+            const url = new URL(window.location.href);
+            url.searchParams.set("twoinc_refreshed", String(Date.now()));
+            url.hash = "twoinc-refresh-merchant-record";
+            (window.twoincAdminNavigate || navigateTo)(url.toString());
           } else {
             render("#a94442", data.message || twoinc_admin.i18n_refresh_failed);
           }

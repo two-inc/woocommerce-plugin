@@ -205,6 +205,44 @@ describe("billing country switch", () => {
       expect(capturedCompany()).toEqual({ name: "", id: "" });
     });
 
+    // TWO-27159: the registry phone goes with the address; the buyer's own stays.
+    test.each([
+      { after: null, expected: "", description: "a registry phone is retracted" },
+      {
+        after: () => ctx.$("#billing_phone").val("+34 600 000 999"),
+        expected: "+34 600 000 999",
+        description: "a phone the buyer edited stays"
+      },
+      {
+        after: () =>
+          ctx.Twoinc.getInstance().writeSoleTraderAddress(
+            { phone_number: "+34 600 000 001" },
+            "billing"
+          ),
+        expected: "+34 600 000 001",
+        description: "a sole trader's verified phone equal to the registry's stays"
+      }
+    ])("$description", ({ after, expected, description }) => {
+      initializeCheckout();
+      ctx
+        .$("form[name='checkout']")
+        .append('<input type="tel" id="billing_phone" name="billing_phone" />');
+      captureCompany("Example Co", "123456789");
+      ctx.Twoinc.getInstance().addressLookup({ lookup_id: "lookup" }, "billing");
+      ajax
+        .last()
+        .succeed({ addresses: [{ street_address: "Calle 1", phone_number: "+34 600 000 001" }] });
+      if (after) after();
+
+      ctx.$("#billing_country").val("ES");
+      fireCountryChange();
+
+      expect({ description, phone: ctx.$("#billing_phone").val() }).toEqual({
+        description,
+        phone: expected
+      });
+    });
+
     test("records the new country so the next re-render is inert again", () => {
       initializeCheckout();
 
@@ -341,9 +379,10 @@ describe("billing country switch", () => {
         }
       ]);
       // The company reaches the page in the bootstrap; only the snapshot's own
-      // fields come back from sessionStorage (ABN-554).
+      // fields come back from sessionStorage.
       window.twoinc.billing_company = "Ejemplo SL";
       window.twoinc.company_id = "B12345678";
+      window.twoinc.company_country = "ES";
 
       ctx.Twoinc.getInstance().initialize(true);
 
@@ -1245,6 +1284,83 @@ describe("billing country switch", () => {
       fireCountryChange();
 
       expect(ctx.$("#billing_company_display_field").hasClass("hidden")).toBe(false);
+    });
+  });
+
+  // TWO-27373. A decline is about the company it was asked for, so every
+  // change of company takes it off screen at once and asks again.
+  describe("a company change retires a decline on screen", () => {
+    test.each([
+      {
+        description: "a billing country switch",
+        change: async () => {
+          captureCompany("Example Co", "123456789");
+          ctx.$("#billing_country").val("ES");
+          fireCountryChange();
+        }
+      },
+      {
+        description: "a company typed in billing",
+        change: async () => {
+          captureCompany("Example Co", "123456789");
+          ctx.$("#billing_company").val("Other Example Co").trigger("input").trigger("change");
+        }
+      },
+      {
+        description: "a company picked in billing",
+        change: async () => {
+          harness.openCompanyPanel(ctx.$, ctx.helper);
+          typeCompanyQuery("example");
+          ajax.last().succeed({
+            items: [
+              {
+                name: "Example Co",
+                highlight: "Example Co",
+                national_identifier: { id: "123456789" }
+              }
+            ]
+          });
+          await flushPromises();
+          clickFirstResultRow();
+        }
+      },
+      {
+        description: "a shipping country switch",
+        change: async () => {
+          ctx.capture.write("Example Co", "123456789", { role: ctx.roles.delivery() });
+          ctx.$("#shipping_country").val("ES").trigger("change");
+        }
+      },
+      {
+        description: "a company typed in delivery",
+        change: async () => {
+          ctx.capture.write("Example Co", "123456789", { role: ctx.roles.delivery() });
+          ctx.$("#shipping_company").val("Other Example Co").trigger("input").trigger("change");
+        }
+      }
+    ])("$description", async ({ description, change }) => {
+      ctx
+        .$("form[name='checkout']")
+        .append(
+          '<select id="shipping_country" name="shipping_country">' +
+            '<option value="GB" selected>United Kingdom</option><option value="ES">Spain</option></select>' +
+            '<input type="text" id="shipping_company" name="shipping_company" value="" />' +
+            '<input type="text" id="shipping_company_display" name="shipping_company_display" value="" />' +
+            '<input type="text" id="shipping_company_id" name="shipping_company_id" value="" />'
+        );
+      initializeCheckout();
+      ctx
+        .$("form[name='checkout']")
+        .append('<div class="twoinc-pay-box twoinc-err-payment-default">Declined</div>');
+      const getApproval = jest.spyOn(ctx.Twoinc.getInstance(), "getApproval");
+
+      await change();
+
+      expect({
+        description,
+        declineShown: !ctx.$(".twoinc-err-payment-default").hasClass("hidden"),
+        askedAgain: getApproval.mock.calls.length > 0
+      }).toEqual({ description, declineShown: false, askedAgain: true });
     });
   });
 });

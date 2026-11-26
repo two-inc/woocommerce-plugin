@@ -19,6 +19,7 @@ const METHOD_DATA = {
   about: '<div class="abt-twoinc">about</div>',
   terms: '<div class="twoinc-terms-consent"><input name="twoinc_terms_accepted" /></div>',
   iconUrl: "https://example.test/logo.svg",
+  unavailable: "Invoice purchase with Two is not available for this order.",
   supports: ["products", "refunds"]
 };
 
@@ -144,6 +145,9 @@ function baseGlobals(location, billing, shipping) {
   const subscribers = {};
   const activeMethod = { name: null };
   const resolution = { finished: true, customerData: true };
+  // Blocks' "Use same address for billing" box, unticked unless a test ticks it, and
+  // whether a dispatch notifies subscribers before it returns, as wp.data's does.
+  const checkout = { useShippingAsBilling: false, notifies: false };
   const captureValues = { company: "", company_id: "", mode: "search" };
   const shippingCaptureValues = { company: "", company_id: "" };
   const valuesFor = (role) => (role === "shipping" ? shippingCaptureValues : captureValues);
@@ -164,7 +168,7 @@ function baseGlobals(location, billing, shipping) {
     companyFieldSelector() {
       return this.isTileLocation() ? "#twoinc_tile_company_name" : this.addressFieldSelector;
     },
-    countryDidChange() {
+    seedCountry() {
       calls.order.push("seed:" + role);
       return false;
     },
@@ -204,6 +208,8 @@ function baseGlobals(location, billing, shipping) {
     numberField: (role) => ({ val: () => valuesFor(role).company_id }),
     nameField: (role) => ({ val: () => valuesFor(role).company }),
     modeFor: () => captureValues.mode,
+    MANUAL_ENTRY_KEY: "company_manual_entry",
+    manualEntryFlag: () => (captureValues.mode === "manual" ? "1" : ""),
     numberFieldSelector: (role) =>
       role === twoincAddressRoles.invoice() ? "#company_id" : "#" + role + "_company_id",
     nameFieldSelector: (role) =>
@@ -255,12 +261,43 @@ function baseGlobals(location, billing, shipping) {
     phone: "",
     email: ""
   });
-  const address = Object.assign(blank(), billing || {});
-  const shippingAddress = Object.assign(blank(), shipping || {});
+  // Replaced, never edited in place, on every write: Blocks' reducers hand out a new
+  // address object for each change, and the skin tells changes apart by reference.
+  let address = Object.assign(blank(), billing || {});
+  let shippingAddress = Object.assign(blank(), shipping || {});
+  // The same object until a server answer replaces the cart, as in the Blocks store.
+  let totals = { total_price: "38600", total_tax: "0", currency_minor_unit: 2 };
 
   /** Fire the listeners one store's subscription registered. */
   function publish(store) {
     (subscribers[store] || []).forEach((fn) => fn());
+  }
+
+  /** What Blocks' `receiveCart` does with a server answer: the whole cart replaced, totals included. */
+  function receiveCart(answer) {
+    totals = Object.assign({}, totals);
+    address = Object.assign({}, address, answer);
+    shippingAddress = Object.assign({}, shippingAddress, answer);
+    publish("wc/store/cart");
+  }
+
+  /** The buyer's own edit: Blocks' address setters, on both roles it mirrors. */
+  function edit(change) {
+    address = Object.assign({}, address, change);
+    shippingAddress = Object.assign({}, shippingAddress, change);
+    publish("wc/store/cart");
+  }
+
+  /** An edit Blocks sets on the delivery address alone. */
+  function editShipping(change) {
+    shippingAddress = Object.assign({}, shippingAddress, change);
+    publish("wc/store/cart");
+  }
+
+  /** An edit that reaches the billing address alone. */
+  function editBilling(change) {
+    address = Object.assign({}, address, change);
+    publish("wc/store/cart");
   }
 
   return {
@@ -269,36 +306,46 @@ function baseGlobals(location, billing, shipping) {
     shippingControl,
     captureValues,
     shippingCaptureValues,
-    address,
-    shippingAddress,
+    get address() {
+      return address;
+    },
+    get shippingAddress() {
+      return shippingAddress;
+    },
     activeMethod,
     resolution,
+    checkout,
     publish,
+    receiveCart,
+    edit,
+    editShipping,
+    editBilling,
 
     data: {
       select: (store) =>
         store === "wc/store/payment"
           ? { getActivePaymentMethod: () => activeMethod.name }
-          : {
-              getCartData: () => ({}),
-              getCustomerData: () =>
-                resolution.customerData ? { billingAddress: address, shippingAddress } : {},
-              getCartTotals: () => ({
-                total_price: "38600",
-                total_tax: "0",
-                currency_minor_unit: 2
-              }),
-              // Only the resolver-backed selector ever finishes.
-              hasFinishedResolution: (selector) => selector === "getCartData" && resolution.finished
-            },
+          : store === "wc/store/checkout"
+            ? { getUseShippingAsBilling: () => checkout.useShippingAsBilling }
+            : {
+                getCartData: () => ({}),
+                getCustomerData: () =>
+                  resolution.customerData ? { billingAddress: address, shippingAddress } : {},
+                getCartTotals: () => totals,
+                // Only the resolver-backed selector ever finishes.
+                hasFinishedResolution: (selector) =>
+                  selector === "getCartData" && resolution.finished
+              },
       dispatch: () => ({
         setBillingAddress(patch) {
           calls.patches.push(patch);
-          Object.assign(address, patch);
+          address = Object.assign({}, address, patch);
+          if (checkout.notifies) publish("wc/store/cart");
         },
         setShippingAddress(patch) {
           calls.shippingPatches.push(patch);
-          Object.assign(shippingAddress, patch);
+          shippingAddress = Object.assign({}, shippingAddress, patch);
+          if (checkout.notifies) publish("wc/store/cart");
         }
       }),
       subscribe: (fn, store) => {
@@ -548,6 +595,174 @@ describe("blocks-checkout.js reuses the classic controller", () => {
     expect(base.calls.patches).toEqual(expectPatches);
   });
 
+  test.each([
+    {
+      ticked: true,
+      steps: [["pick", { address_1: "Second House" }]],
+      expectBilling: { address_1: "Second House" },
+      description: "a first pick reaches billing too while the same-address box is ticked"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { address_1: "First House" }],
+        ["form", { address_1: "First House" }],
+        ["pick", { address_1: "Second House" }]
+      ],
+      expectBilling: { address_1: "Second House" },
+      description: "a re-pick replaces the first company's billing while the box is ticked"
+    },
+    {
+      ticked: false,
+      steps: [
+        ["pick", { address_1: "First House" }],
+        ["form", { address_1: "First House" }],
+        ["pick", { address_1: "Second House" }]
+      ],
+      expectBilling: { address_1: "First House" },
+      description: "a re-pick leaves a separately entered billing address alone"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["shippingPhone", "07700 900002"]
+      ],
+      expectBilling: { phone: "07700 900002" },
+      description: "a phone the buyer types after a pick reaches billing over the registered one"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["form", { phone: "01632 960001" }],
+        ["pick", { phone: "01632 960002" }]
+      ],
+      expectBilling: { phone: "01632 960002" },
+      description: "a re-pick replaces the first company's registered phone on billing"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { address_1: "First House" }],
+        ["form", { address_1: "First House" }],
+        ["pick", { address_1: "Second House" }],
+        ["stale", { address_1: "First House" }]
+      ],
+      expectBilling: { address_1: "Second House" },
+      description: "a stale cart answer reverting both addresses is re-sent to billing too"
+    },
+    {
+      ticked: true,
+      seed: { billing: { phone: "01632 960009" } },
+      steps: [["form", { city: "Oslo" }]],
+      expectBilling: { phone: "01632 960009" },
+      description: "with no pick a saved billing phone is left alone"
+    },
+    {
+      ticked: true,
+      seed: { billing: { phone: "07700 900009" }, shipping: { phone: "07700 900009" } },
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["shippingPhone", ""]
+      ],
+      expectBilling: { phone: "07700 900009" },
+      description: "a shipping phone cleared after a pick puts billing's own phone back"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["form", { phone: "07700 900001" }],
+        ["pick", { phone: "01632 960001" }],
+        ["pick", { phone: "" }]
+      ],
+      expectBilling: { phone: "07700 900001" },
+      description: "a guest's typed phone comes back when a re-pick has no registered phone"
+    },
+    {
+      ticked: true,
+      seed: { billing: { phone: "07700 900009" }, shipping: { phone: "07700 900009" } },
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["pick", { phone: "" }]
+      ],
+      expectBilling: { phone: "07700 900009" },
+      description: "a saved billing phone comes back when a re-pick has no registered phone"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["form", { phone: "01632 960001" }],
+        ["pick", { phone: "01632 960002" }],
+        ["stale", { phone: "01632 960001" }]
+      ],
+      expectBilling: { phone: "01632 960002" },
+      description: "a stale cart answer reverting the phone is re-sent to billing too"
+    },
+    {
+      ticked: true,
+      notifies: true,
+      steps: [
+        ["form", { phone: "07700 900001" }],
+        ["pick", { phone: "01632 960001" }],
+        ["form", { phone: "01632 960001" }],
+        ["pick", { phone: "01632 960002" }],
+        ["stale", { phone: "01632 960001" }],
+        ["pick", { phone: "" }]
+      ],
+      expectBilling: { phone: "07700 900001" },
+      description: "billing's own phone survives a stale answer when every dispatch notifies"
+    },
+    {
+      ticked: true,
+      steps: [
+        ["pick", { phone: "01632 960001" }],
+        ["billingPhone", "07700 900003"],
+        ["shippingPhone", "07700 900002"]
+      ],
+      expectBilling: { phone: "07700 900003" },
+      description: "a billing phone someone else wrote after the mirror is not followed"
+    }
+  ])("$description", async ({ ticked, notifies = false, seed, steps, expectBilling }) => {
+    // WooCommerce 7.6's phone, outside the address form: the buyer's only phone with the box ticked.
+    document.body.innerHTML = '<input id="shipping-phone">';
+    const base = baseGlobals("address_area", (seed || {}).billing, (seed || {}).shipping);
+    base.checkout.useShippingAsBilling = ticked;
+    base.checkout.notifies = notifies;
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    const act = {
+      // How the delivery control writes a pick: onto shipping only (TWO-27358).
+      pick: (fields) =>
+        Object.keys(fields).forEach((key) => {
+          document.getElementById("shipping_" + key).value = fields[key];
+        }),
+      // Blocks' own form, or the buyer, setting both addresses.
+      form: (change) => base.edit(change),
+      // The buyer typing a phone on WooCommerce 7.6, which Blocks sets on shipping only.
+      shippingPhone: (phone) => {
+        document
+          .getElementById("shipping-phone")
+          .dispatchEvent(new window.Event("input", { bubbles: true }));
+        base.editShipping({ phone });
+      },
+      billingPhone: (phone) => base.editBilling({ phone }),
+      // A cart answer older than the last write.
+      stale: (answer) => base.receiveCart(answer)
+    };
+    for (const [step, arg] of steps) {
+      act[step](arg);
+      await Promise.resolve();
+    }
+
+    Object.keys(expectBilling).forEach((key) => {
+      expect(base.address[key]).toBe(expectBilling[key]);
+    });
+  });
+
   test("a pull never overwrites a write that has not reached the store yet", async () => {
     const base = baseGlobals("address_area", { city: "Oslo" });
     const { env } = globals({});
@@ -610,7 +825,8 @@ describe("blocks-checkout.js reuses the classic controller", () => {
         company_id: "12345678",
         company_name: "EXAMPLE TRADING LIMITED",
         shipping_company_id: "",
-        shipping_company: ""
+        shipping_company: "",
+        company_manual_entry: ""
       },
       description: "the invoice capture travels in the tile's own carriers"
     },
@@ -622,7 +838,8 @@ describe("blocks-checkout.js reuses the classic controller", () => {
         company_id: "",
         billing_company: "",
         shipping_company_id: "87654321",
-        shipping_company: "DELIVERY DEPOT LIMITED"
+        shipping_company: "DELIVERY DEPOT LIMITED",
+        company_manual_entry: ""
       },
       description: "a delivery-only capture, all a same-address checkout ever has, still travels"
     },
@@ -634,7 +851,8 @@ describe("blocks-checkout.js reuses the classic controller", () => {
         company_id: "12345678",
         billing_company: "INVOICE HOLDINGS LIMITED",
         shipping_company_id: "87654321",
-        shipping_company: "DELIVERY DEPOT LIMITED"
+        shipping_company: "DELIVERY DEPOT LIMITED",
+        company_manual_entry: ""
       },
       description: "both roles travel unresolved, for the server to prefer the invoice one"
     },
@@ -646,9 +864,24 @@ describe("blocks-checkout.js reuses the classic controller", () => {
         company_id: "",
         billing_company: "",
         shipping_company_id: "",
-        shipping_company: ""
+        shipping_company: "",
+        company_manual_entry: ""
       },
       description: "no capture at all leaves the server's own guard to refuse the order"
+    },
+    {
+      location: "address_area",
+      billing: { company: "TYPED BY HAND", company_id: "", mode: "manual" },
+      shipping: { company: "DELIVERY DEPOT LIMITED", company_id: "87654321" },
+      expected: {
+        company_id: "",
+        billing_company: "TYPED BY HAND",
+        shipping_company_id: "87654321",
+        shipping_company: "DELIVERY DEPOT LIMITED",
+        company_manual_entry: "1"
+      },
+      description:
+        "billing's manual entry travels as a flag, so the server sends no delivery number under it (TWO-26775)"
     }
   ])("$description", ({ location, billing, shipping, expected }) => {
     const base = baseGlobals(location);
@@ -678,10 +911,11 @@ describe("blocks-checkout.js reuses the classic controller", () => {
 });
 
 describe("blocks-checkout.js gates on the shared terms consent", () => {
-  /** The skin's own payment-setup handler, over the given consent state. */
-  function paymentSetup(accepted) {
+  /** The skin's own payment-setup handler, over the given consent state and verdict. */
+  function paymentSetup(accepted, selectable) {
     consentState.accepted = accepted;
     const base = baseGlobals("address_area");
+    if (selectable !== undefined) window.twoincDomHelper.paymentMethodSelectable = selectable;
     const { env, registered } = globals({});
     env.wp.data = base.data;
     evaluate(env);
@@ -709,6 +943,21 @@ describe("blocks-checkout.js gates on the shared terms consent", () => {
   test("a ticked consent travels as payment data under the name the server reads", () => {
     expect(paymentSetup(true).meta.paymentMethodData.twoinc_terms_accepted).toBe("1");
   });
+
+  // TWO-26292: the classic checkout disables Two after a declined or failed
+  // availability check (TWO-25657); Blocks keeps its own radio selected, so
+  // the submit itself is refused.
+  test.each([
+    [true, true, "success", "an approved or pending check places"],
+    [true, false, "error", "a declined or failed check refuses the submit, ticked consent or not"],
+    [false, false, "error", "a declined check is refused before the consent is asked about"]
+  ])("consent %p, placeable %p -> %s: %s", (accepted, selectable, type) => {
+    const result = paymentSetup(accepted, selectable);
+    expect(result.type).toBe(type);
+    if (!selectable) {
+      expect(result.message).toBe("Invoice purchase with Two is not available for this order.");
+    }
+  });
 });
 
 describe("blocks-checkout.js hands the controller the whole page", () => {
@@ -735,7 +984,7 @@ describe("blocks-checkout.js hands the controller the whole page", () => {
       holdsTheField: false,
       // toggleBusinessFields() hides the native row while the search is the
       // active surface, and on a Blocks checkout that row must therefore
-      // never be the buyer's only company field (ABN-554).
+      // never be the buyer's only company field.
       description: "the native row the controller hides carries no company field"
     }
   ])("$description", ({ id, holdsTheField }) => {
@@ -804,17 +1053,15 @@ describe("blocks-checkout.js reaches the rest of the tile's surfaces", () => {
     return { env, registered, updates };
   }
 
-  test.each([
-    ["order-total", 386],
-    ["tax-rate", 0]
-  ])("the controller reads %s off the store's cart totals", (name, expected) => {
+  test("the controller reads the order total off the store's cart totals, and nothing else", () => {
     const base = baseGlobals("address_area");
     const { env } = globals({});
     env.wp.data = base.data;
     evaluate(env);
 
-    const node = document.querySelector("." + name + " .woocommerce-Price-amount bdi");
-    expect(parseFloat(node.textContent)).toBe(expected);
+    const node = document.querySelector(".order-total .woocommerce-Price-amount bdi");
+    expect(parseFloat(node.textContent)).toBe(386);
+    expect(document.querySelector(".tax-rate")).toBeNull();
   });
 
   test.each([
@@ -837,6 +1084,37 @@ describe("blocks-checkout.js reaches the rest of the tile's surfaces", () => {
     expect(updates.map((u) => u.data)).toEqual(expected);
     updates.forEach((u) => expect(u.namespace).toBe("twoinc-payment-gateway"));
   });
+
+  // TWO-27353: every announcement saves the session, which WooCommerce 11.3.1
+  // will not let overlap a checkout request, so a mount that changes nothing sends nothing.
+  test.each([
+    {
+      chosen: true,
+      active: "woocommerce-gateway-tillit",
+      expected: [],
+      description: "already chosen, still chosen"
+    },
+    { chosen: false, active: "cod", expected: [], description: "not chosen, still not chosen" },
+    {
+      chosen: false,
+      active: "woocommerce-gateway-tillit",
+      expected: [{ active: true }],
+      description: "newly chosen"
+    },
+    { chosen: true, active: "cod", expected: [{ active: false }], description: "no longer chosen" }
+  ])(
+    "the session's own choice is announced only on a change: $description",
+    ({ chosen, active, expected }) => {
+      const base = baseGlobals("payment_tile");
+      const { env, updates } = withCartApi(base);
+      env.wc.wcSettings.getSetting = (key) =>
+        key === "woocommerce-gateway-tillit_data" ? { ...METHOD_DATA, chosen } : null;
+      base.activeMethod.name = active;
+      evaluate(env);
+
+      expect(updates.map((u) => u.data)).toEqual(expected);
+    }
+  );
 
   /**
    * TWO-25800. A buyer arriving from the product-page buy button has the
@@ -1104,6 +1382,148 @@ describe("blocks-checkout.js reaches the rest of the tile's surfaces", () => {
     expect(updates).toEqual([{ namespace: "twoinc-payment-gateway", data: { active: true } }]);
     expect(base.calls.resyncs).toBe(atMount + 1);
   });
+
+  /**
+   * TWO-27188. A country change clears the company picked under the old
+   * country, which blanks required fields, so Blocks holds the new country
+   * back. Before WooCommerce 9.5 the cart-extensions answer then replaced the
+   * store's addresses with the server's, and the country snapped back.
+   *
+   * Steps: `announce` asks for a recalculation and `choose` picks this method; `clear` is the controller
+   * clearing a company's address, which blanks it and asks in the same tick;
+   * `throw` is a call that throws; `edit:key=value` is the buyer's edit while
+   * a request is out; `answer[:n]` and `reject` settle the first request (or the nth, from 0);
+   * `fail`, `pushfails` and `coupon` bring the server's cart followed by a change that is not
+   * the buyer's.
+   */
+  test.each`
+    version     | start       | steps                                                    | country | city        | patches | description
+    ${"7.6.2"}  | ${"blank"}  | ${"announce answer"}                                     | ${"ES"} | ${""}       | ${1}    | ${"7.6 keeps the buyer's country"}
+    ${"9.4.1"}  | ${"blank"}  | ${"announce answer"}                                     | ${"ES"} | ${""}       | ${1}    | ${"9.4 keeps the buyer's country"}
+    ${"9.5.0"}  | ${"blank"}  | ${"announce answer"}                                     | ${"GB"} | ${"London"} | ${0}    | ${"9.5 is left to Blocks"}
+    ${"11.2.0"} | ${"blank"}  | ${"announce answer"}                                     | ${"GB"} | ${"London"} | ${0}    | ${"11.2 is left to Blocks"}
+    ${null}     | ${"blank"}  | ${"announce answer"}                                     | ${"GB"} | ${"London"} | ${0}    | ${"an unknown version is left alone"}
+    ${"trunk"}  | ${"blank"}  | ${"announce answer"}                                     | ${"GB"} | ${"London"} | ${0}    | ${"a version that is not a number is left alone"}
+    ${"7.6.2"}  | ${"blank"}  | ${"announce edit:country=FR answer"}                     | ${"FR"} | ${""}       | ${1}    | ${"a country changed in flight ends as changed"}
+    ${"7.6.2"}  | ${"blank"}  | ${"announce edit:city=Paris answer"}                     | ${"ES"} | ${"Paris"}  | ${1}    | ${"a city typed in flight is kept"}
+    ${"7.6.2"}  | ${"blank"}  | ${"choose reject edit:country=FR"}                       | ${"FR"} | ${""}       | ${0}    | ${"a rejection releases the hold"}
+    ${"7.6.2"}  | ${"blank"}  | ${"announce announce edit:country=FR answer:0 answer:1"} | ${"FR"} | ${""}       | ${2}    | ${"two requests out, answered in order"}
+    ${"7.6.2"}  | ${"blank"}  | ${"announce announce edit:country=FR answer:1 answer:0"} | ${"FR"} | ${""}       | ${2}    | ${"two requests out, answered out of order"}
+    ${"7.6.2"}  | ${"filled"} | ${"clear answer"}                                        | ${"ES"} | ${""}       | ${2}    | ${"a company's address blanked and announced in one tick"}
+    ${"7.6.2"}  | ${"blank"}  | ${"throw edit:country=FR"}                               | ${"FR"} | ${""}       | ${0}    | ${"a call that throws leaves the sync running"}
+    ${"9.4.3"}  | ${"blank"}  | ${"choose fail"}                                         | ${"ES"} | ${""}       | ${1}    | ${"a refusal carrying the server's cart"}
+    ${"9.4.3"}  | ${"blank"}  | ${"announce pushfails answer"}                           | ${"ES"} | ${""}       | ${1}    | ${"Blocks' own push failing while a request is out"}
+    ${"9.4.3"}  | ${"blank"}  | ${"announce coupon answer"}                              | ${"ES"} | ${""}       | ${1}    | ${"a coupon applied while a request is out"}
+  `(
+    "an answer overwriting a held address: $description",
+    async ({ version, start, steps, country, city, patches }) => {
+      const server = {
+        country: "GB",
+        address_1: "1 Old Street",
+        city: "London",
+        postcode: "N1 1AA"
+      };
+      const held =
+        start === "filled"
+          ? Object.assign({}, server, { country: "ES" })
+          : { country: "ES", address_1: "", city: "", postcode: "" };
+      const base = baseGlobals("address_area", held, held);
+      const { env, registered } = globals({});
+      env.wp.data = base.data;
+      const methodData = env.wc.wcSettings.getSetting;
+      env.wc.wcSettings.getSetting = (key) => (key === "wcVersion" ? version : methodData(key));
+      const pending = [];
+      let throwNext = false;
+      // Blocks' cart-extensions call: asynchronous, and before 9.5 its answer replaces the whole cart.
+      env.wc.blocksCheckout = {
+        extensionCartUpdate() {
+          if (throwNext) throw new Error("not sent");
+          return new Promise((resolve, reject) => {
+            pending.push({
+              answer(addresses) {
+                base.receiveCart(addresses);
+                resolve(addresses);
+              },
+              reject: () => reject(new Error("refused"))
+            });
+          });
+        }
+      };
+      evaluate(env);
+      registered[0].content.type({});
+      // The page load's own announcement of the method, answered before the buyer starts.
+      pending.splice(0).forEach((request) => request.answer({}));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      // What the controller reads, straight after the skin's own pass over each store change.
+      const painted = [];
+      base.data.subscribe(
+        () => painted.push(shadowInput("billing_country").value),
+        "wc/store/cart"
+      );
+      const announce = () => {
+        try {
+          bodyHandlers["update_checkout.twoincBlocks"]();
+        } catch (error) {
+          // A throwing call surfaces in the handler; what matters is what it leaves behind.
+        }
+      };
+      const act = {
+        announce,
+        // The buyer picking this method, whose announcement handles its own refusal.
+        choose: () => {
+          base.activeMethod.name = "woocommerce-gateway-tillit";
+          base.publish("wc/store/payment");
+        },
+        throw: () => {
+          throwNext = true;
+          announce();
+        },
+        // The controller's own clear: bare value writes, then `update_checkout`, in one tick.
+        clear: () => {
+          ["address_1", "address_2", "city", "postcode", "state"].forEach((key) => {
+            shadowInput("billing_" + key).value = "";
+          });
+          announce();
+        },
+        edit: (change) => {
+          const [key, value] = change.split("=");
+          base.edit({ [key]: value });
+        },
+        answer: (n) => pending[Number(n || 0)].answer(server),
+        reject: () => pending[0].reject(),
+        // A refusal carrying the server's cart: the cart first, then the error, then the rejection.
+        fail: () => {
+          base.receiveCart(server);
+          base.publish("wc/store/cart");
+          pending[0].reject();
+        },
+        // Blocks' own address push failing: the server's cart, then its in-progress flag cleared.
+        pushfails: () => {
+          base.receiveCart(server);
+          base.publish("wc/store/cart");
+        },
+        // A coupon applied: its in-progress flag, the server's cart, then the flag cleared.
+        coupon: () => {
+          base.publish("wc/store/cart");
+          base.receiveCart(server);
+          base.publish("wc/store/cart");
+        }
+      };
+
+      for (const step of steps.split(" ")) {
+        const [name, arg] = step.split(":");
+        act[name](arg);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
+      expect([base.address.country, base.shippingAddress.country]).toEqual([country, country]);
+      expect(base.address.city).toBe(city);
+      expect(shadowInput("billing_country").value).toBe(country);
+      // The controller reads the server's stale country only where it is the outcome.
+      expect(painted.includes(server.country)).toBe(country === server.country);
+      expect(base.calls.patches).toHaveLength(patches);
+    }
+  );
 });
 
 describe("blocks-checkout.js persists the capture across a page load", () => {
@@ -1131,7 +1551,7 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
   test("the storage host stays off screen under the plugin stylesheet", () => {
     // `.custom-checkout` is on the host only so the snapshot recognises it; an
     // author `display` keyed on that class alone beats the UA's `[hidden]` and
-    // paints every one of these inputs onto the Blocks checkout (ABN-554).
+    // paints every one of these inputs onto the Blocks checkout.
     const base = baseGlobals("address_area");
     const { env } = globals({});
     env.wp.data = base.data;
@@ -1782,5 +2202,76 @@ describe("blocks-checkout.js persists the capture across a page load", () => {
 
     expect(base.calls.saves).toBe(saves);
     expect(base.calls.patches.length).toBe(patches);
+  });
+});
+
+/** ABN-644. The controller asks whether the delivery address is the invoice one; here that is Blocks' own tick. */
+describe("blocks-checkout.js answers whether delivery is the invoice address", () => {
+  test.each([
+    [true, true, "use same address for billing ticked"],
+    [false, false, "use same address for billing unticked"]
+  ])("%s gives %s (%s)", (ticked, answer, description) => {
+    const base = baseGlobals("address_area");
+    base.checkout.useShippingAsBilling = ticked;
+    const { env } = globals({});
+    env.wp.data = base.data;
+    evaluate(env);
+
+    expect({ description, answer: window.twoincAddressRoles.deliveryIsInvoice() }).toEqual({
+      description,
+      answer
+    });
+  });
+});
+
+/**
+ * TWO-27368. The Store API answers with address fields HTML-escaped, so a
+ * company "Example & Co" comes back as "Example &amp; Co". The fields the
+ * controller reads, and the order it submits, take the text.
+ */
+describe("blocks-checkout.js reads the store's addresses as text", () => {
+  /** What `wp.htmlEntities.decodeEntities` does: decode in a detached textarea. */
+  function decodeEntities(value) {
+    const textarea = document.createElement("textarea");
+    textarea.innerHTML = value;
+    return textarea.value;
+  }
+
+  function evaluateWith(billing, shipping) {
+    const base = baseGlobals("address_area", billing, shipping);
+    const { env } = globals({});
+    env.wp.data = base.data;
+    env.wp.htmlEntities = { decodeEntities };
+    evaluate(env);
+    return base;
+  }
+
+  test.each([
+    ["Example &amp; Co", "Example & Co", "an escaped ampersand"],
+    ["Example & Co", "Example & Co", "a raw ampersand"],
+    ["Example &#039;s Co", "Example 's Co", "an escaped apostrophe"],
+    ["&lt;b&gt;Example Co", "<b>Example Co", "an escaped tag stays text"]
+  ])("the store's %s reaches both company fields as %s (%s)", (stored, text, description) => {
+    evaluateWith({ company: stored }, { company: stored });
+
+    expect({
+      description,
+      billing: shadowInput("billing_company").value,
+      shipping: shadowInput("shipping_company").value
+    }).toEqual({ description, billing: text, shipping: text });
+  });
+
+  test("a write the store answers escaped counts as taken, not refused", async () => {
+    const base = evaluateWith({ company: "" });
+    await Promise.resolve();
+    base.calls.patches.length = 0;
+
+    shadowInput("billing_company").value = "Example & Co";
+    await Promise.resolve();
+    base.receiveCart({ company: "Example &amp; Co" });
+    await Promise.resolve();
+
+    expect(base.calls.patches).toEqual([{ company: "Example & Co" }]);
+    expect(shadowInput("billing_company").value).toBe("Example & Co");
   });
 });

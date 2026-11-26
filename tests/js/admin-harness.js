@@ -81,7 +81,8 @@ function installJQuery() {
  * stored cap with isset(), so a stored 0 renders as `value="0"`.
  *
  * @param {Object} options
- * @param {boolean} options.companySearch stored enable_company_search
+ * @param {boolean|null} options.companySearch stored enable_company_search; null
+ *   renders no row, as for a brand whose allowed_fields withholds it
  * @param {boolean} options.addressLookup stored enable_address_lookup
  * @param {number[]} options.terms preset term checkboxes to render
  * @param {number[]} options.checked which of those start ticked
@@ -199,6 +200,28 @@ function buildSettingsPage(options) {
         '<div id="twoinc-merchant-invalid-notice" class="twoinc-merchant-notice" style="display:none"></div>' +
         "</td></tr>";
 
+  // The Environment dropdown, opt-in: options.environment is its selected value.
+  const environmentBlock =
+    opts.environment === undefined
+      ? ""
+      : '    <tr><td><select id="' +
+        FIELD_PREFIX +
+        'checkout_env">' +
+        ["production", "sandbox", "staging"]
+          .map(function (mode) {
+            return (
+              '<option value="' +
+              mode +
+              '"' +
+              (mode === opts.environment ? " selected" : "") +
+              ">" +
+              mode +
+              "</option>"
+            );
+          })
+          .join("") +
+        "</select></td></tr>";
+
   // Mirrors generate_two_refresh_merchant_record_html(); opt-in, so the default page has no button.
   const refreshBlock = opts.refreshMerchantRecord
     ? "    <tr><td>" +
@@ -210,6 +233,7 @@ function buildSettingsPage(options) {
   document.body.innerHTML = [
     '<form method="post">',
     '  <table class="form-table"><tbody>',
+    environmentBlock,
     apiKeyBlock,
     refreshBlock,
     '    <tr><td><fieldset class="twoinc-term-checkboxes"' +
@@ -223,13 +247,15 @@ function buildSettingsPage(options) {
       (opts.customDays === undefined ? "" : opts.customDays) +
       '" selected></option><option value="">Remove</option></select></td></tr>',
     '    <tr><td><select id="' + FIELD_PREFIX + 'default_payment_term"></select></td></tr>',
-    '    <tr><td><input type="checkbox" id="' +
-      FIELD_PREFIX +
-      'enable_company_search" name="' +
-      FIELD_PREFIX +
-      'enable_company_search"' +
-      (companySearchChecked ? " checked" : "") +
-      " /></td></tr>",
+    opts.companySearch === null
+      ? ""
+      : '    <tr><td><input type="checkbox" id="' +
+        FIELD_PREFIX +
+        'enable_company_search" name="' +
+        FIELD_PREFIX +
+        'enable_company_search"' +
+        (companySearchChecked ? " checked" : "") +
+        " /></td></tr>",
     '    <tr><td><input type="checkbox" id="' +
       FIELD_PREFIX +
       'enable_address_lookup" name="' +
@@ -359,6 +385,9 @@ async function loadAdmin(options) {
   // brand reaches the notice supplies these the way that method would.
   if (opts.apiKeyNotices) {
     adminSettings.api_key_notices = opts.apiKeyNotices;
+  }
+  if (opts.hasSavedKey !== undefined) {
+    adminSettings.has_saved_key = opts.hasSavedKey;
   }
   global.twoinc_admin = adminSettings;
   global.window.twoinc_admin = adminSettings;

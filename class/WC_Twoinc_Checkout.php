@@ -12,7 +12,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
     {
         private $wc_twoinc;
 
-        /** WC session key holding the company captured in the current cart (ABN-554). */
+        /** WC session key holding the company captured in the current cart. */
         const CAPTURED_COMPANY_SESSION_KEY = 'twoinc_captured_company';
         const CAPTURED_FIELD_MAX_LENGTH = 100;
 
@@ -50,8 +50,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_action('woocommerce_after_checkout_shipping_form', [$this, 'render_shipping_sole_trader_note_slot']);
 
             // A Blocks checkout fires none of the classic hooks above, so the
-            // same bootstrap reaches it from the one hook it does fire
-            // (ABN-554). DOM-ready is what reads it, and that is after the
+            // same bootstrap reaches it from the one hook it does fire.
+            // DOM-ready is what reads it, and that is after the
             // footer.
             add_action('wp_footer', [$this, 'inject_blocks_cart_details']);
 
@@ -60,6 +60,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // the same reason update_company_fields() registers the classic
             // field past that toggle.
             add_filter('option_woocommerce_checkout_company_field', [$this, 'reveal_blocks_company_field']);
+            // Its block-attribute twin, reveal_blocks_company_attribute(), is
+            // registered in load_twoinc_classes() instead (TWO-27186).
         }
 
         /**
@@ -79,14 +81,91 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          */
         public function reveal_blocks_company_field($value)
         {
-            if ($value !== 'hidden' || !$this->wc_twoinc) {
+            return self::reveal_company_field_for($this->wc_twoinc, $value);
+        }
+
+        /**
+         * @param WC_Twoinc|null $gateway
+         * @param mixed          $value
+         *
+         * @return mixed
+         */
+        private static function reveal_company_field_for($gateway, $value)
+        {
+            if ($value !== 'hidden' || !$gateway) {
                 return $value;
             }
-            if ($this->wc_twoinc->get_enable_company_search() !== 'yes') {
+            // A disabled gateway leaves the merchant's own company row as
+            // they set it (TWO-27227).
+            if ($gateway->enabled !== 'yes' || $gateway->get_enable_company_search() !== 'yes') {
                 return $value;
             }
 
             return self::is_blocks_checkout_request() ? 'optional' : $value;
+        }
+
+        /**
+         * The same reveal as reveal_blocks_company_field(), for a Checkout
+         * block that reads its company row from its own attribute (WooCommerce
+         * 7.6). WooCommerce sends the parsed attributes to the browser, so an
+         * empty block (all defaults) is covered as well as a saved one. The row
+         * is revealed optional, as the option filter does, so a block saved as
+         * hidden but required does not stop a consumer buyer.
+         *
+         * Registered at plugins_loaded rather than in the constructor: a block
+         * theme renders the page content before anything has built the
+         * gateway, so the gateway is looked up when the block renders, gated on
+         * the same credentials that decide whether this class is built.
+         *
+         * @param mixed $parsed_block
+         *
+         * @return mixed
+         */
+        public static function reveal_blocks_company_attribute($parsed_block)
+        {
+            if (!is_array($parsed_block) || ($parsed_block['blockName'] ?? null) !== 'woocommerce/checkout') {
+                return $parsed_block;
+            }
+            $attrs = isset($parsed_block['attrs']) && is_array($parsed_block['attrs']) ? $parsed_block['attrs'] : [];
+            if (!empty($attrs['showCompanyField'])) {
+                return $parsed_block;
+            }
+            $gateway = WC_Twoinc::get_instance();
+            if (!$gateway || !$gateway->get_option('api_key') || !$gateway->get_merchant_id()) {
+                return $parsed_block;
+            }
+            if (self::reveal_company_field_for($gateway, 'hidden') !== 'optional') {
+                return $parsed_block;
+            }
+            $attrs['showCompanyField'] = true;
+            $attrs['requireCompanyField'] = false;
+            $parsed_block['attrs'] = $attrs;
+
+            return $parsed_block;
+        }
+
+        /**
+         * The Store API sends address fields HTML-escaped ("A & B" arrives as "A &#038; B"), the
+         * Checkout block keeps that text in its cart store and posts it back at checkout, and
+         * WooCommerce saves it as it arrives. So a Two order's company is decoded once here, the
+         * point where the Store API has written the addresses and not yet saved the order, and
+         * then sanitised as WooCommerce sanitises typed text (TWO-27368). Orders paid another
+         * way are left as WooCommerce writes them.
+         *
+         * @param WC_Order $order
+         */
+        public static function decode_store_api_company($order): void
+        {
+            if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
+                return;
+            }
+            foreach (['billing', 'shipping'] as $role) {
+                $company = (string) $order->{'get_' . $role . '_company'}();
+                $decoded = sanitize_text_field(html_entity_decode($company, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                if ($decoded !== $company) {
+                    $order->{'set_' . $role . '_company'}($decoded);
+                }
+            }
         }
 
         /**
@@ -212,11 +291,15 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // Registered before the two fields below so it stays first in
             // insertion order, which decides render order among fields that
             // share a priority (PHP's sort is stable).
-            if (!isset($fields['billing']['billing_company'])) {
+            //
+            // A disabled gateway adds neither company field (TWO-27227): the
+            // store's own company field setting applies, hidden included.
+            $gateway_enabled = $this->wc_twoinc->enabled === 'yes';
+            if ($gateway_enabled && !isset($fields['billing']['billing_company'])) {
                 $fields['billing']['billing_company'] = [
                     // The payment tile's own guidance is the only signal that
                     // a company is needed — no required flag, and no asterisk
-                    // either (ABN-554).
+                    // either.
                     'label' => __('Company name', 'twoinc-payment-gateway'),
                     'autocomplete' => 'organization',
                     'class' => array('form-row-wide'),
@@ -266,7 +349,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // "ship to a different address?" form is currently shown, the same
             // way the billing control is always registered regardless of the
             // admin's company-search-location setting.
-            if (!isset($fields['shipping']['shipping_company'])) {
+            if ($gateway_enabled && !isset($fields['shipping']['shipping_company'])) {
                 $fields['shipping']['shipping_company'] = [
                     'label' => __('Company name', 'twoinc-payment-gateway'),
                     'autocomplete' => 'organization',
@@ -408,7 +491,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             }
 
             // wp_footer fires whether or not core's pay template accepted the
-            // request, so this bootstrap judges ownership for itself (ABN-554).
+            // request, so this bootstrap judges ownership for itself.
             $key = isset($_GET['key']) ? sanitize_text_field(wp_unslash((string) $_GET['key'])) : '';
             if (!hash_equals((string) $order->get_order_key(), $key)) {
                 return null;
@@ -424,8 +507,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         /**
          * The clearing hooks run on requests that construct no payment
          * gateway (the Store API's own cart routes), so they are registered
-         * by loading this class rather than by instantiating anything
-         * (ABN-554).
+         * by loading this class rather than by instantiating anything.
          *
          * @return void
          */
@@ -433,6 +515,47 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         {
             add_action('woocommerce_cart_emptied', ['WC_Twoinc_Checkout', 'forget_captured_company']);
             add_action('woocommerce_cart_item_removed', ['WC_Twoinc_Checkout', 'forget_captured_company_when_cart_ends']);
+            add_action('woocommerce_checkout_update_customer', ['WC_Twoinc_Checkout', 'keep_capture_fields_off_customer']);
+            add_filter('woocommerce_checkout_get_value', ['WC_Twoinc_Checkout', 'never_prefill_capture_fields'], 10, 2);
+        }
+
+        /**
+         * The plugin's own capture fields that WooCommerce would otherwise keep:
+         * core saves every posted `billing_`/`shipping_` field it has no setter for
+         * as customer meta, and prefills the next checkout from it. A company
+         * number replayed that way outlives an address the buyer has since moved to
+         * another country (TWO-26286), so none of them is kept or replayed.
+         */
+        private const CUSTOMER_UNSAVED_CAPTURE_FIELDS = ['billing_company_display', 'shipping_company_display', 'shipping_company_id'];
+
+        /**
+         * Before the customer is saved at checkout, drop the capture fields core
+         * just copied onto it, along with any copy an earlier order left.
+         *
+         * @param object $customer WC_Customer
+         * @return void
+         */
+        public static function keep_capture_fields_off_customer($customer)
+        {
+            if (!is_object($customer) || !method_exists($customer, 'delete_meta_data')) {
+                return;
+            }
+            foreach (self::CUSTOMER_UNSAVED_CAPTURE_FIELDS as $key) {
+                $customer->delete_meta_data($key);
+            }
+        }
+
+        /**
+         * Render the capture fields empty, whatever an earlier order left on the
+         * customer.
+         *
+         * @param mixed $value
+         * @param string $input
+         * @return mixed
+         */
+        public static function never_prefill_capture_fields($value, $input)
+        {
+            return in_array($input, self::CUSTOMER_UNSAVED_CAPTURE_FIELDS, true) ? '' : $value;
         }
 
         /** @return object|null */
@@ -454,8 +577,12 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             return $cart && method_exists($cart, 'is_empty') && !$cart->is_empty();
         }
 
-        /** @return void */
-        public static function remember_captured_company($company_id, $company_name)
+        /**
+         * @param string $country the country the company was captured under; kept so a
+         *   replay can never pair the number with another country (TWO-26286)
+         * @return void
+         */
+        public static function remember_captured_company($company_id, $company_name, $country = '')
         {
             $session = self::capture_session();
             if (!$session) {
@@ -468,7 +595,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             }
 
             // A capture belongs to a cart; written without one it would be
-            // read back by whatever cart the buyer opens next (ABN-554).
+            // read back by whatever cart the buyer opens next.
             if (!self::cart_has_contents()) {
                 return;
             }
@@ -476,6 +603,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             $session->set(self::CAPTURED_COMPANY_SESSION_KEY, [
                 'company_id' => (string) $company_id,
                 'company_name' => (string) $company_name,
+                'country' => self::country_code($country),
             ]);
         }
 
@@ -498,10 +626,12 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
         /**
          * The company this page may replay: the one captured in the live
-         * cart, or on the pay-for-order page the one the order carries
-         * (ABN-554).
+         * cart, or on the pay-for-order page the one the order carries.
          *
-         * @return array{company_id: string, company_name: string}
+         * Each carries the country it was captured under, blank where none was
+         * recorded (TWO-26286).
+         *
+         * @return array{company_id: string, company_name: string, country: string}
          */
         public static function remembered_company(): array
         {
@@ -510,10 +640,12 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 return [
                     'company_id' => method_exists($order, 'get_meta') ? (string) $order->get_meta('company_id') : '',
                     'company_name' => method_exists($order, 'get_meta') ? (string) $order->get_meta('company_name') : '',
+                    // The order-pay page carries no billing country to judge it against; the browser replays it as is.
+                    'country' => '',
                 ];
             }
 
-            $blank = ['company_id' => '', 'company_name' => ''];
+            $blank = ['company_id' => '', 'company_name' => '', 'country' => ''];
             $session = self::capture_session();
             if (!$session) {
                 return $blank;
@@ -534,7 +666,17 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             return [
                 'company_id' => (string) ($remembered['company_id'] ?? ''),
                 'company_name' => (string) ($remembered['company_name'] ?? ''),
+                // A capture remembered before the country was kept has none, and is not replayed.
+                'country' => self::country_code($remembered['country'] ?? ''),
             ];
+        }
+
+        /** An ISO 3166-1 alpha-2 code, upper-cased, or blank for anything else. */
+        private static function country_code($value): string
+        {
+            $code = strtoupper(trim((string) $value));
+
+            return preg_match('/^[A-Z]{2}$/', $code) === 1 ? $code : '';
         }
 
         public static function ajax_remember_company(): void
@@ -546,14 +688,15 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             self::remember_captured_company(
                 self::posted_capture_field('company_id'),
-                self::posted_capture_field('company_name')
+                self::posted_capture_field('company_name'),
+                self::posted_capture_field('country')
             );
             wp_send_json_success();
         }
 
         /**
          * Bounded because whatever this accepts is held in the session row and
-         * echoed into every later checkout render (ABN-554).
+         * echoed into every later checkout render.
          */
         private static function posted_capture_field(string $key): string
         {
@@ -599,6 +742,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // times out or comes back degraded (TWO-25232) — never
                     // for a search that simply matched nothing.
                     'company_search_unavailable' => __('Company search is temporarily unavailable. Please try again.', 'twoinc-payment-gateway'),
+                    // What a search answers while no country is selected,
+                    // in place of asking the registry (TWO-27235).
+                    'company_search_no_country' => __('Select your country above to search for your company.', 'twoinc-payment-gateway'),
                     // Watermark inside the dropdown's own query field, stating
                     // the search threshold (TWO-25288). The %d is
                     // deliberately LEFT UNRESOLVED here: the JS
@@ -615,12 +761,12 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // the same translated strings too.
                     'enter_manually' => __('Enter manually', 'twoinc-payment-gateway'),
                     'search_company' => __('Search for company', 'twoinc-payment-gateway'),
-                    // The panel announces this once a search answers (ABN-554).
+                    // The panel announces this once a search answers.
                     /* translators: %d: number of companies the search returned, interpolated in JS. */
                     'search_results_plural' => __('%d results are available, use up and down arrow keys to navigate.', 'twoinc-payment-gateway'),
                     'search_results_one' => __('1 result is available, use up and down arrow keys to navigate.', 'twoinc-payment-gateway'),
                     // Same sentence process_payment() refuses with, so the
-                    // client gate and the server gate never disagree (ABN-554).
+                    // client gate and the server gate never disagree.
                     'terms_not_accepted' => WC_Twoinc::get_terms_not_accepted_message(),
                 ],
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),
@@ -664,7 +810,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'remember_company_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_remember_company') : '',
                 // A Blocks store serves the pay-for-order endpoint from the
                 // checkout page itself, so the capture controls mount there
-                // too and must not post into the cart's memory (ABN-554).
+                // too and must not post into the cart's memory.
                 'order_pay' => self::get_order_being_paid() !== null,
                 // Chip selector bootstrap (TWO-24751). JS renders only; the
                 // live data (fees, selection) comes from the wc-ajax
@@ -677,7 +823,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'heading' => __('Selected payment terms', 'twoinc-payment-gateway'),
                     // An end-of-month term falls due that many days after the end
                     // of the month, so the bare day count states the wrong due date
-                    // for it (ABN-554). Both placeholders in the explainer are the
+                    // for it. Both placeholders in the explainer are the
                     // same day count; the chip renderer substitutes every one.
                     'eom' => WC_Twoinc_Payment_Terms::is_end_of_month($this->wc_twoinc),
                     'days_label_eom' => __('EOM+%s', 'twoinc-payment-gateway'),
@@ -721,7 +867,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'text' => [
                         'registered_business' => __('Registered company', 'twoinc-payment-gateway'),
                         'sole_trader' => __('Sole trader', 'twoinc-payment-gateway'),
-                        'popup_prompt' => __('Click here to login or sign up as a sole trader.', 'twoinc-payment-gateway'),
+                        // The one button on the panel a refused signup window leaves over the popover (TWO-26775).
+                        'signup_panel' => __('Sign up or log in as a sole trader', 'twoinc-payment-gateway'),
                         // One link covers both "pick a different existing
                         // registration" and "register a new one" (TWO-40):
                         // that choice is made inside the hosted signup's own
@@ -737,6 +884,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             if ($user_id) {
                 $properties['company_id'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), true);
                 $properties['billing_company'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), true);
+                // The profile records no country for the merchant-set company, so it is
+                // taken as belonging to the buyer's own saved billing country (TWO-26286).
+                $properties['company_country'] = self::country_code(get_user_meta($user_id, 'billing_country', true));
                 $properties['department'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('department'), true);
                 $properties['project'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('project'), true);
             }
@@ -746,6 +896,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             if ($captured['company_id'] !== '' || $captured['company_name'] !== '') {
                 $properties['company_id'] = $captured['company_id'];
                 $properties['billing_company'] = $captured['company_name'];
+                $properties['company_country'] = $captured['country'];
             }
 
             return $properties;
@@ -767,6 +918,14 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // company search from rendering there (TWO-25326 follow-up).
             // The same condition is_available() judges, and it adds no fetch
             // of its own to a checkout render.
+            //
+            // A disabled gateway withholds it too (TWO-27227): with company
+            // search in the address area it would otherwise still mount for
+            // other methods and query the registry for a gateway the merchant
+            // switched off. Not logged: it is a setting, not a fault.
+            if ($this->wc_twoinc->enabled !== 'yes') {
+                return;
+            }
             $status = $this->wc_twoinc->get_api_key_verification_status();
             if (WC_Twoinc::is_definitive_key_failure($status['status'])) {
                 $this->wc_twoinc->log_withheld_from_checkout(

@@ -1,5 +1,5 @@
 /**
- * The per-country gates on a Blocks checkout (ABN-585).
+ * The per-country gates on a Blocks checkout.
  *
  * The skin owns no gate of its own — it mounts the classic controller onto
  * Blocks' own company row — so this runs the real skin over the real

@@ -10,8 +10,8 @@
  * Term availability: `get_available_terms()` is the single seam — the
  * merchant's ticked presets intersected with the backend's offered set
  * (TWO-24812) plus an optional custom term, which that same set must also
- * offer (ABN-521). An empty result means "offer nothing": no term is sent and
- * the backend applies the account default. The merchant cannot save into that
+ * offer. An empty result means "offer nothing", and an order placed then is
+ * refused (TWO-27109). The merchant cannot save into that
  * empty state once terms are configured (see
  * WC_Twoinc::validate_two_payment_terms_field). Do not read term lists
  * anywhere else.
@@ -26,7 +26,19 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
     {
         public const SESSION_KEY = 'two_selected_term';
 
-        /** Preferred default term, in days (ABN-548). */
+        /**
+         * Order fee item meta marking the plugin's own payment terms fee (TWO-26340), sent as BUYER_FEE.
+         */
+        public const BUYER_FEE_META = 'buyer_fee';
+
+        /**
+         * The cart fee id apply_cart_fee() added in this request, else null.
+         *
+         * @var string|null
+         */
+        private static $buyer_fee_id = null;
+
+        /** Preferred default term, in days. */
         public const PREFERRED_DEFAULT_TERM = 30;
 
         /**
@@ -44,7 +56,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         /**
          * Ceiling (seconds) for every buyer surcharge quote: a gate giving up
          * sooner than the path that charges withholds a method the charge
-         * would have priced (ABN-546).
+         * would have priced.
          */
         public const SURCHARGE_PRICING_TIMEOUT = 30;
 
@@ -79,7 +91,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         private static $fx_failure_logged = false;
 
-        /** Terms whose quote failed this request, keyed by term (ABN-539). */
+        /** Terms whose quote failed this request, keyed by term. */
         private static $unquoted_terms = [];
 
         /** @var array<string,bool> Keyed by value, so a second distinct bad method still speaks. */
@@ -88,8 +100,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         /**
          * Whether the term feature is active: at least one term is offered. When
          * true a term is sent on the order and any configured surcharge applies.
-         * There is no merchant on/off toggle — the offered-term set is the single
-         * switch, and an empty set falls through to the account default.
+         * There is no merchant on/off toggle: the offered-term set is the single
+         * switch, and an order is refused at create while it is empty.
          */
         public static function is_enabled($gateway): bool
         {
@@ -103,9 +115,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * The merchant's ticked presets intersected with the backend's
          * `available_terms` (so a term the backend withdrew drops out even
          * while a stale admin subset still lists it), plus an optional
-         * custom term the backend must also offer. An empty result is
-         * meaningful: no term is offered, so none is sent and the backend
-         * applies the account default.
+         * custom term the backend must also offer. An empty result means
+         * no term is offered, and process_payment() refuses the order.
          *
          * @return int[]
          */
@@ -136,7 +147,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         /**
          * The pre-selected term: the admin's configured default, the merchant's
          * own default term, 30, then the shortest available term — each only
-         * while it is available, and an empty set has none at all (ABN-548).
+         * while it is available, and an empty set has none at all.
          */
         public static function get_default_term($gateway): ?int
         {
@@ -160,8 +171,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
         /**
          * The buyer's current selection from the WC session, validated against
-         * the available set (an invalid or stale selection falls back to the
-         * default rather than erroring).
+         * the available set. A stale selection falls back to the default here
+         * for display and pricing only: process_payment() refuses it first
+         * (get_unoffered_chosen_term()), so an order is never booked on it.
          */
         public static function get_selected_term($gateway): ?int
         {
@@ -175,20 +187,83 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * Store the buyer's selection. Returns the term actually stored
-         * (invalid input resolves to the default).
+         * Return the buyer's selection (storing it when a session exists), or
+         * null when the merchant does not offer that term: nothing is stored then. A term that is not
+         * offered is refused, never replaced by the default, so the order is
+         * not booked under a term the buyer did not choose.
          */
         public static function set_selected_term($gateway, $days): ?int
         {
-            $terms = self::get_available_terms($gateway);
             $days = (int) $days;
-            if (!in_array($days, $terms, true)) {
-                $days = self::get_default_term($gateway);
+            if (!in_array($days, self::get_available_terms($gateway), true)) {
+                return null;
             }
             if (function_exists('WC') && (WC()->session ?? null)) {
                 WC()->session->set(self::SESSION_KEY, $days);
             }
             return $days;
+        }
+
+        /**
+         * Buyer-facing refusal of a term that is not offered, shared by the
+         * select-term answer and the submit so the two read the same.
+         */
+        public static function unoffered_term_message(): string
+        {
+            return __('The selected payment term is no longer available. Please review the payment options and place the order again.', 'twoinc-payment-gateway');
+        }
+
+        /**
+         * Buyer-facing refusal of an order placed while no term is offered.
+         */
+        public static function no_offered_term_message(): string
+        {
+            return sprintf(
+                /* translators: %s: the payment method's product name */
+                __('%s has no payment term available for this order. Please choose another payment method.', 'twoinc-payment-gateway'),
+                WC_Twoinc_Brand::get('product_name')
+            );
+        }
+
+        /**
+         * The term the buyer chose when the merchant does not offer it: the
+         * posted selection (the hidden checkout field) else the session's.
+         * Such a choice must be refused, never turned into the default. 0 when
+         * the buyer never chose a term, when the choice is offered, or when
+         * nothing is offered at all (the submit refuses that case first).
+         */
+        public static function get_unoffered_chosen_term($gateway): int
+        {
+            $offered = self::get_available_terms($gateway);
+            if (count($offered) === 0) {
+                return 0;
+            }
+            $posted = isset($_POST[self::SESSION_KEY]) ? (int) $_POST[self::SESSION_KEY] : 0;
+            $session = function_exists('WC') ? (WC()->session ?? null) : null;
+            $chosen = $posted > 0 ? $posted : ($session ? (int) $session->get(self::SESSION_KEY) : 0);
+            return ($chosen > 0 && !in_array($chosen, $offered, true)) ? $chosen : 0;
+        }
+
+        /**
+         * After a submit is refused over a term that is not offered: drop a
+         * stored selection that is itself no longer offered, so the reloaded
+         * checkout shows what a retry would book (the default) instead of
+         * refusing every retry. An offered stored selection is kept. The classic
+         * checkout re-reads the live set from the select-term answer after any
+         * failed submit (twoincTermChips.resync()), since a failed submit does
+         * not update the checkout by itself.
+         */
+        public static function recover_from_unoffered_refusal($gateway): void
+        {
+            $session = function_exists('WC') ? (WC()->session ?? null) : null;
+            if (!$session) {
+                return;
+            }
+            $offered = self::get_available_terms($gateway);
+            $stored = (int) $session->get(self::SESSION_KEY);
+            if ($stored > 0 && count($offered) > 0 && !in_array($stored, $offered, true)) {
+                $session->set(self::SESSION_KEY, null);
+            }
         }
 
         /**
@@ -614,7 +689,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
         /**
          * Record and report a configured surcharge that could not be
-         * quoted (ABN-539).
+         * quoted.
          * Error level for log_surcharge_fx_failure()'s reason: the merchant
          * loses that revenue and nothing else on any surface says so.
          *
@@ -647,7 +722,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * the availability gate and the order payload all resolve it here, or
          * the buyer is charged one term's fee and booked on another — the
          * hidden field follows a chip immediately while the session follows it
-         * a round trip later (ABN-554).
+         * a round trip later.
          */
         public static function resolve_charged_term($gateway): ?int
         {
@@ -659,7 +734,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         /**
          * Whether the merchant configured anything for this term that a
          * quote could actually charge. A term that prices to nothing must
-         * not put the payment method behind a pricing call (ABN-546): on a
+         * not put the payment method behind a pricing call: on a
          * single-term shop that is the whole storefront, over a fee of zero.
          *
          * A cap alone charges nothing — it bounds a percentage that is not
@@ -686,7 +761,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
         /**
          * Whether the term this checkout would be charged for cannot be
-         * priced (ABN-546) — the fail-CLOSED condition the availability gate
+         * priced: the fail-CLOSED condition the availability gate
          * withholds the payment method on, alongside a surcharge currency
          * no rate can express.
          *
@@ -746,7 +821,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * Whether the merchant offers end-of-month terms, which fall due that
          * many days after the end of the month rather than from the invoice.
          * The buyer-facing chip text depends on it as much as the booked order
-         * does (ABN-554).
+         * does.
          */
         public static function is_end_of_month($gateway): bool
         {
@@ -778,7 +853,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * Quote the buyer's fee share for one term via the pricing endpoint.
          * A failed or malformed HTTP quote is fail-soft — returns null, the
          * chip renders without a fee label — but never silent: the failure is
-         * logged once per term per request naming the cause (ABN-539). An
+         * logged once per term per request naming the cause. An
          * unquotable
          * currency pair is a fail-CLOSED condition handled upstream by the
          * availability gate (TWO-25269), which withholds the payment method
@@ -842,7 +917,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 'POST',
                 array(),
                 null,
-                self::SURCHARGE_PRICING_TIMEOUT
+                self::SURCHARGE_PRICING_TIMEOUT,
+                WC_Twoinc_Helper::idempotency_key('fee_quote', [], $request)
             );
 
             if (is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) < 200 || (int) wp_remote_retrieve_response_code($response) >= 300) {
@@ -861,7 +937,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             // Refused BEFORE the cache write: a quote in another currency
             // cannot be charged, and caching it as a success left the
             // failure re-reported and the method withheld for the whole
-            // TTL after the pricing service recovered (ABN-546).
+            // TTL after the pricing service recovered.
             $answer_currency = strtoupper(trim(strval($body['currency'] ?? '')));
             if ($answer_currency !== '' && $answer_currency !== strtoupper($request['currency'])) {
                 self::record_unquoted_surcharge(
@@ -929,14 +1005,15 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return ['success' => false];
             }
 
-            $response = $gateway->make_request('/pricing/v1/merchant/rates', [
+            $rates_request = [
                 'buyer_country_code' => $buyer_country,
-                // No admin recourse-pricing config yet — hardcoded false.
+                // No admin recourse-pricing config yet: hardcoded false.
                 'recourse_pricing' => false,
                 // payout_schedule omitted: the server infers it from the
                 // merchant's payee accounts (matches Magento).
                 'net_terms' => $net_terms,
-            ], 'POST', array(), null, 10);
+            ];
+            $response = $gateway->make_request('/pricing/v1/merchant/rates', $rates_request, 'POST', array(), null, 10, WC_Twoinc_Helper::idempotency_key('merchant_rates', [], $rates_request));
 
             if (
                 is_wp_error($response)
@@ -965,8 +1042,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
             // Nothing priced, and a fee set with no currency, are both
             // unrenderable: a screen drawing either says "this term carries no
-            // fee", which is a wrong figure rather than a missing one
-            // (ABN-540).
+            // fee", which is a wrong figure rather than a missing one.
             $currency = strval($body['currency'] ?? '');
             if ($fees === [] || $currency === '') {
                 return ['success' => false];
@@ -1001,6 +1077,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         public static function apply_cart_fee($cart): void
         {
+            self::$buyer_fee_id = null;
             $gateway = WC_Twoinc::get_instance();
             if (!$gateway) {
                 return;
@@ -1053,6 +1130,10 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
             $label = self::get_fee_label();
             $amount = (float) $fee['buyer_fee_share'];
+            // WC_Cart_Fees ids a fee added by name with sanitize_title() of it, and refuses a fee whose id is taken:
+            // then the fee by that id is another's, not this one.
+            $fee_id = sanitize_title($label);
+            $taken = array_key_exists($fee_id, $cart->get_fees());
             switch ($settings['tax_treatment']) {
                 case 'always_zero':
                     // Unconditionally non-taxable via add_fee's $taxable
@@ -1079,6 +1160,29 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                     // 'standard' — pre-feature behaviour, byte-for-byte.
                     $cart->add_fee($label, $amount, true);
             }
+            self::$buyer_fee_id = $taken ? null : $fee_id;
+        }
+
+        /**
+         * woocommerce_checkout_create_order_fee_item: marks the order fee item made from the fee apply_cart_fee() added.
+         *
+         * @param WC_Order_Item_Fee $item
+         * @param string            $fee_key
+         * @param object            $fee the cart fee
+         */
+        public static function mark_buyer_fee_item($item, $fee_key, $fee): void
+        {
+            if (self::$buyer_fee_id !== null && isset($fee->id) && $fee->id === self::$buyer_fee_id) {
+                $item->add_meta_data(WC_Twoinc_Brand::meta_key(self::BUYER_FEE_META), 'yes', true);
+            }
+        }
+
+        /**
+         * Whether an order fee item is the plugin's own payment terms fee. A fee placed before TWO-26340 is not marked.
+         */
+        public static function is_buyer_fee_item($item): bool
+        {
+            return method_exists($item, 'get_meta') && 'yes' === $item->get_meta(WC_Twoinc_Brand::meta_key(self::BUYER_FEE_META));
         }
 
         /**
@@ -1086,7 +1190,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * surcharge_line_description wins (with %s replaced by the selected
          * term days, as on every platform); otherwise the brand label, else the
          * translated cross-platform default wording, whose days are spelled as
-         * running from the end of the month under end-of-month terms (ABN-554).
+         * running from the end of the month under end-of-month terms.
          */
         public static function get_fee_label(): string
         {
@@ -1213,30 +1317,36 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             }
             $days = isset($_POST['days']) ? (int) $_POST['days'] : 0;
             $stored = self::set_selected_term($gateway, $days);
+            if ($stored === null) {
+                // Carries the live offered set and the term the server holds, so
+                // the chips can drop a withdrawn term instead of offering it again.
+                wp_send_json_error([
+                    'message' => self::unoffered_term_message(),
+                    'terms' => self::get_available_terms($gateway),
+                    'selected' => self::get_selected_term($gateway),
+                ]);
+                return;
+            }
             wp_send_json_success(['selected' => $stored]);
         }
 
         /**
          * The terms block injected into the order create payload: the
-         * buyer's selected term plus the offered set (the backend records
-         * available_terms for parity with Magento's payload).
+         * buyer's selected term. The create-order request does not define
+         * `available_terms`, so the offered set is not sent.
          *
-         * @return array{terms: array, available_terms: int[]}|null
+         * @return array{terms: array}|null
          */
         public static function get_order_payload_terms($gateway, $order): ?array
         {
             if (!self::is_enabled($gateway)) {
                 return null;
             }
-            $terms = self::get_available_terms($gateway);
             $selected = self::resolve_charged_term($gateway);
             if ($selected === null) {
                 return null;
             }
-            return [
-                'terms' => self::build_terms_block($gateway, $selected),
-                'available_terms' => $terms,
-            ];
+            return ['terms' => self::build_terms_block($gateway, $selected)];
         }
 
         /**

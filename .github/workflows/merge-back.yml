@@ -14,6 +14,11 @@ jobs:
   main-to-staging:
     name: main → staging
     runs-on: ${{ vars.RUNNER_STANDARD }}
+    # ISEC-853: id-token lets back-merge read the App key from Secret Manager
+    # (gha-app-key-reader) instead of the org secret.
+    permissions:
+      contents: read
+      id-token: write
     if: github.ref_name == 'main'
     steps:
       # actions-public, not the private two-inc/actions the private plugin
@@ -23,7 +28,6 @@ jobs:
         uses: two-inc/actions-public/back-merge@main
         with:
           client-id: ${{ vars.TWO_INC_APP_CLIENT_ID }}
-          app-private-key: ${{ secrets.TWO_INC_APP_PRIVATE_KEY }}
           source-ref: main
           target-ref: staging
           reviewer: brtkwr

@@ -2,7 +2,7 @@
   "enabled": "yes",
   "title": "Business invoice",
   "subtitle": "Receive the invoice via PDF and email",
-  "checkout_env": "PROD",
+  "checkout_env": "sandbox",
   "clear_options_on_uninstall": "no",
   "payment_terms_days": [14, 30, 60, 90],
   "section_api_credentials": "",

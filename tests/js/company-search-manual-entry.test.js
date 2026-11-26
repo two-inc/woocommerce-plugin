@@ -818,7 +818,7 @@ describe("company-search manual-entry affordance", () => {
       }
     });
 
-    test("the real company field is cleared, not just the display one", () => {
+    test("the name stays in the company field and only the number goes (TWO-26775)", () => {
       jest.useFakeTimers();
       openPanel();
       $("#billing_company").val("Previously Picked Ltd");
@@ -828,8 +828,9 @@ describe("company-search manual-entry affordance", () => {
       activate();
       jest.advanceTimersByTime(1);
 
-      expect($("#billing_company").val()).toBe("");
+      expect($("#billing_company").val()).toBe("Previously Picked Ltd");
       expect($("#company_id").val()).toBe("");
+      expect(ctx.Twoinc.getInstance().customerCompany.organization_number).toBe("");
       jest.useRealTimers();
     });
 
@@ -847,7 +848,7 @@ describe("company-search manual-entry affordance", () => {
       expect($("#billing_address_1").val()).toBe("Registry Street 1");
     }
 
-    test("the disowned company's registry address does not survive into the order", () => {
+    test("the picked company's address stays for the buyer to edit (TWO-26775)", () => {
       jest.useFakeTimers();
       openPanel();
       givenLookedUpAddress();
@@ -857,11 +858,10 @@ describe("company-search manual-entry affordance", () => {
       activate();
       jest.advanceTimersByTime(1);
 
-      expect($("#billing_address_1").val()).toBe("");
-      expect($("#billing_address_2").val()).toBe("");
-      expect($("#billing_city").val()).toBe("");
-      expect($("#billing_postcode").val()).toBe("");
-      expect(ctx.Twoinc.getInstance().addressStateFor("billing").registryApplied).toBe(false);
+      expect($("#billing_address_1").val()).toBe("Registry Street 1");
+      expect($("#billing_address_2").val()).toBe("Flat 2");
+      expect($("#billing_city").val()).toBe("Registryville");
+      expect($("#billing_postcode").val()).toBe("0001");
       jest.useRealTimers();
     });
 
